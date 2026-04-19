@@ -54,6 +54,8 @@ const STATUS_LABELS: Record<Status, { label: string; color: string }> = {
   cancelled: { label: 'キャンセル済み', color: 'bg-red-100 text-red-600' },
 }
 
+const DEFAULT_PURPOSES = ['定期配送', 'メンテナンス', '商談', '監査', 'その他']
+
 export default function PreRegistrationsPage() {
   const { t } = useLocale()
   const [preRegs, setPreRegs] = useState<PreRegistration[]>([])
@@ -65,6 +67,7 @@ export default function PreRegistrationsPage() {
   // Form state
   const [stores, setStores] = useState<Store[]>([])
   const [staffList, setStaffList] = useState<StaffMember[]>([])
+  const [visitPurposes, setVisitPurposes] = useState<string[]>(DEFAULT_PURPOSES)
   const [selectedStoreId, setSelectedStoreId] = useState('')
   const [selectedAreaId, setSelectedAreaId] = useState('')
   const [form, setForm] = useState({
@@ -83,6 +86,15 @@ export default function PreRegistrationsPage() {
   useEffect(() => {
     fetchPreRegs()
     fetchStores()
+    // 受付設定の訪問目的を取得
+    fetch('/api/v1/admin/settings')
+      .then(r => r.ok ? r.json() : { settings: {} })
+      .then((data: { settings?: { visit_purposes?: string[] } }) => {
+        if (Array.isArray(data.settings?.visit_purposes) && (data.settings?.visit_purposes?.length ?? 0) > 0) {
+          setVisitPurposes(data.settings!.visit_purposes!)
+        }
+      })
+      .catch(() => {})
   }, [])
 
   async function fetchPreRegs() {
@@ -455,14 +467,17 @@ export default function PreRegistrationsPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     訪問目的 <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={form.purpose}
                     onChange={e => setForm(f => ({ ...f, purpose: e.target.value }))}
-                    placeholder="商談・打ち合わせ"
                     required
                     className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]"
-                  />
+                  >
+                    <option value="">訪問目的を選択...</option>
+                    {visitPurposes.map(p => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* Contact person */}

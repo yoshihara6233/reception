@@ -112,6 +112,18 @@ export function ReceptionContent({ token, storeName, areaName, preToken }: Props
             </span>
             <span className="opacity-60">&rarr;</span>
           </Link>
+
+          {/* 事前登録QRをお持ちの方 */}
+          <Link
+            href={`/r/${token}/scan`}
+            className="flex items-center justify-between w-full px-5 py-4 bg-white/80 text-[#1e3a5f] border border-[#1e3a5f]/30 rounded-[14px] text-sm font-medium"
+          >
+            <span className="flex items-center gap-2.5">
+              <span className="text-lg">&#x1F4F1;</span>
+              {locale === 'ja' ? '事前登録QRをお持ちの方はこちら' : 'Have a pre-registration QR?'}
+            </span>
+            <span className="opacity-40 text-xs">QR</span>
+          </Link>
         </div>
 
         {/* Security note */}
