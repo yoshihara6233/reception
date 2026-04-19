@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { getAdminContext } from '@/lib/supabase/admin-context'
 
 // GET /api/v1/admin/pre-registrations
 export async function GET(req: NextRequest) {
-  const supabase = await createServerSupabaseClient()
+  const ctx = await getAdminContext()
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const supabase = createAdminClient()
   const { searchParams } = new URL(req.url)
   const storeId = searchParams.get('storeId')
 
@@ -16,6 +20,7 @@ export async function GET(req: NextRequest) {
       areas(id, name),
       staff_members(id, name)
     `)
+    .eq('tenant_id', ctx.tenant_id)
     .order('created_at', { ascending: false })
     .limit(200)
 
@@ -32,7 +37,8 @@ export async function GET(req: NextRequest) {
 
 // POST /api/v1/admin/pre-registrations — create new pre-registration
 export async function POST(req: NextRequest) {
-  const supabase = await createServerSupabaseClient()
+  const ctx = await getAdminContext()
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
   const {
@@ -51,27 +57,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '必須項目が入力されていません' }, { status: 400 })
   }
 
-  // Get current admin user
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const { data: adminUser } = await supabase
-    .from('admin_users')
-    .select('id, tenant_id')
-    .eq('auth_user_id', user.id)
-    .single()
-
-  if (!adminUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
+  const supabase = createAdminClient()
   const expiresAt = new Date(Date.now() + expiresInHours * 60 * 60 * 1000).toISOString()
 
   const { data, error } = await supabase
     .from('pre_registrations')
     .insert({
-      tenant_id: adminUser.tenant_id,
+      tenant_id: ctx.tenant_id,
       store_id: storeId,
       area_id: areaId,
-      host_user_id: adminUser.id,
+      host_user_id: ctx.id,
       visitor_company: visitorCompany.trim(),
       visitor_name: visitorName.trim(),
       visitor_email: visitorEmail?.trim() || null,
@@ -92,7 +87,10 @@ export async function POST(req: NextRequest) {
 
 // PATCH /api/v1/admin/pre-registrations — cancel
 export async function PATCH(req: NextRequest) {
-  const supabase = await createServerSupabaseClient()
+  const ctx = await getAdminContext()
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const supabase = createAdminClient()
   const { id } = await req.json()
 
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
@@ -101,6 +99,7 @@ export async function PATCH(req: NextRequest) {
     .from('pre_registrations')
     .update({ cancelled_at: new Date().toISOString() })
     .eq('id', id)
+    .eq('tenant_id', ctx.tenant_id)   // tenant-scope the update
     .is('cancelled_at', null)
     .is('used_at', null)
 

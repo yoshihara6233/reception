@@ -1,25 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-
-async function getAdminUser() {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user }, error } = await supabase.auth.getUser()
-  if (error || !user) return null
-
-  const adminClient = createAdminClient()
-  const { data } = await adminClient
-    .from('admin_users')
-    .select('tenant_id, role')
-    .eq('auth_user_id', user.id)
-    .single()
-  return data
-}
+import { getAdminContext } from '@/lib/supabase/admin-context'
 
 // GET /api/v1/admin/staff?storeId=&active=true
 export async function GET(req: NextRequest) {
-  const adminUser = await getAdminUser()
-  if (!adminUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const ctx = await getAdminContext()
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const supabase = createAdminClient()
   const storeId = req.nextUrl.searchParams.get('storeId')
@@ -28,7 +14,7 @@ export async function GET(req: NextRequest) {
   let query = supabase
     .from('staff_members')
     .select('*')
-    .eq('tenant_id', adminUser.tenant_id)
+    .eq('tenant_id', ctx.tenant_id)
     .order('name')
 
   if (activeOnly) query = query.eq('is_active', true)
@@ -42,8 +28,8 @@ export async function GET(req: NextRequest) {
 
 // POST /api/v1/admin/staff
 export async function POST(req: NextRequest) {
-  const adminUser = await getAdminUser()
-  if (!adminUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const ctx = await getAdminContext()
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
   const { name, name_kana, email, slack_member_id, store_id } = body
@@ -56,7 +42,7 @@ export async function POST(req: NextRequest) {
   const { data, error } = await supabase
     .from('staff_members')
     .insert({
-      tenant_id: adminUser.tenant_id,
+      tenant_id: ctx.tenant_id,
       name: name.trim(),
       name_kana: name_kana?.trim() || null,
       email: email?.trim() || null,
@@ -72,8 +58,8 @@ export async function POST(req: NextRequest) {
 
 // PATCH /api/v1/admin/staff?id=
 export async function PATCH(req: NextRequest) {
-  const adminUser = await getAdminUser()
-  if (!adminUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const ctx = await getAdminContext()
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const id = req.nextUrl.searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
@@ -92,7 +78,7 @@ export async function PATCH(req: NextRequest) {
       is_active: body.is_active ?? true,
     })
     .eq('id', id)
-    .eq('tenant_id', adminUser.tenant_id)
+    .eq('tenant_id', ctx.tenant_id)
     .select()
     .single()
 
@@ -102,9 +88,9 @@ export async function PATCH(req: NextRequest) {
 
 // DELETE /api/v1/admin/staff?id= (soft delete)
 export async function DELETE(req: NextRequest) {
-  const adminUser = await getAdminUser()
-  if (!adminUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (adminUser.role === 'viewer') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const ctx = await getAdminContext()
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (ctx.role === 'viewer') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const id = req.nextUrl.searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
@@ -114,7 +100,7 @@ export async function DELETE(req: NextRequest) {
     .from('staff_members')
     .update({ is_active: false })
     .eq('id', id)
-    .eq('tenant_id', adminUser.tenant_id)
+    .eq('tenant_id', ctx.tenant_id)
 
   return NextResponse.json({ ok: true })
 }
