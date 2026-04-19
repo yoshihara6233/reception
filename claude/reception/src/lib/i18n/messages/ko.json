@@ -156,6 +156,7 @@
     "loginButton": "로그인",
     "loggingIn": "로그인 중...",
     "staff": "직원 관리",
-    "consent": "동의 설정"
+    "consent": "동의 설정",
+    "preRegistrations": "사전 등록 관리"
   }
 }

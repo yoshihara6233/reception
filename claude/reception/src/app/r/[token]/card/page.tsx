@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { startCamera, captureFrame, stopCamera } from '@/lib/camera/capture'
 import { compressImage } from '@/lib/camera/compress'
 import { useLocale } from '@/lib/i18n/useLocale'
@@ -12,6 +12,8 @@ type Phase = 'camera' | 'preview' | 'scanning' | 'error'
 export default function CardCapturePage() {
   const params = useParams<{ token: string }>()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const preToken = searchParams.get('pre')
   const { t } = useLocale()
   const { announce } = useAnnounce()
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -134,11 +136,11 @@ export default function CardCapturePage() {
       }
 
       // 5. register ページへ（OCR結果がある場合は自動入力される）
-      router.push(`/r/${params.token}/register`)
+      router.push(`/r/${params.token}/register${preToken ? `?pre=${preToken}` : ''}`)
     } catch (err) {
       console.error('[card] error:', err)
       // エラーでも写真なしで先へ進む
-      router.push(`/r/${params.token}/register`)
+      router.push(`/r/${params.token}/register${preToken ? `?pre=${preToken}` : ''}`)
     }
   }
 
@@ -146,7 +148,7 @@ export default function CardCapturePage() {
   const handleSkip = () => {
     sessionStorage.removeItem('reception-card-photo')
     sessionStorage.removeItem('reception-ocr-result')
-    router.push(`/r/${params.token}/register`)
+    router.push(`/r/${params.token}/register${preToken ? `?pre=${preToken}` : ''}`)
   }
 
   // ── エラー画面 ─────────────────────────────────────────────────────────

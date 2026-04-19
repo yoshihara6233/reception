@@ -156,6 +156,7 @@
     "loginButton": "Login",
     "loggingIn": "Logging in...",
     "staff": "Staff",
-    "consent": "Consent"
+    "consent": "Consent",
+    "preRegistrations": "Pre-Registrations"
   }
 }

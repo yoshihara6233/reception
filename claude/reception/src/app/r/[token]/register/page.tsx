@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useLocale } from '@/lib/i18n/useLocale'
 import { useAnnounce } from '@/lib/speech/useAnnounce'
 
@@ -43,6 +43,8 @@ const DEFAULT_PURPOSES = [
 export default function RegisterPage() {
   const params = useParams<{ token: string }>()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const preToken = searchParams.get('pre')   // pre-registration token
   const { t } = useLocale()
   const { announce } = useAnnounce()
   const [submitting, setSubmitting] = useState(false)
@@ -51,6 +53,7 @@ export default function RegisterPage() {
   const [purposes, setPurposes] = useState(DEFAULT_PURPOSES)
   const [staffSuggestions, setStaffSuggestions] = useState<StaffSuggestion[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
+  const [preRegFilled, setPreRegFilled] = useState(false)   // show "事前登録情報で自動入力しました" banner
   const contactRef = useRef<HTMLDivElement>(null)
 
   const [form, setForm] = useState<FormData>({
@@ -78,11 +81,22 @@ export default function RegisterPage() {
     } catch { /* ignore */ }
   }, [])
 
-  // スタッフサジェストを取得
+  // スタッフサジェストを取得（事前登録の contactPersonId 解決もここで行う）
   useEffect(() => {
     fetch(`/api/v1/areas/${params.token}/staff`)
       .then(r => r.ok ? r.json() : { staff: [] })
-      .then(data => setStaffSuggestions(data.staff ?? []))
+      .then(data => {
+        const list: StaffSuggestion[] = data.staff ?? []
+        setStaffSuggestions(list)
+        // If a contactPersonId was saved from pre-registration, resolve the name now
+        setForm(prev => {
+          if (prev.contactPersonId && !prev.contactPerson) {
+            const found = list.find(s => s.id === prev.contactPersonId)
+            if (found) return { ...prev, contactPerson: found.name }
+          }
+          return prev
+        })
+      })
       .catch(() => {})
   }, [params.token])
 
@@ -126,6 +140,31 @@ export default function RegisterPage() {
       // ignore parse errors
     }
   }, [])
+
+  // 事前登録トークンがある場合: APIからデータ取得してフォームを自動入力
+  useEffect(() => {
+    if (!preToken) return
+    fetch(`/api/v1/pre-registrations?token=${preToken}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data?.preRegistration) return
+        const p = data.preRegistration
+        setForm(prev => ({
+          ...prev,
+          company: p.visitorCompany || prev.company,
+          name: p.visitorName || prev.name,
+          phone: p.visitorPhone || prev.phone,
+          email: p.visitorEmail || prev.email,
+          purpose: p.purpose || prev.purpose,
+          contactPersonId: p.contactPersonId || prev.contactPersonId,
+        }))
+        // contactPersonId will be resolved once staff suggestions are loaded (see effect below)
+        setPreRegFilled(true)
+        // Save pre_reg_id to sessionStorage for linking after check-in
+        sessionStorage.setItem('reception-pre-reg-id', p.id)
+      })
+      .catch(() => { /* non-blocking */ })
+  }, [preToken]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const update = (field: keyof FormData, value: string) => {
     setForm(prev => ({ ...prev, [field]: value }))
@@ -184,14 +223,24 @@ export default function RegisterPage() {
         </button>
         <h1 className="text-xl font-semibold">{t('register.title')}</h1>
         <p className="text-sm text-white/60 mt-1">
-          {ocrFields.size > 0 ? '📋 名刺から自動入力しました' : 'Visitor Registration'}
+          {preRegFilled
+            ? '🎫 事前登録情報で自動入力しました'
+            : ocrFields.size > 0 ? '📋 名刺から自動入力しました' : 'Visitor Registration'}
         </p>
         <div className="absolute bottom-0 left-0 right-0 h-5 bg-[#f0f2f5] rounded-t-[20px]" />
       </div>
 
       <div className="px-5 -mt-1 pb-8">
+        {/* 事前登録バナー */}
+        {preRegFilled && (
+          <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700 mb-4 flex items-center gap-2">
+            <span>🎫</span>
+            <span>事前登録情報で自動入力しました。内容をご確認ください。</span>
+          </div>
+        )}
+
         {/* OCR バナー */}
-        {confidenceLabel && (
+        {!preRegFilled && confidenceLabel && (
           <div className={`rounded-xl border px-4 py-3 text-sm mb-4 ${confidenceColor}`}>
             {confidenceLabel}
           </div>

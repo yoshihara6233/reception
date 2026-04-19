@@ -16,9 +16,10 @@ interface Props {
   token: string
   storeName: string
   areaName: string
+  preToken?: string  // pre-registration token from ?pre= query param
 }
 
-export function ReceptionContent({ token, storeName, areaName }: Props) {
+export function ReceptionContent({ token, storeName, areaName, preToken }: Props) {
   const { locale, t } = useLocale()
   const router = useRouter()
   const { announce } = useAnnounce()
@@ -42,6 +43,13 @@ export function ReceptionContent({ token, storeName, areaName }: Props) {
       })
       .catch(() => {})
   }, [token])
+
+  // 事前登録QRでアクセスした場合: アクション選択をスキップして直接同意→登録へ
+  useEffect(() => {
+    if (preToken) {
+      router.replace(`/r/${token}/consent?pre=${preToken}`)
+    }
+  }, [preToken, token, router])
 
   // CHECK IN ボタン押下: 同意ページを経由して次へ（同意が不要な場合は同意ページ内でスキップ）
   const handleCheckIn = () => {

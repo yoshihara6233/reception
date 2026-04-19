@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useLocale } from '@/lib/i18n/useLocale'
 import { useAnnounce } from '@/lib/speech/useAnnounce'
 import type { Locale } from '@/lib/i18n/useLocale'
@@ -27,6 +27,8 @@ function getBody(template: ConsentTemplate, locale: Locale): string {
 export default function ConsentPage() {
   const params = useParams<{ token: string }>()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const preToken = searchParams.get('pre')   // pre-registration token, forwarded through flow
   const { locale } = useLocale()
   const { announce } = useAnnounce()
 
@@ -66,12 +68,14 @@ export default function ConsentPage() {
       } catch { return null }
     })()
 
+    const preParam = preToken ? `?pre=${preToken}` : ''
+
     if (!settings || settings.require_business_card !== 'hidden') {
-      router.replace(`/r/${params.token}/card`)
+      router.replace(`/r/${params.token}/card${preParam}`)
     } else {
       sessionStorage.removeItem('reception-card-photo')
       sessionStorage.removeItem('reception-ocr-result')
-      router.replace(`/r/${params.token}/register`)
+      router.replace(`/r/${params.token}/register${preParam}`)
     }
   }
 

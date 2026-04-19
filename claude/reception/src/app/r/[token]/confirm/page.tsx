@@ -98,11 +98,22 @@ export default function ConfirmPage() {
         }).catch(() => {/* non-fatal */})
       }
 
+      // Mark pre-registration as used (fire-and-forget)
+      const preRegId = sessionStorage.getItem('reception-pre-reg-id')
+      if (preRegId) {
+        fetch('/api/v1/pre-registrations/mark-used', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pre_registration_id: preRegId, visit_id: visitId }),
+        }).catch(() => {/* non-fatal */})
+      }
+
       // Clean up sessionStorage
       sessionStorage.removeItem('reception-form')
       sessionStorage.removeItem('reception-card-photo')
       sessionStorage.removeItem('reception-face-photo')
       sessionStorage.removeItem('reception-consent-record-id')
+      sessionStorage.removeItem('reception-pre-reg-id')
       sessionStorage.setItem('reception-visit-id', visitId)
       localStorage.setItem('reception-visitor-token', params.token)
 

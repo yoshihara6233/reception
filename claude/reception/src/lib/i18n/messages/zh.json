@@ -156,6 +156,7 @@
     "loginButton": "登录",
     "loggingIn": "登录中...",
     "staff": "员工管理",
-    "consent": "同意设置"
+    "consent": "同意设置",
+    "preRegistrations": "预登记管理"
   }
 }

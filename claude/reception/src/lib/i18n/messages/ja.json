@@ -156,6 +156,7 @@
     "loginButton": "ログイン",
     "loggingIn": "ログイン中...",
     "staff": "スタッフ管理",
-    "consent": "同意設定"
+    "consent": "同意設定",
+    "preRegistrations": "事前登録管理"
   }
 }
