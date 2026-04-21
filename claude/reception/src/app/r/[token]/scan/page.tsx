@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useLocale } from '@/lib/i18n/useLocale'
 
 type Phase = 'requesting' | 'scanning' | 'error' | 'unsupported'
@@ -16,7 +16,10 @@ declare class BarcodeDetector {
 export default function ScanQrPage() {
   const params = useParams<{ token: string }>()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { locale } = useLocale()
+  const mode = (searchParams.get('mode') ?? 'checkin') as 'checkin' | 'checkout'
+  const isCheckout = mode === 'checkout'
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -95,8 +98,12 @@ export default function ScanQrPage() {
         const preToken = url.searchParams.get('pre')
 
         if (preToken) {
-          // 事前登録QR: /r/{area_token}?pre={pre_token} → そのまま受付フローへ
-          router.replace(`/r/${params.token}/consent?pre=${preToken}`)
+          // 事前登録QR: /r/{area_token}?pre={pre_token}
+          if (isCheckout) {
+            router.replace(`/r/${params.token}/checkout?pre=${preToken}`)
+          } else {
+            router.replace(`/r/${params.token}/consent?pre=${preToken}`)
+          }
         } else if (url.pathname.startsWith('/r/')) {
           // 別エリアのキオスクQR → そのページに遷移
           router.replace(url.pathname + url.search)
@@ -128,8 +135,11 @@ export default function ScanQrPage() {
   const handleRetry = () => {
     setPhase('requesting')
     setErrorMsg('')
-    // Remount by navigating to the same page
-    router.replace(`/r/${params.token}/scan`)
+    router.replace(`/r/${params.token}/scan?mode=${mode}`)
+  }
+
+  const handleBack = () => {
+    router.replace(isCheckout ? `/r/${params.token}/checkoutchoice` : `/r/${params.token}/checkin`)
   }
 
   return (
@@ -137,13 +147,15 @@ export default function ScanQrPage() {
       {/* Header */}
       <div className="bg-gradient-to-b from-black/80 to-transparent px-5 pt-10 pb-6 z-10 relative">
         <button
-          onClick={() => router.back()}
+          onClick={handleBack}
           className="text-white/60 text-sm flex items-center gap-1 mb-4"
         >
           &larr; {t('戻る', 'Back')}
         </button>
         <h1 className="text-white text-lg font-semibold">
-          {t('事前登録QRを読み取る', 'Scan Pre-Registration QR')}
+          {isCheckout
+            ? t('退室用QRを読み取る', 'Scan QR for Check-Out')
+            : t('事前登録QRを読み取る', 'Scan Pre-Registration QR')}
         </h1>
         <p className="text-white/60 text-sm mt-1">
           {t('スマートフォンに表示されたQRコードをカメラにかざしてください', 'Hold the QR code from your smartphone up to the camera')}
@@ -216,7 +228,7 @@ export default function ScanQrPage() {
                 </button>
               )}
               <button
-                onClick={() => router.back()}
+                onClick={handleBack}
                 className="w-full py-3 border border-white/30 text-white rounded-xl text-sm"
               >
                 {t('戻る', 'Back')}

@@ -3,48 +3,69 @@ import { createAdminClient } from '@/lib/supabase/admin'
 
 export const dynamic = 'force-dynamic'
 
+type SortCol = 'check_in_at' | 'check_out_at' | 'status' | 'purpose'
+const SORTABLE: SortCol[] = ['check_in_at', 'check_out_at', 'status', 'purpose']
+
 export async function GET(req: NextRequest) {
   const supabase = createAdminClient()
   const tenantId = '00000000-0000-0000-0000-000000000001' // TODO: from auth
   const { searchParams } = req.nextUrl
 
-  const q = searchParams.get('q') || ''
-  const status = searchParams.get('status') || ''
-  const date = searchParams.get('date') || ''
-  const page = parseInt(searchParams.get('page') || '1')
-  const perPage = 20
+  const q        = searchParams.get('q')       || ''
+  const company  = searchParams.get('company') || ''
+  const status   = searchParams.get('status')  || ''
+  const purpose  = searchParams.get('purpose') || ''
+  const storeId  = searchParams.get('storeId') || ''
+  const dateFrom = searchParams.get('dateFrom') || ''
+  const dateTo   = searchParams.get('dateTo')   || ''
+  const sortBy   = (searchParams.get('sortBy') || 'check_in_at') as SortCol
+  const sortDir  = searchParams.get('sortDir') === 'asc'
+  const page     = Math.max(1, parseInt(searchParams.get('page') || '1'))
+  const perPage  = 20
+
+  const col = SORTABLE.includes(sortBy) ? sortBy : 'check_in_at'
 
   let query = supabase
     .from('visits')
     .select(
-      'id, purpose, status, check_in_at, check_out_at, visitors(company, name, department), stores(name)',
+      'id, purpose, status, check_in_at, check_out_at, visitors(company, name, department), stores(id, name)',
       { count: 'exact' }
     )
     .eq('tenant_id', tenantId)
-    .order('check_in_at', { ascending: false })
+    .order(col, { ascending: sortDir })
     .range((page - 1) * perPage, page * perPage - 1)
 
-  if (status) {
-    query = query.eq('status', status)
+  if (status)   query = query.eq('status', status)
+  if (storeId)  query = query.eq('store_id', storeId)
+
+  if (dateFrom) {
+    const from = new Date(dateFrom); from.setHours(0, 0, 0, 0)
+    query = query.gte('check_in_at', from.toISOString())
   }
-  if (date) {
-    const start = new Date(date)
-    const end = new Date(date)
-    end.setDate(end.getDate() + 1)
-    query = query.gte('check_in_at', start.toISOString()).lt('check_in_at', end.toISOString())
+  if (dateTo) {
+    const to = new Date(dateTo); to.setHours(23, 59, 59, 999)
+    query = query.lte('check_in_at', to.toISOString())
   }
 
-  // Note: text search is basic (company/name filter done client-side for now)
   const { data, count } = await query
 
   let visits = data ?? []
 
+  // テキスト絞り込み（name / company / purpose をサーバー側フィルタで近似）
   if (q) {
     const lq = q.toLowerCase()
     visits = visits.filter((v: any) =>
       v.visitors?.name?.toLowerCase().includes(lq) ||
       v.visitors?.company?.toLowerCase().includes(lq)
     )
+  }
+  if (company) {
+    const lc = company.toLowerCase()
+    visits = visits.filter((v: any) => v.visitors?.company?.toLowerCase().includes(lc))
+  }
+  if (purpose) {
+    const lp = purpose.toLowerCase()
+    visits = visits.filter((v: any) => v.purpose?.toLowerCase().includes(lp))
   }
 
   return NextResponse.json({ visits, total: count ?? 0 })

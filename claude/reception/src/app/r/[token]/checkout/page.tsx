@@ -1,18 +1,21 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useLocale } from '@/lib/i18n/useLocale'
 import { useAnnounce } from '@/lib/speech/useAnnounce'
 
 export default function CheckoutPage() {
   const params = useParams<{ token: string }>()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { t } = useLocale()
   const { announce } = useAnnounce()
   const [submitting, setSubmitting] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const preToken = searchParams.get('pre')
 
   useEffect(() => { announce('checkout') }, [announce])
 
@@ -30,7 +33,10 @@ export default function CheckoutPage() {
           'Content-Type': 'application/json',
           ...(deviceToken ? { 'x-device-token': deviceToken } : {}),
         },
-        body: JSON.stringify({ token: params.token }),
+        body: JSON.stringify({
+          token: params.token,
+          ...(preToken ? { preToken } : {}),
+        }),
       })
 
       if (!res.ok) {
@@ -78,7 +84,7 @@ export default function CheckoutPage() {
       {/* Header */}
       <div className="bg-gradient-to-br from-[#1e3a5f] to-[#2c4f7c] px-6 pt-12 pb-8 text-white relative">
         <button
-          onClick={() => router.back()}
+          onClick={() => router.replace(`/r/${params.token}/checkoutchoice`)}
           className="text-white/60 text-sm mb-4 flex items-center gap-1"
         >
           &larr; {t('common.back')}

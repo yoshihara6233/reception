@@ -56,7 +56,7 @@ const STATUS_LABELS: Record<Status, { label: string; color: string }> = {
 
 const DEFAULT_PURPOSES = ['定期配送', 'メンテナンス', '商談', '監査', 'その他']
 
-export default function PreRegistrationsPage() {
+export function PreRegistrationsContent({ lockedStoreId }: { lockedStoreId?: string } = {}) {
   const { t } = useLocale()
   const [preRegs, setPreRegs] = useState<PreRegistration[]>([])
   const [loading, setLoading] = useState(true)
@@ -541,6 +541,10 @@ export default function PreRegistrationsPage() {
       )}
     </div>
   )
+}
+
+export default function PreRegistrationsPage() {
+  return <PreRegistrationsContent />
 }
 
 // Success screen after creation

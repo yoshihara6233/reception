@@ -100,6 +100,7 @@
     "status": "状态",
     "statusCheckedIn": "在场",
     "statusCheckedOut": "已离场",
+    "edit": "详情",
     "statusAutoClosed": "自动关闭",
     "searchPlaceholder": "按公司或姓名搜索",
     "allStatuses": "全部状态",

@@ -7,3 +7,8 @@ export function generateQrToken(): string {
 export function getQrUrl(token: string, baseUrl: string): string {
   return `${baseUrl}/r/${token}`
 }
+
+export async function generateQrSvg(url: string): Promise<string> {
+  const QRCode = (await import('qrcode')).default
+  return QRCode.toString(url, { type: 'svg', margin: 1 })
+}

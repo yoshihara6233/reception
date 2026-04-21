@@ -100,6 +100,7 @@
     "status": "Status",
     "statusCheckedIn": "Checked In",
     "statusCheckedOut": "Checked Out",
+    "edit": "Details",
     "statusAutoClosed": "Auto Closed",
     "searchPlaceholder": "Search by company or name",
     "allStatuses": "All Statuses",

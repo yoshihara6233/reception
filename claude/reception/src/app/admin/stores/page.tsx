@@ -93,11 +93,19 @@ export default function StoresPage() {
                   <h3 className="text-lg font-semibold text-[#1e3a5f]">{store.name}</h3>
                   {store.address && <p className="text-sm text-gray-400 mt-1">{store.address}</p>}
                 </div>
-                <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
-                  store.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'
-                }`}>
-                  {store.is_active ? '✓' : '✗'}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                    store.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'
+                  }`}>
+                    {store.is_active ? '稼働中' : '停止中'}
+                  </span>
+                  <Link
+                    href={`/admin/stores/${store.id}`}
+                    className="px-3 py-1.5 text-xs font-medium text-[#1e3a5f] border border-[#1e3a5f]/30 rounded-lg hover:bg-[#1e3a5f]/5"
+                  >
+                    編集
+                  </Link>
+                </div>
               </div>
 
               <div className="border-t border-gray-100 pt-4">

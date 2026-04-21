@@ -101,6 +101,7 @@
     "statusCheckedIn": "入室中",
     "statusCheckedOut": "退室済み",
     "statusAutoClosed": "自動退室",
+    "edit": "詳細",
     "searchPlaceholder": "会社名・氏名で検索",
     "allStatuses": "全ステータス",
     "search": "検索",

@@ -3,6 +3,42 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  /* ===== Genesis Edge Design Tokens ===== */
+
+  /* Neutrals */
+  --ge-paper:     #F7F5F1;
+  --ge-paper-2:   #EFEBE3;
+  --ge-paper-3:   #E4DED3;
+  --ge-ink:       #0F0F10;
+  --ge-ink-2:     #2A2A2C;
+  --ge-ink-3:     #5B5B5F;
+  --ge-ink-4:     #8C8C90;
+  --ge-line:      #D6CFC1;
+  --ge-line-2:    #B9B0A0;
+
+  /* Accent (藍 / Indigo) */
+  --ge-accent:       #2C4A7E;
+  --ge-accent-ink:   #1B2F52;
+  --ge-accent-soft:  #E4EAF3;
+  --ge-accent-line:  #B8C4DA;
+
+  /* Semantic */
+  --ge-success:      #2F7A4F;
+  --ge-success-soft: #E3EFE6;
+  --ge-warning:      #B5761A;
+  --ge-warning-soft: #F5EAD2;
+  --ge-danger:       #A3332B;
+  --ge-danger-soft:  #F3DDD8;
+
+  /* Motion */
+  --ge-ease:     cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ge-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ge-ease-in:  cubic-bezier(0.4, 0, 1, 1);
+
+  /* Shadows */
+  --ge-shadow-sm: 0 1px 2px rgba(15,15,16,0.06), 0 0 0 1px rgba(15,15,16,0.04);
+  --ge-shadow-md: 0 4px 12px rgba(15,15,16,0.08), 0 0 0 1px rgba(15,15,16,0.04);
 }
 
 @theme inline {

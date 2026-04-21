@@ -100,6 +100,7 @@
     "status": "상태",
     "statusCheckedIn": "입장 중",
     "statusCheckedOut": "퇴장 완료",
+    "edit": "상세",
     "statusAutoClosed": "자동 퇴장",
     "searchPlaceholder": "회사명·이름으로 검색",
     "allStatuses": "전체 상태",
