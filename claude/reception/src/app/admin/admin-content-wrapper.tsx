@@ -9,7 +9,7 @@ export function AdminContentWrapper({ children }: { children: React.ReactNode })
   const pathname = usePathname()
   const hasSubNav = SUB_NAV_PATHS.some(p => pathname === p || pathname.startsWith(p + '/'))
   return (
-    <main style={{ paddingTop: hasSubNav ? 92 : 52 }} className="p-8">
+    <main style={{ paddingTop: hasSubNav ? 92 : 52, paddingLeft: 32, paddingRight: 32, paddingBottom: 32, boxSizing: 'border-box' }}>
       {children}
     </main>
   )
