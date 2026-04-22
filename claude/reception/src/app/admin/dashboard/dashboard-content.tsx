@@ -222,7 +222,7 @@ export function DashboardContent() {
       case 'alerts':         return <AlertPanel alerts={stats.alerts} />
       case 'baggage_alerts': return baggageAlerts.length > 0
         ? <BaggageAlerts alerts={baggageAlerts} />
-        : <div style={{ padding: '12px 16px', font: '400 12px/1 var(--ge-font-jp)', color: 'var(--ge-ink-4)' }}>未審査・フラグの手荷物はありません</div>
+        : <div style={{ padding: '12px 16px', font: '400 12px/1 var(--ge-font-jp)', color: 'var(--ge-ink-4)' }}>受付未監査の件数はありません</div>
       case 'trend_chart':    return <TrendChart />
       case 'store_ranking':
         return (

@@ -169,10 +169,10 @@ export function TodaySummary({ currentVisitors, todayVisits, pendingBaggage, lon
         />
         <MetricCard
           icon={<IconBaggage />}
-          label="未審査手荷物"
+          label="受付未監査"
           value={pendingBaggage}
           unit="件"
-          href="/admin/baggage"
+          href="/admin/visits"
           alert={pendingBaggage > 0}
         />
         <MetricCard

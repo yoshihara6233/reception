@@ -6,14 +6,14 @@ import type { DashboardAlert } from '@/app/api/v1/admin/dashboard/stats/route'
 const TYPE_LABELS: Record<string, string> = {
   inspection_rate_drop: '手荷物検査率低下',
   high_unmatch_rate:    'アンマッチ率上昇',
-  pending_baggage:      '未審査手荷物あり',
+  pending_baggage:      '受付未監査あり',
   long_stay:            '長時間滞在検知',
   no_visits_today:      '本日来訪ゼロ',
 }
 
 const TYPE_LINKS: Record<string, string> = {
-  inspection_rate_drop: '/admin/baggage',
-  pending_baggage:      '/admin/baggage',
+  inspection_rate_drop: '/admin/visits',
+  pending_baggage:      '/admin/visits',
   long_stay:            '/admin/visits',
 }
 

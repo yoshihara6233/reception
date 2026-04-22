@@ -280,7 +280,7 @@ export function StoreRanking({ period, onPeriodChange, rankings, visibleWidgets 
         )}
         {visibleWidgets.store_ranking_pending && (
           <RankingCard
-            title="未承認手荷物"
+            title="受付未監査"
             subtitle="未審査・フラグの積み残し件数（少ないほど良い）"
             items={rankings.pending_baggage}
             valueFormatter={v => `${v}件`}
