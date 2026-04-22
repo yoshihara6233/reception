@@ -54,7 +54,8 @@ const SECTION_META: Record<SectionKey, { label: (loc: string) => string }> = {
 
 const SUB_NAV: Record<SectionKey, NavItem[]> = {
   management: [
-    { href: '/admin/stores', icon: <Building2 size={14} strokeWidth={1.5} />, label: loc => `${loc}一覧` },
+    { href: '/admin/stores',            icon: <Building2    size={14} strokeWidth={1.5} />, label: loc => `${loc}一覧` },
+    { href: '/admin/pre-registrations', icon: <FileText     size={14} strokeWidth={1.5} />, label: '事前受付' },
   ],
   settings: [
     { href: '/admin/settings',         icon: <Settings   size={14} strokeWidth={1.5} />, label: '受付設定', exact: true },
