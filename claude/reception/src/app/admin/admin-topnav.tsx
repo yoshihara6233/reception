@@ -9,7 +9,7 @@ import { useSiteConfig } from '@/lib/site-config'
 import { useAdminAccess } from '@/lib/admin-access'
 import { canAccess } from '@/lib/acl'
 import {
-  LayoutDashboard, ClipboardList,
+  LayoutDashboard, ClipboardList, Luggage, BarChart3,
   Building2, Settings, Users, ScrollText, BookOpen,
   FileText,
 } from 'lucide-react'
@@ -30,9 +30,11 @@ type NavItem = {
 const OP_LINKS: NavItem[] = [
   { href: '/admin/dashboard', icon: <LayoutDashboard size={14} strokeWidth={1.5} />, label: 'ダッシュボード', exact: true },
   { href: '/admin/visits',    icon: <ClipboardList   size={14} strokeWidth={1.5} />, label: '来訪履歴' },
+  { href: '/admin/baggage',   icon: <Luggage         size={14} strokeWidth={1.5} />, label: '手荷物検査' },
+  { href: '/admin/analytics', icon: <BarChart3       size={14} strokeWidth={1.5} />, label: 'アナリティクス' },
 ]
 
-const OP_PATHS = ['/admin/dashboard', '/admin/visits']
+const OP_PATHS = ['/admin/dashboard', '/admin/visits', '/admin/baggage', '/admin/analytics']
 
 // ── セクション（サブナビあり） ────────────────────────────────────────────────
 
@@ -41,6 +43,8 @@ const SECTION_PATHS: Record<SectionKey, string[]> = {
   settings:   ['/admin/settings', '/admin/users', '/admin/logs'],
   manual:     ['/admin/manual'],
 }
+
+// OP_LINKS のパスはセクション判定から除外（currentSection=nullになる）
 
 const SECTION_META: Record<SectionKey, { label: (loc: string) => string }> = {
   management: { label: loc => `${loc}管理` },
