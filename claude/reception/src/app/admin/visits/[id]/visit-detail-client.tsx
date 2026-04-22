@@ -1,13 +1,258 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import Link from 'next/link'
 import { useLocale } from '@/lib/i18n/useLocale'
 
-// visitId を URL に乗せて録画ページへ遷移するためのリンク生成
-function recordingHref(baggageId: string, visitId: string) {
-  return `/admin/baggage/${baggageId}/recording?visitId=${visitId}`
+// ── 録画ビューアー定数（recording/page.tsx と共通） ───────────────────────────
+
+type MockCamera = { slot: 1 | 2; label: string; model: string; cameraId: string }
+type EventMarker = { t: number; label: string; color: string }
+
+const MOCK_CAMERAS: MockCamera[] = [
+  { slot: 1, label: '受付カウンター',   model: 'WV-S1536LN  2688×1520', cameraId: 'ipro-cam-001' },
+  { slot: 2, label: '手荷物検査デスク', model: 'WV-X2531LN  1920×1080', cameraId: 'ipro-cam-002' },
+]
+const MOCK_DURATION_SEC = 600
+const MOCK_EVENTS: EventMarker[] = [
+  { t: 60,  label: '入室',         color: 'bg-purple-500' },
+  { t: 120, label: '手荷物申告',   color: 'bg-amber-500'  },
+  { t: 185, label: '撮影',         color: 'bg-blue-500'   },
+  { t: 340, label: 'スタッフ審査', color: 'bg-emerald-500' },
+  { t: 510, label: '退室',         color: 'bg-orange-500' },
+]
+
+function fmtClock(sec: number) {
+  const m = Math.floor(sec / 60).toString().padStart(2, '0')
+  const s = Math.floor(sec % 60).toString().padStart(2, '0')
+  return `${m}:${s}`
 }
+
+// ── カメラパネル ──────────────────────────────────────────────────────────────
+
+function CameraPanel({ cam, position, playing, speed }: {
+  cam: MockCamera; position: number; playing: boolean; speed: number
+}) {
+  return (
+    <div className="relative aspect-video bg-gradient-to-br from-gray-900 via-slate-900 to-gray-800 rounded-xl overflow-hidden">
+      <div className="absolute inset-0 opacity-10" style={{
+        backgroundImage: 'linear-gradient(to right,white 1px,transparent 1px),linear-gradient(to bottom,white 1px,transparent 1px)',
+        backgroundSize: '40px 40px',
+      }} />
+      <div className="absolute top-2 left-2 text-[10px] text-white/80 font-mono bg-black/50 rounded px-2 py-0.5 leading-tight">
+        🔴 REC · カメラ{cam.slot} · {cam.label}
+        <div className="text-white/50 text-[9px]">{cam.model}</div>
+      </div>
+      <div className="absolute top-2 right-2 text-[10px] text-white/80 font-mono bg-black/50 rounded px-2 py-0.5 tabular-nums">
+        {new Date(Date.now() - (MOCK_DURATION_SEC - position) * 1000).toLocaleString('ja-JP')}
+      </div>
+      <div className="absolute bottom-2 right-2 text-[10px] text-white/60 font-mono">
+        {playing ? `▶ ×${speed}` : '⏸'}
+      </div>
+      <div className="absolute bottom-2 left-2 text-[9px] text-white/40 font-mono">
+        HLS: /recordings/{cam.cameraId}-{position}/stream.m3u8
+      </div>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div className={`w-14 h-14 rounded-full border-2 border-white/40 flex items-center justify-center text-xl text-white/70 ${playing ? 'bg-white/5' : 'bg-black/20'}`}>
+          {playing ? '⏸' : '▶'}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── インライン録画ビューアー（動画モード用） ─────────────────────────────────
+
+function InlineRecordingViewer({ baggageId, visitId }: { baggageId: string; visitId: string }) {
+  const [playing, setPlaying]   = useState(false)
+  const [position, setPosition] = useState(120)
+  const [speed, setSpeed]       = useState(1)
+  const [toast, setToast]       = useState<string | null>(null)
+  const timelineRef = useRef<HTMLDivElement>(null)
+
+  const posPct = (position / MOCK_DURATION_SEC) * 100
+
+  const fireToast = (msg: string) => {
+    setToast(msg)
+    setTimeout(() => setToast(null), 2500)
+  }
+
+  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!timelineRef.current) return
+    const rect = timelineRef.current.getBoundingClientRect()
+    const pct = (e.clientX - rect.left) / rect.width
+    setPosition(Math.max(0, Math.min(MOCK_DURATION_SEC, pct * MOCK_DURATION_SEC)))
+  }
+
+  return (
+    <div className="space-y-2">
+      {/* モックバナー */}
+      <div className="flex items-center justify-between">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-medium">
+          🚧 モック（i-PRO Remo 未接続）
+        </span>
+        <Link
+          href={`/admin/baggage/${baggageId}/recording?visitId=${visitId}`}
+          target="_blank"
+          className="text-xs text-[var(--ge-accent)] hover:underline"
+        >
+          別画面で開く ↗
+        </Link>
+      </div>
+
+      {/* カメラ 2 面 */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+        {MOCK_CAMERAS.map(cam => (
+          <div key={cam.slot} className="relative">
+            <CameraPanel cam={cam} position={position} playing={playing} speed={speed} />
+            <button
+              onClick={() => fireToast(`📥 ${cam.label} の録画を MP4 でダウンロード（cameraId: ${cam.cameraId}）`)}
+              className="absolute bottom-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-white/90 text-[11px] text-[var(--ge-accent)] font-medium shadow hover:bg-white"
+            >
+              📥 MP4 で取得
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* タイムライン + コントロール */}
+      <div className="bg-gray-50 rounded-xl px-4 py-3 space-y-3">
+        {/* コントロールバー */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setPosition(Math.max(0, position - 10))}
+            className="w-8 h-8 rounded-full border border-gray-200 bg-white hover:bg-gray-50 text-sm flex items-center justify-center"
+            title="10秒戻る"
+          >⏮</button>
+          <button
+            onClick={() => setPlaying(p => !p)}
+            className="w-10 h-10 rounded-full bg-[var(--ge-accent)] text-white text-base hover:bg-[var(--ge-accent-ink)] flex items-center justify-center"
+            title={playing ? '一時停止' : '再生（両カメラ同時）'}
+          >{playing ? '⏸' : '▶'}</button>
+          <button
+            onClick={() => setPosition(Math.min(MOCK_DURATION_SEC, position + 10))}
+            className="w-8 h-8 rounded-full border border-gray-200 bg-white hover:bg-gray-50 text-sm flex items-center justify-center"
+            title="10秒進む"
+          >⏭</button>
+          <div className="flex items-center gap-1">
+            {[0.5, 1, 2, 4].map(s => (
+              <button
+                key={s}
+                onClick={() => setSpeed(s)}
+                className={`px-2 py-0.5 text-xs rounded ${speed === s ? 'bg-[var(--ge-accent)] text-white' : 'text-gray-500 hover:bg-gray-200'}`}
+              >×{s}</button>
+            ))}
+          </div>
+          <span className="text-[10px] text-gray-400">両カメラ同期</span>
+          <div className="flex-1" />
+          <span className="text-xs text-gray-500 font-mono tabular-nums">
+            {fmtClock(position)} / {fmtClock(MOCK_DURATION_SEC)}
+          </span>
+        </div>
+
+        {/* シークバー */}
+        <div
+          ref={timelineRef}
+          onClick={handleSeek}
+          className="relative h-7 bg-gray-200 rounded-lg cursor-pointer group"
+        >
+          <div className="absolute inset-y-0 left-0 bg-[var(--ge-accent)]/20 rounded-lg" style={{ width: `${posPct}%` }} />
+          <div className="absolute top-0 bottom-0 w-0.5 bg-[var(--ge-accent)]" style={{ left: `${posPct}%` }} />
+          {MOCK_EVENTS.map(ev => (
+            <div
+              key={ev.label}
+              className="absolute top-0 bottom-0 w-1 group/ev"
+              style={{ left: `${(ev.t / MOCK_DURATION_SEC) * 100}%` }}
+            >
+              <div className={`absolute inset-0 ${ev.color}`} />
+              <div className="absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] bg-gray-800 text-white px-1.5 py-0.5 rounded opacity-0 group-hover/ev:opacity-100 transition-opacity pointer-events-none">
+                {ev.label} · {fmtClock(ev.t)}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* イベント凡例 */}
+        <div className="flex items-center gap-3 flex-wrap text-[11px] text-gray-500">
+          {MOCK_EVENTS.map(ev => (
+            <button
+              key={ev.label}
+              onClick={() => setPosition(ev.t)}
+              className="flex items-center gap-1.5 hover:text-gray-800 transition-colors"
+            >
+              <span className={`w-2 h-2 ${ev.color} rounded-full`} />
+              {ev.label}（{fmtClock(ev.t)}）
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* アクション */}
+      <div className="flex gap-2 flex-wrap">
+        <button
+          onClick={() => fireToast('📥 両カメラをまとめて MP4 ダウンロード（本番: /recordings/{id}/download ×2）')}
+          className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-[var(--ge-accent)] text-white rounded-xl text-xs font-medium hover:bg-[var(--ge-accent-ink)]"
+        >
+          📥 両カメラを MP4 ダウンロード
+        </button>
+        <button
+          onClick={() => fireToast(`📎 スナップショットを申告レコードに添付（${fmtClock(position)}）`)}
+          className="flex-1 flex items-center justify-center gap-1.5 py-2 border border-gray-200 rounded-xl text-xs text-gray-700 hover:bg-gray-50"
+        >
+          📎 現在フレームを添付
+        </button>
+        <button
+          onClick={() => fireToast(`🔖 ブックマーク: ${fmtClock(position)}（両カメラ）`)}
+          className="flex items-center justify-center gap-1.5 px-3 py-2 border border-gray-200 rounded-xl text-xs text-gray-700 hover:bg-gray-50"
+        >
+          🔖
+        </button>
+      </div>
+
+      {/* i-PRO Remo 接続情報 */}
+      <div className="grid grid-cols-2 gap-2">
+        <div className="bg-white rounded-xl border border-gray-100 p-3">
+          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">i-PRO Remo 接続</p>
+          <dl className="text-[11px] space-y-1">
+            {[
+              ['Endpoint', 'remo.i-pro.com'],
+              ['Tenant', '—（未設定）'],
+              ['カメラ数', `${MOCK_CAMERAS.length} / 2 台`],
+              ['録画保管元', '現地レコーダ'],
+            ].map(([k, v]) => (
+              <div key={k} className="flex justify-between gap-2">
+                <dt className="text-gray-400">{k}</dt>
+                <dd className="font-mono text-gray-700 truncate">{v}</dd>
+              </div>
+            ))}
+            <div className="flex justify-between gap-2">
+              <dt className="text-gray-400">Status</dt>
+              <dd><span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 text-[10px] font-medium">未接続</span></dd>
+            </div>
+          </dl>
+        </div>
+        <div className="bg-amber-50/60 border border-amber-100 rounded-xl p-3 text-[10px] text-amber-900 space-y-1">
+          <p className="font-semibold">本番接続時の差し替え</p>
+          <ul className="list-disc list-inside space-y-0.5 opacity-80">
+            <li>カメラ登録: <code>store_cameras</code></li>
+            <li>録画検索: <code>GET /cameras/{'{id}'}/recordings</code></li>
+            <li>再生: <code>GET /recordings/{'{id}'}/stream</code></li>
+            <li>MP4: <code>GET /recordings/{'{id}'}/download</code></li>
+          </ul>
+        </div>
+      </div>
+
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[var(--ge-accent)] text-white text-sm px-5 py-3 rounded-xl shadow-lg z-50 pointer-events-none">
+          {toast}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── 型定義 ────────────────────────────────────────────────────────────────────
 
 interface VisitInfo {
   purpose: string
@@ -76,11 +321,11 @@ function VisitStatusBadge({ status, t }: { status: string; t: (k: string) => str
   )
 }
 
-// ── 手荷物写真パネル ───────────────────────────────────────────────────────
+// ── 手荷物写真パネル ────────────────────────────────────────────────────────
 
-function BaggagePhotoPanel({
-  label, url, placeholder,
-}: { label: string; url: string | null; placeholder: string }) {
+function BaggagePhotoPanel({ label, url, placeholder }: {
+  label: string; url: string | null; placeholder: string
+}) {
   return (
     <div className="flex-1 min-w-0">
       <p className="text-xs text-gray-400 font-medium mb-1.5">{label}</p>
@@ -111,9 +356,9 @@ function BaggageReviewControls({
   onUpdated: (status: string, notes: string) => void
 }) {
   const [status, setStatus] = useState(currentStatus)
-  const [notes, setNotes] = useState(initNotes ?? '')
+  const [notes, setNotes]   = useState(initNotes ?? '')
   const [saving, setSaving] = useState(false)
-  const [open, setOpen] = useState(false)
+  const [open, setOpen]     = useState(false)
 
   const handleSave = async (newStatus: string) => {
     setSaving(true)
@@ -201,8 +446,7 @@ export function VisitDetailClient({
 
   const [baggage, setBaggage] = useState(baggageDeclarations)
 
-  const ocrPhoto = photos.find(p => p.ocrResult)
-  // 顔・名刺写真のみ（手荷物写真は baggage_declarations から取得）
+  const ocrPhoto     = photos.find(p => p.ocrResult)
   const visitorPhotos = photos.filter(p => p.type === 'face' || p.type === 'card')
 
   const handleBaggageUpdated = (bdId: string, status: string, notes: string) => {
@@ -227,6 +471,7 @@ export function VisitDetailClient({
         <VisitStatusBadge status={visitInfo.status} t={t} />
       </div>
 
+      {/* ── 来訪情報 + 写真 ─────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* 来訪情報 */}
         <div className="bg-white rounded-2xl shadow-sm p-6">
@@ -277,7 +522,6 @@ export function VisitDetailClient({
               })}
             </div>
           )}
-
           {ocrPhoto && (
             <div className="mt-4 p-3 bg-[#f0f2f5] rounded-xl">
               <p className="text-xs text-gray-500 mb-2 font-medium">{t('admin.ocrResult')}</p>
@@ -289,9 +533,9 @@ export function VisitDetailClient({
         </div>
       </div>
 
-      {/* 手荷物検査セクション */}
+      {/* ── 手荷物検査セクション ─────────────────────────────────────────────── */}
       {baggage.length > 0 && (
-        <div className="mt-6 space-y-4">
+        <div className="mt-6 space-y-6">
           {baggage.map(bd => (
             <div key={bd.id} className="bg-white rounded-2xl shadow-sm overflow-hidden">
               {/* ヘッダー */}
@@ -312,49 +556,15 @@ export function VisitDetailClient({
               </div>
 
               <div className="px-6 py-5 space-y-5">
-                {/* 動画モード: 録画リンクカード */}
+
+                {/* 動画モード: インライン録画ビューアー */}
                 {bd.inspection_mode === 'video' ? (
-                  <Link
-                    href={recordingHref(bd.id, visitId)}
-                    className="group block bg-gray-900 rounded-xl overflow-hidden hover:ring-2 hover:ring-violet-500 transition-all"
-                  >
-                    <div className="aspect-video flex flex-col items-center justify-center relative">
-                      <div className="absolute inset-0 opacity-10"
-                        style={{
-                          backgroundImage: 'linear-gradient(to right, white 1px, transparent 1px), linear-gradient(to bottom, white 1px, transparent 1px)',
-                          backgroundSize: '40px 40px',
-                        }}
-                      />
-                      <div className="absolute top-3 left-3 text-[10px] text-white/70 font-mono bg-black/50 rounded px-2 py-0.5">
-                        🔴 REC · i-PRO Remo
-                      </div>
-                      <div className="absolute top-3 right-3 text-[10px] text-white/60 font-mono bg-black/50 rounded px-2 py-0.5">
-                        {new Date(visitInfo.checkInAt).toLocaleString(dateLocale)} ± 5分
-                      </div>
-                      <div className="w-16 h-16 rounded-full border-2 border-white/40 flex items-center justify-center text-white/70 group-hover:border-violet-400 group-hover:text-violet-400 transition-colors bg-black/20">
-                        <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
-                          <polygon points="5 3 19 12 5 21 5 3"/>
-                        </svg>
-                      </div>
-                      <p className="text-white/60 text-sm mt-3">録画を再生する</p>
-                      <p className="text-white/40 text-xs mt-1 group-hover:text-violet-400 transition-colors">
-                        クリックして録画ビューアーを開く →
-                      </p>
-                    </div>
-                  </Link>
+                  <InlineRecordingViewer baggageId={bd.id} visitId={visitId} />
                 ) : (
-                  /* 写真モード: 手荷物写真インライン表示 */
+                  /* 写真モード: 手荷物写真インライン */
                   <div className="flex gap-3">
-                    <BaggagePhotoPanel
-                      label="荷物の内容"
-                      url={bd.photoContentsUrl}
-                      placeholder="写真なし"
-                    />
-                    <BaggagePhotoPanel
-                      label="バッグ外観（空）"
-                      url={bd.photoEmptyUrl}
-                      placeholder="写真なし"
-                    />
+                    <BaggagePhotoPanel label="荷物の内容" url={bd.photoContentsUrl} placeholder="写真なし" />
+                    <BaggagePhotoPanel label="バッグ外観（空）" url={bd.photoEmptyUrl} placeholder="写真なし" />
                   </div>
                 )}
 
