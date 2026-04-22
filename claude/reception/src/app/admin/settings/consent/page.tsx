@@ -109,7 +109,7 @@ export default function ConsentSettingsPage() {
   return (
     <div className="max-w-2xl">
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-[#1e3a5f]">個人情報取扱同意設定</h1>
+        <h1 className="text-2xl font-bold text-[#1e3a5f]">個人情報取扱同意設定</h1>
         <p className="text-sm text-gray-500 mt-1">
           来訪者が写真・名刺データを提供する前に表示する同意文を設定します。
           未設定の場合、同意画面はスキップされます。

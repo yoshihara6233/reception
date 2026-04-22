@@ -357,7 +357,7 @@ export default function VisitsPage() {
       {/* ── ヘッダー ────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-          <h1 style={{ font: '700 20px/1.2 var(--font-sans)', color: 'var(--ge-ink)', margin: 0 }}>
+          <h1 style={{ font: '700 24px/1.2 var(--font-sans)', color: '#1e3a5f', margin: 0 }}>
             {t('admin.visits')}
           </h1>
           <span style={{ font: '400 12px/1 var(--font-sans)', color: 'var(--ge-ink-4)' }}>
