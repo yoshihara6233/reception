@@ -80,7 +80,7 @@
   "admin": {
     "title": "Admin",
     "dashboard": "Dashboard",
-    "visits": "Visit History",
+    "visits": "Reception History",
     "analytics": "Analytics",
     "stores": "Store Management",
     "settings": "Reception Settings",
@@ -118,7 +118,7 @@
     "businessCard": "Business Card",
     "facePhoto": "Face Photo",
     "ocrResult": "OCR Result",
-    "backToVisits": "Back to Visit History",
+    "backToVisits": "Back to Reception History",
     "addStore": "Add Store",
     "storeName": "Store Name",
     "address": "Address",

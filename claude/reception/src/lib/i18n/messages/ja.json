@@ -80,7 +80,7 @@
   "admin": {
     "title": "管理画面",
     "dashboard": "ダッシュボード",
-    "visits": "来訪履歴",
+    "visits": "受付履歴",
     "analytics": "アナリティクス",
     "stores": "店舗管理",
     "settings": "受付設定",
@@ -118,7 +118,7 @@
     "businessCard": "名刺",
     "facePhoto": "顔写真",
     "ocrResult": "OCR結果",
-    "backToVisits": "来訪履歴に戻る",
+    "backToVisits": "受付履歴に戻る",
     "addStore": "店舗を追加",
     "storeName": "店舗名",
     "address": "住所",

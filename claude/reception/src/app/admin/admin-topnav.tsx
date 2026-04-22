@@ -29,12 +29,11 @@ type NavItem = {
 
 const OP_LINKS: NavItem[] = [
   { href: '/admin/dashboard', icon: <LayoutDashboard size={14} strokeWidth={1.5} />, label: 'ダッシュボード', exact: true },
-  { href: '/admin/visits',    icon: <ClipboardList   size={14} strokeWidth={1.5} />, label: '来訪履歴' },
-  { href: '/admin/baggage',   icon: <Luggage         size={14} strokeWidth={1.5} />, label: '手荷物検査' },
+  { href: '/admin/visits',    icon: <ClipboardList   size={14} strokeWidth={1.5} />, label: '受付履歴' },
   { href: '/admin/analytics', icon: <BarChart3       size={14} strokeWidth={1.5} />, label: 'アナリティクス' },
 ]
 
-const OP_PATHS = ['/admin/dashboard', '/admin/visits', '/admin/baggage', '/admin/analytics']
+const OP_PATHS = ['/admin/dashboard', '/admin/visits', '/admin/analytics']
 
 // ── セクション（サブナビあり） ────────────────────────────────────────────────
 
