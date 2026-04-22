@@ -6,6 +6,13 @@ import { useLocale } from '@/lib/i18n/useLocale'
 
 // ── 型 ────────────────────────────────────────────────────────────────────────
 
+interface BaggageDecl {
+  id: string
+  status: string
+  context: 'checkin' | 'checkout'
+  inspection_mode: 'photo' | 'video' | null
+}
+
 interface Visit {
   id: string
   purpose: string
@@ -14,6 +21,7 @@ interface Visit {
   check_out_at: string | null
   visitors: { company: string; name: string; department?: string } | null
   stores: { id: string; name: string } | null
+  baggage_declarations: BaggageDecl[] | null
 }
 
 interface Store { id: string; name: string }
@@ -59,6 +67,47 @@ function StatusBadge({ status, t }: { status: string; t: (k: string) => string }
       {labelKeys[status] ? t(labelKeys[status]) : status}
     </span>
   )
+}
+
+function BaggageBadge({ decls }: { decls: BaggageDecl[] | null }) {
+  if (!decls || decls.length === 0) return null
+  const hasFlagged = decls.some(d => d.status === 'flagged')
+  const hasPending = decls.some(d => d.status === 'pending' || d.status === '')
+  const allCleared = decls.every(d => d.status === 'cleared')
+  if (hasFlagged) return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 3,
+      padding: '2px 6px', borderRadius: 999,
+      font: '500 10px/1 var(--font-sans)',
+      background: '#fef2f2', color: '#b91c1c',
+      border: '1px solid #fecaca', whiteSpace: 'nowrap',
+    }}>🚩 フラグ</span>
+  )
+  if (hasPending) return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 3,
+      padding: '2px 6px', borderRadius: 999,
+      font: '500 10px/1 var(--font-sans)',
+      background: '#fefce8', color: '#a16207',
+      border: '1px solid #fde68a', whiteSpace: 'nowrap',
+    }}>⚠️ 未審査</span>
+  )
+  if (allCleared) return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 3,
+      padding: '2px 6px', borderRadius: 999,
+      font: '500 10px/1 var(--font-sans)',
+      background: '#f0fdf4', color: '#15803d',
+      border: '1px solid #bbf7d0', whiteSpace: 'nowrap',
+    }}>✓ 済</span>
+  )
+  return null
+}
+
+function getBaggageMode(decls: BaggageDecl[] | null): string {
+  if (!decls || decls.length === 0) return '—'
+  const hasVideo = decls.some(d => d.inspection_mode === 'video')
+  return hasVideo ? '🎥 動画' : '📷 写真'
 }
 
 function SortTh({
@@ -136,6 +185,9 @@ export default function VisitsPage() {
   // 選択状態
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
+  // 手荷物フィルター（クライアントサイド）
+  const [baggageFilter, setBaggageFilter] = useState<'' | 'flagged' | 'pending' | 'cleared' | 'none'>('')
+
   const [filters,  setFilters]  = useState<Filters>(EMPTY_FILTERS)
   const [sortCol,  setSortCol]  = useState<SortCol>('check_in_at')
   const [sortDir,  setSortDir]  = useState<SortDir>('desc')
@@ -143,7 +195,7 @@ export default function VisitsPage() {
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const perPage = 20
   const totalPages = Math.ceil(total / perPage)
-  const hasFilters = Object.values(filters).some(v => v !== '')
+  const hasFilters = Object.values(filters).some(v => v !== '') || !!baggageFilter
 
   // ── 店舗一覧・目的一覧 ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -201,6 +253,7 @@ export default function VisitsPage() {
   }
   const clearFilters = () => {
     setFilters(EMPTY_FILTERS)
+    setBaggageFilter('')
     applyFilters(EMPTY_FILTERS, sortCol, sortDir)
   }
 
@@ -258,6 +311,17 @@ export default function VisitsPage() {
     setExporting(false)
   }
 
+  // 手荷物フィルター適用（表示用）
+  const getBaggageSummary = (decls: BaggageDecl[] | null): 'flagged' | 'pending' | 'cleared' | 'none' => {
+    if (!decls || decls.length === 0) return 'none'
+    if (decls.some(d => d.status === 'flagged')) return 'flagged'
+    if (decls.some(d => d.status === 'pending' || d.status === '')) return 'pending'
+    return 'cleared'
+  }
+  const displayedVisits = baggageFilter
+    ? visits.filter(v => getBaggageSummary(v.baggage_declarations) === baggageFilter)
+    : visits
+
   const sortProps = { sortCol, sortDir, onSort: handleSort }
   const selectedCount = selected.size
 
@@ -290,6 +354,21 @@ export default function VisitsPage() {
               絞り込みクリア
             </button>
           )}
+          <Link
+            href="/admin/baggage/review"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '5px 12px', borderRadius: 4,
+              font: '500 11px/1 var(--font-sans)', color: '#fff',
+              background: 'var(--ge-accent)', border: '1px solid var(--ge-accent)',
+              textDecoration: 'none',
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            </svg>
+            手荷物レビュー
+          </Link>
           <button
             onClick={() => handleExport(false)}
             disabled={exporting}
@@ -366,6 +445,7 @@ export default function VisitsPage() {
               <SortTh col="check_in_at"  label={t('admin.checkInTime')}  {...sortProps} />
               <SortTh col="check_out_at" label={t('admin.checkOutTime')} {...sortProps} />
               <SortTh col="status"       label={t('admin.status')}       {...sortProps} />
+              <th style={{ padding: '8px 12px', textAlign: 'left', font: '500 11px/1 var(--font-sans)', color: 'var(--ge-ink-4)', whiteSpace: 'nowrap' }}>手荷物</th>
               <th style={{ width: 40 }} />
             </tr>
 
@@ -428,6 +508,23 @@ export default function VisitsPage() {
                   <option value="auto_closed">{t('admin.statusAutoClosed')}</option>
                 </select>
               </td>
+              <td style={{ padding: '4px 6px' }}>
+                <select
+                  value={baggageFilter}
+                  onChange={e => setBaggageFilter(e.target.value as typeof baggageFilter)}
+                  style={{
+                    width: '100%', padding: '4px 8px',
+                    font: '400 11px/1.4 var(--font-sans)', color: baggageFilter ? 'var(--ge-ink)' : 'var(--ge-ink-4)',
+                    background: '#fff', border: '1px solid var(--ge-line)', borderRadius: 4, outline: 'none',
+                  }}
+                >
+                  <option value="">すべて</option>
+                  <option value="flagged">🚩 フラグあり</option>
+                  <option value="pending">⚠️ 未審査あり</option>
+                  <option value="cleared">✓ 済</option>
+                  <option value="none">申告なし</option>
+                </select>
+              </td>
               <td />
             </tr>
           </thead>
@@ -440,7 +537,7 @@ export default function VisitsPage() {
                   <td style={{ padding: '8px 14px' }}>
                     <div style={{ width: 14, height: 14, background: 'var(--ge-paper-2)', borderRadius: 2 }} />
                   </td>
-                  {[...Array(8)].map((_, j) => (
+                  {[...Array(9)].map((_, j) => (
                     <td key={j} style={{ padding: '10px 12px' }}>
                       <div style={{
                         height: 12, borderRadius: 3, background: 'var(--ge-paper-2)',
@@ -451,13 +548,16 @@ export default function VisitsPage() {
                   ))}
                 </tr>
               ))
-            ) : visits.length === 0 ? (
+            ) : displayedVisits.length === 0 ? (
               <tr>
-                <td colSpan={9} style={{ textAlign: 'center', padding: '48px 0', color: 'var(--ge-ink-4)', font: '400 13px/1 var(--font-sans)' }}>
-                  {hasFilters ? (
+                <td colSpan={10} style={{ textAlign: 'center', padding: '48px 0', color: 'var(--ge-ink-4)', font: '400 13px/1 var(--font-sans)' }}>
+                  {hasFilters || baggageFilter ? (
                     <div>
                       <p style={{ marginBottom: 8 }}>条件に一致する来訪記録がありません</p>
-                      <button onClick={clearFilters} style={{ font: '500 11px/1 var(--font-sans)', color: 'var(--ge-accent)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
+                      <button
+                        onClick={() => { clearFilters(); setBaggageFilter('') }}
+                        style={{ font: '500 11px/1 var(--font-sans)', color: 'var(--ge-accent)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+                      >
                         絞り込みをクリア
                       </button>
                     </div>
@@ -465,7 +565,7 @@ export default function VisitsPage() {
                 </td>
               </tr>
             ) : (
-              visits.map(visit => {
+              displayedVisits.map(visit => {
                 const isSelected = selected.has(visit.id)
                 return (
                   <tr
@@ -518,6 +618,20 @@ export default function VisitsPage() {
                     </td>
                     <td style={{ padding: '10px 12px' }}>
                       <StatusBadge status={visit.status} t={t} />
+                    </td>
+                    <td style={{ padding: '10px 12px' }} onClick={e => e.stopPropagation()}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        {visit.baggage_declarations && visit.baggage_declarations.length > 0 && (
+                          <span style={{
+                            font: '400 10px/1 var(--font-sans)',
+                            color: 'var(--ge-ink-4)',
+                            whiteSpace: 'nowrap',
+                          }}>
+                            {getBaggageMode(visit.baggage_declarations)}
+                          </span>
+                        )}
+                        <BaggageBadge decls={visit.baggage_declarations} />
+                      </div>
                     </td>
                     <td style={{ padding: '10px 12px', textAlign: 'right' }}>
                       <Link

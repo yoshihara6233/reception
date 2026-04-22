@@ -10,6 +10,8 @@ const DEFAULT_SETTINGS = {
   require_business_card: 'optional',
   require_face_photo: 'optional',
   visit_purposes: ['定期配送', 'メンテナンス', '商談', '監査', 'その他'],
+  require_baggage_inspection_checkin: 'none',
+  require_baggage_inspection_checkout: 'none',
 }
 
 export async function GET(req: NextRequest) {
@@ -60,6 +62,14 @@ export async function GET(req: NextRequest) {
       storeSettings.visit_purposes ??
       tenantSettings.visit_purposes ??
       DEFAULT_SETTINGS.visit_purposes,
+    require_baggage_inspection_checkin:
+      storeSettings.require_baggage_inspection_checkin ??
+      tenantSettings.require_baggage_inspection_checkin ??
+      DEFAULT_SETTINGS.require_baggage_inspection_checkin,
+    require_baggage_inspection_checkout:
+      storeSettings.require_baggage_inspection_checkout ??
+      tenantSettings.require_baggage_inspection_checkout ??
+      DEFAULT_SETTINGS.require_baggage_inspection_checkout,
   }
 
   return NextResponse.json({ settings: merged })

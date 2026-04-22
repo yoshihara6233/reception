@@ -40,6 +40,12 @@ export const ANNOUNCEMENTS: Record<string, Record<Locale, string>> = {
     zh: '请面对摄像头，然后按下拍摄按钮。',
     ko: '카메라를 바라보고 촬영 버튼을 눌러주세요.',
   },
+  baggage: {
+    ja: '手荷物を申告してください。カバンの中身とカバン内部の写真を撮影します。',
+    en: 'Please declare your baggage. You will photograph its contents and the inside of the bag.',
+    zh: '请申报随身行李。请拍摄行李内容物及行李内部的照片。',
+    ko: '수하물을 신고해 주세요. 가방 내용물과 가방 내부 사진을 촬영합니다.',
+  },
   confirm: {
     ja: '入力内容をご確認ください。よろしければ入室するボタンを押してください。',
     en: 'Please review your information. When ready, tap the Check In button.',
@@ -160,6 +166,14 @@ export function useAnnounce() {
     playAudioFile(key as string, locale)
   }, [])
 
+  const stop = useCallback(() => {
+    if (_playTimer !== null) { clearTimeout(_playTimer); _playTimer = null }
+    if (_currentAudio) { _currentAudio.pause(); _currentAudio.currentTime = 0; _currentAudio = null }
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel()
+    }
+  }, [])
+
   const isMuted  = useCallback(() => getIsMuted(), [])
   const setMuted = useCallback((muted: boolean) => {
     localStorage.setItem(MUTE_KEY, String(muted))
@@ -182,5 +196,5 @@ export function useAnnounce() {
     }
   }, [])
 
-  return { announce, speak, isMuted, setMuted }
+  return { announce, speak, stop, isMuted, setMuted }
 }

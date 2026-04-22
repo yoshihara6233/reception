@@ -4,12 +4,12 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useLocale, type Locale } from '@/lib/i18n/useLocale'
 import { LogoutButton } from './logout-button'
-import { useEffect, useState } from 'react'
+
 import { useSiteConfig } from '@/lib/site-config'
 import { useAdminAccess } from '@/lib/admin-access'
 import { canAccess } from '@/lib/acl'
 import {
-  LayoutDashboard, ClipboardList, Briefcase,
+  LayoutDashboard, ClipboardList,
   Building2, Settings, Users, ScrollText, BookOpen,
   FileText,
 } from 'lucide-react'
@@ -23,7 +23,6 @@ type NavItem = {
   icon: React.ReactNode
   label: string | ((loc: string) => string)
   exact?: boolean
-  badgeKey?: string
 }
 
 // ── 1行目に直接並べるオペレーションリンク ────────────────────────────────────
@@ -31,10 +30,9 @@ type NavItem = {
 const OP_LINKS: NavItem[] = [
   { href: '/admin/dashboard', icon: <LayoutDashboard size={14} strokeWidth={1.5} />, label: 'ダッシュボード', exact: true },
   { href: '/admin/visits',    icon: <ClipboardList   size={14} strokeWidth={1.5} />, label: '来訪履歴' },
-  { href: '/admin/baggage',   icon: <Briefcase       size={14} strokeWidth={1.5} />, label: '手荷物検査', badgeKey: 'baggage' },
 ]
 
-const OP_PATHS = ['/admin/dashboard', '/admin/visits', '/admin/baggage']
+const OP_PATHS = ['/admin/dashboard', '/admin/visits']
 
 // ── セクション（サブナビあり） ────────────────────────────────────────────────
 
@@ -88,7 +86,6 @@ export function AdminTopNav() {
   const pathname = usePathname()
   const { locationName } = useSiteConfig()
   const { role, name, email } = useAdminAccess()
-  const [baggageCount, setBaggageCount] = useState(0)
   const isLogin = pathname === '/admin/login'
 
   // どのセクションにいるか（オペレーションリンクはnull）
@@ -98,15 +95,6 @@ export function AdminTopNav() {
     )?.[0] ?? null
 
   const subNavItems = currentSection ? SUB_NAV[currentSection] : null
-
-  // 手荷物バッジ
-  useEffect(() => {
-    if (isLogin) return
-    fetch('/api/v1/admin/baggage-count')
-      .then(r => r.json())
-      .then(d => setBaggageCount(d.count ?? 0))
-      .catch(() => {})
-  }, [pathname, isLogin])
 
   if (isLogin) return null
 
@@ -167,23 +155,11 @@ export function AdminTopNav() {
             const active = isActive(pathname, item.href, item.exact)
             const allowed = canAccess(role, item.href)
             const label = resolveLabel(item.label, locationName)
-            const count = item.badgeKey === 'baggage' ? baggageCount : 0
             if (!allowed) return null
             return (
               <Link key={item.href} href={item.href} style={linkStyle(active)}>
                 {item.icon}
                 {label}
-                {count > 0 && (
-                  <span style={{
-                    background: 'var(--ge-danger)', color: '#fff',
-                    font: '600 10px/1 var(--font-mono)',
-                    borderRadius: 999, minWidth: 16, height: 16,
-                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                    padding: '0 4px', marginLeft: 2,
-                  }}>
-                    {count > 99 ? '99+' : count}
-                  </span>
-                )}
               </Link>
             )
           })}

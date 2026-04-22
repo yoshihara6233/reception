@@ -51,6 +51,19 @@ export default function ConfirmPage() {
     }
   }
 
+  const uploadBaggagePhoto = async (visitId: string, tenantId: string, slot: 'contents' | 'empty', dataUrl: string): Promise<string | null> => {
+    try {
+      const res = await fetch('/api/v1/visits/photos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visitId, tenantId, type: `baggage_${slot}`, photoData: dataUrl }),
+      })
+      if (!res.ok) return null
+      const data = await res.json()
+      return data.storagePath || null
+    } catch { return null }
+  }
+
   const handleCheckIn = async () => {
     if (!form || submitting) return
     setSubmitting(true)
@@ -87,6 +100,37 @@ export default function ConfirmPage() {
       if (cardPhoto) uploadTasks.push(uploadPhoto(visitId, tenantId, 'card', cardPhoto))
       if (facePhoto) uploadTasks.push(uploadPhoto(visitId, tenantId, 'face', facePhoto))
       if (uploadTasks.length > 0) await Promise.all(uploadTasks)
+
+      // Submit baggage declaration (checkin) if present
+      const baggageMode = sessionStorage.getItem('reception-baggage-checkin-mode')
+      const baggageDecl = sessionStorage.getItem('reception-baggage-checkin-declaration')
+      const baggageContents = sessionStorage.getItem('reception-baggage-checkin-photo-contents')
+      const baggageEmpty = sessionStorage.getItem('reception-baggage-checkin-photo-empty')
+
+      if (baggageMode) {
+        let photoPathContents: string | null = null
+        let photoPathEmpty: string | null = null
+        if (baggageMode === 'photo') {
+          if (baggageContents) photoPathContents = await uploadBaggagePhoto(visitId, tenantId, 'contents', baggageContents)
+          if (baggageEmpty) photoPathEmpty = await uploadBaggagePhoto(visitId, tenantId, 'empty', baggageEmpty)
+        }
+
+        await fetch('/api/v1/visits/baggage', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            visitId, tenantId, context: 'checkin',
+            declaration: baggageDecl || null,
+            photoPathContents, photoPathEmpty,
+            inspectionMode: baggageMode,
+          }),
+        }).catch(() => {/* non-fatal */})
+
+        sessionStorage.removeItem('reception-baggage-checkin-mode')
+        sessionStorage.removeItem('reception-baggage-checkin-declaration')
+        sessionStorage.removeItem('reception-baggage-checkin-photo-contents')
+        sessionStorage.removeItem('reception-baggage-checkin-photo-empty')
+      }
 
       // Link consent record to visit (fire-and-forget)
       const consentRecordId = sessionStorage.getItem('reception-consent-record-id')

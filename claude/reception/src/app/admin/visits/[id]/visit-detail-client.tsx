@@ -21,6 +21,14 @@ interface Photo {
   ocrResult?: unknown
 }
 
+interface BaggageDeclaration {
+  id: string
+  context: 'checkin' | 'checkout'
+  inspection_mode: 'photo' | 'video' | null
+  declaration_text: string | null
+  status: string
+}
+
 function StatusBadge({ status, t }: { status: string; t: (k: string) => string }) {
   const styles: Record<string, string> = {
     checked_in: 'bg-emerald-50 text-emerald-700',
@@ -44,11 +52,13 @@ export function VisitDetailClient({
   visitorCompany,
   visitInfo,
   photos,
+  baggageDeclarations = [],
 }: {
   visitorName: string
   visitorCompany: string
   visitInfo: VisitInfo
   photos: Photo[]
+  baggageDeclarations?: BaggageDeclaration[]
 }) {
   const { t, locale } = useLocale()
   const dateLocale = locale === 'zh' ? 'zh-CN' : locale === 'ko' ? 'ko-KR' : locale === 'en' ? 'en-US' : 'ja-JP'
@@ -129,6 +139,58 @@ export function VisitDetailClient({
           )}
         </div>
       </div>
+
+      {/* Baggage declarations */}
+      {baggageDeclarations.length > 0 && (
+        <div className="mt-6 space-y-4">
+          {baggageDeclarations.map(bd => (
+            <div key={bd.id} className="bg-white rounded-2xl shadow-sm p-6">
+              <h2 className="font-semibold text-[#1e3a5f] mb-4">
+                🧳 手荷物検査 — {bd.context === 'checkin' ? '入室時' : '退室時'}
+              </h2>
+              {bd.inspection_mode === 'video' ? (
+                <div>
+                  <div className="bg-gray-900 rounded-xl aspect-video flex flex-col items-center justify-center mb-4">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" opacity="0.5">
+                      <circle cx="12" cy="12" r="10"/>
+                      <polygon points="10 8 16 12 10 16 10 8" fill="white" stroke="none"/>
+                    </svg>
+                    <p className="text-white/60 text-sm mt-3">i-PRO Remo 動画</p>
+                    <p className="text-white/40 text-xs mt-1">{new Date(visitInfo.checkInAt).toLocaleString(dateLocale)} ± 5分</p>
+                    <p className="text-white/30 text-xs mt-3">（連携設定後に再生可能）</p>
+                  </div>
+                  {bd.declaration_text && (
+                    <div className="p-3 bg-[#f0f2f5] rounded-xl">
+                      <p className="text-xs text-gray-500 mb-1 font-medium">申告内容</p>
+                      <p className="text-sm text-gray-700">{bd.declaration_text}</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <p className="text-sm text-gray-400 mb-2">写真は上部のフォトセクションに表示されます</p>
+                  {bd.declaration_text && (
+                    <div className="p-3 bg-[#f0f2f5] rounded-xl">
+                      <p className="text-xs text-gray-500 mb-1 font-medium">申告内容</p>
+                      <p className="text-sm text-gray-700">{bd.declaration_text}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+              <div className="mt-3 flex items-center gap-2">
+                <span className="text-xs text-gray-400">ステータス:</span>
+                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                  bd.status === 'cleared' ? 'bg-green-50 text-green-700' :
+                  bd.status === 'flagged' ? 'bg-red-50 text-red-700' :
+                  'bg-yellow-50 text-yellow-700'
+                }`}>
+                  {bd.status === 'cleared' ? '✓ 済' : bd.status === 'flagged' ? '🚩 フラグ' : '⚠️ 未審査'}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

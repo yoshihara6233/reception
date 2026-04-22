@@ -14,7 +14,7 @@ export default async function VisitDetailPage({ params }: Props) {
 
   const { data: visit } = await supabase
     .from('visits')
-    .select('*, visitors(*), stores(name), areas(name), visit_photos(*)')
+    .select('*, visitors(*), stores(name), areas(name), visit_photos(*), baggage_declarations(id, context, inspection_mode, declaration_text, status)')
     .eq('id', id)
     .single()
 
@@ -38,6 +38,14 @@ export default async function VisitDetailPage({ params }: Props) {
     })
   )
 
+  const baggageDeclarations = ((visit.baggage_declarations as any[]) || []).map((bd: any) => ({
+    id: bd.id,
+    context: bd.context as 'checkin' | 'checkout',
+    inspection_mode: bd.inspection_mode as 'photo' | 'video' | null,
+    declaration_text: bd.declaration_text as string | null,
+    status: bd.status as string,
+  }))
+
   return (
     <VisitDetailClient
       visitorName={visitor?.name ?? ''}
@@ -53,6 +61,7 @@ export default async function VisitDetailPage({ params }: Props) {
         status: visit.status,
       }}
       photos={photosWithUrls}
+      baggageDeclarations={baggageDeclarations}
     />
   )
 }

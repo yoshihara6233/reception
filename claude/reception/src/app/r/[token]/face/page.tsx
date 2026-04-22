@@ -28,9 +28,9 @@ export default function FaceCapturePage() {
       if (raw) {
         const s = JSON.parse(raw)
         setFaceRequired(s.require_face_photo === 'required')
-        // hidden の場合はスキップして確認画面へ
+        // hidden の場合はスキップして手荷物検査へ（手荷物側でさらにスキップ判定）
         if (s.require_face_photo === 'hidden') {
-          router.replace(`/r/${params.token}/confirm`)
+          router.replace(`/r/${params.token}/baggage?context=checkin`)
         }
       }
     } catch { /* ignore */ }
@@ -107,13 +107,13 @@ export default function FaceCapturePage() {
     const reader = new FileReader()
     reader.onload = () => {
       sessionStorage.setItem('reception-face-photo', reader.result as string)
-      router.push(`/r/${params.token}/confirm`)
+      router.push(`/r/${params.token}/baggage?context=checkin`)
     }
     reader.readAsDataURL(compressed)
   }
 
   const handleSkip = () => {
-    router.push(`/r/${params.token}/confirm`)
+    router.push(`/r/${params.token}/baggage?context=checkin`)
   }
 
   if (phase === 'error') {

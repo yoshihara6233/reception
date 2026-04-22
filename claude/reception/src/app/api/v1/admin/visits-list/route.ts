@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
   let query = supabase
     .from('visits')
     .select(
-      'id, purpose, status, check_in_at, check_out_at, visitors(company, name, department), stores(id, name)',
+      'id, purpose, status, check_in_at, check_out_at, visitors(company, name, department), stores(id, name), baggage_declarations(id, status, context, inspection_mode)',
       { count: 'exact' }
     )
     .eq('tenant_id', tenantId)

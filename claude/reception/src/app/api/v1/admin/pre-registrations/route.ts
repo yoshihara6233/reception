@@ -85,6 +85,40 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ id: data.id, token: data.token }, { status: 201 })
 }
 
+// PUT /api/v1/admin/pre-registrations — update details
+export async function PUT(req: NextRequest) {
+  const ctx = await getAdminContext()
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const body = await req.json()
+  const { id, visitorCompany, visitorName, visitorEmail, purpose, areaId, contactPersonId, expiresAt } = body
+
+  if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+  if (!visitorCompany?.trim() || !visitorName?.trim() || !purpose?.trim()) {
+    return NextResponse.json({ error: '必須項目が入力されていません' }, { status: 400 })
+  }
+
+  const supabase = createAdminClient()
+  const updates: Record<string, unknown> = {
+    visitor_company: visitorCompany.trim(),
+    visitor_name: visitorName.trim(),
+    visitor_email: visitorEmail?.trim() || null,
+    purpose: purpose.trim(),
+  }
+  if (areaId) updates.area_id = areaId
+  if (contactPersonId) updates.contact_person_id = contactPersonId
+  if (expiresAt) updates.expires_at = new Date(expiresAt).toISOString()
+
+  const { error } = await supabase
+    .from('pre_registrations')
+    .update(updates)
+    .eq('id', id)
+    .eq('tenant_id', ctx.tenant_id)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true })
+}
+
 // PATCH /api/v1/admin/pre-registrations — cancel
 export async function PATCH(req: NextRequest) {
   const ctx = await getAdminContext()

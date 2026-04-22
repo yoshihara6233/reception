@@ -1,149 +1,452 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useLocale } from '@/lib/i18n/useLocale'
 import { useAnnounce } from '@/lib/speech/useAnnounce'
+
+// ── Genesis Edge brand tokens ─────────────────────────────────────────────────
+const GE = {
+  ink:        '#2C4A7E',   // GE Accent Indigo
+  inkDark:    '#1B2F52',   // GE Accent Ink
+  soft:       '#E4EAF3',   // GE Accent Soft
+  line:       '#B8C4DA',   // GE Accent Line
+  paper:      '#F7F5F1',
+  paperDark:  '#EFEBE3',
+  neutral:    '#5B5B5F',
+  subtle:     '#8C8C90',
+  border:     '#D6CFC1',
+  success:    '#2F7A4F',   // for exit / checkout section
+  successSoft:'#E3EFE6',
+  successLine:'#A3C9B2',
+}
+
+// ── SVG icons ─────────────────────────────────────────────────────────────────
+
+function FaceIcon({ size = 28, color = 'currentColor' }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 48" fill="none">
+      <circle cx="24" cy="20" r="11" stroke={color} strokeWidth="2.2"/>
+      <circle cx="19.5" cy="18.5" r="1.9" fill={color}/>
+      <circle cx="28.5" cy="18.5" r="1.9" fill={color}/>
+      <path d="M18.5 25c1.5 2.5 9.5 2.5 11 0" stroke={color} strokeWidth="2" strokeLinecap="round"/>
+      <path d="M8 44c0-9 7-15 16-15s16 6 16 15" stroke={color} strokeWidth="2.2" strokeLinecap="round"/>
+    </svg>
+  )
+}
+
+function QrIcon({ size = 28, color = 'currentColor' }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 48" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round">
+      <rect x="6"  y="6"  width="13" height="13" rx="2"/>
+      <rect x="9"  y="9"  width="7"  height="7"  rx="1" fill={color} stroke="none"/>
+      <rect x="29" y="6"  width="13" height="13" rx="2"/>
+      <rect x="32" y="9"  width="7"  height="7"  rx="1" fill={color} stroke="none"/>
+      <rect x="6"  y="29" width="13" height="13" rx="2"/>
+      <rect x="9"  y="32" width="7"  height="7"  rx="1" fill={color} stroke="none"/>
+      <rect x="29" y="29" width="5"  height="5"  rx="1" fill={color} stroke="none"/>
+      <rect x="36" y="29" width="6"  height="5"  rx="1" fill={color} stroke="none"/>
+      <rect x="29" y="36" width="5"  height="6"  rx="1" fill={color} stroke="none"/>
+      <rect x="36" y="36" width="6"  height="6"  rx="1" fill={color} stroke="none"/>
+    </svg>
+  )
+}
+
+function NewIcon({ size = 28, color = 'currentColor' }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 48" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="20" cy="17" r="8"/>
+      <path d="M4 44c0-9 7-14 16-14"/>
+      <circle cx="36" cy="36" r="9"/>
+      <line x1="36" y1="31" x2="36" y2="41"/>
+      <line x1="31" y1="36" x2="41" y2="36"/>
+    </svg>
+  )
+}
+
+function EnterIcon({ size = 18, color = 'currentColor' }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M15 3h6v18h-6M10 17l5-5-5-5M15 12H3"/>
+    </svg>
+  )
+}
+
+function ExitIcon({ size = 18, color = 'currentColor' }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 21H3V3h6M16 17l5-5-5-5M21 12H9"/>
+    </svg>
+  )
+}
+
+// ── Option row ────────────────────────────────────────────────────────────────
+
+type RowVariant = 'primary' | 'secondary' | 'ghost'
+
+interface OptionRowConfig {
+  bg: string; border: string; color: string
+  iconBg: string; subColor: string
+  tagBg: string; tagColor: string; arrow: string
+}
+
+function OptionRow({
+  href, icon, label, sub, tag, variant, cfg,
+}: {
+  href: string; icon: React.ReactNode; label: string; sub: string
+  tag?: string; variant: RowVariant; cfg: OptionRowConfig
+}) {
+  return (
+    <a
+      href={href}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 12,
+        padding: '14px 14px',
+        background: cfg.bg,
+        border: `1.5px solid ${cfg.border}`,
+        borderRadius: 12,
+        textDecoration: 'none',
+        color: cfg.color,
+        WebkitTapHighlightColor: 'transparent',
+      }}
+    >
+      {/* icon */}
+      <span style={{
+        width: 50, height: 50, borderRadius: 10, flexShrink: 0,
+        background: cfg.iconBg,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        {icon}
+      </span>
+
+      {/* text */}
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span style={{ font: `600 15px/1.3 var(--font-sans)` }}>{label}</span>
+          {tag && (
+            <span style={{
+              font: `600 10px/1 var(--font-mono)`, letterSpacing: '0.08em',
+              padding: '2px 7px', borderRadius: 4,
+              background: cfg.tagBg, color: cfg.tagColor,
+            }}>{tag}</span>
+          )}
+        </span>
+        <span style={{
+          display: 'block', marginTop: 3,
+          font: `400 11px/1.5 var(--font-sans)`,
+          color: cfg.subColor,
+        }}>{sub}</span>
+      </span>
+
+      {/* arrow */}
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+        stroke={cfg.arrow} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+        style={{ flexShrink: 0 }}>
+        <path d="M9 18l6-6-6-6"/>
+      </svg>
+    </a>
+  )
+}
+
+// ── Section header ────────────────────────────────────────────────────────────
+
+function SectionHeader({
+  icon, label, sub, accentColor, softColor, lineColor,
+}: {
+  icon: React.ReactNode; label: string; sub: string
+  accentColor: string; softColor: string; lineColor: string
+}) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 10,
+      padding: '10px 14px',
+      background: softColor,
+      border: `1px solid ${lineColor}`,
+      borderRadius: 10,
+    }}>
+      <span style={{
+        width: 30, height: 30, borderRadius: 7, flexShrink: 0,
+        background: accentColor, color: '#fff',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        {icon}
+      </span>
+      <span>
+        <span style={{ font: `700 14px/1.2 var(--font-sans)`, color: accentColor, display: 'block' }}>
+          {label}
+        </span>
+        <span style={{ font: `400 10px/1 var(--font-sans)`, color: GE.neutral, marginTop: 2, display: 'block' }}>
+          {sub}
+        </span>
+      </span>
+    </div>
+  )
+}
+
+// ── Returning visitor banner ──────────────────────────────────────────────────
+
+interface ReturningVisitor { name: string; lastVisit: string | null }
+
+function ReturningBanner({
+  data, token, locale,
+}: { data: ReturningVisitor; token: string; locale: string }) {
+  const ja = (j: string, e: string) => locale === 'ja' ? j : e
+  const fmt = (iso: string) => {
+    const d = new Date(iso)
+    return `${d.getMonth() + 1}/${d.getDate()}`
+  }
+  return (
+    <a
+      href={`/r/${token}/returning`}
+      style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '12px 14px',
+        background: GE.soft,
+        border: `1.5px solid ${GE.line}`,
+        borderRadius: 12,
+        textDecoration: 'none', gap: 10,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{
+          width: 34, height: 34, borderRadius: '50%',
+          background: GE.ink, color: '#fff',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          font: `700 14px/1 var(--font-sans)`, flexShrink: 0,
+        }}>
+          {data.name.slice(0, 1)}
+        </span>
+        <div>
+          <p style={{ font: `600 13px/1.2 var(--font-sans)`, color: GE.inkDark, margin: 0 }}>
+            {data.name}{ja(' さん', '')}
+          </p>
+          {data.lastVisit && (
+            <p style={{ font: `400 10px/1 var(--font-mono)`, color: GE.neutral, marginTop: 2 }}>
+              {ja(`前回: ${fmt(data.lastVisit)}`, `Last: ${fmt(data.lastVisit)}`)}
+            </p>
+          )}
+        </div>
+      </div>
+      <span style={{
+        font: `600 11px/1 var(--font-sans)`,
+        padding: '6px 12px', borderRadius: 7,
+        background: GE.ink, color: '#fff',
+        whiteSpace: 'nowrap', flexShrink: 0,
+      }}>
+        {ja('前回の情報で →', 'Quick →')}
+      </span>
+    </a>
+  )
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 
 interface Props {
   token: string
   storeName: string
   areaName: string
-  preToken?: string  // pre-registration token from ?pre= query param
+  preToken?: string
 }
 
 export function ReceptionContent({ token, storeName, areaName, preToken }: Props) {
   const { locale } = useLocale()
   const { announce } = useAnnounce()
+  const [returning, setReturning] = useState<ReturningVisitor | null>(null)
 
-  // ページ表示時にアナウンス
-  useEffect(() => {
-    announce('reception')
-  }, [announce])
+  const ja = (j: string, e: string) => locale === 'ja' ? j : e
 
-  // 店舗設定を取得して sessionStorage に保存
+  useEffect(() => { announce('reception') }, [announce])
+
   useEffect(() => {
     fetch(`/api/v1/area-settings?token=${token}`)
       .then(r => r.ok ? r.json() : { settings: null })
       .then(data => {
-        if (data.settings) {
-          // 来訪者フロー全体で参照できるよう sessionStorage に保存
-          sessionStorage.setItem('reception-area-settings', JSON.stringify(data.settings))
-        }
+        if (data.settings) sessionStorage.setItem('reception-area-settings', JSON.stringify(data.settings))
       })
       .catch(() => {})
   }, [token])
 
-  // 事前登録QRでアクセスした場合: アクション選択をスキップして直接同意→登録へ
   useEffect(() => {
-    if (preToken) {
-      window.location.replace(`/r/${token}/consent?pre=${preToken}`)
-    }
+    if (preToken) window.location.replace(`/r/${token}/consent?pre=${preToken}`)
   }, [preToken, token])
 
+  // リピーター検知
+  useEffect(() => {
+    const visitorId = localStorage.getItem('reception-visitor-id')
+    if (!visitorId) return
+    fetch(`/api/v1/visitors/me?token=${token}&visitorId=${visitorId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.visitor) setReturning({ name: data.visitor.name, lastVisit: data.lastVisit?.date ?? null })
+      })
+      .catch(() => {})
+  }, [token])
+
+  // ── カード設定 ─────────────────────────────────────────────────────────────
+
+  // 入室 primary (GE indigo)
+  const inPrimary: OptionRowConfig = {
+    bg: GE.ink, border: 'transparent', color: '#fff',
+    iconBg: 'rgba(255,255,255,0.18)', subColor: 'rgba(255,255,255,0.62)',
+    tagBg: 'rgba(255,255,255,0.2)', tagColor: '#fff', arrow: 'rgba(255,255,255,0.45)',
+  }
+  const inSecondary: OptionRowConfig = {
+    bg: '#fff', border: GE.line, color: GE.inkDark,
+    iconBg: GE.soft, subColor: GE.neutral,
+    tagBg: GE.soft, tagColor: GE.ink, arrow: GE.border,
+  }
+  const inGhost: OptionRowConfig = {
+    bg: GE.paper, border: GE.border, color: '#1e293b',
+    iconBg: '#fff', subColor: GE.subtle,
+    tagBg: GE.paperDark, tagColor: GE.neutral, arrow: GE.border,
+  }
+
+  // 退室 primary (GE success green)
+  const outPrimary: OptionRowConfig = {
+    bg: GE.success, border: 'transparent', color: '#fff',
+    iconBg: 'rgba(255,255,255,0.18)', subColor: 'rgba(255,255,255,0.62)',
+    tagBg: 'rgba(255,255,255,0.2)', tagColor: '#fff', arrow: 'rgba(255,255,255,0.45)',
+  }
+  const outSecondary: OptionRowConfig = {
+    bg: '#fff', border: GE.successLine, color: GE.success,
+    iconBg: GE.successSoft, subColor: GE.neutral,
+    tagBg: GE.successSoft, tagColor: GE.success, arrow: GE.border,
+  }
+  const outGhost: OptionRowConfig = {
+    bg: GE.paper, border: GE.border, color: '#1e293b',
+    iconBg: '#fff', subColor: GE.subtle,
+    tagBg: GE.paperDark, tagColor: GE.neutral, arrow: GE.border,
+  }
+
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: 'var(--ge-paper)', color: 'var(--ge-ink)' }}>
-      {/* Header */}
-      <div style={{
-        borderBottom: '1px solid var(--ge-line)',
-        padding: '32px 20px 20px',
-        background: '#fff',
-        textAlign: 'center',
+    <div style={{
+      minHeight: '100svh', display: 'flex', flexDirection: 'column',
+      background: GE.paper, fontFamily: 'var(--font-sans)',
+    }}>
+      {/* ── 上部カラーバー ─────────────────────────────────────────────── */}
+      <div style={{ height: 4, background: `linear-gradient(90deg, ${GE.inkDark} 0%, ${GE.ink} 50%, ${GE.success} 100%)` }} />
+
+      {/* ── ヘッダー ───────────────────────────────────────────────────── */}
+      <header style={{
+        background: '#fff', borderBottom: `1px solid ${GE.border}`,
+        padding: '16px 20px', textAlign: 'center',
       }}>
-        <h1 style={{ font: `700 22px/1.2 var(--font-sans)`, color: 'var(--ge-ink)', margin: 0 }}>
+        <p style={{ font: `500 10px/1 var(--font-mono)`, letterSpacing: '0.16em', textTransform: 'uppercase', color: GE.subtle, marginBottom: 6 }}>
+          Genesis Edge · Reception
+        </p>
+        <h1 style={{ font: `700 20px/1.2 var(--font-sans)`, color: GE.inkDark, margin: 0 }}>
           {storeName}
         </h1>
-        <p style={{ font: `400 12px/1.4 var(--font-sans)`, color: 'var(--ge-ink-3)', marginTop: 4 }}>
+        <p style={{ font: `400 12px/1.4 var(--font-sans)`, color: GE.neutral, marginTop: 3 }}>
           {areaName}
         </p>
-      </div>
+      </header>
 
-      {/* Content */}
-      <div style={{ padding: '24px 20px', flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <p style={{ font: `400 13px/1.6 var(--font-sans)`, color: 'var(--ge-ink-3)', marginBottom: 8 }}>
-          {locale === 'ja' ? '入室・退室の手続きをお選びください' : 'Select check-in or check-out'}
-        </p>
+      {/* ── コンテンツ ─────────────────────────────────────────────────── */}
+      <main style={{ flex: 1, padding: '14px 14px 20px', display: 'flex', flexDirection: 'column', gap: 8 }}>
 
-        {/* 入室 */}
-        <a
-          href={`/r/${token}/checkin`}
-          style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '18px 20px',
-            background: 'var(--ge-accent)', color: '#fff',
-            borderRadius: 6, textDecoration: 'none',
-            border: '1px solid transparent',
-          }}
-        >
-          <span style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <span style={{
-              width: 36, height: 36, borderRadius: 4, flexShrink: 0,
-              background: 'rgba(255,255,255,0.15)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M15 3h6v18h-6M10 17l5-5-5-5M15 12H3"/>
-              </svg>
-            </span>
-            <span>
-              <span style={{ display: 'block', font: `600 15px/1.3 var(--font-sans)` }}>
-                {locale === 'ja' ? '入室' : 'Check In'}
-              </span>
-              <span style={{ display: 'block', marginTop: 3, font: `400 11px/1.4 var(--font-sans)`, color: 'rgba(255,255,255,0.6)' }}>
-                {locale === 'ja' ? 'はじめての方・リピーターの方' : 'New & returning visitors'}
-              </span>
-            </span>
+        {/* リピーターバナー */}
+        {returning && <ReturningBanner data={returning} token={token} locale={locale} />}
+
+        {/* ━━━ 入室セクション ━━━ */}
+        <SectionHeader
+          icon={<EnterIcon size={16} color="#fff" />}
+          label={ja('入室', 'Check In')}
+          sub={ja('入室方法を選択してください', 'Select check-in method')}
+          accentColor={GE.ink}
+          softColor={GE.soft}
+          lineColor={GE.line}
+        />
+
+        <OptionRow
+          href={`/r/${token}/face-auth?mode=checkin`}
+          icon={<FaceIcon size={26} color="#fff" />}
+          label={ja('顔認証でチェックイン', 'Face ID Check-In')}
+          sub={ja('登録済みの方はすぐに入室できます', 'Instant entry for registered visitors')}
+          tag={ja('推奨', 'REC')}
+          variant="primary"
+          cfg={inPrimary}
+        />
+
+        <OptionRow
+          href={`/r/${token}/scan?mode=checkin`}
+          icon={<QrIcon size={24} color={GE.ink} />}
+          label={ja('QRコードで入室', 'QR Code Check-In')}
+          sub={ja('メールで届いたQRコードをスキャン', 'Scan the QR code from your email')}
+          tag="QR"
+          variant="secondary"
+          cfg={inSecondary}
+        />
+
+        <OptionRow
+          href={`/r/${token}/consent`}
+          icon={<NewIcon size={24} color={GE.neutral} />}
+          label={ja('はじめての方', 'New Visitor')}
+          sub={ja('フォームに情報を入力して入室', 'Fill in the form to check in')}
+          variant="ghost"
+          cfg={inGhost}
+        />
+
+        {/* ─── 区切り ─── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '2px 0' }}>
+          <div style={{ flex: 1, height: 1, background: GE.border }} />
+          <span style={{ font: `500 10px/1 var(--font-mono)`, letterSpacing: '0.1em', color: GE.subtle }}>
+            ·  ·  ·
           </span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M9 18l6-6-6-6"/>
-          </svg>
-        </a>
+          <div style={{ flex: 1, height: 1, background: GE.border }} />
+        </div>
 
-        {/* 退室 */}
-        <a
-          href={`/r/${token}/checkoutchoice`}
-          style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '18px 20px',
-            background: '#fff', color: 'var(--ge-ink)',
-            borderRadius: 6, textDecoration: 'none',
-            border: '1px solid var(--ge-line)',
-          }}
-        >
-          <span style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <span style={{
-              width: 36, height: 36, borderRadius: 4, flexShrink: 0,
-              background: 'var(--ge-paper-2)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--ge-ink-2)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M9 21H3V3h6M16 17l5-5-5-5M21 12H9"/>
-              </svg>
-            </span>
-            <span>
-              <span style={{ display: 'block', font: `600 15px/1.3 var(--font-sans)` }}>
-                {locale === 'ja' ? '退室' : 'Check Out'}
-              </span>
-              <span style={{ display: 'block', marginTop: 3, font: `400 11px/1.4 var(--font-sans)`, color: 'var(--ge-ink-3)' }}>
-                {locale === 'ja' ? '退室手続きはこちら' : 'Complete your check-out'}
-              </span>
-            </span>
-          </span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ge-line-2)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M9 18l6-6-6-6"/>
-          </svg>
-        </a>
-      </div>
+        {/* ━━━ 退室セクション ━━━ */}
+        <SectionHeader
+          icon={<ExitIcon size={16} color="#fff" />}
+          label={ja('退室', 'Check Out')}
+          sub={ja('退室方法を選択してください', 'Select check-out method')}
+          accentColor={GE.success}
+          softColor={GE.successSoft}
+          lineColor={GE.successLine}
+        />
 
-      {/* Footer */}
-      <div style={{
-        borderTop: '1px solid var(--ge-line)',
-        padding: '12px 20px',
-        marginTop: 'auto',
+        <OptionRow
+          href={`/r/${token}/face-auth?mode=checkout`}
+          icon={<FaceIcon size={26} color="#fff" />}
+          label={ja('顔認証で退室', 'Face ID Check-Out')}
+          sub={ja('カメラで顔をスキャンして退室', 'Scan your face to check out')}
+          tag={ja('推奨', 'REC')}
+          variant="primary"
+          cfg={outPrimary}
+        />
+
+        <OptionRow
+          href={`/r/${token}/scan?mode=checkout`}
+          icon={<QrIcon size={24} color={GE.success} />}
+          label={ja('QRコードで退室', 'QR Code Check-Out')}
+          sub={ja('入室時のQRコードをスキャン', 'Scan your check-in QR code')}
+          tag="QR"
+          variant="secondary"
+          cfg={outSecondary}
+        />
+
+        <OptionRow
+          href={`/r/${token}/checkout`}
+          icon={<NewIcon size={24} color={GE.neutral} />}
+          label={ja('はじめての方・手動退室', 'Manual Check-Out')}
+          sub={ja('お名前・情報を入力して退室', 'Enter your name to check out')}
+          variant="ghost"
+          cfg={outGhost}
+        />
+      </main>
+
+      {/* ── フッター ───────────────────────────────────────────────────── */}
+      <footer style={{
+        borderTop: `1px solid ${GE.border}`,
+        padding: '10px 20px', background: '#fff', textAlign: 'center',
       }}>
-        <span style={{ font: `500 10px/1 var(--font-mono)`, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--ge-ink-4)' }}>
+        <span style={{
+          font: `500 9px/1 var(--font-mono)`,
+          letterSpacing: '0.14em', textTransform: 'uppercase', color: GE.subtle,
+        }}>
           Genesis Edge · Reception
         </span>
-      </div>
+      </footer>
     </div>
   )
 }
