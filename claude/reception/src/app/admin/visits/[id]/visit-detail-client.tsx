@@ -3,6 +3,11 @@
 import Link from 'next/link'
 import { useLocale } from '@/lib/i18n/useLocale'
 
+// visitId を URL に乗せて録画ページへ遷移するためのリンク生成
+function recordingHref(baggageId: string, visitId: string) {
+  return `/admin/baggage/${baggageId}/recording?visitId=${visitId}`
+}
+
 interface VisitInfo {
   purpose: string
   storeName?: string
@@ -48,12 +53,14 @@ function StatusBadge({ status, t }: { status: string; t: (k: string) => string }
 }
 
 export function VisitDetailClient({
+  visitId,
   visitorName,
   visitorCompany,
   visitInfo,
   photos,
   baggageDeclarations = [],
 }: {
+  visitId: string
   visitorName: string
   visitorCompany: string
   visitInfo: VisitInfo
@@ -150,15 +157,39 @@ export function VisitDetailClient({
               </h2>
               {bd.inspection_mode === 'video' ? (
                 <div>
-                  <div className="bg-gray-900 rounded-xl aspect-video flex flex-col items-center justify-center mb-4">
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" opacity="0.5">
-                      <circle cx="12" cy="12" r="10"/>
-                      <polygon points="10 8 16 12 10 16 10 8" fill="white" stroke="none"/>
-                    </svg>
-                    <p className="text-white/60 text-sm mt-3">i-PRO Remo 動画</p>
-                    <p className="text-white/40 text-xs mt-1">{new Date(visitInfo.checkInAt).toLocaleString(dateLocale)} ± 5分</p>
-                    <p className="text-white/30 text-xs mt-3">（連携設定後に再生可能）</p>
-                  </div>
+                  {/* 録画ビューアーへのリンクカード */}
+                  <Link
+                    href={recordingHref(bd.id, visitId)}
+                    className="group block bg-gray-900 rounded-xl overflow-hidden mb-4 hover:ring-2 hover:ring-violet-500 transition-all"
+                  >
+                    <div className="aspect-video flex flex-col items-center justify-center relative">
+                      {/* グリッド背景 */}
+                      <div className="absolute inset-0 opacity-10"
+                        style={{
+                          backgroundImage: 'linear-gradient(to right, white 1px, transparent 1px), linear-gradient(to bottom, white 1px, transparent 1px)',
+                          backgroundSize: '40px 40px',
+                        }}
+                      />
+                      {/* REC バッジ */}
+                      <div className="absolute top-3 left-3 text-[10px] text-white/70 font-mono bg-black/50 rounded px-2 py-0.5">
+                        🔴 REC · i-PRO Remo
+                      </div>
+                      {/* 時刻 */}
+                      <div className="absolute top-3 right-3 text-[10px] text-white/60 font-mono bg-black/50 rounded px-2 py-0.5">
+                        {new Date(visitInfo.checkInAt).toLocaleString(dateLocale)} ± 5分
+                      </div>
+                      {/* 再生ボタン */}
+                      <div className="w-16 h-16 rounded-full border-2 border-white/40 flex items-center justify-center text-white/70 group-hover:border-violet-400 group-hover:text-violet-400 transition-colors bg-black/20">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+                          <polygon points="5 3 19 12 5 21 5 3"/>
+                        </svg>
+                      </div>
+                      <p className="text-white/60 text-sm mt-3">録画を再生する</p>
+                      <p className="text-white/40 text-xs mt-1 group-hover:text-violet-400 transition-colors">
+                        クリックして録画ビューアーを開く →
+                      </p>
+                    </div>
+                  </Link>
                   {bd.declaration_text && (
                     <div className="p-3 bg-[#f0f2f5] rounded-xl">
                       <p className="text-xs text-gray-500 mb-1 font-medium">申告内容</p>

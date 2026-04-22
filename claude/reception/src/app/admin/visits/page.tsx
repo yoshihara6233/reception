@@ -104,10 +104,37 @@ function BaggageBadge({ decls }: { decls: BaggageDecl[] | null }) {
   return null
 }
 
-function getBaggageMode(decls: BaggageDecl[] | null): string {
-  if (!decls || decls.length === 0) return '—'
-  const hasVideo = decls.some(d => d.inspection_mode === 'video')
-  return hasVideo ? '🎥 動画' : '📷 写真'
+function BaggageModeCell({ decls }: { decls: BaggageDecl[] | null }) {
+  if (!decls || decls.length === 0) return <span style={{ color: 'var(--ge-line-2)' }}>—</span>
+  const videoDecl = decls.find(d => d.inspection_mode === 'video')
+  if (videoDecl) {
+    return (
+      <Link
+        href={`/admin/baggage/${videoDecl.id}/recording`}
+        onClick={e => e.stopPropagation()}
+        title="録画を見る"
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 4,
+          padding: '2px 8px', borderRadius: 6,
+          font: '600 11px/1.4 var(--font-sans)',
+          color: '#7c3aed', background: '#f5f3ff',
+          border: '1px solid #ddd6fe', textDecoration: 'none',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        🎥 動画
+      </Link>
+    )
+  }
+  return (
+    <span style={{
+      font: '400 11px/1 var(--font-sans)',
+      color: 'var(--ge-ink-4)',
+      whiteSpace: 'nowrap',
+    }}>
+      📷 写真
+    </span>
+  )
 }
 
 function SortTh({
@@ -620,16 +647,8 @@ export default function VisitsPage() {
                       <StatusBadge status={visit.status} t={t} />
                     </td>
                     <td style={{ padding: '10px 12px' }} onClick={e => e.stopPropagation()}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                        {visit.baggage_declarations && visit.baggage_declarations.length > 0 && (
-                          <span style={{
-                            font: '400 10px/1 var(--font-sans)',
-                            color: 'var(--ge-ink-4)',
-                            whiteSpace: 'nowrap',
-                          }}>
-                            {getBaggageMode(visit.baggage_declarations)}
-                          </span>
-                        )}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <BaggageModeCell decls={visit.baggage_declarations} />
                         <BaggageBadge decls={visit.baggage_declarations} />
                       </div>
                     </td>

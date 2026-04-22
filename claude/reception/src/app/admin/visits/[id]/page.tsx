@@ -48,6 +48,7 @@ export default async function VisitDetailPage({ params }: Props) {
 
   return (
     <VisitDetailClient
+      visitId={id}
       visitorName={visitor?.name ?? ''}
       visitorCompany={[visitor?.company, visitor?.department].filter(Boolean).join(' / ')}
       visitInfo={{
