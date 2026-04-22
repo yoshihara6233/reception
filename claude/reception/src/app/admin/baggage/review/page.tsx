@@ -112,10 +112,10 @@ function SelectPhase({
       {/* ヘッダー */}
       <div className="flex items-center gap-3 mb-6">
         <button
-          onClick={() => router.push('/admin/baggage')}
+          onClick={() => router.push('/admin/visits')}
           className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
         >
-          ← 手荷物一覧
+          ← 受付履歴
         </button>
         <h1 className="text-lg font-bold text-[var(--ge-accent)]">🔍 日次レビュー</h1>
       </div>

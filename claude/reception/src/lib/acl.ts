@@ -12,7 +12,6 @@ export function isFullAdmin(role: Role): boolean {
 const MENU_ACCESS: Record<string, Role[]> = {
   '/admin/dashboard':              ['tenant_admin', 'super_admin', 'store_manager', 'auditor', 'viewer'],
   '/admin/visits':                 ['tenant_admin', 'super_admin', 'store_manager', 'auditor', 'viewer'],
-  '/admin/baggage':                ['tenant_admin', 'super_admin', 'store_manager', 'auditor', 'viewer'],
   '/admin/analytics':              ['tenant_admin', 'super_admin', 'store_manager', 'auditor'],
   '/admin/stores':                 ['tenant_admin', 'super_admin', 'store_manager', 'auditor'],
   '/admin/pre-registrations':      ['tenant_admin', 'super_admin', 'store_manager'],
