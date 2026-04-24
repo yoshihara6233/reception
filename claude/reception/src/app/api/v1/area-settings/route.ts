@@ -4,7 +4,7 @@
  * 認証不要 (公開エンドポイント) — 機密情報は含まない
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 const DEFAULT_SETTINGS = {
   require_business_card: 'optional',
@@ -20,15 +20,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'token is required' }, { status: 400 })
   }
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
+  // Service role を使用: この API は認証不要だが、stores/tenants に anon RLS がないため
+  // 返すのは公開可能な設定値のみ（PII 含まず）
+  const supabase = createAdminClient()
 
   // QRトークンからエリア・店舗・テナントを取得
   const { data: area, error } = await supabase
     .from('areas')
-    .select('id, store_id, tenant_id, name, stores(name, settings), stores!inner(tenant_id)')
+    .select('id, store_id, tenant_id, name, stores(name, settings)')
     .eq('qr_token', token)
     .eq('is_active', true)
     .single()
