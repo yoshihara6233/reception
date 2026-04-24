@@ -1,13 +1,15 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useParams } from 'next/navigation'
 import { useLocale } from '@/lib/i18n/useLocale'
 import { useAnnounce } from '@/lib/speech/useAnnounce'
 
 export default function DonePage() {
   const [visitId, setVisitId] = useState<string>('')
-  const { t } = useLocale()
+  const { t, locale } = useLocale()
   const { announce } = useAnnounce()
+  const params = useParams<{ token: string }>()
 
   useEffect(() => {
     const id = sessionStorage.getItem('reception-visit-id') || ''
@@ -16,6 +18,12 @@ export default function DonePage() {
   }, [announce])
 
   const shortId = visitId.slice(0, 8).toUpperCase()
+
+  const backLabel =
+    locale === 'zh' ? '返回受理台首页' :
+    locale === 'ko' ? '안내 데스크로 돌아가기' :
+    locale === 'ja' ? '受付トップに戻る' :
+    'Back to Reception'
 
   return (
     <div className="min-h-screen bg-[#f0f2f5] flex flex-col">
@@ -42,7 +50,7 @@ export default function DonePage() {
           </p>
         </div>
 
-        <div className="bg-white rounded-2xl p-5 shadow-sm">
+        <div className="bg-white rounded-2xl p-5 shadow-sm mb-4">
           <div className="flex items-start gap-3">
             <span className="text-lg mt-0.5">&#x1F6B6;</span>
             <p className="text-sm text-gray-500 leading-relaxed">
@@ -50,11 +58,19 @@ export default function DonePage() {
             </p>
           </div>
         </div>
+
+        {/* Back to top button */}
+        <a
+          href={`/r/${params.token}`}
+          className="block w-full py-4 bg-[#1e3a5f] text-white text-center text-sm font-semibold rounded-2xl shadow-sm"
+        >
+          {backLabel}
+        </a>
       </div>
 
       {/* Footer */}
-      <div className="bg-[#1e3a5f] py-5 text-center mt-auto">
-        <p className="text-[11px] text-white/50 tracking-widest uppercase">
+      <div className="py-5 text-center mt-6">
+        <p className="text-[11px] text-gray-400 tracking-widest uppercase">
           Powered by Reception Kiosk
         </p>
       </div>

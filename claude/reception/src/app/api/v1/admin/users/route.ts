@@ -41,7 +41,37 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ success: true })
-  } catch (err) {
+  } catch {
+    return NextResponse.json({ error: 'サーバーエラー' }, { status: 500 })
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url)
+    const id = searchParams.get('id')
+    if (!id) return NextResponse.json({ error: 'id は必須です' }, { status: 400 })
+
+    const body = await req.json()
+    const { name, role } = body
+
+    if (!name?.trim()) {
+      return NextResponse.json({ error: '名前は必須です' }, { status: 400 })
+    }
+
+    const supabase = createAdminClient()
+
+    const { error } = await supabase
+      .from('admin_users')
+      .update({ name: name.trim(), role: role || 'viewer' })
+      .eq('id', id)
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true })
+  } catch {
     return NextResponse.json({ error: 'サーバーエラー' }, { status: 500 })
   }
 }

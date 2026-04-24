@@ -204,7 +204,8 @@ export default function StoresPage() {
     setActiveTab(tab)
     if (!selectedId) return
     if (tab === 'staff')   fetchStaff(selectedId)
-    if (tab === 'preregs') fetchPreRegs(selectedId)
+    // preregs タブではスタッフ一覧も必要（担当スタッフドロップダウン用）
+    if (tab === 'preregs') { fetchPreRegs(selectedId); fetchStaff(selectedId) }
     if (tab === 'cameras') fetchCameras(selectedId)
   }
 

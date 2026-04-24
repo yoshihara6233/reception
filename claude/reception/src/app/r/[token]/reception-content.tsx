@@ -189,7 +189,12 @@ interface ReturningVisitor { name: string; lastVisit: string | null }
 function ReturningBanner({
   data, token, locale,
 }: { data: ReturningVisitor; token: string; locale: string }) {
-  const ja = (j: string, e: string) => locale === 'ja' ? j : e
+  const ja = (j: string, e: string, z: string = e, k: string = e) => {
+    if (locale === 'zh') return z
+    if (locale === 'ko') return k
+    if (locale === 'ja') return j
+    return e
+  }
   const fmt = (iso: string) => {
     const d = new Date(iso)
     return `${d.getMonth() + 1}/${d.getDate()}`
@@ -217,11 +222,11 @@ function ReturningBanner({
         </span>
         <div>
           <p style={{ font: `600 13px/1.2 var(--font-sans)`, color: GE.inkDark, margin: 0 }}>
-            {data.name}{ja(' さん', '')}
+            {data.name}{ja(' さん', '', '', ' 님')}
           </p>
           {data.lastVisit && (
             <p style={{ font: `400 10px/1 var(--font-mono)`, color: GE.neutral, marginTop: 2 }}>
-              {ja(`前回: ${fmt(data.lastVisit)}`, `Last: ${fmt(data.lastVisit)}`)}
+              {ja(`前回: ${fmt(data.lastVisit)}`, `Last: ${fmt(data.lastVisit)}`, `上次: ${fmt(data.lastVisit)}`, `이전 방문: ${fmt(data.lastVisit)}`)}
             </p>
           )}
         </div>
@@ -232,7 +237,7 @@ function ReturningBanner({
         background: GE.ink, color: '#fff',
         whiteSpace: 'nowrap', flexShrink: 0,
       }}>
-        {ja('前回の情報で →', 'Quick →')}
+        {ja('前回の情報で →', 'Quick →', '使用上次信息 →', '이전 정보로 →')}
       </span>
     </a>
   )
@@ -252,7 +257,12 @@ export function ReceptionContent({ token, storeName, areaName, preToken }: Props
   const { announce } = useAnnounce()
   const [returning, setReturning] = useState<ReturningVisitor | null>(null)
 
-  const ja = (j: string, e: string) => locale === 'ja' ? j : e
+  const ja = (j: string, e: string, z: string = e, k: string = e) => {
+    if (locale === 'zh') return z
+    if (locale === 'ko') return k
+    if (locale === 'ja') return j
+    return e
+  }
 
   useEffect(() => { announce('reception') }, [announce])
 
@@ -350,8 +360,8 @@ export function ReceptionContent({ token, storeName, areaName, preToken }: Props
         {/* ━━━ 入室セクション ━━━ */}
         <SectionHeader
           icon={<EnterIcon size={16} color="#fff" />}
-          label={ja('入室', 'Check In')}
-          sub={ja('入室方法を選択してください', 'Select check-in method')}
+          label={ja('入室', 'Check In', '入场', '입실')}
+          sub={ja('入室方法を選択してください', 'Select check-in method', '请选择入场方式', '입실 방법을 선택하세요')}
           accentColor={GE.ink}
           softColor={GE.soft}
           lineColor={GE.line}
@@ -360,9 +370,9 @@ export function ReceptionContent({ token, storeName, areaName, preToken }: Props
         <OptionRow
           href={`/r/${token}/face-auth?mode=checkin`}
           icon={<FaceIcon size={26} color="#fff" />}
-          label={ja('顔認証でチェックイン', 'Face ID Check-In')}
-          sub={ja('登録済みの方はすぐに入室できます', 'Instant entry for registered visitors')}
-          tag={ja('推奨', 'REC')}
+          label={ja('顔認証でチェックイン', 'Face ID Check-In', '刷脸入场', '얼굴 인식으로 입실')}
+          sub={ja('登録済みの方はすぐに入室できます', 'Instant entry for registered visitors', '已注册用户可立即入场', '등록된 분은 바로 입실 가능합니다')}
+          tag={ja('推奨', 'REC', '推荐', '추천')}
           variant="primary"
           cfg={inPrimary}
         />
@@ -370,8 +380,8 @@ export function ReceptionContent({ token, storeName, areaName, preToken }: Props
         <OptionRow
           href={`/r/${token}/scan?mode=checkin`}
           icon={<QrIcon size={24} color={GE.ink} />}
-          label={ja('QRコードで入室', 'QR Code Check-In')}
-          sub={ja('メールで届いたQRコードをスキャン', 'Scan the QR code from your email')}
+          label={ja('QRコードで入室', 'QR Code Check-In', '扫码入场', 'QR 코드로 입실')}
+          sub={ja('メールで届いたQRコードをスキャン', 'Scan the QR code from your email', '扫描邮件中的二维码', '이메일로 받은 QR 코드를 스캔하세요')}
           tag="QR"
           variant="secondary"
           cfg={inSecondary}
@@ -380,8 +390,8 @@ export function ReceptionContent({ token, storeName, areaName, preToken }: Props
         <OptionRow
           href={`/r/${token}/consent`}
           icon={<NewIcon size={24} color={GE.neutral} />}
-          label={ja('はじめての方', 'New Visitor')}
-          sub={ja('フォームに情報を入力して入室', 'Fill in the form to check in')}
+          label={ja('はじめての方', 'New Visitor', '初次访客', '처음 방문하시는 분')}
+          sub={ja('フォームに情報を入力して入室', 'Fill in the form to check in', '填写表格入场', '양식을 작성하여 입실')}
           variant="ghost"
           cfg={inGhost}
         />
@@ -398,8 +408,8 @@ export function ReceptionContent({ token, storeName, areaName, preToken }: Props
         {/* ━━━ 退室セクション ━━━ */}
         <SectionHeader
           icon={<ExitIcon size={16} color="#fff" />}
-          label={ja('退室', 'Check Out')}
-          sub={ja('退室方法を選択してください', 'Select check-out method')}
+          label={ja('退室', 'Check Out', '离场', '퇴실')}
+          sub={ja('退室方法を選択してください', 'Select check-out method', '请选择离场方式', '퇴실 방법을 선택하세요')}
           accentColor={GE.success}
           softColor={GE.successSoft}
           lineColor={GE.successLine}
@@ -408,9 +418,9 @@ export function ReceptionContent({ token, storeName, areaName, preToken }: Props
         <OptionRow
           href={`/r/${token}/face-auth?mode=checkout`}
           icon={<FaceIcon size={26} color="#fff" />}
-          label={ja('顔認証で退室', 'Face ID Check-Out')}
-          sub={ja('カメラで顔をスキャンして退室', 'Scan your face to check out')}
-          tag={ja('推奨', 'REC')}
+          label={ja('顔認証で退室', 'Face ID Check-Out', '刷脸离场', '얼굴 인식으로 퇴실')}
+          sub={ja('カメラで顔をスキャンして退室', 'Scan your face to check out', '扫描人脸离场', '카메라로 얼굴을 스캔하여 퇴실')}
+          tag={ja('推奨', 'REC', '推荐', '추천')}
           variant="primary"
           cfg={outPrimary}
         />
@@ -418,8 +428,8 @@ export function ReceptionContent({ token, storeName, areaName, preToken }: Props
         <OptionRow
           href={`/r/${token}/scan?mode=checkout`}
           icon={<QrIcon size={24} color={GE.success} />}
-          label={ja('QRコードで退室', 'QR Code Check-Out')}
-          sub={ja('入室時のQRコードをスキャン', 'Scan your check-in QR code')}
+          label={ja('QRコードで退室', 'QR Code Check-Out', '扫码离场', 'QR 코드로 퇴실')}
+          sub={ja('入室時のQRコードをスキャン', 'Scan your check-in QR code', '扫描入场时的二维码', '입실 시 QR 코드를 스캔하세요')}
           tag="QR"
           variant="secondary"
           cfg={outSecondary}
@@ -428,8 +438,8 @@ export function ReceptionContent({ token, storeName, areaName, preToken }: Props
         <OptionRow
           href={`/r/${token}/checkout`}
           icon={<NewIcon size={24} color={GE.neutral} />}
-          label={ja('はじめての方・手動退室', 'Manual Check-Out')}
-          sub={ja('お名前・情報を入力して退室', 'Enter your name to check out')}
+          label={ja('はじめての方・手動退室', 'Manual Check-Out', '初次访客·手动离场', '처음 방문하시는 분·수동 퇴실')}
+          sub={ja('お名前・情報を入力して退室', 'Enter your name to check out', '输入姓名及信息离场', '이름·정보를 입력하여 퇴실')}
           variant="ghost"
           cfg={outGhost}
         />
