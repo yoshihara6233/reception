@@ -169,7 +169,7 @@ export default function FaceRegisterPage() {
         {/* ── カメラ ───────────────────────────────────────────────────── */}
         {phase === 'camera' && (
           <div className="flex flex-col items-center gap-4">
-            <div className="w-full bg-black rounded-2xl overflow-hidden aspect-square relative">
+            <div className="w-full bg-black rounded-2xl overflow-hidden relative" style={{ aspectRatio: '3/4' }}>
               <video
                 ref={videoRef}
                 autoPlay
@@ -177,9 +177,20 @@ export default function FaceRegisterPage() {
                 muted
                 className="w-full h-full object-cover scale-x-[-1]"
               />
-              {/* オーバーレイ: 顔ガイド */}
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="w-48 h-56 border-2 border-white/40 rounded-full" />
+              {/* オーバーレイ: 顔ガイド（楕円） */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ paddingTop: '8%' }}>
+                <div style={{
+                  width: '60%', paddingTop: '75%',
+                  border: '2px solid rgba(255,255,255,0.5)',
+                  borderRadius: '50%',
+                  boxShadow: '0 0 0 9999px rgba(0,0,0,0.35)',
+                }} />
+              </div>
+              {/* 上部ガイドテキスト */}
+              <div className="absolute top-3 left-0 right-0 flex justify-center pointer-events-none">
+                <span className="bg-black/40 text-white text-xs px-3 py-1 rounded-full">
+                  顔を枠に合わせてください
+                </span>
               </div>
             </div>
             <button
@@ -200,7 +211,7 @@ export default function FaceRegisterPage() {
         {/* ── プレビュー ───────────────────────────────────────────────── */}
         {phase === 'preview' && capturedUrl && (
           <div className="flex flex-col items-center gap-4">
-            <div className="w-full bg-black rounded-2xl overflow-hidden aspect-square">
+            <div className="w-full bg-black rounded-2xl overflow-hidden" style={{ aspectRatio: '3/4' }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={capturedUrl}
