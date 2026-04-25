@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { UserCircle, Briefcase, Camera, Trash2, Edit2, Plus, Search, RefreshCw } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { UserCircle, Briefcase, Camera, Trash2, Edit2, Plus, Search, RefreshCw, QrCode, Printer, X } from 'lucide-react'
+import QRCode from 'qrcode'
 
 // ── 型 ────────────────────────────────────────────────────────────────────────
 
@@ -21,6 +22,19 @@ interface Person {
   created_at: string
 }
 
+interface Area {
+  id: string
+  name: string
+  qr_token: string
+  is_active: boolean
+}
+
+interface Store {
+  id: string
+  name: string
+  areas: Area[]
+}
+
 type TabType = 'employee' | 'external'
 
 // ── メインページ ──────────────────────────────────────────────────────────────
@@ -33,6 +47,8 @@ export default function PersonsPage() {
   const [showModal, setShowModal] = useState(false)
   const [editPerson, setEditPerson] = useState<Person | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [qrPerson, setQrPerson] = useState<Person | null>(null)
+  const [stores, setStores] = useState<Store[]>([])
 
   const fetchPersons = useCallback(async () => {
     setLoading(true)
@@ -45,6 +61,13 @@ export default function PersonsPage() {
   }, [tab, q])
 
   useEffect(() => { fetchPersons() }, [fetchPersons])
+
+  useEffect(() => {
+    fetch('/api/v1/admin/stores-list')
+      .then(r => r.json())
+      .then(d => setStores(d.stores || []))
+      .catch(() => {})
+  }, [])
 
   async function handleDelete(person: Person) {
     if (!confirm(`「${person.name}」を削除しますか？顔登録データも削除されます。`)) return
@@ -178,6 +201,14 @@ export default function PersonsPage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1">
+                      {/* QR発行ボタン */}
+                      <button
+                        onClick={() => setQrPerson(person)}
+                        className="p-1.5 text-gray-400 hover:text-[#1e3a5f] hover:bg-[#1e3a5f]/10 rounded-lg"
+                        title="顔登録QRを発行"
+                      >
+                        <QrCode size={13} />
+                      </button>
                       <button
                         onClick={() => { setEditPerson(person); setShowModal(true) }}
                         className="p-1.5 text-gray-400 hover:text-[#1e3a5f] hover:bg-[#1e3a5f]/10 rounded-lg"
@@ -209,7 +240,7 @@ export default function PersonsPage() {
           : '外部登録者（取引先・常連訪問者等）は一度顔登録すると、次回から顔認証で受付できます。'}
       </p>
 
-      {/* モーダル */}
+      {/* 登録・編集モーダル */}
       {showModal && (
         <PersonModal
           mode={editPerson ? 'edit' : 'add'}
@@ -219,6 +250,153 @@ export default function PersonsPage() {
           onSaved={() => { setShowModal(false); setEditPerson(null); fetchPersons() }}
         />
       )}
+
+      {/* QR発行モーダル */}
+      {qrPerson && (
+        <QrModal
+          person={qrPerson}
+          stores={stores}
+          onClose={() => setQrPerson(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+// ── QR発行モーダル ─────────────────────────────────────────────────────────────
+
+function QrModal({
+  person,
+  stores,
+  onClose,
+}: {
+  person: Person
+  stores: Store[]
+  onClose: () => void
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const allAreas = stores.flatMap(s => s.areas.filter(a => a.is_active).map(a => ({ ...a, storeName: s.name })))
+  const [selectedToken, setSelectedToken] = useState(allAreas[0]?.qr_token ?? '')
+  const [url, setUrl] = useState('')
+
+  useEffect(() => {
+    if (!selectedToken) return
+    const origin = window.location.origin
+    const u = `${origin}/r/${selectedToken}/face-register?visitorId=${person.id}&lang=ja`
+    setUrl(u)
+    if (canvasRef.current) {
+      QRCode.toCanvas(canvasRef.current, u, {
+        width: 240,
+        margin: 2,
+        color: { dark: '#1e3a5f', light: '#ffffff' },
+      }).catch(() => {})
+    }
+  }, [selectedToken, person.id])
+
+  const handlePrint = () => {
+    const win = window.open('', '_blank')
+    if (!win) return
+    const dataUrl = canvasRef.current?.toDataURL('image/png') ?? ''
+    win.document.write(`
+      <html><head><title>${person.name} 顔登録QR</title>
+      <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; gap: 12px; }
+        h2 { font-size: 18px; color: #1e3a5f; margin: 0; }
+        p { font-size: 12px; color: #6b7280; margin: 0; }
+        img { width: 240px; height: 240px; }
+        .url { font-size: 10px; color: #9ca3af; word-break: break-all; max-width: 280px; text-align: center; }
+      </style></head>
+      <body>
+        <h2>${person.name}</h2>
+        <p>顔認証登録用QRコード</p>
+        <img src="${dataUrl}" />
+        <p class="url">${url}</p>
+        <script>window.onload = () => { window.print(); window.close() }<\/script>
+      </body></html>
+    `)
+    win.document.close()
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl p-6 w-full max-w-sm">
+        {/* ヘッダー */}
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-base font-semibold text-[#1e3a5f]">顔登録QRを発行</h2>
+          <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 rounded-lg">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* 人物情報 */}
+        <div className="flex items-center gap-3 mb-5 p-3 bg-[#f8f9fb] rounded-xl">
+          <div className="w-9 h-9 rounded-full bg-[#1e3a5f]/10 flex items-center justify-center text-[#1e3a5f] font-semibold text-sm flex-shrink-0">
+            {person.name.slice(0, 1)}
+          </div>
+          <div>
+            <div className="text-sm font-medium text-[#1e3a5f]">{person.name}</div>
+            <div className="text-xs text-gray-400">
+              {person.person_type === 'employee' ? '従業員' : '外部登録者'}
+              {person.employee_code ? ` • ${person.employee_code}` : ''}
+            </div>
+          </div>
+        </div>
+
+        {/* 受付エリア選択 */}
+        {allAreas.length > 1 && (
+          <div className="mb-4">
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">受付エリアを選択</label>
+            <select
+              value={selectedToken}
+              onChange={e => setSelectedToken(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+            >
+              {allAreas.map(a => (
+                <option key={a.id} value={a.qr_token}>{a.storeName} — {a.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* QRコード */}
+        <div className="flex flex-col items-center gap-3 mb-5">
+          <div className="p-4 bg-white border border-gray-100 rounded-2xl shadow-sm">
+            <canvas ref={canvasRef} />
+          </div>
+          <p className="text-xs text-gray-400 text-center leading-relaxed">
+            このQRをスキャンすると顔登録ページへ直接アクセスできます
+          </p>
+          {person.face_id && (
+            <p className="text-xs text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg text-center">
+              ⚠ すでに顔登録済みです。再スキャンで上書き登録できます。
+            </p>
+          )}
+        </div>
+
+        {/* URL表示 */}
+        <div className="mb-5">
+          <div className="text-[10px] text-gray-400 font-mono break-all bg-gray-50 rounded-lg px-3 py-2 select-all">
+            {url}
+          </div>
+        </div>
+
+        {/* ボタン */}
+        <div className="flex gap-2">
+          <button
+            onClick={handlePrint}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50"
+          >
+            <Printer size={13} />
+            印刷
+          </button>
+          <button
+            onClick={onClose}
+            className="flex-1 py-2.5 bg-[#1e3a5f] text-white rounded-xl text-sm font-medium"
+          >
+            閉じる
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -324,7 +502,7 @@ function PersonModal({
             />
           </div>
 
-          {/* 従業員番号（従業員のみ） */}
+          {/* 従業員番号 */}
           {personType === 'employee' && (
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">社員番号</label>
