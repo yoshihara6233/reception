@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useSiteConfig } from '@/lib/site-config'
 
@@ -591,31 +591,35 @@ export default function StoresPage() {
                 {selectedStore.areas.length === 0 && !addingArea ? (
                   <p style={{ font: '400 12px/1.5 var(--font-sans)', color: 'var(--ge-ink-4)', margin: 0 }}>エリアが登録されていません</p>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                     {selectedStore.areas.map(area => (
                       <div key={area.id} style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        padding: '10px 12px', borderRadius: 6,
+                        padding: '16px', borderRadius: 8,
                         background: 'var(--ge-paper)', border: '1px solid var(--ge-line)',
                       }}>
-                        <div>
-                          <p style={{ font: '500 13px/1 var(--font-sans)', color: 'var(--ge-ink)', margin: 0 }}>{area.name}</p>
-                          <p style={{ font: '400 10px/1 var(--font-mono)', color: 'var(--ge-ink-4)', margin: '4px 0 0' }}>{area.qr_token.slice(0, 16)}…</p>
+                        {/* 上段: 名前 + ボタン */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                          <div>
+                            <p style={{ font: '500 13px/1 var(--font-sans)', color: 'var(--ge-ink)', margin: 0 }}>{area.name}</p>
+                            <p style={{ font: '400 10px/1 var(--font-mono)', color: 'var(--ge-ink-4)', margin: '4px 0 0' }}>{area.qr_token.slice(0, 16)}…</p>
+                          </div>
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                            <Link href={`/r/${area.qr_token}`} target="_blank"
+                              style={{ font: '500 11px/1 var(--font-sans)', color: 'var(--ge-accent)', textDecoration: 'none', padding: '3px 8px' }}>
+                              Preview
+                            </Link>
+                            <button onClick={() => handleQrPrint(area)} style={{ ...btnSecondary, padding: '3px 8px', fontSize: 11 }}>QR印刷</button>
+                            <button onClick={() => handleReissueQr(area.id)} disabled={reissuingAreaId === area.id} style={{
+                              padding: '3px 8px', borderRadius: 4, cursor: 'pointer', font: '500 11px/1 var(--font-sans)',
+                              color: 'var(--ge-warning)', background: '#fffbeb', border: '1px solid #fde68a',
+                              opacity: reissuingAreaId === area.id ? 0.5 : 1,
+                            }}>
+                              {reissuingAreaId === area.id ? '再発行中...' : '再発行'}
+                            </button>
+                          </div>
                         </div>
-                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                          <Link href={`/r/${area.qr_token}`} target="_blank"
-                            style={{ font: '500 11px/1 var(--font-sans)', color: 'var(--ge-accent)', textDecoration: 'none', padding: '3px 8px' }}>
-                            Preview
-                          </Link>
-                          <button onClick={() => handleQrPrint(area)} style={{ ...btnSecondary, padding: '3px 8px', fontSize: 11 }}>QR印刷</button>
-                          <button onClick={() => handleReissueQr(area.id)} disabled={reissuingAreaId === area.id} style={{
-                            padding: '3px 8px', borderRadius: 4, cursor: 'pointer', font: '500 11px/1 var(--font-sans)',
-                            color: 'var(--ge-warning)', background: '#fffbeb', border: '1px solid #fde68a',
-                            opacity: reissuingAreaId === area.id ? 0.5 : 1,
-                          }}>
-                            {reissuingAreaId === area.id ? '再発行中...' : '再発行'}
-                          </button>
-                        </div>
+                        {/* QRコード表示 */}
+                        <AreaQrCode token={area.qr_token} />
                       </div>
                     ))}
                   </div>
@@ -1070,6 +1074,43 @@ export default function StoresPage() {
 
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+// ── エリアQRコード表示コンポーネント ───────────────────────────────────────────
+
+function AreaQrCode({ token }: { token: string }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+
+  useEffect(() => {
+    if (!canvasRef.current) return
+    const url = `${window.location.origin}/r/${token}`
+    import('qrcode').then(mod => {
+      const QRCode = mod.default
+      QRCode.toCanvas(canvasRef.current!, url, {
+        width: 160,
+        margin: 1,
+        color: { dark: '#1e3a5f', light: '#ffffff' },
+      }).catch(() => {})
+    })
+  }, [token])
+
+  const url = typeof window !== 'undefined' ? `${window.location.origin}/r/${token}` : ''
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
+      <div style={{ padding: 8, background: '#fff', border: '1px solid var(--ge-line)', borderRadius: 8, flexShrink: 0 }}>
+        <canvas ref={canvasRef} />
+      </div>
+      <div style={{ paddingTop: 4 }}>
+        <p style={{ font: '500 11px/1.6 var(--font-sans)', color: 'var(--ge-ink-3)', margin: '0 0 6px' }}>
+          スマートフォンでスキャンして受付できます
+        </p>
+        <p style={{ font: '400 10px/1.5 var(--font-mono)', color: 'var(--ge-ink-4)', margin: 0, wordBreak: 'break-all' }}>
+          {url}
+        </p>
       </div>
     </div>
   )
