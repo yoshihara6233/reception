@@ -21,6 +21,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.103.2",
+    "hls.js": "^1.6.16",
     "jose": "^6.2.2",
     "jspdf": "^4.2.1",
     "jsqr": "^1.4.0",
