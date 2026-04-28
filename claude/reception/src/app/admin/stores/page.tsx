@@ -120,13 +120,24 @@ export default function StoresPage() {
   const [editingStaffId, setEditingStaffId] = useState<string | null>(null)
   const [editStaff, setEditStaff]     = useState({ name: '', name_kana: '', email: '', slack_member_id: '' })
 
-  // カメラ
+  // カメラ（i-PRO）
   const [cameras, setCameras]           = useState<Camera[]>([])
   const [cameraLoading, setCameraLoading] = useState(false)
   const emptyCameraForm = () => ({ label: '', iproCameraId: '', iproRecorderId: '' })
   const [editingCameraSlot, setEditingCameraSlot] = useState<1 | 2 | null>(null)
   const [cameraForm, setCameraForm]     = useState(emptyCameraForm())
   const [cameraSaving, setCameraSaving] = useState(false)
+
+  // カメラ（VMS）
+  const [vmsEnabled, setVmsEnabled]     = useState(false)
+  const [vmsUrl, setVmsUrl]             = useState('')
+  const [vmsApiKey, setVmsApiKey]       = useState('')
+  const [vmsCam1, setVmsCam1]           = useState('')
+  const [vmsCam2, setVmsCam2]           = useState('')
+  const [vmsSaving, setVmsSaving]       = useState(false)
+  const [vmsSaved, setVmsSaved]         = useState(false)
+  const [vmsTesting, setVmsTesting]     = useState(false)
+  const [vmsTestMsg, setVmsTestMsg]     = useState<{ ok: boolean; msg: string } | null>(null)
 
   // 事前来客登録
   const [preRegs, setPreRegs]           = useState<PreReg[]>([])
@@ -175,9 +186,20 @@ export default function StoresPage() {
 
   const fetchCameras = useCallback(async (storeId: string) => {
     setCameraLoading(true)
-    const res  = await fetch(`/api/v1/admin/cameras?storeId=${storeId}`)
-    const data = await res.json()
-    setCameras(data.cameras ?? [])
+    const [iproRes, vmsRes] = await Promise.all([
+      fetch(`/api/v1/admin/cameras?storeId=${storeId}`),
+      fetch(`/api/v1/admin/stores/${storeId}/cameras`),
+    ])
+    const iproData = await iproRes.json()
+    setCameras(iproData.cameras ?? [])
+    if (vmsRes.ok) {
+      const vmsData = await vmsRes.json()
+      setVmsEnabled(vmsData.vms_enabled ?? false)
+      setVmsUrl(vmsData.vms_url ?? '')
+      const s = vmsData.slots ?? []
+      setVmsCam1(s.find((c: { slot: number; vms_camera_id?: string }) => c.slot === 1)?.vms_camera_id ?? '')
+      setVmsCam2(s.find((c: { slot: number; vms_camera_id?: string }) => c.slot === 2)?.vms_camera_id ?? '')
+    }
     setCameraLoading(false)
   }, [])
 
@@ -339,6 +361,50 @@ export default function StoresPage() {
     if (!confirm('このカメラ登録を削除しますか？')) return
     await fetch(`/api/v1/admin/cameras?id=${id}`, { method: 'DELETE' })
     if (selectedId) fetchCameras(selectedId)
+  }
+
+  const handleSaveVms = async () => {
+    if (!selectedId) return
+    setVmsSaving(true)
+    setVmsSaved(false)
+    await fetch(`/api/v1/admin/stores/${selectedId}/cameras`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        vms_url: vmsUrl || null,
+        vms_api_key: vmsApiKey || null,
+        vms_enabled: vmsEnabled,
+        slots: [
+          { slot: 1, label: '受付カウンター',   vms_camera_id: vmsCam1, ipro_camera_id: '', ipro_recorder_id: '', is_active: true },
+          { slot: 2, label: '手荷物検査デスク', vms_camera_id: vmsCam2, ipro_camera_id: '', ipro_recorder_id: '', is_active: true },
+        ],
+      }),
+    })
+    setVmsSaving(false)
+    setVmsSaved(true)
+    setVmsApiKey('')  // パスワード欄をクリア
+    setTimeout(() => setVmsSaved(false), 2500)
+  }
+
+  const handleTestVms = async () => {
+    if (!vmsUrl || !vmsApiKey) {
+      setVmsTestMsg({ ok: false, msg: 'URL と API Key を入力してください' })
+      return
+    }
+    setVmsTesting(true)
+    setVmsTestMsg(null)
+    try {
+      const res = await fetch('/api/v1/vms/cameras-test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vmsUrl, vmsApiKey }),
+      })
+      const d = await res.json()
+      setVmsTestMsg(res.ok ? { ok: true, msg: `接続成功 — カメラ ${d.count ?? '?'} 台確認` } : { ok: false, msg: d.error || '接続失敗' })
+    } catch {
+      setVmsTestMsg({ ok: false, msg: 'ネットワークエラー' })
+    }
+    setVmsTesting(false)
   }
 
   // ── 事前来客登録 ───────────────────────────────────────────────────────────
@@ -919,9 +985,100 @@ export default function StoresPage() {
 
             {/* ─ カメラ タブ ─ */}
             {activeTab === 'cameras' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+              {/* VMS セクション */}
+              <div style={{ background: '#fff', borderRadius: 8, border: '1px solid var(--ge-line)', padding: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <div>
+                    <h3 style={{ font: '600 13px/1 var(--font-sans)', color: 'var(--ge-ink)', margin: '0 0 4px' }}>🖥 VMS 接続（オンプレミス）</h3>
+                    <p style={{ font: '400 11px/1.5 var(--font-sans)', color: 'var(--ge-ink-4)', margin: 0 }}>
+                      手荷物申告時に自動で録画を開始し、HLS ストリームで再生します。
+                    </p>
+                  </div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', font: '500 12px/1 var(--font-sans)', color: 'var(--ge-ink-3)', flexShrink: 0 }}>
+                    <input
+                      type="checkbox"
+                      checked={vmsEnabled}
+                      onChange={e => setVmsEnabled(e.target.checked)}
+                      style={{ accentColor: 'var(--ge-accent)', width: 14, height: 14 }}
+                    />
+                    VMS 有効
+                  </label>
+                </div>
+
+                <div style={{ opacity: vmsEnabled ? 1 : 0.45, pointerEvents: vmsEnabled ? 'auto' : 'none', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label style={{ font: '500 10px/1 var(--font-sans)', color: 'var(--ge-ink-3)', display: 'block', marginBottom: 3 }}>VMS URL</label>
+                      <input
+                        type="url"
+                        value={vmsUrl}
+                        onChange={e => setVmsUrl(e.target.value)}
+                        placeholder="例: https://vms.your-domain.com"
+                        style={{ ...inputStyle, fontFamily: 'var(--font-mono)' }}
+                      />
+                    </div>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label style={{ font: '500 10px/1 var(--font-sans)', color: 'var(--ge-ink-3)', display: 'block', marginBottom: 3 }}>API Key</label>
+                      <input
+                        type="password"
+                        value={vmsApiKey}
+                        onChange={e => setVmsApiKey(e.target.value)}
+                        placeholder="••••••••  (変更する場合のみ入力)"
+                        autoComplete="new-password"
+                        style={inputStyle}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ font: '500 10px/1 var(--font-sans)', color: 'var(--ge-ink-3)', display: 'block', marginBottom: 3 }}>カメラID — スロット1（受付）</label>
+                      <input
+                        value={vmsCam1}
+                        onChange={e => setVmsCam1(e.target.value)}
+                        placeholder="例: camera_01"
+                        style={{ ...inputStyle, fontFamily: 'var(--font-mono)' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ font: '500 10px/1 var(--font-sans)', color: 'var(--ge-ink-3)', display: 'block', marginBottom: 3 }}>カメラID — スロット2（手荷物）</label>
+                      <input
+                        value={vmsCam2}
+                        onChange={e => setVmsCam2(e.target.value)}
+                        placeholder="例: camera_02"
+                        style={{ ...inputStyle, fontFamily: 'var(--font-mono)' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <button
+                      onClick={handleTestVms}
+                      disabled={vmsTesting}
+                      style={{ ...btnSecondary, padding: '4px 10px', opacity: vmsTesting ? 0.5 : 1 }}
+                    >
+                      {vmsTesting ? 'テスト中...' : '接続テスト'}
+                    </button>
+                    <button
+                      onClick={handleSaveVms}
+                      disabled={vmsSaving}
+                      style={{ ...btnPrimary, padding: '4px 12px', opacity: vmsSaving ? 0.5 : 1 }}
+                    >
+                      {vmsSaving ? '保存中...' : '保存'}
+                    </button>
+                    {vmsSaved && <span style={{ font: '400 11px/1 var(--font-sans)', color: 'var(--ge-success)' }}>✅ 保存しました</span>}
+                    {vmsTestMsg && (
+                      <span style={{ font: '400 11px/1 var(--font-sans)', color: vmsTestMsg.ok ? 'var(--ge-success)' : '#dc2626' }}>
+                        {vmsTestMsg.ok ? '✅' : '⚠️'} {vmsTestMsg.msg}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* i-PRO セクション */}
               <div style={{ background: '#fff', borderRadius: 8, border: '1px solid var(--ge-line)', padding: 20 }}>
                 <div style={{ marginBottom: 16 }}>
-                  <h3 style={{ font: '600 13px/1 var(--font-sans)', color: 'var(--ge-ink)', margin: '0 0 4px' }}>i-PRO Remo カメラ登録</h3>
+                  <h3 style={{ font: '600 13px/1 var(--font-sans)', color: 'var(--ge-ink)', margin: '0 0 4px' }}>📷 i-PRO Remo カメラ登録</h3>
                   <p style={{ font: '400 11px/1.5 var(--font-sans)', color: 'var(--ge-ink-4)', margin: 0 }}>
                     1店舗につき最大2台のカメラを登録できます。スロット1が受付カウンター、スロット2が手荷物検査デスクの目安です。
                   </p>
@@ -1069,6 +1226,7 @@ export default function StoresPage() {
                     })}
                   </div>
                 )}
+              </div>
               </div>
             )}
 
