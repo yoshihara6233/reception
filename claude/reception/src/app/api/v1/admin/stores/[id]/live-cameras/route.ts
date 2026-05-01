@@ -104,19 +104,25 @@ export async function GET(
       if (!vms)      return { ...base, error: 'VMS が設定されていません' }
       if (!cameraId) return { ...base, error: 'カメラID が設定されていません（カメラ設定タブで選択してください）' }
 
-      // UUID または名前 → UUID を解決 (事前取得済みのリストを使う)
+      // UUID または名前/ID → VMS UUID を解決 (事前取得済みのリストを使う)
+      // 保存値は UUID | name | id のいずれかの可能性がある
       let vmsUuid: string | null = null
-      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cameraId)) {
-        vmsUuid = cameraId
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cameraId.trim())) {
+        vmsUuid = cameraId.trim()
       } else {
-        const match = vmsCameraList.find(
-          c => c.name === cameraId || c.ip_address === cameraId
+        const q = cameraId.trim()
+        const match = vmsCameraList.find(c =>
+          c.id.trim()   === q ||
+          c.name.trim() === q ||
+          (c.ip_address && c.ip_address.trim() === q)
         )
+        // マッチした場合: その camera の id が UUID なら UUID として使う、
+        // 非 UUID (camera_01 など) ならその id をそのまま stream エンドポイントに渡す
         vmsUuid = match?.id ?? null
       }
 
       if (!vmsUuid) {
-        const names = vmsCameraList.map(c => c.name).join('、') || '取得できませんでした'
+        const names = vmsCameraList.map(c => `${c.name}(id:${c.id})`).join('、') || '取得できませんでした'
         return {
           ...base,
           error: `カメラが見つかりません: "${cameraId}" — VMS にあるカメラ: ${names}`,
