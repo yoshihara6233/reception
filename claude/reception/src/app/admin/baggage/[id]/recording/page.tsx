@@ -49,21 +49,45 @@ function fmtDatetime(iso: string | null) {
   })
 }
 
+/** 検査開始時刻 + 経過秒 を "HH:MM:SS" で返す */
+function wallClockTime(inspectionStartedIso: string | null, positionSec: number): string {
+  if (!inspectionStartedIso) return fmtTime(positionSec)
+  const dt = new Date(new Date(inspectionStartedIso).getTime() + positionSec * 1000)
+  return dt.toLocaleString('ja-JP', {
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  })
+}
+
+/** "MM/DD HH:MM:SS" — コントロールバー表示用（日付込み） */
+function wallClockFull(inspectionStartedIso: string | null, positionSec: number): string {
+  if (!inspectionStartedIso) return fmtTime(positionSec)
+  const dt = new Date(new Date(inspectionStartedIso).getTime() + positionSec * 1000)
+  return dt.toLocaleString('ja-JP', {
+    month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  })
+}
+
 // ── HLS プレーヤー（1 カメラ分） ─────────────────────────────────────
 function HlsVideoPanel({
   cam,
   hlsUrl,
   playing,
+  seekCmd,
+  inspectionStartedIso,
   onDurationChange,
   onTimeUpdate,
 }: {
   cam: CameraInfo
   hlsUrl: string
   playing: boolean
+  seekCmd?: { to: number; v: number }
+  inspectionStartedIso: string | null
   onDurationChange?: (d: number) => void
   onTimeUpdate?: (t: number) => void
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const [currentTime, setCurrentTime] = useState(0)
 
   useEffect(() => {
     if (!videoRef.current || !hlsUrl) return
@@ -93,28 +117,53 @@ function HlsVideoPanel({
     return () => { hlsInstance?.destroy?.() }
   }, [hlsUrl, onDurationChange])
 
+  // 再生 / 停止
   useEffect(() => {
     if (!videoRef.current) return
     if (playing) videoRef.current.play().catch(() => {})
     else videoRef.current.pause()
   }, [playing])
 
+  // シーク — seekCmd.v が変わるたびに発火（同じ位置への連続シークも動く）
+  useEffect(() => {
+    if (seekCmd === undefined || !videoRef.current) return
+    videoRef.current.currentTime = seekCmd.to
+  }, [seekCmd])
+
+  // 現在時刻を親と自身の state に通知（シーク中は親への通知をスキップ）
   useEffect(() => {
     const v = videoRef.current
-    if (!v || !onTimeUpdate) return
-    const handler = () => onTimeUpdate(v.currentTime)
+    if (!v) return
+    const handler = () => {
+      setCurrentTime(v.currentTime)
+      onTimeUpdate?.(v.currentTime)
+    }
     v.addEventListener('timeupdate', handler)
     return () => v.removeEventListener('timeupdate', handler)
-  }, [onTimeUpdate])
+  }, [onTimeUpdate])  // onTimeUpdate 側で seekingRef をチェック
 
   return (
     <div className="relative aspect-video bg-black rounded-xl overflow-hidden">
       <video ref={videoRef} className="w-full h-full object-contain" playsInline muted />
+
+      {/* カメララベル (左上) */}
       <div className="absolute top-2 left-2 text-[10px] text-white/80 font-mono bg-black/50 rounded px-2 py-0.5 leading-tight">
         🔴 REC · カメラ{cam.slot} · {cam.label}
       </div>
+
+      {/* カメラID (右上) */}
       <div className="absolute top-2 right-2 text-[10px] text-white/60 font-mono bg-black/50 rounded px-2 py-0.5">
         {cam.cameraId}
+      </div>
+
+      {/* 再生中の実時刻オーバーレイ (左下) */}
+      <div className="absolute bottom-2 left-2 flex items-center gap-1.5 bg-black/60 rounded px-2.5 py-1">
+        {playing && (
+          <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block" />
+        )}
+        <span className="text-white font-mono text-xs tabular-nums tracking-wide">
+          {wallClockTime(inspectionStartedIso, currentTime)}
+        </span>
       </div>
     </div>
   )
@@ -142,7 +191,10 @@ export default function BaggageRecordingPage() {
   const [loadError, setLoadError] = useState<string | null>(null)
 
   const [playing, setPlaying] = useState(false)
-  const [position, setPosition] = useState(0)
+  const [position, setPosition] = useState(0)   // 表示用 (timeupdate から更新)
+  // seekCmd: { to: 秒, v: バージョン } — v が変わるたびに useEffect が再発火する
+  const [seekCmd, setSeekCmd] = useState<{ to: number; v: number } | undefined>(undefined)
+  const seekingRef = useRef(false) // シーク中は timeupdate によるposition上書きを抑制
   const [duration, setDuration] = useState(0)
   const [toast, setToast] = useState<string | null>(null)
   const timelineRef = useRef<HTMLDivElement>(null)
@@ -170,16 +222,26 @@ export default function BaggageRecordingPage() {
 
   const anyHls = cameras.some(c => c.hlsUrl)
   const vmsConnected = data?.vms_connected ?? false
-  const inspectionStarted = data?.inspection_started_at
-  const inspectionEnded   = data?.inspection_ended_at
+  const inspectionStarted = data?.inspection_started_at ?? null
+  const inspectionEnded   = data?.inspection_ended_at ?? null
 
   const posPct = duration > 0 ? (position / duration) * 100 : 0
 
+  /** シーク共通処理: position を即時更新 + versioned seekCmd でビデオを移動 */
+  const seek = useCallback((target: number) => {
+    const clamped = Math.max(0, Math.min(duration || 0, target))
+    seekingRef.current = true
+    setPosition(clamped)
+    setSeekCmd(prev => ({ to: clamped, v: (prev?.v ?? 0) + 1 }))
+    // 200ms 後にシーク完了とみなし timeupdate を再度受け付ける
+    setTimeout(() => { seekingRef.current = false }, 200)
+  }, [duration])
+
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!timelineRef.current) return
+    if (!timelineRef.current || !duration) return
     const rect = timelineRef.current.getBoundingClientRect()
     const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
-    setPosition(pct * duration)
+    seek(pct * duration)
   }
 
   if (loading) {
@@ -242,7 +304,7 @@ export default function BaggageRecordingPage() {
         <div className="flex items-center gap-4 px-4 py-3 bg-[var(--ge-accent)]/5 border border-[var(--ge-accent)]/15 rounded-xl mb-3 text-sm">
           <span className="text-[var(--ge-accent)] font-semibold text-xs uppercase tracking-wide">検査時刻</span>
           <span className="font-mono text-gray-700 text-xs">
-            {fmtDatetime(inspectionStarted ?? null)} 〜 {fmtDatetime(inspectionEnded ?? null)}
+            {fmtDatetime(inspectionStarted)} 〜 {fmtDatetime(inspectionEnded)}
           </span>
           {inspectionStarted && !anyHls && vmsConnected && (
             <span className="ml-auto text-[11px] text-amber-600">
@@ -262,8 +324,10 @@ export default function BaggageRecordingPage() {
                   cam={cam}
                   hlsUrl={cam.hlsUrl}
                   playing={playing}
+                  seekCmd={seekCmd}
+                  inspectionStartedIso={inspectionStarted}
                   onDurationChange={d => { if (d > 0) setDuration(d) }}
-                  onTimeUpdate={t => setPosition(t)}
+                  onTimeUpdate={t => { if (!seekingRef.current) setPosition(t) }}
                 />
               ) : (
                 <NoCameraPanel
@@ -294,7 +358,7 @@ export default function BaggageRecordingPage() {
           <div className="px-4 py-4 border-t border-gray-100">
             <div className="flex items-center gap-3 mb-3">
               <button
-                onClick={() => setPosition(p => Math.max(0, p - 10))}
+                onClick={() => seek(position - 10)}
                 className="w-9 h-9 rounded-full border border-gray-200 hover:bg-gray-50 text-sm"
                 title="10秒戻る"
               >⏮</button>
@@ -305,12 +369,24 @@ export default function BaggageRecordingPage() {
                 {playing ? '⏸' : '▶'}
               </button>
               <button
-                onClick={() => setPosition(p => Math.min(duration, p + 10))}
+                onClick={() => seek(position + 10)}
                 className="w-9 h-9 rounded-full border border-gray-200 hover:bg-gray-50 text-sm"
                 title="10秒進む"
               >⏭</button>
               <span className="text-xs text-gray-400 ml-2">両カメラ同期</span>
-              <div className="flex-1" />
+
+              {/* 現在再生中の実時刻 */}
+              <div className="flex-1 flex justify-center">
+                {inspectionStarted ? (
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg">
+                    <span className="text-[10px] text-gray-400 font-medium">再生時刻</span>
+                    <span className="text-sm font-mono font-semibold text-gray-800 tabular-nums tracking-wide">
+                      {wallClockFull(inspectionStarted, position)}
+                    </span>
+                  </div>
+                ) : null}
+              </div>
+
               <span className="text-xs text-gray-500 font-mono tabular-nums">
                 {fmtTime(position)} / {duration > 0 ? fmtTime(duration) : '--:--'}
               </span>
@@ -342,7 +418,29 @@ export default function BaggageRecordingPage() {
                   </div>
                 </div>
               )}
+
+              {/* シークバー上の現在時刻ラベル */}
+              {inspectionStarted && duration > 0 && (
+                <div
+                  className="absolute -top-6 text-[10px] font-mono text-[var(--ge-accent)] whitespace-nowrap -translate-x-1/2 pointer-events-none"
+                  style={{ left: `${posPct}%` }}
+                >
+                  {wallClockTime(inspectionStarted, position)}
+                </div>
+              )}
             </div>
+
+            {/* シークバー下端: 開始時刻〜終了時刻 */}
+            {inspectionStarted && (
+              <div className="flex justify-between mt-1 text-[10px] text-gray-400 font-mono px-0.5">
+                <span>{fmtDatetime(inspectionStarted)}</span>
+                {duration > 0 && (
+                  <span>
+                    {wallClockFull(inspectionStarted, duration)}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         ) : (
           /* ── 映像なし: 設定案内 ─────────────────────────────────── */
@@ -410,6 +508,12 @@ export default function BaggageRecordingPage() {
               <div className="flex justify-between gap-2 pt-1 border-t border-gray-100">
                 <dt className="text-gray-400">検査開始</dt>
                 <dd className="font-mono text-gray-600 text-[10px]">{fmtDatetime(inspectionStarted)}</dd>
+              </div>
+            )}
+            {inspectionEnded && (
+              <div className="flex justify-between gap-2">
+                <dt className="text-gray-400">検査終了</dt>
+                <dd className="font-mono text-gray-600 text-[10px]">{fmtDatetime(inspectionEnded)}</dd>
               </div>
             )}
           </dl>
