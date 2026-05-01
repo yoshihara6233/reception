@@ -80,7 +80,9 @@ export default function ConfirmPage() {
           name: form.name,
           phone: form.phone,
           email: form.email,
-          purpose: form.purpose === 'その他' ? form.purposeDetail : form.purpose,
+          purpose: form.purpose === 'その他'
+            ? (form.purposeDetail || 'その他')
+            : form.purpose,
           contactPerson: form.contactPerson,
           contactPersonId: form.contactPersonId || null,
         }),
@@ -201,7 +203,9 @@ export default function ConfirmPage() {
             {form.phone && <ConfirmRow label={t('register.phone')} value={form.phone} />}
             <ConfirmRow
               label={t('register.purpose')}
-              value={form.purpose === 'その他' ? form.purposeDetail : form.purpose}
+              value={form.purpose === 'その他'
+                ? (form.purposeDetail || 'その他')
+                : form.purpose}
             />
             {form.contactPerson && <ConfirmRow label={t('register.contactPerson')} value={form.contactPerson} />}
           </div>
