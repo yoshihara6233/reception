@@ -19,6 +19,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
+const TENANT_ID = '00000000-0000-0000-0000-000000000001' // TODO: from auth
+
 interface CameraSlot {
   slot: 1 | 2
   label: string
@@ -77,10 +79,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         .from('store_cameras')
         .upsert(
           {
+            tenant_id: TENANT_ID,
             store_id: storeId,
             slot: slot.slot,
             label: slot.label,
-            ipro_camera_id: slot.ipro_camera_id || null,
+            ipro_camera_id: slot.ipro_camera_id || '',  // NOT NULL — empty string OK
             ipro_recorder_id: slot.ipro_recorder_id || null,
             vms_camera_id: slot.vms_camera_id || null,
             is_active: slot.is_active,
