@@ -45,6 +45,7 @@ export default function FaceAuthPage() {
   const [confidence, setConfidence] = useState(0)
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [errorMsg, setErrorMsg]   = useState<string | null>(null)
+  const [countdown, setCountdown] = useState(5)
 
   // ── カメラ起動 ───────────────────────────────────────────────────────────────
 
@@ -122,61 +123,67 @@ export default function FaceAuthPage() {
     }
   }
 
-  // ── チェックイン / チェックアウト ────────────────────────────────────────────
+  // ── チェックアウト処理 ───────────────────────────────────────────────────────
 
   const handleCheckIn = async () => {
     if (!visitor || isCheckingIn) return
+
+    if (!isCheckout) {
+      // 入室モード → 来訪目的選択画面へ遷移
+      sessionStorage.setItem('reception-purpose-visitor', JSON.stringify({
+        visitorId:  visitor.id,
+        name:       visitor.name,
+        company:    visitor.company,
+        department: visitor.department,
+        phone:      visitor.phone,
+        email:      visitor.email,
+        source:     'face-auth',
+      }))
+      router.replace(`/r/${params.token}/purpose-select`)
+      return
+    }
+
+    // 退室モード: visitorId で active visit を検索して退室
     setIsCheckingIn(true)
-
     try {
-      if (isCheckout) {
-        // 退室モード: visitorId で active visit を検索して退室
-        const res = await fetch('/api/v1/visits/check-out', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            token:     params.token,
-            visitorId: visitor.id,
-          }),
-        })
+      const res = await fetch('/api/v1/visits/check-out', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token:     params.token,
+          visitorId: visitor.id,
+        }),
+      })
 
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}))
-          throw new Error(body.error || '退室処理に失敗しました')
-        }
-
-        setPhase('done')
-      } else {
-        // 入室モード
-        const res = await fetch('/api/v1/visits/check-in', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            token:       params.token,
-            company:     visitor.company,
-            name:        visitor.name,
-            department:  visitor.department,
-            phone:       visitor.phone,
-            email:       visitor.email,
-            purpose:     '顔認証チェックイン',
-          }),
-        })
-
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}))
-          throw new Error(body.error || 'チェックインに失敗しました')
-        }
-
-        const { visitId } = await res.json()
-        sessionStorage.setItem('reception-visit-id', visitId)
-        setPhase('done')
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error || '退室処理に失敗しました')
       }
+
+      setPhase('done')
     } catch (err) {
       setIsCheckingIn(false)
-      setErrorMsg(err instanceof Error ? err.message : (isCheckout ? '退室に失敗しました' : 'チェックインに失敗しました'))
+      setErrorMsg(err instanceof Error ? err.message : '退室に失敗しました')
       setPhase('error')
     }
   }
+
+  // ── 退室完了後 カウントダウン → TOP ─────────────────────────────────────────
+
+  useEffect(() => {
+    if (phase !== 'done') return
+    const timer = setInterval(() => {
+      setCountdown(c => {
+        if (c <= 1) {
+          clearInterval(timer)
+          window.location.href = `/r/${params.token}`
+          return 0
+        }
+        return c - 1
+      })
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [phase, params.token])
 
   // ── 通常フローへ ─────────────────────────────────────────────────────────────
 
@@ -209,7 +216,7 @@ export default function FaceAuthPage() {
           <div className="absolute bottom-0 left-0 right-0 h-5 bg-[var(--ge-paper)] rounded-t-[20px]" />
         </div>
 
-        <div className="px-5 -mt-1 flex-1">
+        <div className="px-5 -mt-1 flex-1 space-y-4">
           <div className="bg-white rounded-2xl p-6 shadow-sm text-center">
             <div className="w-12 h-12 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-3">
               <span className="text-2xl">{doneIcon}</span>
@@ -221,11 +228,18 @@ export default function FaceAuthPage() {
               <p className="text-xs text-gray-400 mt-1">類似度: {confidence.toFixed(1)}%</p>
             </div>
           </div>
+          <a
+            href={`/r/${params.token}`}
+            className="block w-full py-4 bg-[var(--ge-accent)] text-white text-center text-sm font-semibold rounded-2xl shadow-sm"
+          >
+            受付トップに戻る
+            <span className="ml-2 text-white/60 text-xs font-normal">({countdown}秒後に自動で戻ります)</span>
+          </a>
         </div>
 
-        <div className="bg-[var(--ge-accent)] py-5 text-center mt-auto">
-          <p className="text-[11px] text-white/50 tracking-widest uppercase">
-            Reception Kiosk — Face Auth
+        <div className="py-6 text-center mt-auto">
+          <p className="text-[11px] text-gray-400 tracking-widest uppercase">
+            Powered by Reception Kiosk
           </p>
         </div>
       </div>
