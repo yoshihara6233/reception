@@ -1025,6 +1025,23 @@ export default function StoresPage() {
                       手荷物申告時に自動で録画を開始し、HLS ストリームで再生します。
                     </p>
                   </div>
+                  {/* ライブ映像確認ボタン */}
+                  {vmsEnabled && selectedId && (
+                    <Link
+                      href={`/admin/cameras/live?storeId=${selectedId}`}
+                      target="_blank"
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 5,
+                        padding: '5px 11px', borderRadius: 6,
+                        font: '500 11px/1 var(--font-sans)', color: '#fff',
+                        background: '#dc2626', border: 'none', textDecoration: 'none',
+                        whiteSpace: 'nowrap', flexShrink: 0,
+                      }}
+                    >
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff', opacity: 0.85, animation: 'none' }} />
+                      🔴 ライブ映像確認
+                    </Link>
+                  )}
                   <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', font: '500 12px/1 var(--font-sans)', color: 'var(--ge-ink-3)', flexShrink: 0 }}>
                     <input
                       type="checkbox"

@@ -130,6 +130,15 @@ export function createVmsClient(config: VmsClientConfig) {
     },
 
     /**
+     * GET /api/v1/cameras/:id/live — ライブ HLS ストリーム URL を取得
+     * VMS がライブ配信エンドポイントを持つ場合に使用する。
+     * 返却: { hls_url: string, expires_at?: string }
+     */
+    getLiveStream(cameraId: string): Promise<{ hls_url: string; expires_at?: string }> {
+      return request<{ hls_url: string; expires_at?: string }>('GET', `/api/v1/cameras/${encodeURIComponent(cameraId)}/live`)
+    },
+
+    /**
      * GET /api/v1/inspections/:id/snapshot
      * img src に直接指定可能な URL を返す。
      * 実際の画像取得はブラウザが直接 VMS に行う（認証不要な静的リソース想定）
