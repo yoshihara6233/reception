@@ -18,6 +18,8 @@ interface Person {
   notes: string | null
   face_id: string | null
   face_registered_at: string | null
+  face_photo_path: string | null
+  facePhotoUrl: string | null
   is_registered: boolean
   created_at: string
 }
@@ -168,8 +170,17 @@ export default function PersonsPage() {
                 <tr key={person.id} className="border-t border-gray-50 hover:bg-gray-50/50">
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-[#1e3a5f]/10 flex items-center justify-center text-[#1e3a5f] font-semibold text-sm flex-shrink-0">
-                        {person.name.slice(0, 1)}
+                      <div className="w-8 h-8 rounded-full overflow-hidden bg-[#1e3a5f]/10 flex items-center justify-center text-[#1e3a5f] font-semibold text-sm flex-shrink-0">
+                        {person.facePhotoUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={person.facePhotoUrl}
+                            alt={person.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          person.name.slice(0, 1)
+                        )}
                       </div>
                       <div>
                         <div className="font-medium text-[#1e3a5f]">{person.name}</div>

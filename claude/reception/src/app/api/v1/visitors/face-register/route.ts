@@ -95,6 +95,18 @@ export async function POST(req: NextRequest) {
     const imageBuffer = dataUrlToBuffer(facePhotoDataUrl)
     const { faceId, confidence } = await indexFace(tenantId, visitorId, imageBuffer)
 
+    // 顔写真を Supabase Storage にも保存
+    let facePhotoPath: string | null = null
+    try {
+      const storagePath = `${tenantId}/${visitorId}/face_${Date.now()}.jpg`
+      const { error: uploadErr } = await supabase.storage
+        .from('visit-photos')
+        .upload(storagePath, imageBuffer, { contentType: 'image/jpeg', upsert: true })
+      if (!uploadErr) facePhotoPath = storagePath
+    } catch {
+      // 写真保存失敗は非致命的
+    }
+
     // DB 更新
     const { error: updateErr } = await supabase
       .from('visitors')
@@ -102,6 +114,7 @@ export async function POST(req: NextRequest) {
         face_id:              faceId,
         face_registered_at:   new Date().toISOString(),
         face_auth_consent:    true,
+        ...(facePhotoPath ? { face_photo_path: facePhotoPath } : {}),
       })
       .eq('id', visitorId)
       .eq('tenant_id', tenantId)

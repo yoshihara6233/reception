@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
 
   let query = supabase
     .from('visitors')
-    .select('id, name, company, department, phone, email, person_type, employee_code, notes, face_id, face_registered_at, is_registered, created_at')
+    .select('id, name, company, department, phone, email, person_type, employee_code, notes, face_id, face_registered_at, face_photo_path, is_registered, created_at')
     .eq('tenant_id', TENANT_ID)
     .neq('person_type', 'visitor')   // 一般来訪者は除く
     .order('created_at', { ascending: false })
@@ -46,7 +46,21 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json({ persons: data ?? [] })
+  // 顔写真の signed URL を生成
+  const persons = await Promise.all(
+    (data ?? []).map(async (p: any) => {
+      let facePhotoUrl: string | null = null
+      if (p.face_photo_path) {
+        const { data: signed } = await supabase.storage
+          .from('visit-photos')
+          .createSignedUrl(p.face_photo_path, 3600)
+        facePhotoUrl = signed?.signedUrl ?? null
+      }
+      return { ...p, facePhotoUrl }
+    })
+  )
+
+  return NextResponse.json({ persons })
 }
 
 // ── POST ───────────────────────────────────────────────────────────────────────
