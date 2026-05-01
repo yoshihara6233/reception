@@ -8,7 +8,7 @@
  * HLS.js で映像を表示する。映像確認・接続テスト用途。
  */
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, Suspense } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 
@@ -173,7 +173,7 @@ function LivePanel({
 }
 
 // ── メイン ─────────────────────────────────────────────────────────────────────
-export default function LiveCameraPage() {
+function LiveCameraContent() {
   const searchParams = useSearchParams()
   const storeId      = searchParams.get('storeId')
 
@@ -390,5 +390,17 @@ export default function LiveCameraPage() {
         </div>
       )}
     </div>
+  )
+}
+
+export default function LiveCameraPage() {
+  return (
+    <Suspense fallback={
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 60, color: '#6b7280', gap: 10 }}>
+        読み込み中...
+      </div>
+    }>
+      <LiveCameraContent />
+    </Suspense>
   )
 }
