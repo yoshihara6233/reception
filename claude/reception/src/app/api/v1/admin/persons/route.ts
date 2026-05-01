@@ -3,10 +3,10 @@
  *
  * 来店者管理 CRUD エンドポイント
  *
- * GET    ?type=employee|external|all&q=<search>  — 一覧取得
- * POST                                            — 新規登録 (employee / external)
- * PATCH  ?id=<visitorId>                          — 編集
- * DELETE ?id=<visitorId>                          — 削除 (face_id も Rekognition から削除)
+ * GET    ?type=employee|external|primary|all&q=<search>  — 一覧取得
+ * POST                                                    — 新規登録 (employee / external)
+ * PATCH  ?id=<visitorId>                                  — 編集・昇格
+ * DELETE ?id=<visitorId>                                  — 削除 (face_id も Rekognition から削除)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -20,16 +20,70 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
-  const type = searchParams.get('type') || 'all'   // 'employee' | 'external' | 'all'
+  const type = searchParams.get('type') || 'all'
   const q    = searchParams.get('q') || ''
 
   const supabase = createAdminClient()
 
+  // ── 一次受付者: 直近30日以内に来訪した visitor タイプ ──────────────────────
+  if (type === 'primary') {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+
+    // 直近30日以内に来訪した visitor_id を取得
+    const { data: recentVisits } = await supabase
+      .from('visits')
+      .select('visitor_id, check_in_at')
+      .eq('tenant_id', TENANT_ID)
+      .gte('check_in_at', thirtyDaysAgo)
+      .order('check_in_at', { ascending: false })
+
+    const visitorIdToLastVisit: Record<string, string> = {}
+    for (const v of (recentVisits ?? [])) {
+      if (!visitorIdToLastVisit[v.visitor_id]) {
+        visitorIdToLastVisit[v.visitor_id] = v.check_in_at
+      }
+    }
+
+    const visitorIds = Object.keys(visitorIdToLastVisit)
+    if (visitorIds.length === 0) {
+      return NextResponse.json({ persons: [] })
+    }
+
+    let query = supabase
+      .from('visitors')
+      .select('id, name, company, department, phone, email, person_type, employee_code, notes, face_id, face_registered_at, is_registered, created_at')
+      .eq('tenant_id', TENANT_ID)
+      .eq('person_type', 'visitor')
+      .in('id', visitorIds)
+
+    if (q) {
+      query = query.or(`name.ilike.%${q}%,company.ilike.%${q}%,email.ilike.%${q}%`)
+    }
+
+    const { data, error } = await query
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    // 最終来訪日を付与
+    const persons = (data ?? []).map((p: any) => ({
+      ...p,
+      facePhotoUrl: null,
+      lastVisitAt: visitorIdToLastVisit[p.id] ?? null,
+    }))
+
+    // 最終来訪日の新しい順
+    persons.sort((a, b) =>
+      new Date(b.lastVisitAt ?? 0).getTime() - new Date(a.lastVisitAt ?? 0).getTime()
+    )
+
+    return NextResponse.json({ persons })
+  }
+
+  // ── 従業員 / 外部登録者 ──────────────────────────────────────────────────────
   let query = supabase
     .from('visitors')
-    .select('id, name, company, department, phone, email, person_type, employee_code, notes, face_id, face_registered_at, face_photo_path, is_registered, created_at')
+    .select('id, name, company, department, phone, email, person_type, employee_code, notes, face_id, face_registered_at, is_registered, created_at')
     .eq('tenant_id', TENANT_ID)
-    .neq('person_type', 'visitor')   // 一般来訪者は除く
+    .neq('person_type', 'visitor')
     .order('created_at', { ascending: false })
 
   if (type !== 'all') {
@@ -41,24 +95,9 @@ export async function GET(req: NextRequest) {
   }
 
   const { data, error } = await query
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-
-  // 顔写真の signed URL を生成
-  const persons = await Promise.all(
-    (data ?? []).map(async (p: any) => {
-      let facePhotoUrl: string | null = null
-      if (p.face_photo_path) {
-        const { data: signed } = await supabase.storage
-          .from('visit-photos')
-          .createSignedUrl(p.face_photo_path, 3600)
-        facePhotoUrl = signed?.signedUrl ?? null
-      }
-      return { ...p, facePhotoUrl }
-    })
-  )
+  const persons = (data ?? []).map((p: any) => ({ ...p, facePhotoUrl: null }))
 
   return NextResponse.json({ persons })
 }
@@ -116,7 +155,7 @@ export async function PATCH(req: NextRequest) {
     if (!id) return NextResponse.json({ error: 'id は必須です' }, { status: 400 })
 
     const body = await req.json()
-    const { name, company, department, phone, email, person_type, employee_code, notes } = body
+    const { name, company, department, phone, email, person_type, employee_code, notes, promote } = body
 
     if (!name?.trim()) {
       return NextResponse.json({ error: '名前は必須です' }, { status: 400 })
@@ -134,7 +173,6 @@ export async function PATCH(req: NextRequest) {
         .single()
 
       if (visitor?.face_id) {
-        // Rekognition から削除 (AWS 設定がある場合のみ)
         if (process.env.AWS_ACCESS_KEY_ID) {
           try {
             const { deleteFace } = await import('@/lib/aws/rekognition')
@@ -167,18 +205,25 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ ok: true })
     }
 
+    // 昇格 (一次受付者 → 従業員 / 外部登録者)
+    const updateFields: Record<string, unknown> = {
+      name:          name.trim(),
+      company:       company?.trim() || '',
+      department:    department?.trim() || null,
+      phone:         phone?.trim() || null,
+      email:         email?.trim() || null,
+      person_type,
+      employee_code: employee_code?.trim() || null,
+      notes:         notes?.trim() || null,
+    }
+
+    if (promote) {
+      updateFields.is_registered = true
+    }
+
     const { error } = await supabase
       .from('visitors')
-      .update({
-        name:          name.trim(),
-        company:       company?.trim() || '',
-        department:    department?.trim() || null,
-        phone:         phone?.trim() || null,
-        email:         email?.trim() || null,
-        person_type,
-        employee_code: employee_code?.trim() || null,
-        notes:         notes?.trim() || null,
-      })
+      .update(updateFields)
       .eq('id', id)
       .eq('tenant_id', TENANT_ID)
 
@@ -199,7 +244,6 @@ export async function DELETE(req: NextRequest) {
 
     const supabase = createAdminClient()
 
-    // 顔 ID を先に取得して Rekognition からも削除
     const { data: visitor } = await supabase
       .from('visitors')
       .select('face_id, tenant_id')
