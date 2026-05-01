@@ -396,6 +396,23 @@ export function ReceptionContent({ token, storeName, areaName, preToken }: Props
           cfg={inGhost}
         />
 
+        {/* 顔認証初回登録リンク */}
+        <a
+          href={`/r/${token}/consent`}
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            padding: '8px 14px',
+            color: GE.subtle,
+            font: `400 11px/1 var(--font-sans)`,
+            textDecoration: 'none',
+          }}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M17.982 18.725A7.488 7.488 0 0012 15.75a7.488 7.488 0 00-5.982 2.975m11.963 0a9 9 0 10-11.963 0m11.963 0A8.966 8.966 0 0112 21a8.966 8.966 0 01-5.982-2.275M15 9.75a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+          {ja('顔認証を初めて登録する方 →', 'Register face auth for first time →', '首次注册人脸识别 →', '처음 얼굴 인증 등록하기 →')}
+        </a>
+
         {/* ─── 区切り ─── */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '2px 0' }}>
           <div style={{ flex: 1, height: 1, background: GE.border }} />

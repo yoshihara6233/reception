@@ -48,6 +48,7 @@ export default function RegisterPage() {
   const { t } = useLocale()
   const { announce } = useAnnounce()
   const [submitting, setSubmitting] = useState(false)
+  const [showValidation, setShowValidation] = useState(false)
   const [ocrResult, setOcrResult] = useState<OcrResult | null>(null)
   const [ocrFields, setOcrFields] = useState<Set<string>>(new Set())
   const [purposes, setPurposes] = useState(DEFAULT_PURPOSES)
@@ -176,7 +177,11 @@ export default function RegisterPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!isValid || submitting) return
+    if (!isValid) {
+      setShowValidation(true)
+      return
+    }
+    if (submitting) return
     setSubmitting(true)
 
     sessionStorage.setItem('reception-form', JSON.stringify({
@@ -215,12 +220,20 @@ export default function RegisterPage() {
           <span className="w-6 h-1 rounded-full bg-white" />
           <span className="w-6 h-1 rounded-full bg-white/30" />
         </div>
-        <button
-          onClick={() => router.back()}
-          className="text-white/60 text-sm mb-3 flex items-center gap-1"
-        >
-          &larr; 戻る
-        </button>
+        <div className="flex items-center justify-between mb-3">
+          <button
+            onClick={() => router.back()}
+            className="text-white/60 text-sm flex items-center gap-1"
+          >
+            &larr; 戻る
+          </button>
+          <a
+            href={`/r/${params.token}`}
+            className="text-white/50 text-xs flex items-center gap-1 hover:text-white/80"
+          >
+            受付トップへ ↑
+          </a>
+        </div>
         <h1 className="text-xl font-semibold">{t('register.title')}</h1>
         <p className="text-sm text-white/60 mt-1">
           {preRegFilled
@@ -259,14 +272,17 @@ export default function RegisterPage() {
                 onChange={e => update('company', e.target.value)}
                 placeholder={t('register.companyPlaceholder')}
                 className={`w-full px-4 py-3 border rounded-xl text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] focus:border-transparent transition-colors ${
+                  showValidation && !form.company.trim() ? 'border-red-400 bg-red-50/30' :
                   ocrFields.has('company') ? 'border-emerald-300 bg-emerald-50/30' : 'border-gray-200'
                 }`}
-                required
               />
               {ocrFields.has('company') && (
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-500 text-xs">📋</span>
               )}
             </div>
+            {showValidation && !form.company.trim() && (
+              <p className="text-red-500 text-xs mt-1">会社名を入力してください</p>
+            )}
           </div>
 
           {/* 氏名 */}
@@ -281,14 +297,17 @@ export default function RegisterPage() {
                 onChange={e => update('name', e.target.value)}
                 placeholder={t('register.namePlaceholder')}
                 className={`w-full px-4 py-3 border rounded-xl text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] focus:border-transparent transition-colors ${
+                  showValidation && !form.name.trim() ? 'border-red-400 bg-red-50/30' :
                   ocrFields.has('name') ? 'border-emerald-300 bg-emerald-50/30' : 'border-gray-200'
                 }`}
-                required
               />
               {ocrFields.has('name') && (
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-500 text-xs">📋</span>
               )}
             </div>
+            {showValidation && !form.name.trim() && (
+              <p className="text-red-500 text-xs mt-1">氏名を入力してください</p>
+            )}
           </div>
 
           {/* 部署・電話・メール */}
@@ -378,6 +397,9 @@ export default function RegisterPage() {
                 className="w-full mt-3 px-4 py-3 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]"
               />
             )}
+            {showValidation && !form.purpose && (
+              <p className="text-red-500 text-xs mt-2">来訪目的を選択してください</p>
+            )}
           </div>
 
           {/* 訪問先担当者（スタッフサジェスト付き） */}
@@ -438,8 +460,12 @@ export default function RegisterPage() {
           {/* 送信 */}
           <button
             type="submit"
-            disabled={!isValid || submitting}
-            className="w-full py-4 bg-[#1e3a5f] text-white rounded-[14px] text-base font-semibold disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            disabled={submitting}
+            className={`w-full py-4 rounded-[14px] text-base font-semibold flex items-center justify-center gap-2 transition-colors ${
+              isValid
+                ? 'bg-[#1e3a5f] text-white'
+                : 'bg-[#1e3a5f]/40 text-white cursor-not-allowed'
+            } disabled:opacity-40 disabled:cursor-not-allowed`}
           >
             {submitting ? t('common.loading') : (
               <>{t('common.next')} <span className="opacity-60">&rarr;</span></>

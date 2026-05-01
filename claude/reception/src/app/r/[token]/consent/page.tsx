@@ -161,9 +161,17 @@ export default function ConsentPage() {
           <span className="w-6 h-1 rounded-full bg-white/30" />
           <span className="w-6 h-1 rounded-full bg-white/30" />
         </div>
-        <button onClick={() => router.back()} className="text-white/60 text-sm mb-3 flex items-center gap-1">
-          &larr; 戻る
-        </button>
+        <div className="flex items-center justify-between mb-3">
+          <button onClick={() => router.back()} className="text-white/60 text-sm flex items-center gap-1">
+            &larr; 戻る
+          </button>
+          <a
+            href={`/r/${params.token}`}
+            className="text-white/50 text-xs hover:text-white/80"
+          >
+            受付トップへ ↑
+          </a>
+        </div>
         <h1 className="text-xl font-semibold">{labels.title[l]}</h1>
         <p className="text-xs text-white/60 mt-1">{labels.subtitle[l]}</p>
         <div className="absolute bottom-0 left-0 right-0 h-5 bg-[#f0f2f5] rounded-t-[20px]" />
