@@ -155,7 +155,7 @@ export function createVmsClient(config: VmsClientConfig) {
           : []
       const q = idOrName.trim()
       const match = cameras.find(
-        c => c.id.trim() === q || c.name.trim() === q || (c.ip_address && c.ip_address.trim() === q)
+        c => (c.id ?? '').trim() === q || (c.name ?? '').trim() === q || (c.ip_address ? c.ip_address.trim() === q : false)
       )
       return match?.id ?? null
     },

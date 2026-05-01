@@ -125,9 +125,9 @@ async function _handler(
       } else {
         const q = cameraId.trim()
         const match = vmsCameraList.find(c =>
-          c.id.trim()   === q ||
-          c.name.trim() === q ||
-          (c.ip_address && c.ip_address.trim() === q)
+          (c.id   ?? '').trim() === q ||
+          (c.name ?? '').trim() === q ||
+          (c.ip_address ? c.ip_address.trim() === q : false)
         )
         // マッチした場合: その camera の id が UUID なら UUID として使う、
         // 非 UUID (camera_01 など) ならその id をそのまま stream エンドポイントに渡す
