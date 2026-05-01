@@ -167,8 +167,15 @@ export default function FaceAuthPage() {
     // 退室モード: (手荷物検査 →) checkout ページで退室実行
     // visitorId を保存して checkout ページが顔認証退室を自動実行できるようにする
     sessionStorage.setItem('reception-face-checkout-visitor-id', visitor.id)
-    const baggageDone = sessionStorage.getItem('reception-baggage-checkout-done') === '1'
-    if (isBaggageRequired('checkout') && !baggageDone) {
+
+    // 前回フローの残留フラグを必ずリセット（stale なフラグで手荷物検査がスキップされるのを防ぐ）
+    sessionStorage.removeItem('reception-baggage-checkout-done')
+    sessionStorage.removeItem('reception-baggage-checkout-mode')
+    sessionStorage.removeItem('reception-baggage-checkout-declaration')
+    sessionStorage.removeItem('reception-baggage-checkout-photo-contents')
+    sessionStorage.removeItem('reception-baggage-checkout-photo-empty')
+
+    if (isBaggageRequired('checkout')) {
       router.replace(`/r/${params.token}/baggage?context=checkout`)
     } else {
       router.replace(`/r/${params.token}/checkout`)
