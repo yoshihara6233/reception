@@ -8,11 +8,10 @@
  *   { vmsUrl: string, vmsApiKey: string }
  *
  * Response:
- *   { ok: true, count: number }  |  { error: string }
+ *   { ok: true, count: number, raw_keys: string[], raw_first_camera: unknown }
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createVmsClient } from '@/lib/vms/client'
 
 export async function POST(req: NextRequest) {
   const { vmsUrl, vmsApiKey } = await req.json()
@@ -22,9 +21,21 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const vms = createVmsClient({ baseUrl: vmsUrl, apiKey: vmsApiKey, timeoutMs: 5000 })
-    const cameras = await vms.getCameras()
-    return NextResponse.json({ ok: true, count: cameras.length })
+    // raw レスポンスを直接取得してフィールド名を確認
+    const res = await fetch(`${vmsUrl}/api/v1/cameras`, {
+      headers: { 'Authorization': `Bearer ${vmsApiKey}`, 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(5000),
+    })
+    const raw = await res.json().catch(() => null)
+    const arr = Array.isArray(raw) ? raw : (raw?.cameras ?? [])
+    const first = arr[0] ?? null
+    return NextResponse.json({
+      ok: res.ok,
+      status: res.status,
+      raw_first_camera: first,
+      raw_keys: first ? Object.keys(first) : [],
+      count: arr.length,
+    })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'VMS接続エラー'
     return NextResponse.json({ error: msg }, { status: 502 })
