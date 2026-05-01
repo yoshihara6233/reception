@@ -123,48 +123,55 @@ export default function FaceAuthPage() {
     }
   }
 
-  // ── チェックアウト処理 ───────────────────────────────────────────────────────
+  // ── 手荷物検査の要否チェック ─────────────────────────────────────────────────
+
+  const isBaggageRequired = (context: 'checkin' | 'checkout'): boolean => {
+    try {
+      const raw = sessionStorage.getItem('reception-area-settings')
+      if (!raw) return false
+      const s = JSON.parse(raw)
+      const key = context === 'checkin'
+        ? 'require_baggage_inspection_checkin'
+        : 'require_baggage_inspection_checkout'
+      return (s[key] ?? 'none') !== 'none'
+    } catch { return false }
+  }
+
+  // ── 確認後の処理 ─────────────────────────────────────────────────────────────
 
   const handleCheckIn = async () => {
     if (!visitor || isCheckingIn) return
 
+    // ビジター情報を sessionStorage に保存（baggage 後の画面で使用）
+    sessionStorage.setItem('reception-purpose-visitor', JSON.stringify({
+      visitorId:  visitor.id,
+      name:       visitor.name,
+      company:    visitor.company,
+      department: visitor.department,
+      phone:      visitor.phone,
+      email:      visitor.email,
+      source:     'face-auth',
+    }))
+
     if (!isCheckout) {
-      // 入室モード → 来訪目的選択画面へ遷移
-      sessionStorage.setItem('reception-purpose-visitor', JSON.stringify({
-        visitorId:  visitor.id,
-        name:       visitor.name,
-        company:    visitor.company,
-        department: visitor.department,
-        phone:      visitor.phone,
-        email:      visitor.email,
-        source:     'face-auth',
-      }))
-      router.replace(`/r/${params.token}/purpose-select`)
+      // 入室モード: (手荷物検査 →) 来訪目的選択 → done
+      const baggageDone = !!sessionStorage.getItem('reception-baggage-checkin-mode')
+      if (isBaggageRequired('checkin') && !baggageDone) {
+        router.replace(`/r/${params.token}/baggage?context=checkin&next=purpose-select`)
+      } else {
+        router.replace(`/r/${params.token}/purpose-select`)
+      }
       return
     }
 
-    // 退室モード: visitorId で active visit を検索して退室
-    setIsCheckingIn(true)
-    try {
-      const res = await fetch('/api/v1/visits/check-out', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          token:     params.token,
-          visitorId: visitor.id,
-        }),
-      })
-
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        throw new Error(body.error || '退室処理に失敗しました')
-      }
-
-      setPhase('done')
-    } catch (err) {
-      setIsCheckingIn(false)
-      setErrorMsg(err instanceof Error ? err.message : '退室に失敗しました')
-      setPhase('error')
+    // 退室モード: (手荷物検査 →) checkout ページで退室実行
+    // visitorId を保存して checkout ページが顔認証退室を自動実行できるようにする
+    sessionStorage.setItem('reception-face-checkout-visitor-id', visitor.id)
+    const baggageDone = sessionStorage.getItem('reception-baggage-checkout-done') === '1'
+    if (isBaggageRequired('checkout') && !baggageDone) {
+      router.replace(`/r/${params.token}/baggage?context=checkout`)
+    } else {
+      router.replace(`/r/${params.token}/checkout`)
     }
   }
 

@@ -17,6 +17,7 @@ export default function CheckoutPage() {
   const [countdown, setCountdown] = useState(5)
   const [baggageRequired, setBaggageRequired] = useState(false)
   const [baggage, setBaggage] = useState<{ done: boolean; mode: string | null }>({ done: false, mode: null })
+  const [faceVisitorId, setFaceVisitorId] = useState<string | null>(null)  // 顔認証退室時の visitorId
 
   const preToken = searchParams.get('pre')
 
@@ -39,6 +40,10 @@ export default function CheckoutPage() {
     const done = sessionStorage.getItem('reception-baggage-checkout-done') === '1'
     const mode = sessionStorage.getItem('reception-baggage-checkout-mode')
     setBaggage({ done, mode })
+
+    // 顔認証退室の visitorId を読み込む
+    const vid = sessionStorage.getItem('reception-face-checkout-visitor-id')
+    if (vid) setFaceVisitorId(vid)
   }, [])
 
   // 手荷物検査が必要で未完了なら baggage ページへリダイレクト
@@ -47,6 +52,17 @@ export default function CheckoutPage() {
       router.replace(`/r/${params.token}/baggage?context=checkout`)
     }
   }, [baggageRequired, baggage.done, params.token, router])
+
+  // 顔認証退室: 手荷物検査が完了 or 不要になったら自動でチェックアウト実行
+  useEffect(() => {
+    if (!faceVisitorId) return
+    const baggageOk = !baggageRequired || baggage.done
+    if (!baggageOk) return  // まだ手荷物検査中
+    // baggage ステートの読み込みが完了してから実行（baggageRequired が初期値 false のまま走らないよう遅延）
+    const t = setTimeout(() => handleCheckout(), 100)
+    return () => clearTimeout(t)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [faceVisitorId, baggageRequired, baggage.done])
 
   // 退室後に手荷物申告を送信する
   const submitBaggageDeclaration = async (visitId: string, tenantId: string) => {
@@ -118,6 +134,7 @@ export default function CheckoutPage() {
 
     try {
       const deviceToken = localStorage.getItem('reception-visitor-token')
+      const faceVid = sessionStorage.getItem('reception-face-checkout-visitor-id')
 
       const res = await fetch('/api/v1/visits/check-out', {
         method: 'POST',
@@ -127,6 +144,7 @@ export default function CheckoutPage() {
         },
         body: JSON.stringify({
           token: params.token,
+          ...(faceVid ? { visitorId: faceVid } : {}),
           ...(preToken ? { preToken } : {}),
         }),
       })
@@ -137,6 +155,10 @@ export default function CheckoutPage() {
       }
 
       const { visitId, tenantId } = await res.json()
+
+      // 顔認証退室の sessionStorage をクリア
+      sessionStorage.removeItem('reception-face-checkout-visitor-id')
+      sessionStorage.removeItem('reception-purpose-visitor')
 
       // 手荷物申告を送信（non-blocking）
       if (visitId && tenantId) {

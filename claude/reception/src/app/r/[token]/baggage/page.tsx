@@ -175,6 +175,12 @@ export default function BaggagePage() {
     if (context === 'checkout') {
       sessionStorage.setItem('reception-baggage-checkout-done', '1')
     }
+    // next クエリパラメータがあればそちらへ（face-auth フローなど）
+    const nextPage = searchParams.get('next')
+    if (nextPage) {
+      router.push(`/r/${params.token}/${nextPage}`)
+      return
+    }
     router.push(context === 'checkin'
       ? `/r/${params.token}/confirm`
       : `/r/${params.token}/checkout`)
