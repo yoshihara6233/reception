@@ -50,6 +50,11 @@ export interface VmsClientConfig {
 export function createVmsClient(config: VmsClientConfig) {
   const { baseUrl, apiKey, timeoutMs = 10000 } = config
 
+  // HTTP headers only accept ASCII (0x20-0x7E). Catch multi-byte chars early.
+  if (!/^[\x20-\x7E]*$/.test(apiKey)) {
+    throw new Error('VMS API Key には半角英数字・記号のみ使用できます（日本語不可）')
+  }
+
   const headers = {
     'Authorization': `Bearer ${apiKey}`,
     'Content-Type': 'application/json',

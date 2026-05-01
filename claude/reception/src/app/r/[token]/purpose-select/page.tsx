@@ -113,7 +113,6 @@ export default function PurposeSelectPage() {
       const { visitId, visitorId } = await res.json()
 
       // ローカル記憶を更新
-      if (visitorId) localStorage.setItem('reception-visitor-id', visitorId)
       sessionStorage.setItem('reception-visit-id', visitId)
       localStorage.setItem('reception-visitor-token', params.token)
       sessionStorage.removeItem('reception-purpose-visitor')

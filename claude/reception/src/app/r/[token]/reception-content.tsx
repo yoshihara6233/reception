@@ -182,66 +182,6 @@ function SectionHeader({
   )
 }
 
-// ── Returning visitor banner ──────────────────────────────────────────────────
-
-interface ReturningVisitor { name: string; lastVisit: string | null }
-
-function ReturningBanner({
-  data, token, locale,
-}: { data: ReturningVisitor; token: string; locale: string }) {
-  const ja = (j: string, e: string, z: string = e, k: string = e) => {
-    if (locale === 'zh') return z
-    if (locale === 'ko') return k
-    if (locale === 'ja') return j
-    return e
-  }
-  const fmt = (iso: string) => {
-    const d = new Date(iso)
-    return `${d.getMonth() + 1}/${d.getDate()}`
-  }
-  return (
-    <a
-      href={`/r/${token}/returning`}
-      style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '12px 14px',
-        background: GE.soft,
-        border: `1.5px solid ${GE.line}`,
-        borderRadius: 12,
-        textDecoration: 'none', gap: 10,
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span style={{
-          width: 34, height: 34, borderRadius: '50%',
-          background: GE.ink, color: '#fff',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          font: `700 14px/1 var(--font-sans)`, flexShrink: 0,
-        }}>
-          {data.name.slice(0, 1)}
-        </span>
-        <div>
-          <p style={{ font: `600 13px/1.2 var(--font-sans)`, color: GE.inkDark, margin: 0 }}>
-            {data.name}{ja(' さん', '', '', ' 님')}
-          </p>
-          {data.lastVisit && (
-            <p style={{ font: `400 10px/1 var(--font-mono)`, color: GE.neutral, marginTop: 2 }}>
-              {ja(`前回: ${fmt(data.lastVisit)}`, `Last: ${fmt(data.lastVisit)}`, `上次: ${fmt(data.lastVisit)}`, `이전 방문: ${fmt(data.lastVisit)}`)}
-            </p>
-          )}
-        </div>
-      </div>
-      <span style={{
-        font: `600 11px/1 var(--font-sans)`,
-        padding: '6px 12px', borderRadius: 7,
-        background: GE.ink, color: '#fff',
-        whiteSpace: 'nowrap', flexShrink: 0,
-      }}>
-        {ja('前回の情報で →', 'Quick →', '使用上次信息 →', '이전 정보로 →')}
-      </span>
-    </a>
-  )
-}
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -255,8 +195,6 @@ interface Props {
 export function ReceptionContent({ token, storeName, areaName, preToken }: Props) {
   const { locale } = useLocale()
   const { announce } = useAnnounce()
-  const [returning, setReturning] = useState<ReturningVisitor | null>(null)
-
   const ja = (j: string, e: string, z: string = e, k: string = e) => {
     if (locale === 'zh') return z
     if (locale === 'ko') return k
@@ -278,18 +216,6 @@ export function ReceptionContent({ token, storeName, areaName, preToken }: Props
   useEffect(() => {
     if (preToken) window.location.replace(`/r/${token}/consent?pre=${preToken}`)
   }, [preToken, token])
-
-  // リピーター検知
-  useEffect(() => {
-    const visitorId = localStorage.getItem('reception-visitor-id')
-    if (!visitorId) return
-    fetch(`/api/v1/visitors/me?token=${token}&visitorId=${visitorId}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (data?.visitor) setReturning({ name: data.visitor.name, lastVisit: data.lastVisit?.date ?? null })
-      })
-      .catch(() => {})
-  }, [token])
 
   // ── カード設定 ─────────────────────────────────────────────────────────────
 
@@ -353,9 +279,6 @@ export function ReceptionContent({ token, storeName, areaName, preToken }: Props
 
       {/* ── コンテンツ ─────────────────────────────────────────────────── */}
       <main style={{ flex: 1, padding: '14px 14px 20px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-
-        {/* リピーターバナー */}
-        {returning && <ReturningBanner data={returning} token={token} locale={locale} />}
 
         {/* ━━━ 入室セクション ━━━ */}
         <SectionHeader

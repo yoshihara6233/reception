@@ -1,66 +1,33 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import { useLocale } from '@/lib/i18n/useLocale'
 import { useAnnounce } from '@/lib/speech/useAnnounce'
 import {
   THEME,
   ReceptionShell,
-  ReturningBanner,
   OptionCard,
   FaceIcon,
   QrScanIcon,
   NewPersonIcon,
 } from '../reception-shell'
 
-interface ReturningVisitor {
-  name: string
-  lastVisit: string | null
-}
-
 export default function CheckInChoicePage() {
   const params  = useParams<{ token: string }>()
   const { locale } = useLocale()
   const { announce } = useAnnounce()
   const theme   = THEME.checkin
-  const [returning, setReturning] = useState<ReturningVisitor | null>(null)
 
   useEffect(() => { announce('reception') }, [announce])
 
   const ja = (j: string, e: string) => locale === 'ja' ? j : e
-
-  // ── リピーター検知 ─────────────────────────────────────────────────────────
-  useEffect(() => {
-    const visitorId = localStorage.getItem('reception-visitor-id')
-    if (!visitorId) return
-
-    fetch(`/api/v1/visitors/me?token=${params.token}&visitorId=${visitorId}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (data?.visitor) {
-          setReturning({ name: data.visitor.name, lastVisit: data.lastVisit?.date ?? null })
-        }
-      })
-      .catch(() => {})
-  }, [params.token])
 
   return (
     <ReceptionShell
       token={params.token}
       themeKey="checkin"
       locale={locale}
-      returningBanner={
-        returning ? (
-          <ReturningBanner
-            name={returning.name}
-            lastVisit={returning.lastVisit}
-            href={`/r/${params.token}/returning`}
-            locale={locale}
-            theme={theme}
-          />
-        ) : undefined
-      }
     >
       {/* 顔認証 — primary */}
       <OptionCard
