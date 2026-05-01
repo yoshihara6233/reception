@@ -54,6 +54,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     slots: cameras || [],
     vms_url: settings?.vms_url || null,
     vms_enabled: settings?.vms_enabled || false,
+    vms_has_key: !!(settings?.vms_api_key),
     ipro_client_id: settings?.ipro_client_id || null,
   })
 }
@@ -72,27 +73,46 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     ipro_client_secret,
   } = body
 
-  // Upsert camera slots
+  // Camera slots: update existing rows or insert new ones
+  // (avoid relying on unique constraint for upsert)
   if (Array.isArray(slots)) {
     for (const slot of slots as CameraSlot[]) {
-      const { error } = await admin
+      // Check if row already exists
+      const { data: existing } = await admin
         .from('store_cameras')
-        .upsert(
-          {
-            tenant_id: TENANT_ID,
-            store_id: storeId,
-            slot: slot.slot,
-            label: slot.label,
-            ipro_camera_id: slot.ipro_camera_id || '',  // NOT NULL — empty string OK
-            ipro_recorder_id: slot.ipro_recorder_id || null,
-            vms_camera_id: slot.vms_camera_id || null,
-            is_active: slot.is_active,
-          },
-          { onConflict: 'store_id,slot' }
-        )
-      if (error) {
-        console.error('[cameras PUT] upsert error:', error)
-        return NextResponse.json({ error: error.message }, { status: 500 })
+        .select('id')
+        .eq('store_id', storeId)
+        .eq('slot', slot.slot)
+        .maybeSingle()
+
+      const rowData = {
+        tenant_id: TENANT_ID,
+        store_id: storeId,
+        slot: slot.slot,
+        label: slot.label,
+        ipro_camera_id: slot.ipro_camera_id || '',
+        ipro_recorder_id: slot.ipro_recorder_id || null,
+        vms_camera_id: slot.vms_camera_id || null,
+        is_active: slot.is_active,
+      }
+
+      if (existing) {
+        const { error } = await admin
+          .from('store_cameras')
+          .update(rowData)
+          .eq('id', existing.id)
+        if (error) {
+          console.error('[cameras PUT] update error:', error)
+          return NextResponse.json({ error: error.message }, { status: 500 })
+        }
+      } else {
+        const { error } = await admin
+          .from('store_cameras')
+          .insert(rowData)
+        if (error) {
+          console.error('[cameras PUT] insert error:', error)
+          return NextResponse.json({ error: error.message }, { status: 500 })
+        }
       }
     }
   }

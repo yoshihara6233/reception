@@ -132,10 +132,12 @@ export default function StoresPage() {
   const [vmsEnabled, setVmsEnabled]     = useState(false)
   const [vmsUrl, setVmsUrl]             = useState('')
   const [vmsApiKey, setVmsApiKey]       = useState('')
+  const [vmsHasKey, setVmsHasKey]       = useState(false)  // サーバーに保存済みキーがあるか
   const [vmsCam1, setVmsCam1]           = useState('')
   const [vmsCam2, setVmsCam2]           = useState('')
   const [vmsSaving, setVmsSaving]       = useState(false)
   const [vmsSaved, setVmsSaved]         = useState(false)
+  const [vmsError, setVmsError]         = useState<string | null>(null)
   const [vmsTesting, setVmsTesting]     = useState(false)
   const [vmsTestMsg, setVmsTestMsg]     = useState<{ ok: boolean; msg: string } | null>(null)
 
@@ -196,6 +198,8 @@ export default function StoresPage() {
       const vmsData = await vmsRes.json()
       setVmsEnabled(vmsData.vms_enabled ?? false)
       setVmsUrl(vmsData.vms_url ?? '')
+      setVmsApiKey('')        // ロード時は空欄（サーバーはキーを返さない）
+      setVmsHasKey(!!(vmsData.vms_has_key))
       const s = vmsData.slots ?? []
       setVmsCam1(s.find((c: { slot: number; vms_camera_id?: string }) => c.slot === 1)?.vms_camera_id ?? '')
       setVmsCam2(s.find((c: { slot: number; vms_camera_id?: string }) => c.slot === 2)?.vms_camera_id ?? '')
@@ -367,37 +371,62 @@ export default function StoresPage() {
     if (!selectedId) return
     setVmsSaving(true)
     setVmsSaved(false)
-    await fetch(`/api/v1/admin/stores/${selectedId}/cameras`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        vms_url: vmsUrl || null,
-        vms_api_key: vmsApiKey || null,
-        vms_enabled: vmsEnabled,
-        slots: [
-          { slot: 1, label: '受付カウンター',   vms_camera_id: vmsCam1, ipro_camera_id: '', ipro_recorder_id: '', is_active: true },
-          { slot: 2, label: '手荷物検査デスク', vms_camera_id: vmsCam2, ipro_camera_id: '', ipro_recorder_id: '', is_active: true },
-        ],
-      }),
-    })
-    setVmsSaving(false)
-    setVmsSaved(true)
-    setVmsApiKey('')  // パスワード欄をクリア
-    setTimeout(() => setVmsSaved(false), 2500)
+    setVmsError(null)
+    try {
+      const res = await fetch(`/api/v1/admin/stores/${selectedId}/cameras`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vms_url: vmsUrl || null,
+          vms_api_key: vmsApiKey || null,
+          vms_enabled: vmsEnabled,
+          slots: [
+            { slot: 1, label: '受付カウンター',   vms_camera_id: vmsCam1, ipro_camera_id: '', ipro_recorder_id: '', is_active: true },
+            { slot: 2, label: '手荷物検査デスク', vms_camera_id: vmsCam2, ipro_camera_id: '', ipro_recorder_id: '', is_active: true },
+          ],
+        }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error || `HTTP ${res.status}`)
+      }
+      setVmsSaved(true)
+      if (vmsApiKey) {
+        setVmsHasKey(true)
+        setVmsApiKey('')
+      }
+      setTimeout(() => setVmsSaved(false), 2500)
+    } catch (err) {
+      setVmsError(err instanceof Error ? err.message : '保存に失敗しました')
+    } finally {
+      setVmsSaving(false)
+    }
   }
 
   const handleTestVms = async () => {
-    if (!vmsUrl || !vmsApiKey) {
-      setVmsTestMsg({ ok: false, msg: 'URL と API Key を入力してください' })
+    if (!vmsUrl) {
+      setVmsTestMsg({ ok: false, msg: 'VMS URL を入力してください' })
+      return
+    }
+    if (!vmsApiKey && !vmsHasKey) {
+      setVmsTestMsg({ ok: false, msg: 'API Key を入力してください' })
       return
     }
     setVmsTesting(true)
     setVmsTestMsg(null)
     try {
-      const res = await fetch('/api/v1/vms/cameras-test', {
+      // キーが入力されている場合はクライアント直送、保存済みキーを使う場合はサーバー経由
+      const useServerKey = !vmsApiKey && vmsHasKey
+      const url = useServerKey && selectedId
+        ? `/api/v1/admin/stores/${selectedId}/test-vms`
+        : '/api/v1/vms/cameras-test'
+      const body = useServerKey
+        ? { vmsUrl }
+        : { vmsUrl, vmsApiKey }
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vmsUrl, vmsApiKey }),
+        body: JSON.stringify(body),
       })
       const d = await res.json()
       setVmsTestMsg(res.ok ? { ok: true, msg: `接続成功 — カメラ ${d.count ?? '?'} 台確認` } : { ok: false, msg: d.error || '接続失敗' })
@@ -1020,12 +1049,17 @@ export default function StoresPage() {
                       />
                     </div>
                     <div style={{ gridColumn: '1 / -1' }}>
-                      <label style={{ font: '500 10px/1 var(--font-sans)', color: 'var(--ge-ink-3)', display: 'block', marginBottom: 3 }}>API Key</label>
+                      <label style={{ font: '500 10px/1 var(--font-sans)', color: 'var(--ge-ink-3)', display: 'block', marginBottom: 3 }}>
+                        API Key
+                        {vmsHasKey && !vmsApiKey && (
+                          <span style={{ marginLeft: 6, color: 'var(--ge-success, #16a34a)', fontSize: 9 }}>✓ 保存済み</span>
+                        )}
+                      </label>
                       <input
                         type="password"
                         value={vmsApiKey}
                         onChange={e => setVmsApiKey(e.target.value)}
-                        placeholder="••••••••  (変更する場合のみ入力)"
+                        placeholder={vmsHasKey ? '変更する場合のみ入力' : 'API Key を入力'}
                         autoComplete="new-password"
                         style={inputStyle}
                       />
@@ -1066,6 +1100,7 @@ export default function StoresPage() {
                       {vmsSaving ? '保存中...' : '保存'}
                     </button>
                     {vmsSaved && <span style={{ font: '400 11px/1 var(--font-sans)', color: 'var(--ge-success)' }}>✅ 保存しました</span>}
+                    {vmsError && <span style={{ font: '400 11px/1 var(--font-sans)', color: '#dc2626' }}>⚠️ {vmsError}</span>}
                     {vmsTestMsg && (
                       <span style={{ font: '400 11px/1 var(--font-sans)', color: vmsTestMsg.ok ? 'var(--ge-success)' : '#dc2626' }}>
                         {vmsTestMsg.ok ? '✅' : '⚠️'} {vmsTestMsg.msg}
