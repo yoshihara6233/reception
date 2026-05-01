@@ -117,6 +117,13 @@ export default function ConfirmPage() {
           if (baggageEmpty) photoPathEmpty = await uploadBaggagePhoto(visitId, tenantId, 'empty', baggageEmpty)
         }
 
+        // エリア設定から storeId を取得 (VMS連携に使用)
+        let storeId: string | null = null
+        try {
+          const areaSettings = JSON.parse(sessionStorage.getItem('reception-area-settings') || '{}')
+          storeId = areaSettings.store_id || null
+        } catch { /* ignore */ }
+
         await fetch('/api/v1/visits/baggage', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -125,6 +132,7 @@ export default function ConfirmPage() {
             declaration: baggageDecl || null,
             photoPathContents, photoPathEmpty,
             inspectionMode: baggageMode,
+            ...(storeId ? { storeId } : {}),
           }),
         }).catch(() => {/* non-fatal */})
 

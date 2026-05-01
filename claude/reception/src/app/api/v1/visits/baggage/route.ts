@@ -70,11 +70,11 @@ export async function POST(req: NextRequest) {
       declarationId = data.id
     }
 
-    // VMS連携: inspectionMode = 'video' かつ storeId + vmsCameraId がある場合
+    // VMS連携: inspectionMode = 'video' かつ storeId がある場合
     let vmsInspectionId: string | null = null
     let vmsHlsUrl: string | null = null
 
-    if (inspectionMode === 'video' && storeId && vmsCameraId) {
+    if (inspectionMode === 'video' && storeId) {
       try {
         // Fetch store VMS settings directly (no HTTP round-trip)
         const { data: store } = await supabase
@@ -89,10 +89,26 @@ export async function POST(req: NextRequest) {
           vms_enabled?: boolean
         } | null
 
-        if (settings?.vms_enabled && settings.vms_url && settings.vms_api_key) {
+        // vmsCameraId が渡されなかった場合は store_cameras から手荷物検査デスク (slot=2) のカメラを取得
+        let resolvedCameraId: string | null = vmsCameraId || null
+        if (!resolvedCameraId) {
+          const { data: cameras } = await supabase
+            .from('store_cameras')
+            .select('slot, vms_camera_id, ipro_camera_id')
+            .eq('store_id', storeId)
+            .order('slot', { ascending: false }) // slot 2 (手荷物検査デスク) を優先
+            .limit(2)
+          // slot 2 (手荷物検査デスク) → slot 1 の順で有効なカメラIDを探す
+          for (const cam of (cameras ?? [])) {
+            const cid = cam.vms_camera_id || cam.ipro_camera_id
+            if (cid) { resolvedCameraId = cid; break }
+          }
+        }
+
+        if (settings?.vms_enabled && settings.vms_url && settings.vms_api_key && resolvedCameraId) {
           const vms = createVmsClient({ baseUrl: settings.vms_url, apiKey: settings.vms_api_key })
           const inspection = await vms.createInspection({
-            camera:      vmsCameraId,
+            camera:      resolvedCameraId,
             startedAt:   new Date().toISOString(),
             subjectRef:  visitId || declarationId,
           })

@@ -49,6 +49,11 @@ export async function GET(req: NextRequest) {
 
   // テナント設定 → 店舗設定でマージ（公開して良い項目のみ）
   const merged = {
+    // IDs (来訪者フローで VMS など内部連携に使用)
+    store_id: area.store_id,
+    area_id: area.id,
+    tenant_id: area.tenant_id,
+    // 設定値
     require_business_card:
       storeSettings.require_business_card ??
       tenantSettings.require_business_card ??
