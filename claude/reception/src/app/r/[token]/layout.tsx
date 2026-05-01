@@ -1,11 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useLocale } from '@/lib/i18n/useLocale'
 import type { Locale } from '@/lib/i18n/useLocale'
 import { SpeechToggle } from '@/lib/speech/SpeechToggle'
-
-const STORAGE_KEY = 'reception-locale'
-const VALID: Locale[] = ['ja', 'en', 'zh', 'ko']
 
 const LANG_OPTIONS: { locale: Locale; flag: string; label: string; native: string }[] = [
   { locale: 'ja', flag: '🇯🇵', label: 'JP', native: '日本語' },
@@ -15,24 +13,14 @@ const LANG_OPTIONS: { locale: Locale; flag: string; label: string; native: strin
 ]
 
 export default function VisitorLayout({ children }: { children: React.ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>('ja')
+  // Use the shared useLocale hook — now backed by useSyncExternalStore,
+  // so locale is always in sync with localStorage with no flash.
+  const { locale, setLocale } = useLocale()
   const [open, setOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) as Locale | null
-    if (saved && VALID.includes(saved)) setLocaleState(saved)
-    setMounted(true)
-
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === STORAGE_KEY && e.newValue && VALID.includes(e.newValue as Locale)) {
-        setLocaleState(e.newValue as Locale)
-      }
-    }
-    window.addEventListener('storage', onStorage)
-    return () => window.removeEventListener('storage', onStorage)
-  }, [])
+  useEffect(() => { setMounted(true) }, [])
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -44,11 +32,9 @@ export default function VisitorLayout({ children }: { children: React.ReactNode 
   }, [open])
 
   const select = useCallback((next: Locale) => {
-    localStorage.setItem(STORAGE_KEY, next)
-    setLocaleState(next)
-    window.dispatchEvent(new StorageEvent('storage', { key: STORAGE_KEY, newValue: next }))
+    setLocale(next)
     setOpen(false)
-  }, [])
+  }, [setLocale])
 
   const current = LANG_OPTIONS.find(o => o.locale === locale) ?? LANG_OPTIONS[0]
 

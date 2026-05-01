@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { useLocale } from '@/lib/i18n/useLocale'
+import { useAnnounce } from '@/lib/speech/useAnnounce'
 import {
   THEME,
   ReceptionShell,
@@ -21,10 +22,13 @@ interface ReturningVisitor {
 export default function CheckOutChoicePage() {
   const params  = useParams<{ token: string }>()
   const { locale } = useLocale()
+  const { announce } = useAnnounce()
   const theme   = THEME.checkout
   const [returning, setReturning] = useState<ReturningVisitor | null>(null)
 
   const ja = (j: string, e: string) => locale === 'ja' ? j : e
+
+  useEffect(() => { announce('checkout') }, [announce])
 
   // ── リピーター検知（直近の在室ビジター） ──────────────────────────────────
   useEffect(() => {
