@@ -7,8 +7,9 @@
  *
  * HLS URL resolution order (per camera):
  *   1. vms_hls_url already stored in DB (set at inspection time)
- *   2. vms.getInspection(inspection_id) if inspection_id is stored
- *   3. vms.getRecordings(camera, from, to) using inspection_started_at + 1h window
+ *   2. vms.getVodUrl(camera, inspection_started_at, inspection_ended_at)
+ *      → OSS-VMS GET /api/v1/recordings?camera=X&from=unix&to=unix
+ *      → returns Frigate nginx-vod-module HLS URL with HMAC access_token
  *
  * API key never leaves the server. HLS URLs are auth-free and safe to return.
  */
@@ -97,21 +98,15 @@ export async function GET(
         if (decl.vms_hls_url) {
           hlsUrl = decl.vms_hls_url
 
-        // 2. On-demand via getRecordings (cameraId → UUID 解決 → 録画検索)
+        // 2. On-demand via getVodUrl (OSS-VMS: camera name + unix timestamp → VOD HLS)
         } else if (vms && decl.inspection_started_at && (s.vms_camera_id || s.ipro_camera_id)) {
           try {
-            // カメラID が UUID でない場合は名前から解決
-            const resolvedUuid = await vms.resolveCameraId(cameraId)
-            if (resolvedUuid) {
-              const from = decl.inspection_started_at
-              const to   = new Date(new Date(from).getTime() + 60 * 60 * 1000).toISOString()
-              const recordings = await vms.getRecordings({ cameraId: resolvedUuid, fromDt: from, toDt: to })
-              // 録画が見つかったら再生 URL を取得
-              if (recordings?.[0]?.id) {
-                const playback = await vms.getPlaybackUrl(recordings[0].id)
-                hlsUrl = playback.url || null
-              }
-            }
+            const result = await vms.getVodUrl(
+              cameraId,
+              decl.inspection_started_at,
+              decl.inspection_ended_at ?? undefined,
+            )
+            hlsUrl = result.hls_url || null
           } catch { /* non-fatal */ }
         }
 

@@ -171,32 +171,57 @@ export function createVmsClient(config: VmsClientConfig) {
     },
 
     /**
-     * GET /api/v1/recordings — 録画一覧 (カメラUUID + 期間でフィルタ)
+     * VOD HLS URL を取得する（録画再生用）。
+     *
+     * OSS-VMS: GET /api/v1/recordings?camera={name}&from={unix}&to={unix}
+     *   → { hls_url: "https://vms.../proxy/frigate/vod/.../index.m3u8?access_token=..." }
+     *
+     * @param cameraId  VMS カメラ名（またはUUID — 名前ベースで直接使用）
+     * @param fromIso   開始時刻 (ISO 8601)
+     * @param toIso     終了時刻 (ISO 8601)
      */
-    getRecordings(params: {
-      cameraId: string     // UUID
-      fromDt?: string      // ISO 8601
-      toDt?: string        // ISO 8601
-      pageSize?: number
-    }): Promise<VmsRecording[]> {
-      const qs = new URLSearchParams({ camera_id: params.cameraId })
-      if (params.fromDt)   qs.set('from_dt',   params.fromDt)
-      if (params.toDt)     qs.set('to_dt',     params.toDt)
-      if (params.pageSize) qs.set('page_size', String(params.pageSize))
-      return request<VmsRecording[]>('GET', `/api/v1/recordings?${qs}`)
+    async getVodUrl(
+      cameraId: string,
+      fromIso: string,
+      toIso?: string,
+    ): Promise<{ hls_url: string; expires_at: string }> {
+      const from = Math.floor(new Date(fromIso).getTime() / 1000)
+      const to   = toIso
+        ? Math.floor(new Date(toIso).getTime() / 1000)
+        : from + 3600  // デフォルト 1 時間
+      const qs = new URLSearchParams({
+        camera: cameraId,
+        from:   String(from),
+        to:     String(to),
+      })
+      const res = await request<{ hls_url: string; from_unix: number; to_unix: number }>(
+        'GET', `/api/v1/recordings?${qs}`
+      )
+      return {
+        hls_url:    res.hls_url,
+        expires_at: new Date(to * 1000).toISOString(),
+      }
     },
 
     /**
-     * GET /api/v1/recordings/:id/playback-url — 署名付き再生 URL
+     * @deprecated OSS-VMS は /api/v1/recordings/:id/playback-url を提供しない。
+     * getVodUrl() を使用してください。
      */
-    async getPlaybackUrl(recordingId: string): Promise<{ url: string; expires_at: string }> {
-      const res = await request<{ url: string; expires_at: string }>(
-        'GET', `/api/v1/recordings/${recordingId}/playback-url`
-      )
-      return {
-        url:        toAbsoluteUrl(res.url),
-        expires_at: res.expires_at,
-      }
+    getRecordings(_params: {
+      cameraId: string
+      fromDt?: string
+      toDt?: string
+      pageSize?: number
+    }): Promise<VmsRecording[]> {
+      return Promise.resolve([])
+    },
+
+    /**
+     * @deprecated OSS-VMS は /api/v1/recordings/:id/playback-url を提供しない。
+     * getVodUrl() を使用してください。
+     */
+    getPlaybackUrl(_recordingId: string): Promise<{ url: string; expires_at: string }> {
+      return Promise.resolve({ url: '', expires_at: '' })
     },
   }
 }
