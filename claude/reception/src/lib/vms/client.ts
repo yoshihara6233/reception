@@ -113,9 +113,16 @@ export function createVmsClient(config: VmsClientConfig) {
   }
 
   return {
-    /** GET /api/v1/cameras — カメラ一覧 */
-    getCameras(): Promise<VmsCamera[]> {
-      return request<VmsCamera[]>('GET', '/api/v1/cameras')
+    /** GET /api/v1/cameras — カメラ一覧 (常に配列を返す) */
+    async getCameras(): Promise<VmsCamera[]> {
+      const raw = await request<unknown>('GET', '/api/v1/cameras')
+      // FastAPI は配列を直接返すが、念のため防御
+      if (Array.isArray(raw)) return raw as VmsCamera[]
+      // { cameras: [...] } 形式で返る場合
+      if (raw && typeof raw === 'object' && Array.isArray((raw as Record<string, unknown>).cameras)) {
+        return (raw as Record<string, unknown>).cameras as VmsCamera[]
+      }
+      throw new Error(`VMS /api/v1/cameras の応答が配列ではありません: ${JSON.stringify(raw).slice(0, 100)}`)
     },
 
     /**
@@ -140,7 +147,12 @@ export function createVmsClient(config: VmsClientConfig) {
     async resolveCameraId(idOrName: string): Promise<string | null> {
       if (isUuid(idOrName)) return idOrName
       // UUID でなければカメラ一覧で name / ip_address を検索
-      const cameras = await request<VmsCamera[]>('GET', '/api/v1/cameras')
+      // getCameras() を経由することで防御コードが効く
+      const raw = await request<unknown>('GET', '/api/v1/cameras')
+      const cameras: VmsCamera[] = Array.isArray(raw) ? raw as VmsCamera[]
+        : (raw && typeof raw === 'object' && Array.isArray((raw as Record<string, unknown>).cameras))
+          ? (raw as Record<string, unknown>).cameras as VmsCamera[]
+          : []
       const match = cameras.find(
         c => c.name === idOrName || c.ip_address === idOrName
       )
