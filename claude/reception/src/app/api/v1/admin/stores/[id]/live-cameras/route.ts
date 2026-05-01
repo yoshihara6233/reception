@@ -34,6 +34,19 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  try {
+  return await _handler(_req, params)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[live-cameras] unhandled error:', msg, err)
+    return NextResponse.json({ error: `サーバーエラー: ${msg}` }, { status: 500 })
+  }
+}
+
+async function _handler(
+  _req: NextRequest,
+  params: Promise<{ id: string }>,
+) {
   const { id: storeId } = await params
   const admin = createAdminClient()
 
