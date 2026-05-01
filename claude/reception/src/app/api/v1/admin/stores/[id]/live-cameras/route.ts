@@ -80,30 +80,55 @@ export async function GET(
     }
   }
 
+  // VMS カメラ一覧を先に取得 (解決 + エラー時の候補表示に使う)
+  type VmsCamRow = { id: string; name: string; location: string; status: string; ip_address?: string | null }
+  let vmsCameraList: VmsCamRow[] = []
+  if (vms) {
+    try { vmsCameraList = await vms.getCameras() } catch { /* non-fatal */ }
+  }
+
   // 各スロットの HLS URL を並列取得
   const cameras = await Promise.all(
     slotDefs.map(async ({ slot, defaultLabel }) => {
-      const row       = slotMap.get(slot)
-      const label     = row?.label ?? defaultLabel
-      const cameraId  = row?.vms_camera_id || row?.ipro_camera_id || null
+      const row      = slotMap.get(slot)
+      const label    = row?.label ?? defaultLabel
+      const cameraId = row?.vms_camera_id || row?.ipro_camera_id || null
 
-      const base = { slot, label, camera_id: cameraId, vms_uuid: null as string | null, hls_url: null as string | null, error: null as string | null }
+      const base = {
+        slot, label, camera_id: cameraId,
+        vms_uuid: null as string | null,
+        hls_url:  null as string | null,
+        error:    null as string | null,
+      }
 
-      if (!vms) return { ...base, error: 'VMS が設定されていません' }
-      if (!cameraId) return { ...base, error: 'カメラID が設定されていません' }
+      if (!vms)      return { ...base, error: 'VMS が設定されていません' }
+      if (!cameraId) return { ...base, error: 'カメラID が設定されていません（カメラ設定タブで選択してください）' }
+
+      // UUID または名前 → UUID を解決 (事前取得済みのリストを使う)
+      let vmsUuid: string | null = null
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cameraId)) {
+        vmsUuid = cameraId
+      } else {
+        const match = vmsCameraList.find(
+          c => c.name === cameraId || c.ip_address === cameraId
+        )
+        vmsUuid = match?.id ?? null
+      }
+
+      if (!vmsUuid) {
+        const names = vmsCameraList.map(c => c.name).join('、') || '取得できませんでした'
+        return {
+          ...base,
+          error: `カメラが見つかりません: "${cameraId}" — VMS にあるカメラ: ${names}`,
+        }
+      }
 
       try {
-        // UUID でない場合は VMS カメラ一覧で解決
-        const vmsUuid = await vms.resolveCameraId(cameraId)
-        if (!vmsUuid) {
-          return { ...base, vms_uuid: null, error: `VMS にカメラが見つかりません: ${cameraId}` }
-        }
-
         const live = await vms.getLiveStream(vmsUuid)
         return { ...base, vms_uuid: vmsUuid, hls_url: live.hls_url, error: null }
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'ライブ取得失敗'
-        return { ...base, error: msg }
+        return { ...base, vms_uuid: vmsUuid, error: msg }
       }
     }),
   )
