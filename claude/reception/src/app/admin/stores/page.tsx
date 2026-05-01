@@ -140,6 +140,10 @@ export default function StoresPage() {
   const [vmsError, setVmsError]         = useState<string | null>(null)
   const [vmsTesting, setVmsTesting]     = useState(false)
   const [vmsTestMsg, setVmsTestMsg]     = useState<{ ok: boolean; msg: string } | null>(null)
+  // VMS カメラ一覧（選択 UI 用）
+  const [vmsCameraList, setVmsCameraList] = useState<{ id: string; name: string; location: string; status: string }[]>([])
+  const [vmsListLoading, setVmsListLoading] = useState(false)
+  const [vmsListError, setVmsListError] = useState<string | null>(null)
 
   // 事前来客登録
   const [preRegs, setPreRegs]           = useState<PreReg[]>([])
@@ -434,6 +438,24 @@ export default function StoresPage() {
       setVmsTestMsg({ ok: false, msg: 'ネットワークエラー' })
     }
     setVmsTesting(false)
+  }
+
+  // VMS カメラ一覧を取得してカメラ選択 UI に使う
+  const handleFetchVmsCameras = async () => {
+    if (!selectedId) return
+    setVmsListLoading(true)
+    setVmsListError(null)
+    setVmsCameraList([])
+    try {
+      const res = await fetch(`/api/v1/admin/stores/${selectedId}/vms-cameras`)
+      const d   = await res.json()
+      if (!res.ok || d.error) throw new Error(d.error || `HTTP ${res.status}`)
+      setVmsCameraList(d.cameras ?? [])
+    } catch (err) {
+      setVmsListError(err instanceof Error ? err.message : '取得失敗')
+    } finally {
+      setVmsListLoading(false)
+    }
   }
 
   // ── 事前来客登録 ───────────────────────────────────────────────────────────
@@ -1081,12 +1103,53 @@ export default function StoresPage() {
                         style={inputStyle}
                       />
                     </div>
+                    {/* VMS カメラ一覧から選択 */}
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                        <span style={{ font: '500 10px/1 var(--font-sans)', color: 'var(--ge-ink-3)' }}>カメラ選択</span>
+                        <button
+                          onClick={handleFetchVmsCameras}
+                          disabled={vmsListLoading || (!vmsHasKey && !vmsApiKey)}
+                          style={{ ...btnSecondary, padding: '3px 8px', fontSize: 10, opacity: (vmsListLoading || (!vmsHasKey && !vmsApiKey)) ? 0.5 : 1 }}
+                        >
+                          {vmsListLoading ? '取得中...' : '🔄 VMS からカメラ一覧を取得'}
+                        </button>
+                        {vmsListError && (
+                          <span style={{ font: '400 10px/1 var(--font-sans)', color: '#dc2626' }}>⚠️ {vmsListError}</span>
+                        )}
+                      </div>
+                      {vmsCameraList.length > 0 && (
+                        <div style={{ background: 'var(--ge-paper-2)', borderRadius: 6, border: '1px solid var(--ge-line)', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 160, overflowY: 'auto' }}>
+                          {vmsCameraList.map(cam => (
+                            <div key={cam.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                              <div style={{ minWidth: 0 }}>
+                                <span style={{ font: '500 11px/1 var(--font-sans)', color: 'var(--ge-ink)' }}>{cam.name}</span>
+                                <span style={{ font: '400 10px/1 var(--font-sans)', color: 'var(--ge-ink-4)', marginLeft: 6 }}>{cam.location}</span>
+                                <span style={{ font: '400 9px/1 monospace', color: cam.status === 'online' ? '#16a34a' : '#9ca3af', marginLeft: 6 }}>{cam.status}</span>
+                                <div style={{ font: '400 9px/1 monospace', color: 'var(--ge-ink-4)', marginTop: 1 }}>{cam.id}</div>
+                              </div>
+                              <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                                <button
+                                  onClick={() => setVmsCam1(cam.id)}
+                                  style={{ padding: '2px 6px', borderRadius: 4, font: '500 9px/1 var(--font-sans)', background: vmsCam1 === cam.id ? 'var(--ge-accent)' : 'var(--ge-paper)', color: vmsCam1 === cam.id ? '#fff' : 'var(--ge-ink-3)', border: '1px solid var(--ge-line)', cursor: 'pointer' }}
+                                >S1</button>
+                                <button
+                                  onClick={() => setVmsCam2(cam.id)}
+                                  style={{ padding: '2px 6px', borderRadius: 4, font: '500 9px/1 var(--font-sans)', background: vmsCam2 === cam.id ? 'var(--ge-accent)' : 'var(--ge-paper)', color: vmsCam2 === cam.id ? '#fff' : 'var(--ge-ink-3)', border: '1px solid var(--ge-line)', cursor: 'pointer' }}
+                                >S2</button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
                     <div>
                       <label style={{ font: '500 10px/1 var(--font-sans)', color: 'var(--ge-ink-3)', display: 'block', marginBottom: 3 }}>カメラID — スロット1（受付）</label>
                       <input
                         value={vmsCam1}
                         onChange={e => setVmsCam1(e.target.value)}
-                        placeholder="例: camera_01"
+                        placeholder="VMS カメラ UUID を入力または上で選択"
                         style={{ ...inputStyle, fontFamily: 'var(--font-mono)' }}
                       />
                     </div>
@@ -1095,7 +1158,7 @@ export default function StoresPage() {
                       <input
                         value={vmsCam2}
                         onChange={e => setVmsCam2(e.target.value)}
-                        placeholder="例: camera_02"
+                        placeholder="VMS カメラ UUID を入力または上で選択"
                         style={{ ...inputStyle, fontFamily: 'var(--font-mono)' }}
                       />
                     </div>

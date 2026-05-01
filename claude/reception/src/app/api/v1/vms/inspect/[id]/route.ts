@@ -1,104 +1,58 @@
 /**
  * PATCH /api/v1/vms/inspect/[id]
  *
- * 検査終了: VMS に ended_at を送り、baggage_declarations に inspection_ended_at を保存する。
+ * 検査終了: baggage_declarations に inspection_ended_at を保存する。
+ * VMS (OSS-VMS) には inspection エンドポイントが存在しないため DB のみ更新。
  *
  * Request body:
- *   { declarationId: string, storeId: string, endedAt?: string }
+ *   { declarationId?: string, endedAt?: string }
  *
  * GET /api/v1/vms/inspect/[id]
  *
- * 検査情報再取得: VMS から最新の hls_url と status を返す。
- *
- * Request query:
- *   ?storeId=<storeId>
+ * 申告の検査情報を返す (DB から)。
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { createVmsClient } from '@/lib/vms/client'
 
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id: inspectionId } = await params
-  const { declarationId, storeId, endedAt } = await req.json()
-
-  if (!storeId) {
-    return NextResponse.json({ error: 'storeId は必須です' }, { status: 400 })
-  }
+  const { id: declarationId } = await params
+  const body = await req.json().catch(() => ({}))
+  const endedAt = (body.endedAt as string | undefined) ?? new Date().toISOString()
 
   const admin = createAdminClient()
 
-  const { data: store } = await admin
-    .from('stores')
-    .select('settings')
-    .eq('id', storeId)
-    .single()
+  const { error } = await admin
+    .from('baggage_declarations')
+    .update({ inspection_ended_at: endedAt })
+    .eq('id', declarationId)
 
-  const settings = store?.settings as {
-    vms_url?: string; vms_api_key?: string; vms_enabled?: boolean
-  } | null
-
-  if (!settings?.vms_enabled || !settings.vms_url || !settings.vms_api_key) {
-    return NextResponse.json({ error: 'VMS未設定' }, { status: 400 })
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  const vms = createVmsClient({ baseUrl: settings.vms_url, apiKey: settings.vms_api_key })
-
-  try {
-    const inspection = await vms.endInspection(inspectionId, endedAt)
-
-    // Update declaration if declarationId provided
-    if (declarationId) {
-      await admin
-        .from('baggage_declarations')
-        .update({ inspection_ended_at: inspection.ended_at ?? new Date().toISOString() })
-        .eq('id', declarationId)
-    }
-
-    return NextResponse.json({ success: true, inspection })
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'VMS接続エラー'
-    return NextResponse.json({ error: msg }, { status: 502 })
-  }
+  return NextResponse.json({ success: true, ended_at: endedAt })
 }
 
 export async function GET(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id: inspectionId } = await params
-  const storeId = new URL(req.url).searchParams.get('storeId')
-
-  if (!storeId) {
-    return NextResponse.json({ error: 'storeId は必須です' }, { status: 400 })
-  }
-
+  const { id: declarationId } = await params
   const admin = createAdminClient()
 
-  const { data: store } = await admin
-    .from('stores')
-    .select('settings')
-    .eq('id', storeId)
+  const { data: decl } = await admin
+    .from('baggage_declarations')
+    .select('id, visit_id, inspection_mode, inspection_started_at, inspection_ended_at, vms_hls_url, status')
+    .eq('id', declarationId)
     .single()
 
-  const settings = store?.settings as {
-    vms_url?: string; vms_api_key?: string; vms_enabled?: boolean
-  } | null
-
-  if (!settings?.vms_enabled || !settings.vms_url || !settings.vms_api_key) {
-    return NextResponse.json({ error: 'VMS未設定' }, { status: 400 })
+  if (!decl) {
+    return NextResponse.json({ error: '申告が見つかりません' }, { status: 404 })
   }
 
-  const vms = createVmsClient({ baseUrl: settings.vms_url, apiKey: settings.vms_api_key })
-
-  try {
-    const inspection = await vms.getInspection(inspectionId)
-    return NextResponse.json(inspection)
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'VMS接続エラー'
-    return NextResponse.json({ error: msg }, { status: 502 })
-  }
+  return NextResponse.json(decl)
 }

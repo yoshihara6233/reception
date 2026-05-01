@@ -106,26 +106,16 @@ export async function POST(req: NextRequest) {
         }
 
         if (settings?.vms_enabled && settings.vms_url && settings.vms_api_key && resolvedCameraId) {
-          const vms = createVmsClient({ baseUrl: settings.vms_url, apiKey: settings.vms_api_key })
-          const inspection = await vms.createInspection({
-            camera:      resolvedCameraId,
-            startedAt:   new Date().toISOString(),
-            subjectRef:  visitId || declarationId,
-          })
-
-          vmsInspectionId = inspection.id || null
-          vmsHlsUrl = inspection.hls_url || null
-
-          if (vmsInspectionId || vmsHlsUrl) {
-            await supabase
-              .from('baggage_declarations')
-              .update({
-                vms_inspection_id: vmsInspectionId,
-                vms_hls_url: vmsHlsUrl,
-                inspection_started_at: new Date().toISOString(),
-              })
-              .eq('id', declarationId)
-          }
+          // VMS には inspection エンドポイントがないため、
+          // 検査開始時刻のみ DB に記録する。
+          // 録画の HLS URL は管理画面の録画ビューアで取得時に VMS から検索する。
+          await supabase
+            .from('baggage_declarations')
+            .update({
+              vms_inspection_id:    null,  // VMS は inspection を管理しない
+              inspection_started_at: new Date().toISOString(),
+            })
+            .eq('id', declarationId)
         }
       } catch (vmsErr) {
         // VMS失敗は申告保存自体はブロックしない (ソフト失敗)

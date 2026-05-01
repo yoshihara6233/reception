@@ -1,9 +1,13 @@
 /**
  * GET /api/v1/admin/stores/[id]/live-cameras
  *
- * ライブカメラ映像の HLS URL を取得する。
- * VMS の GET /api/v1/cameras/:id/live を各スロットのカメラIDで呼び出し、
- * ライブストリーム URL を返す。
+ * VMS のライブストリーム URL を各カメラスロットごとに取得する。
+ *
+ * 解決フロー:
+ *   1. store_cameras から vms_camera_id を取得
+ *   2. UUID 形式でなければ VMS カメラ一覧で name/IP から UUID を解決
+ *   3. GET /api/v1/cameras/:uuid/stream で HLS URL を取得
+ *   4. 相対 URL は baseUrl を付与して絶対 URL に変換
  *
  * Response:
  *   {
@@ -13,11 +17,12 @@
  *     cameras: Array<{
  *       slot: 1 | 2
  *       label: string
- *       camera_id: string | null
- *       hls_url: string | null
+ *       camera_id: string | null        (store に登録されている ID/名前)
+ *       vms_uuid: string | null         (解決された VMS UUID)
+ *       hls_url: string | null          (絶対 URL)
  *       error: string | null
  *     }>
- *     fetched_at: string  (ISO 8601)
+ *     fetched_at: string
  *   }
  */
 
@@ -51,11 +56,10 @@ export async function GET(
     .order('slot')
 
   const settings = store.settings as Record<string, unknown> | null
-  const vmsEnabled  = !!(settings?.vms_enabled)
-  const vmsUrl      = (settings?.vms_url as string | null) ?? null
-  const vmsApiKey   = (settings?.vms_api_key as string | null) ?? null
+  const vmsEnabled = !!(settings?.vms_enabled)
+  const vmsUrl     = (settings?.vms_url as string | null) ?? null
+  const vmsApiKey  = (settings?.vms_api_key as string | null) ?? null
 
-  // スロット 1, 2 を必ず返す (未登録でも空で返す)
   const slotMap = new Map(
     (slots ?? []).map(s => [s.slot as 1 | 2, s]),
   )
@@ -64,7 +68,7 @@ export async function GET(
     { slot: 2, defaultLabel: '手荷物検査デスク' },
   ]
 
-  // VMS クライアント (設定済みの場合)
+  // VMS クライアント
   let vms: ReturnType<typeof createVmsClient> | null = null
   let vmsConnected = false
   if (vmsEnabled && vmsUrl && vmsApiKey) {
@@ -76,31 +80,30 @@ export async function GET(
     }
   }
 
-  // 各スロットのライブ URL を並列で取得
+  // 各スロットの HLS URL を並列取得
   const cameras = await Promise.all(
     slotDefs.map(async ({ slot, defaultLabel }) => {
-      const row = slotMap.get(slot)
+      const row       = slotMap.get(slot)
       const label     = row?.label ?? defaultLabel
       const cameraId  = row?.vms_camera_id || row?.ipro_camera_id || null
 
-      if (!vms || !cameraId) {
-        return {
-          slot,
-          label,
-          camera_id: cameraId,
-          hls_url:   null,
-          error: !vms
-            ? 'VMS が設定されていません'
-            : 'カメラID が設定されていません',
-        }
-      }
+      const base = { slot, label, camera_id: cameraId, vms_uuid: null as string | null, hls_url: null as string | null, error: null as string | null }
+
+      if (!vms) return { ...base, error: 'VMS が設定されていません' }
+      if (!cameraId) return { ...base, error: 'カメラID が設定されていません' }
 
       try {
-        const live = await vms.getLiveStream(cameraId)
-        return { slot, label, camera_id: cameraId, hls_url: live.hls_url, error: null }
+        // UUID でない場合は VMS カメラ一覧で解決
+        const vmsUuid = await vms.resolveCameraId(cameraId)
+        if (!vmsUuid) {
+          return { ...base, vms_uuid: null, error: `VMS にカメラが見つかりません: ${cameraId}` }
+        }
+
+        const live = await vms.getLiveStream(vmsUuid)
+        return { ...base, vms_uuid: vmsUuid, hls_url: live.hls_url, error: null }
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'ライブ取得失敗'
-        return { slot, label, camera_id: cameraId, hls_url: null, error: msg }
+        return { ...base, error: msg }
       }
     }),
   )

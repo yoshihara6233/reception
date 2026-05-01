@@ -9,9 +9,11 @@ import { dispatchWebhook } from '@/lib/webhooks/dispatch'
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { token, company, name, department, phone, email, purpose, contactPerson, contactPersonId } = body
+    const { token, company, name, department, phone, email, purpose, contactPerson, contactPersonId, visitorId: knownVisitorId } = body
 
-    if (!token || !company?.trim() || !name?.trim() || !purpose) {
+    // visitorId が渡された場合は既存 visitor を使う (顔認証チェックイン)
+    // それ以外は company / name 必須
+    if (!token || (!knownVisitorId && (!company?.trim() || !name?.trim())) || !purpose) {
       return NextResponse.json(
         { error: '必須項目が入力されていません' },
         { status: 400 }
@@ -60,31 +62,53 @@ export async function POST(req: NextRequest) {
     }
 
     // Create or update visitor
-    const { data: visitor, error: visitorError } = await supabase
-      .from('visitors')
-      .upsert(
-        {
-          tenant_id: qr.tenantId!,
-          company: company.trim(),
-          department: department?.trim() || null,
-          name: name.trim(),
-          phone: phone?.trim() || null,
-          email: email?.trim() || null,
-          device_token: deviceToken || null,
-        },
-        {
-          onConflict: 'id', // won't match, always inserts. TODO: upsert by device_token
-        }
-      )
-      .select('id')
-      .single()
+    // knownVisitorId が渡された場合 (顔認証チェックイン) は既存 visitor をそのまま使う
+    let visitorDbId: string
 
-    if (visitorError || !visitor) {
-      console.error('Visitor creation error:', visitorError)
-      return NextResponse.json(
-        { error: '来訪者情報の登録に失敗しました' },
-        { status: 500 }
-      )
+    if (knownVisitorId) {
+      // 顔認証で特定済みの visitor を使う (新規作成しない)
+      const { data: existingVisitor, error: fetchErr } = await supabase
+        .from('visitors')
+        .select('id')
+        .eq('id', knownVisitorId)
+        .eq('tenant_id', qr.tenantId!)
+        .single()
+
+      if (fetchErr || !existingVisitor) {
+        return NextResponse.json(
+          { error: '来訪者が見つかりません' },
+          { status: 404 }
+        )
+      }
+      visitorDbId = existingVisitor.id
+    } else {
+      const { data: visitor, error: visitorError } = await supabase
+        .from('visitors')
+        .upsert(
+          {
+            tenant_id: qr.tenantId!,
+            company: company.trim(),
+            department: department?.trim() || null,
+            name: name.trim(),
+            phone: phone?.trim() || null,
+            email: email?.trim() || null,
+            device_token: deviceToken || null,
+          },
+          {
+            onConflict: 'id', // won't match, always inserts. TODO: upsert by device_token
+          }
+        )
+        .select('id')
+        .single()
+
+      if (visitorError || !visitor) {
+        console.error('Visitor creation error:', visitorError)
+        return NextResponse.json(
+          { error: '来訪者情報の登録に失敗しました' },
+          { status: 500 }
+        )
+      }
+      visitorDbId = visitor.id
     }
 
     // Create visit
@@ -92,7 +116,7 @@ export async function POST(req: NextRequest) {
       .from('visits')
       .insert({
         tenant_id: qr.tenantId!,
-        visitor_id: visitor.id,
+        visitor_id: visitorDbId,
         store_id: qr.storeId!,
         area_id: qr.areaId!,
         purpose,
@@ -119,7 +143,11 @@ export async function POST(req: NextRequest) {
           .eq('id', qr.storeId!)
           .single()
         const storeName = storeData?.name || qr.storeId || 'unknown'
-        const message = `✅ [${name.trim()} / ${company.trim()}] が [${storeName}] にチェックインしました`
+        const displayName    = name?.trim()    || ''
+        const displayCompany = company?.trim() || ''
+        const message = displayCompany
+          ? `✅ [${displayName} / ${displayCompany}] が [${storeName}] にチェックインしました`
+          : `✅ [${displayName}] が [${storeName}] にチェックインしました`
 
         // Get notification rules for this tenant + store
         const { data: rules } = await supabase
@@ -218,7 +246,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       visitId: visit.id,
-      visitorId: visitor.id,
+      visitorId: visitorDbId,
       tenantId: qr.tenantId,
     })
   } catch (err) {

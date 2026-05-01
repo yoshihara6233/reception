@@ -97,20 +97,21 @@ export async function GET(
         if (decl.vms_hls_url) {
           hlsUrl = decl.vms_hls_url
 
-        // 2. Re-fetch via inspection_id
-        } else if (vms && decl.vms_inspection_id) {
-          try {
-            const insp = await vms.getInspection(decl.vms_inspection_id)
-            hlsUrl = insp.hls_url || null
-          } catch { /* non-fatal */ }
-
-        // 3. On-demand via getRecordings (for past inspections)
+        // 2. On-demand via getRecordings (cameraId → UUID 解決 → 録画検索)
         } else if (vms && decl.inspection_started_at && (s.vms_camera_id || s.ipro_camera_id)) {
           try {
-            const from = decl.inspection_started_at
-            const to = new Date(new Date(from).getTime() + 60 * 60 * 1000).toISOString() // +1h
-            const recordings = await vms.getRecordings({ camera: cameraId, from, to })
-            hlsUrl = recordings?.[0]?.hls_url || null
+            // カメラID が UUID でない場合は名前から解決
+            const resolvedUuid = await vms.resolveCameraId(cameraId)
+            if (resolvedUuid) {
+              const from = decl.inspection_started_at
+              const to   = new Date(new Date(from).getTime() + 60 * 60 * 1000).toISOString()
+              const recordings = await vms.getRecordings({ cameraId: resolvedUuid, fromDt: from, toDt: to })
+              // 録画が見つかったら再生 URL を取得
+              if (recordings?.[0]?.id) {
+                const playback = await vms.getPlaybackUrl(recordings[0].id)
+                hlsUrl = playback.url || null
+              }
+            }
           } catch { /* non-fatal */ }
         }
 

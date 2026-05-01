@@ -1,71 +1,55 @@
 /**
  * POST /api/v1/vms/inspect
  *
- * Server-side proxy to the on-premise VMS API.
- * Keeps the VMS API key out of the browser.
+ * 手荷物検査の開始を記録する。
+ * VMS (OSS-VMS) には inspection エンドポイントが存在しないため、
+ * DB の baggage_declarations に inspection_started_at を書き込むのみ。
+ * ライブ映像は GET /api/v1/admin/stores/:id/live-cameras で取得する。
  *
  * Request body:
- *   { storeId: string, cameraId: string, visitId?: string }
+ *   { storeId: string, cameraId?: string, visitId?: string, declarationId?: string }
  *
  * Response:
- *   { inspection_id: string, hls_url: string }
- *   or { error: string, skipped?: true }  ← when VMS not configured (soft failure)
+ *   { ok: true, started_at: string }
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { createVmsClient } from '@/lib/vms/client'
 
 export async function POST(req: NextRequest) {
   try {
-    const { storeId, cameraId, visitId } = await req.json()
-
-    if (!storeId || !cameraId) {
-      return NextResponse.json({ error: 'storeId と cameraId は必須です' }, { status: 400 })
-    }
+    const { declarationId, visitId } = await req.json()
 
     const supabase = createAdminClient()
+    const startedAt = new Date().toISOString()
 
-    // Fetch store VMS settings
-    const { data: store, error: storeErr } = await supabase
-      .from('stores')
-      .select('settings')
-      .eq('id', storeId)
-      .single()
+    if (declarationId) {
+      await supabase
+        .from('baggage_declarations')
+        .update({ inspection_started_at: startedAt })
+        .eq('id', declarationId)
+    } else if (visitId) {
+      // 最新の未終了申告を探して更新
+      const { data: decl } = await supabase
+        .from('baggage_declarations')
+        .select('id')
+        .eq('visit_id', visitId)
+        .is('inspection_started_at', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
 
-    if (storeErr || !store) {
-      return NextResponse.json({ error: '店舗が見つかりません' }, { status: 404 })
+      if (decl) {
+        await supabase
+          .from('baggage_declarations')
+          .update({ inspection_started_at: startedAt })
+          .eq('id', decl.id)
+      }
     }
 
-    const settings = store.settings as {
-      vms_url?: string
-      vms_api_key?: string
-      vms_enabled?: boolean
-    } | null
-
-    if (!settings?.vms_enabled || !settings.vms_url || !settings.vms_api_key) {
-      // VMS not configured — soft failure, caller can proceed without video
-      return NextResponse.json({ skipped: true, error: 'VMS未設定' }, { status: 200 })
-    }
-
-    const vms = createVmsClient({
-      baseUrl: settings.vms_url,
-      apiKey: settings.vms_api_key,
-    })
-
-    const inspection = await vms.createInspection({
-      camera:     cameraId,
-      startedAt:  new Date().toISOString(),
-      subjectRef: visitId,
-    })
-
-    return NextResponse.json({
-      inspection_id: inspection.id,
-      hls_url: inspection.hls_url,
-    })
+    return NextResponse.json({ ok: true, started_at: startedAt })
   } catch (err) {
-    console.error('[vms/inspect] error:', err)
-    const msg = err instanceof Error ? err.message : 'VMS接続エラー'
-    return NextResponse.json({ error: msg }, { status: 502 })
+    const msg = err instanceof Error ? err.message : 'エラー'
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 }

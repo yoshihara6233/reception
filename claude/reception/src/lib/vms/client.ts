@@ -1,50 +1,72 @@
 /**
  * VMS (Video Management System) API client
  *
- * 最終 API 仕様:
+ * OSS-VMS (VMS-cloud) 実装に合わせた API 仕様:
+ *
  *   GET  /api/v1/cameras
- *   GET  /api/v1/recordings?camera=X&from=ISO&to=ISO   (HLS URL 取得、DB 保存なし)
- *   POST /api/v1/inspections                           → { id, hls_url }
- *   PATCH /api/v1/inspections/:id                      (ended_at 更新)
- *   GET  /api/v1/inspections/:id
- *   GET  /api/v1/inspections/:id/snapshot              (img src 直接指定可)
+ *     → [{ id: UUID, name, location, status, ip_address, ... }]
  *
- * Auth: Bearer token (Authorization ヘッダ)
- * HLS URL: 追加ヘッダー不要 — <video> / HLS.js から直接アクセス可
+ *   GET  /api/v1/cameras/:uuid/stream
+ *     → { camera_id, hls_url: "/go2rtc/api/stream.m3u8?src=UUID", expires_at }
+ *     ※ hls_url は相対パス → baseUrl を先頭に付けて絶対 URL にする
  *
- * サーバーサイド専用。vmsApiKey をブラウザに露出しないこと。
+ *   GET  /api/v1/recordings
+ *     ?camera_id=UUID&from_dt=ISO&to_dt=ISO
+ *     → [{ id, camera_id, started_at, ended_at, file_path, ... }]
+ *
+ *   GET  /api/v1/recordings/:id/playback-url
+ *     → { url, expires_at }
+ *
+ * Auth: JWT Bearer token (Authorization: Bearer <token>)
+ *   - POST /api/v1/auth/login → { access_token, refresh_token } で取得
+ *   - vms_api_key には access_token（またはその場で login して取得する）を設定
+ *
+ * Camera ID 解決:
+ *   store_cameras.vms_camera_id には UUID または カメラ名 を登録可能。
+ *   UUID でない場合は getCameras() でリストを取得し name/ip_address でマッチング。
+ *
+ * サーバーサイド専用。vms_api_key をブラウザに露出しないこと。
  */
 
 export interface VmsCamera {
-  id: string
+  id: string          // UUID
   name: string
-  location?: string
-  status?: string
+  location: string
+  status: string      // "online" | "offline" | ...
+  ip_address?: string
+  is_ptz?: boolean
 }
 
 export interface VmsRecording {
-  camera: string
-  hls_url: string
-  from?: string
-  to?: string
+  id: string          // UUID
+  camera_id: string   // UUID
+  camera_name?: string
+  started_at: string  // ISO 8601
+  ended_at?: string | null
+  file_path: string
+  file_size_bytes?: number
+  duration_sec?: number
+  codec?: string
+  resolution?: string
 }
 
-export interface VmsInspection {
-  id: string
-  hls_url: string
-  camera?: string
-  started_at?: string
-  ended_at?: string | null
-  subject_ref?: string
-  status?: string
+export interface VmsStreamResponse {
+  camera_id: string
+  hls_url: string     // 相対パス "/go2rtc/api/stream.m3u8?src=UUID"
+  expires_at: string  // ISO 8601
 }
 
 export interface VmsClientConfig {
-  /** VMS のベース URL (例: "https://vms.your-domain.com" または "http://192.168.1.100:8080") */
+  /** VMS のベース URL (例: "http://192.168.1.100:3000") */
   baseUrl: string
-  /** Bearer トークン */
+  /** JWT アクセストークン (POST /api/v1/auth/login で取得) */
   apiKey: string
   timeoutMs?: number
+}
+
+// UUID v4 形式かどうかチェック (簡易)
+function isUuid(s: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
 }
 
 export function createVmsClient(config: VmsClientConfig) {
@@ -74,7 +96,7 @@ export function createVmsClient(config: VmsClientConfig) {
 
       if (!res.ok) {
         const text = await res.text().catch(() => '')
-        throw new Error(`VMS ${method} ${path} → ${res.status}: ${text}`)
+        throw new Error(`VMS ${method} ${path} → ${res.status}: ${text.slice(0, 200)}`)
       }
 
       return res.json() as Promise<T>
@@ -83,68 +105,75 @@ export function createVmsClient(config: VmsClientConfig) {
     }
   }
 
+  /** HLS の相対 URL を絶対 URL に変換する */
+  function toAbsoluteUrl(hlsUrl: string): string {
+    if (hlsUrl.startsWith('http://') || hlsUrl.startsWith('https://')) return hlsUrl
+    // 相対パスの場合は baseUrl を先頭に付ける
+    return `${baseUrl}${hlsUrl.startsWith('/') ? '' : '/'}${hlsUrl}`
+  }
+
   return {
     /** GET /api/v1/cameras — カメラ一覧 */
     getCameras(): Promise<VmsCamera[]> {
       return request<VmsCamera[]>('GET', '/api/v1/cameras')
     },
 
-    /** GET /api/v1/recordings?camera=X&from=ISO&to=ISO — HLS URL 取得 */
-    getRecordings(params: { camera: string; from?: string; to?: string }): Promise<VmsRecording[]> {
-      const qs = new URLSearchParams({ camera: params.camera })
-      if (params.from) qs.set('from', params.from)
-      if (params.to)   qs.set('to',   params.to)
+    /**
+     * GET /api/v1/cameras/:uuid/stream — ライブ HLS URL を取得
+     * @param cameraUuid  VMS カメラ UUID (UUID 形式)
+     * @returns  絶対 URL に変換済みの hls_url
+     */
+    async getLiveStream(cameraUuid: string): Promise<{ hls_url: string; expires_at: string }> {
+      const res = await request<VmsStreamResponse>('GET', `/api/v1/cameras/${encodeURIComponent(cameraUuid)}/stream`)
+      return {
+        hls_url:    toAbsoluteUrl(res.hls_url),
+        expires_at: res.expires_at,
+      }
+    },
+
+    /**
+     * カメラ名 / IP / UUID から VMS の UUID を解決する。
+     * vms_camera_id が UUID 形式でない場合に使用。
+     * @param idOrName  UUID, カメラ名, または IP アドレス
+     * @returns  VMS カメラ UUID (見つからなければ null)
+     */
+    async resolveCameraId(idOrName: string): Promise<string | null> {
+      if (isUuid(idOrName)) return idOrName
+      // UUID でなければカメラ一覧で name / ip_address を検索
+      const cameras = await request<VmsCamera[]>('GET', '/api/v1/cameras')
+      const match = cameras.find(
+        c => c.name === idOrName || c.ip_address === idOrName
+      )
+      return match?.id ?? null
+    },
+
+    /**
+     * GET /api/v1/recordings — 録画一覧 (カメラUUID + 期間でフィルタ)
+     */
+    getRecordings(params: {
+      cameraId: string     // UUID
+      fromDt?: string      // ISO 8601
+      toDt?: string        // ISO 8601
+      pageSize?: number
+    }): Promise<VmsRecording[]> {
+      const qs = new URLSearchParams({ camera_id: params.cameraId })
+      if (params.fromDt)   qs.set('from_dt',   params.fromDt)
+      if (params.toDt)     qs.set('to_dt',     params.toDt)
+      if (params.pageSize) qs.set('page_size', String(params.pageSize))
       return request<VmsRecording[]>('GET', `/api/v1/recordings?${qs}`)
     },
 
     /**
-     * POST /api/v1/inspections — 検査開始
-     * @param camera     カメラ ID (例: "camera_01")
-     * @param startedAt  ISO 8601 開始時刻
-     * @param subjectRef 参照キー (例: CHK-001, visitId など)
+     * GET /api/v1/recordings/:id/playback-url — 署名付き再生 URL
      */
-    createInspection(params: {
-      camera: string
-      startedAt?: string
-      subjectRef?: string
-    }): Promise<VmsInspection> {
-      return request<VmsInspection>('POST', '/api/v1/inspections', {
-        camera:      params.camera,
-        started_at:  params.startedAt ?? new Date().toISOString(),
-        subject_ref: params.subjectRef,
-      })
-    },
-
-    /**
-     * PATCH /api/v1/inspections/:id — 終了時刻を更新
-     */
-    endInspection(inspectionId: string, endedAt?: string): Promise<VmsInspection> {
-      return request<VmsInspection>('PATCH', `/api/v1/inspections/${inspectionId}`, {
-        ended_at: endedAt ?? new Date().toISOString(),
-      })
-    },
-
-    /** GET /api/v1/inspections/:id — 検査記録と URL 再取得 */
-    getInspection(inspectionId: string): Promise<VmsInspection> {
-      return request<VmsInspection>('GET', `/api/v1/inspections/${inspectionId}`)
-    },
-
-    /**
-     * GET /api/v1/cameras/:id/live — ライブ HLS ストリーム URL を取得
-     * VMS がライブ配信エンドポイントを持つ場合に使用する。
-     * 返却: { hls_url: string, expires_at?: string }
-     */
-    getLiveStream(cameraId: string): Promise<{ hls_url: string; expires_at?: string }> {
-      return request<{ hls_url: string; expires_at?: string }>('GET', `/api/v1/cameras/${encodeURIComponent(cameraId)}/live`)
-    },
-
-    /**
-     * GET /api/v1/inspections/:id/snapshot
-     * img src に直接指定可能な URL を返す。
-     * 実際の画像取得はブラウザが直接 VMS に行う（認証不要な静的リソース想定）
-     */
-    snapshotUrl(inspectionId: string): string {
-      return `${baseUrl}/api/v1/inspections/${inspectionId}/snapshot`
+    async getPlaybackUrl(recordingId: string): Promise<{ url: string; expires_at: string }> {
+      const res = await request<{ url: string; expires_at: string }>(
+        'GET', `/api/v1/recordings/${recordingId}/playback-url`
+      )
+      return {
+        url:        toAbsoluteUrl(res.url),
+        expires_at: res.expires_at,
+      }
     },
   }
 }
