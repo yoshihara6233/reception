@@ -468,7 +468,17 @@ export function VisitDetailClient({
           <h1 className="text-2xl font-bold text-[#1e3a5f]">{visitorName}</h1>
           <p className="text-gray-500 mt-1">{visitorCompany}</p>
         </div>
-        <VisitStatusBadge status={visitInfo.status} t={t} />
+        <div className="flex items-center gap-3">
+          <a
+            href={`/admin/visits/${visitId}/evidence`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#0f1a2e] text-white text-xs font-semibold rounded-xl hover:bg-[#1e3a5f] transition-colors shadow-sm"
+          >
+            🔒 エビデンスPDF出力
+          </a>
+          <VisitStatusBadge status={visitInfo.status} t={t} />
+        </div>
       </div>
 
       {/* ── 来訪情報 + 写真 ─────────────────────────────────────────────────── */}

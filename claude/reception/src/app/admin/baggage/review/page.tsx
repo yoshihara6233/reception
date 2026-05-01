@@ -755,13 +755,22 @@ function ReviewPhase({
                   )}
                 </div>
                 {item.visits?.id && (
-                  <Link
-                    href={`/admin/visits/${item.visits.id}`}
-                    target="_blank"
-                    className="text-[10px] text-[var(--ge-accent)]/50 hover:text-[var(--ge-accent)] underline flex-shrink-0 mt-0.5"
-                  >
-                    詳細 ↗
-                  </Link>
+                  <div className="flex items-center gap-2 flex-shrink-0 mt-0.5">
+                    <Link
+                      href={`/admin/visits/${item.visits.id}`}
+                      target="_blank"
+                      className="text-[10px] text-[var(--ge-accent)]/50 hover:text-[var(--ge-accent)] underline"
+                    >
+                      詳細 ↗
+                    </Link>
+                    <Link
+                      href={`/admin/visits/${item.visits.id}/evidence`}
+                      target="_blank"
+                      className="text-[10px] px-2 py-0.5 bg-[#0f1a2e] text-white rounded-full hover:bg-[#1e3a5f] transition-colors"
+                    >
+                      🔒 PDF
+                    </Link>
+                  </div>
                 )}
               </div>
               <div className="mt-2 space-y-0.5 text-xs text-gray-400">

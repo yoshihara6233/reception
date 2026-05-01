@@ -13,10 +13,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Reception Kiosk",
-  description: "セルフ受付システム — リテール店舗バックヤード向け",
+  title: "Reception Kiosk — 証拠が残る。",
+  description: "バックヤードの入退室・手荷物を写真・映像・顔認証で記録。業者・スタッフの持ち込み/持ち出しを証拠として保全する内部不正防止ツール。",
   manifest: "/manifest.json",
-  themeColor: "#1a1a1a",
+  themeColor: "#0f1a2e",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
