@@ -13,12 +13,13 @@
  *       status: string  ("online" | "offline" | ...)
  *       ip_address: string | null
  *     }>
+ *     raw_first_camera?: unknown   (debug: フィールド名確認用)
+ *     raw_keys?: string[]
  *   }
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { createVmsClient } from '@/lib/vms/client'
 
 export async function GET(
   _req: NextRequest,
@@ -38,21 +39,41 @@ export async function GET(
     return NextResponse.json({ cameras: [], error: 'VMS が設定されていません' })
   }
 
+  const vmsUrl    = settings.vms_url as string
+  const vmsApiKey = settings.vms_api_key as string
+
   try {
-    const vms = createVmsClient({
-      baseUrl: settings.vms_url as string,
-      apiKey:  settings.vms_api_key as string,
-      timeoutMs: 8000,
+    // raw レスポンスを直接取得してフィールド名を確認
+    const res = await fetch(`${vmsUrl}/api/v1/cameras`, {
+      headers: {
+        'Authorization': `Bearer ${vmsApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      signal: AbortSignal.timeout(8000),
     })
-    const cameras = await vms.getCameras()
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      return NextResponse.json({ cameras: [], error: `VMS ${res.status}: ${text.slice(0, 200)}` }, { status: 502 })
+    }
+
+    const raw = await res.json()
+    const arr: unknown[] = Array.isArray(raw) ? raw : (raw?.cameras ?? [])
+    const first = arr[0] ?? null
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cameras = arr.map((c: any) => ({
+      id:         c.id ?? c.camera_id ?? c.uuid ?? c._id ?? null,
+      name:       c.name ?? c.camera_name ?? null,
+      location:   c.location ?? c.area ?? '',
+      status:     c.status ?? 'unknown',
+      ip_address: c.ip_address ?? c.ip ?? null,
+    }))
+
     return NextResponse.json({
-      cameras: cameras.map(c => ({
-        id:         c.id,
-        name:       c.name,
-        location:   c.location,
-        status:     c.status,
-        ip_address: c.ip_address ?? null,
-      })),
+      cameras,
+      raw_first_camera: first,
+      raw_keys: first && typeof first === 'object' ? Object.keys(first as object) : [],
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'カメラ一覧取得失敗'
