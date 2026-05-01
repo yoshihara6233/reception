@@ -333,12 +333,17 @@ export default function BaggagePage() {
     <div className="min-h-screen bg-[var(--ge-paper)] flex flex-col">
       <div className="bg-[var(--ge-accent)] px-6 pt-10 pb-8 text-white relative">
         <StepBar />
-        <button
-          onClick={() => router.back()}
-          className="text-white/60 text-sm mb-4 flex items-center gap-1"
-        >
-          ← {t('common.back')}
-        </button>
+        <div className="flex items-center justify-between mb-4">
+          <button
+            onClick={() => router.back()}
+            className="text-white/60 text-sm flex items-center gap-1"
+          >
+            ← {t('common.back')}
+          </button>
+          <a href={`/r/${params.token}`} className="text-white/50 text-xs">
+            受付トップへ ↑
+          </a>
+        </div>
         <h1 className="text-xl font-semibold">
           🧳 {context === 'checkin' ? '入室時 手荷物検査' : '退室時 手荷物検査'}
         </h1>

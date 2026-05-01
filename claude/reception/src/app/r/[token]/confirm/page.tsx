@@ -182,12 +182,17 @@ export default function ConfirmPage() {
     <div className="min-h-screen bg-[#f0f2f5]">
       {/* Header */}
       <div className="bg-gradient-to-br from-[#1e3a5f] to-[#2c4f7c] px-6 pt-12 pb-8 text-white relative">
-        <button
-          onClick={() => router.back()}
-          className="text-white/60 text-sm mb-4 flex items-center gap-1"
-        >
-          &larr; {t('common.back')}
-        </button>
+        <div className="flex items-center justify-between mb-4">
+          <button
+            onClick={() => router.back()}
+            className="text-white/60 text-sm flex items-center gap-1"
+          >
+            &larr; {t('common.back')}
+          </button>
+          <a href={`/r/${params.token}`} className="text-white/50 text-xs">
+            受付トップへ ↑
+          </a>
+        </div>
         <h1 className="text-xl font-semibold">{t('checkin.title')}</h1>
         <p className="text-sm text-white/60 mt-1">Confirmation</p>
         <div className="absolute bottom-0 left-0 right-0 h-5 bg-[#f0f2f5] rounded-t-[20px]" />

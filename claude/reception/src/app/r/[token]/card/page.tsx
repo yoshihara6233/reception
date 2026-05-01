@@ -189,10 +189,18 @@ export default function CardCapturePage() {
     <div className="min-h-screen bg-black flex flex-col">
       {/* ステップ表示 */}
       <div className="pt-10 pb-2 px-6 text-center">
-        <div className="flex items-center justify-center gap-1 mb-3">
-          <span className="w-6 h-1 rounded-full bg-white" />
-          <span className="w-6 h-1 rounded-full bg-white/30" />
-          <span className="w-6 h-1 rounded-full bg-white/30" />
+        <div className="flex items-center justify-between mb-3">
+          <button onClick={() => router.back()} className="text-white/50 text-xs flex items-center gap-1">
+            ← 戻る
+          </button>
+          <div className="flex items-center gap-1">
+            <span className="w-6 h-1 rounded-full bg-white" />
+            <span className="w-6 h-1 rounded-full bg-white/30" />
+            <span className="w-6 h-1 rounded-full bg-white/30" />
+          </div>
+          <a href={`/r/${params.token}`} className="text-white/50 text-xs">
+            TOPへ ↑
+          </a>
         </div>
         <h1 className="text-white text-lg font-medium">{t('camera.businessCard')}</h1>
         <p className="text-gray-400 text-sm mt-1">{t('camera.businessCardGuide')}</p>

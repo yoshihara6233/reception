@@ -14,6 +14,7 @@ export default function CheckoutPage() {
   const [submitting, setSubmitting] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [countdown, setCountdown] = useState(5)
   const [baggageRequired, setBaggageRequired] = useState(false)
   const [baggage, setBaggage] = useState<{ done: boolean; mode: string | null }>({ done: false, mode: null })
 
@@ -150,12 +151,28 @@ export default function CheckoutPage() {
     }
   }
 
+  // 退室完了後 5秒カウントダウン → TOPへ自動遷移
+  useEffect(() => {
+    if (!success) return
+    const timer = setInterval(() => {
+      setCountdown(c => {
+        if (c <= 1) {
+          clearInterval(timer)
+          window.location.href = `/r/${params.token}`
+          return 0
+        }
+        return c - 1
+      })
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [success, params.token])
+
   if (success) {
     return (
       <div className="min-h-screen bg-[#f0f2f5] flex flex-col">
-        <div className="bg-gradient-to-br from-[#1e3a5f] to-[#2c4f7c] px-6 pt-16 pb-12 text-white text-center relative">
-          <div className="w-16 h-16 bg-blue-400/20 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-8 h-8 text-blue-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+        <div className="bg-gradient-to-br from-[#065f46] to-[#0d9488] px-6 pt-16 pb-12 text-white text-center relative">
+          <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
           </div>
@@ -163,13 +180,20 @@ export default function CheckoutPage() {
           <p className="text-sm text-white/60 mt-1">Check-out Complete</p>
           <div className="absolute bottom-0 left-0 right-0 h-5 bg-[#f0f2f5] rounded-t-[20px]" />
         </div>
-        <div className="px-5 -mt-1 flex-1">
+        <div className="px-5 -mt-1 flex-1 space-y-4">
           <div className="bg-white rounded-2xl p-6 shadow-sm text-center">
-            <p className="text-gray-500">{t('checkout.success')}</p>
+            <p className="text-gray-500 text-sm">お疲れ様でした。またのお越しをお待ちしております。</p>
           </div>
+          <a
+            href={`/r/${params.token}`}
+            className="block w-full py-4 bg-[#1e3a5f] text-white text-center text-sm font-semibold rounded-2xl shadow-sm"
+          >
+            受付トップに戻る
+            <span className="ml-2 text-white/60 text-xs font-normal">({countdown}秒後に自動で戻ります)</span>
+          </a>
         </div>
-        <div className="bg-[#1e3a5f] py-5 text-center mt-auto">
-          <p className="text-[11px] text-white/50 tracking-widest uppercase">
+        <div className="py-6 text-center mt-auto">
+          <p className="text-[11px] text-gray-400 tracking-widest uppercase">
             Powered by Reception Kiosk
           </p>
         </div>
@@ -181,12 +205,17 @@ export default function CheckoutPage() {
     <div className="min-h-screen bg-[#f0f2f5] flex flex-col">
       {/* Header */}
       <div className="bg-gradient-to-br from-[#1e3a5f] to-[#2c4f7c] px-6 pt-12 pb-8 text-white relative">
-        <button
-          onClick={() => router.replace(`/r/${params.token}/checkoutchoice`)}
-          className="text-white/60 text-sm mb-4 flex items-center gap-1"
-        >
-          &larr; {t('common.back')}
-        </button>
+        <div className="flex items-center justify-between mb-4">
+          <button
+            onClick={() => router.replace(`/r/${params.token}/checkoutchoice`)}
+            className="text-white/60 text-sm flex items-center gap-1"
+          >
+            &larr; {t('common.back')}
+          </button>
+          <a href={`/r/${params.token}`} className="text-white/50 text-xs">
+            受付トップへ ↑
+          </a>
+        </div>
         <h1 className="text-xl font-semibold">{t('checkout.title')}</h1>
         <div className="absolute bottom-0 left-0 right-0 h-5 bg-[#f0f2f5] rounded-t-[20px]" />
       </div>

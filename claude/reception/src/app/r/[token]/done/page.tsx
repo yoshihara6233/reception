@@ -12,6 +12,8 @@ export default function DonePage() {
   const { announce } = useAnnounce()
   const params = useParams<{ token: string }>()
 
+  const [countdown, setCountdown] = useState(5)
+
   useEffect(() => {
     const id = sessionStorage.getItem('reception-visit-id') || ''
     setVisitId(id)
@@ -27,6 +29,21 @@ export default function DonePage() {
       setHasFace(false)
     }
   }, [announce])
+
+  // 5秒カウントダウン → TOPへ自動遷移
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCountdown(c => {
+        if (c <= 1) {
+          clearInterval(timer)
+          window.location.href = `/r/${params.token}`
+          return 0
+        }
+        return c - 1
+      })
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [params.token])
 
   const shortId = visitId.slice(0, 8).toUpperCase()
 
@@ -109,6 +126,7 @@ export default function DonePage() {
           className="block w-full py-4 bg-[#1e3a5f] text-white text-center text-sm font-semibold rounded-2xl shadow-sm"
         >
           {backLabel}
+          <span className="ml-2 text-white/60 text-xs font-normal">({countdown}秒後に自動で戻ります)</span>
         </a>
       </div>
 

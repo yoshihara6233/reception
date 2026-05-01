@@ -133,9 +133,19 @@ export default function FaceCapturePage() {
   return (
     <div className="min-h-screen bg-black flex flex-col">
       {/* Header */}
-      <div className="pt-12 pb-4 px-6 text-center">
-        <h1 className="text-white text-lg font-medium">{t('camera.facePhoto')}</h1>
-        <p className="text-gray-400 text-sm mt-1">{t('camera.facePhotoGuide')}</p>
+      <div className="pt-10 pb-4 px-6">
+        <div className="flex items-center justify-between mb-3">
+          <button onClick={() => router.back()} className="text-white/50 text-xs flex items-center gap-1">
+            ← 戻る
+          </button>
+          <a href={`/r/${params.token}`} className="text-white/50 text-xs">
+            TOPへ ↑
+          </a>
+        </div>
+        <div className="text-center">
+          <h1 className="text-white text-lg font-medium">{t('camera.facePhoto')}</h1>
+          <p className="text-gray-400 text-sm mt-1">{t('camera.facePhotoGuide')}</p>
+        </div>
       </div>
 
       {/* Camera / Preview */}
