@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    return NextResponse.json({ success: true, visitId: visitToCheckout.id })
+    return NextResponse.json({ success: true, visitId: visitToCheckout.id, tenantId: qr.tenantId })
   } catch (err) {
     console.error('Checkout error:', err)
     return NextResponse.json(

@@ -3,12 +3,17 @@ import { createAdminClient } from '@/lib/supabase/admin'
 
 export async function POST(req: NextRequest) {
   try {
-    const { visitId, tenantId, type, dataUrl } = await req.json()
+    const body = await req.json()
+    const { visitId, tenantId, type } = body
+    // photoData は旧キー名 (baggage upload から来る)、dataUrl は新キー名
+    const dataUrl: string = body.dataUrl ?? body.photoData
+
+    const ALLOWED_TYPES = ['card', 'face', 'baggage_contents', 'baggage_empty']
 
     if (!visitId || !tenantId || !type || !dataUrl) {
       return NextResponse.json({ error: '必須パラメータが不足しています' }, { status: 400 })
     }
-    if (!['card', 'face'].includes(type)) {
+    if (!ALLOWED_TYPES.includes(type)) {
       return NextResponse.json({ error: '不正なphotoタイプです' }, { status: 400 })
     }
 
@@ -39,19 +44,22 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Insert visit_photos record
-    const { error: dbError } = await supabase.from('visit_photos').insert({
-      visit_id: visitId,
-      tenant_id: tenantId,
-      type,
-      storage_path: storagePath,
-    })
+    // baggage photos: storage only (path saved via baggage_declarations)
+    const isBaggageType = type === 'baggage_contents' || type === 'baggage_empty'
+    if (!isBaggageType) {
+      // Insert visit_photos record for face/card
+      const { error: dbError } = await supabase.from('visit_photos').insert({
+        visit_id: visitId,
+        tenant_id: tenantId,
+        type,
+        storage_path: storagePath,
+      })
 
-    if (dbError) {
-      console.error('visit_photos insert error:', dbError)
-      // Try to clean up the uploaded file
-      await supabase.storage.from('visit-photos').remove([storagePath])
-      return NextResponse.json({ error: '写真記録の保存に失敗しました' }, { status: 500 })
+      if (dbError) {
+        console.error('visit_photos insert error:', dbError)
+        await supabase.storage.from('visit-photos').remove([storagePath])
+        return NextResponse.json({ error: '写真記録の保存に失敗しました' }, { status: 500 })
+      }
     }
 
     return NextResponse.json({ success: true, storagePath })

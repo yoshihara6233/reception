@@ -14,10 +14,101 @@ export default function CheckoutPage() {
   const [submitting, setSubmitting] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [baggageRequired, setBaggageRequired] = useState(false)
+  const [baggage, setBaggage] = useState<{ done: boolean; mode: string | null }>({ done: false, mode: null })
 
   const preToken = searchParams.get('pre')
 
   useEffect(() => { announce('checkout') }, [announce])
+
+  // エリア設定を読み込み、手荷物検査の要否チェック
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('reception-area-settings')
+      if (raw) {
+        const s = JSON.parse(raw)
+        const val = s.require_baggage_inspection_checkout ?? 'none'
+        if (val !== 'none') {
+          setBaggageRequired(true)
+        }
+      }
+    } catch { /* ignore */ }
+
+    // 手荷物検査済みか確認
+    const done = sessionStorage.getItem('reception-baggage-checkout-done') === '1'
+    const mode = sessionStorage.getItem('reception-baggage-checkout-mode')
+    setBaggage({ done, mode })
+  }, [])
+
+  // 手荷物検査が必要で未完了なら baggage ページへリダイレクト
+  useEffect(() => {
+    if (baggageRequired && !baggage.done) {
+      router.replace(`/r/${params.token}/baggage?context=checkout`)
+    }
+  }, [baggageRequired, baggage.done, params.token, router])
+
+  // 退室後に手荷物申告を送信する
+  const submitBaggageDeclaration = async (visitId: string, tenantId: string) => {
+    const mode = sessionStorage.getItem('reception-baggage-checkout-mode')
+    const decl = sessionStorage.getItem('reception-baggage-checkout-declaration')
+    const contentsDataUrl = sessionStorage.getItem('reception-baggage-checkout-photo-contents')
+    const emptyDataUrl = sessionStorage.getItem('reception-baggage-checkout-photo-empty')
+
+    if (!mode) return
+
+    let photoPathContents: string | null = null
+    let photoPathEmpty: string | null = null
+
+    if (mode === 'photo') {
+      if (contentsDataUrl) {
+        try {
+          const res = await fetch('/api/v1/visits/photos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ visitId, tenantId, type: 'baggage_contents', dataUrl: contentsDataUrl }),
+          })
+          if (res.ok) {
+            const data = await res.json()
+            photoPathContents = data.storagePath || null
+          }
+        } catch { /* non-fatal */ }
+      }
+      if (emptyDataUrl) {
+        try {
+          const res = await fetch('/api/v1/visits/photos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ visitId, tenantId, type: 'baggage_empty', dataUrl: emptyDataUrl }),
+          })
+          if (res.ok) {
+            const data = await res.json()
+            photoPathEmpty = data.storagePath || null
+          }
+        } catch { /* non-fatal */ }
+      }
+    }
+
+    await fetch('/api/v1/visits/baggage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        visitId, tenantId, context: 'checkout',
+        declaration: decl || null,
+        photoPathContents,
+        photoPathEmpty,
+        inspectionMode: mode,
+      }),
+    }).catch(() => { /* non-fatal */ })
+
+    // sessionStorage クリア
+    ;[
+      'reception-baggage-checkout-done',
+      'reception-baggage-checkout-mode',
+      'reception-baggage-checkout-declaration',
+      'reception-baggage-checkout-photo-contents',
+      'reception-baggage-checkout-photo-empty',
+    ].forEach(k => sessionStorage.removeItem(k))
+  }
 
   const handleCheckout = async () => {
     if (submitting) return
@@ -42,6 +133,13 @@ export default function CheckoutPage() {
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
         throw new Error(body.error || '退室処理に失敗しました')
+      }
+
+      const { visitId, tenantId } = await res.json()
+
+      // 手荷物申告を送信（non-blocking）
+      if (visitId && tenantId) {
+        await submitBaggageDeclaration(visitId, tenantId)
       }
 
       setSuccess(true)
@@ -93,9 +191,20 @@ export default function CheckoutPage() {
         <div className="absolute bottom-0 left-0 right-0 h-5 bg-[#f0f2f5] rounded-t-[20px]" />
       </div>
 
-      <div className="px-5 -mt-1 flex-1">
+      <div className="px-5 -mt-1 flex-1 space-y-4">
+        {/* 手荷物検査済みバナー */}
+        {baggage.done && (
+          <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex items-center gap-3">
+            <span className="text-xl">✅</span>
+            <div>
+              <p className="text-sm font-medium text-emerald-700">退室時 手荷物検査完了</p>
+              <p className="text-xs text-emerald-600 mt-0.5">退室後にレポートに記録されます</p>
+            </div>
+          </div>
+        )}
+
         {error && (
-          <div className="bg-red-50 text-red-600 rounded-2xl p-4 mb-4 text-sm">
+          <div className="bg-red-50 text-red-600 rounded-2xl p-4 text-sm">
             {error}
           </div>
         )}
