@@ -126,12 +126,43 @@ export function createVmsClient(config: VmsClientConfig) {
     },
 
     /**
-     * GET /api/v1/cameras/:uuid/stream — ライブ HLS URL を取得
-     * @param cameraUuid  VMS カメラ UUID (UUID 形式)
-     * @returns  絶対 URL に変換済みの hls_url
+     * ライブ HLS URL を取得する。
+     *
+     * OSS-VMS の仕様:
+     *   カメラ名ベース (UUID でない): GET /api/v1/recordings?camera={name}&from={now-30s}&to={now+3600s}
+     *     → { hls_url: "https://vms.../proxy/frigate/.../index.m3u8?access_token=..." }
+     *     hls_url はブラウザから直接再生可能（access_token で認証済み、有効期限なし）
+     *     CORS は CORS_ALLOWED_ORIGIN で受付 SaaS のオリジンを許可済み
+     *
+     *   UUID 形式の ID: GET /api/v1/cameras/:uuid/stream (OSS-VMS 旧仕様)
+     *
+     * @param cameraId  VMS カメラ名 (OSS-VMS/Frigate) または UUID
+     * @returns  hls_url: 直接 HLS.js に渡せる絶対 URL (access_token 付き)
      */
-    async getLiveStream(cameraUuid: string): Promise<{ hls_url: string; expires_at: string }> {
-      const res = await request<VmsStreamResponse>('GET', `/api/v1/cameras/${encodeURIComponent(cameraUuid)}/stream`)
+    async getLiveStream(cameraId: string): Promise<{ hls_url: string; expires_at: string }> {
+      if (!isUuid(cameraId)) {
+        // OSS-VMS + Frigate: recordings API でライブ HLS URL を取得
+        // from: 現在 -30秒（バッファ）, to: 現在 +1時間（HLS ストリームを開放状態に保つ）
+        const now  = Math.floor(Date.now() / 1000)
+        const from = now - 30
+        const to   = now + 3600
+        const qs = new URLSearchParams({
+          camera: cameraId,
+          from:   String(from),
+          to:     String(to),
+        })
+        const res = await request<{
+          hls_url:   string
+          from_unix: number
+          to_unix:   number
+        }>('GET', `/api/v1/recordings?${qs}`)
+        return {
+          hls_url:    res.hls_url,           // 既に絶対 URL + access_token 付き
+          expires_at: new Date(to * 1000).toISOString(),
+        }
+      }
+      // OSS-VMS UUID 形式 (旧仕様): /api/v1/cameras/:uuid/stream
+      const res = await request<VmsStreamResponse>('GET', `/api/v1/cameras/${encodeURIComponent(cameraId)}/stream`)
       return {
         hls_url:    toAbsoluteUrl(res.hls_url),
         expires_at: res.expires_at,

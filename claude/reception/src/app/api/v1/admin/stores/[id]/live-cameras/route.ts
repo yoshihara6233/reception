@@ -117,41 +117,54 @@ async function _handler(
       if (!vms)      return { ...base, error: 'VMS が設定されていません' }
       if (!cameraId) return { ...base, error: 'カメラID が設定されていません（カメラ設定タブで選択してください）' }
 
-      // UUID または名前/ID → VMS UUID を解決 (事前取得済みのリストを使う)
-      // 保存値は UUID | name | id のいずれかの可能性がある
-      let vmsUuid: string | null = null
-      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cameraId.trim())) {
-        vmsUuid = cameraId.trim()
-      } else {
-        const q = cameraId.trim()
+      // UUID または名前/ID → VMS カメラ識別子を解決する
+      //
+      // OSS-VMS: カメラ一覧から UUID を取得し、/api/v1/cameras/:uuid/stream で HLS URL を取得
+      // Frigate NVR: カメラ名をそのまま使い、/vod/:name/index.m3u8 で HLS URL を構築
+      //   → getCameras() が失敗 or 空でも cameraId が名前として有効なら直接使える
+      let resolvedId: string | null = null
+      const q = cameraId.trim()
+      const isUuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+      if (isUuidPattern.test(q)) {
+        // UUID がそのまま保存されている場合 (OSS-VMS)
+        resolvedId = q
+      } else if (vmsCameraList.length > 0) {
+        // カメラ一覧が取得できた場合: id / name / ip_address でマッチング
         const match = vmsCameraList.find(c =>
           (c.id   ?? '').trim() === q ||
           (c.name ?? '').trim() === q ||
           (c.ip_address ? c.ip_address.trim() === q : false)
         )
         if (match) {
-          // match.id があればそれを使い、undefined の場合は cameraId をそのまま試す
-          // (VMS が UUID ではなく名前ベースの ID を使う場合に対応)
-          vmsUuid = match.id ?? cameraId.trim()
+          // match.id が UUID なら UUID として使用、それ以外 (Frigate など) は name にフォールバック
+          const matchedId = (match.id ?? '').trim()
+          resolvedId = isUuidPattern.test(matchedId) ? matchedId : (match.name ?? q)
         } else {
-          vmsUuid = null
+          const names = vmsCameraList.map(c => c.name ?? c.id ?? '(不明)').join('、')
+          return {
+            ...base,
+            error: `カメラが見つかりません: "${cameraId}" — VMS にあるカメラ: ${names}`,
+          }
         }
+      } else {
+        // カメラ一覧が取得できなかった場合 (Frigate で /api/v1/cameras が空など):
+        // cameraId をそのまま識別子として使い getLiveStream に委ねる
+        resolvedId = q
       }
 
-      if (!vmsUuid) {
-        const names = vmsCameraList.map(c => c.name ?? c.id ?? '(不明)').join('、') || '取得できませんでした'
-        return {
-          ...base,
-          error: `カメラが見つかりません: "${cameraId}" — VMS にあるカメラ: ${names}`,
-        }
+      if (!resolvedId) {
+        return { ...base, error: 'カメラ識別子を解決できませんでした' }
       }
 
       try {
-        const live = await vms.getLiveStream(vmsUuid)
-        return { ...base, vms_uuid: vmsUuid, hls_url: live.hls_url, error: null }
+        const live = await vms.getLiveStream(resolvedId!)
+        // OSS-VMS の hls_url には access_token が含まれており、ブラウザから直接再生可能。
+        // CORS は VMS 側で CORS_ALLOWED_ORIGIN に受付 SaaS のオリジンを設定済み。
+        return { ...base, vms_uuid: resolvedId, hls_url: live.hls_url, error: null }
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'ライブ取得失敗'
-        return { ...base, vms_uuid: vmsUuid, error: msg }
+        return { ...base, vms_uuid: resolvedId, error: msg }
       }
     }),
   )
