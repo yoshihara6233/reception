@@ -129,13 +129,17 @@ async function _handler(
           (c.name ?? '').trim() === q ||
           (c.ip_address ? c.ip_address.trim() === q : false)
         )
-        // マッチした場合: その camera の id が UUID なら UUID として使う、
-        // 非 UUID (camera_01 など) ならその id をそのまま stream エンドポイントに渡す
-        vmsUuid = match?.id ?? null
+        if (match) {
+          // match.id があればそれを使い、undefined の場合は cameraId をそのまま試す
+          // (VMS が UUID ではなく名前ベースの ID を使う場合に対応)
+          vmsUuid = match.id ?? cameraId.trim()
+        } else {
+          vmsUuid = null
+        }
       }
 
       if (!vmsUuid) {
-        const names = vmsCameraList.map(c => `${c.name}(id:${c.id})`).join('、') || '取得できませんでした'
+        const names = vmsCameraList.map(c => c.name ?? c.id ?? '(不明)').join('、') || '取得できませんでした'
         return {
           ...base,
           error: `カメラが見つかりません: "${cameraId}" — VMS にあるカメラ: ${names}`,
