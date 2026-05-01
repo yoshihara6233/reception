@@ -191,7 +191,11 @@ function LiveCameraContent() {
 
     try {
       const res = await fetch(`/api/v1/admin/stores/${storeId}/live-cameras`)
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      if (!res.ok) {
+        let detail = `HTTP ${res.status}`
+        try { const j = await res.json(); if (j?.error) detail = `${res.status}: ${j.error}` } catch { /* ignore */ }
+        throw new Error(detail)
+      }
       const d: LiveData = await res.json()
       setData(d)
       setRefreshKey(k => k + 1)
