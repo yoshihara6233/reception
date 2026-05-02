@@ -195,6 +195,26 @@ function FilterInput({ value, onChange, placeholder, type = 'text' }: {
   )
 }
 
+// ── タイムラインイベント ────────────────────────────────────────────────────────
+
+type TimelineEvent = {
+  key: string
+  type: 'checkin' | 'checkout'
+  time: string
+  visit: Visit
+}
+
+function buildTimeline(visits: Visit[]): TimelineEvent[] {
+  const events: TimelineEvent[] = []
+  for (const v of visits) {
+    events.push({ key: `${v.id}-in`, type: 'checkin', time: v.check_in_at, visit: v })
+    if (v.check_out_at) {
+      events.push({ key: `${v.id}-out`, type: 'checkout', time: v.check_out_at, visit: v })
+    }
+  }
+  return events.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
+}
+
 // ── メインページ ──────────────────────────────────────────────────────────────
 
 export default function VisitsPage() {
@@ -208,6 +228,7 @@ export default function VisitsPage() {
   const [exporting, setExporting] = useState(false)
   const [stores,    setStores]    = useState<Store[]>([])
   const [purposes,  setPurposes]  = useState<string[]>([])
+  const [viewMode,  setViewMode]  = useState<'table' | 'timeline'>('table')
 
   // 選択状態
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -381,6 +402,42 @@ export default function VisitsPage() {
               絞り込みクリア
             </button>
           )}
+          {/* タイムライン / テーブル トグル */}
+          <div style={{
+            display: 'flex', borderRadius: 4, overflow: 'hidden',
+            border: '1px solid var(--ge-line)',
+          }}>
+            {(['table', 'timeline'] as const).map(mode => (
+              <button
+                key={mode}
+                onClick={() => setViewMode(mode)}
+                style={{
+                  padding: '5px 10px', cursor: 'pointer',
+                  font: '500 11px/1 var(--font-sans)',
+                  background: viewMode === mode ? 'var(--ge-accent)' : '#fff',
+                  color: viewMode === mode ? '#fff' : 'var(--ge-ink-3)',
+                  border: 'none', outline: 'none',
+                }}
+              >
+                {mode === 'table' ? '📋 テーブル' : '⏱ タイムライン'}
+              </button>
+            ))}
+          </div>
+
+          {/* アンマッチ確認リンク */}
+          <Link
+            href="/admin/visits/mismatch"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '5px 12px', borderRadius: 4,
+              font: '500 11px/1 var(--font-sans)', color: '#b91c1c',
+              background: '#fef2f2', border: '1px solid #fecaca',
+              textDecoration: 'none',
+            }}
+          >
+            ⚠️ アンマッチ確認
+          </Link>
+
           <Link
             href="/admin/baggage/review"
             style={{
@@ -449,7 +506,108 @@ export default function VisitsPage() {
         </div>
       )}
 
+      {/* ── タイムライン ─────────────────────────────────────────────── */}
+      {viewMode === 'timeline' && (
+        <div style={{ background: '#fff', borderRadius: 6, border: '1px solid var(--ge-line)', overflow: 'hidden' }}>
+          {loading ? (
+            <div style={{ padding: '40px', textAlign: 'center', color: 'var(--ge-ink-4)', font: '400 13px/1 var(--font-sans)' }}>読み込み中...</div>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr style={{ background: 'var(--ge-paper)', borderBottom: '1px solid var(--ge-line)' }}>
+                  <th style={{ padding: '8px 12px', textAlign: 'left', font: '500 11px/1 var(--font-sans)', color: 'var(--ge-ink-4)', whiteSpace: 'nowrap' }}>時刻</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'left', font: '500 11px/1 var(--font-sans)', color: 'var(--ge-ink-4)', whiteSpace: 'nowrap' }}>種別</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'left', font: '500 11px/1 var(--font-sans)', color: 'var(--ge-ink-4)', whiteSpace: 'nowrap' }}>訪問者</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'left', font: '500 11px/1 var(--font-sans)', color: 'var(--ge-ink-4)', whiteSpace: 'nowrap' }}>会社</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'left', font: '500 11px/1 var(--font-sans)', color: 'var(--ge-ink-4)', whiteSpace: 'nowrap' }}>目的</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'left', font: '500 11px/1 var(--font-sans)', color: 'var(--ge-ink-4)', whiteSpace: 'nowrap' }}>店舗</th>
+                  <th style={{ width: 80 }} />
+                </tr>
+              </thead>
+              <tbody>
+                {buildTimeline(displayedVisits).length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: 'center', padding: '48px 0', color: 'var(--ge-ink-4)', font: '400 13px/1 var(--font-sans)' }}>
+                      {t('admin.noVisits')}
+                    </td>
+                  </tr>
+                ) : buildTimeline(displayedVisits).map(ev => {
+                  const isCheckout = ev.type === 'checkout'
+                  const isCheckoutOnly = ev.visit.purpose === '__checkout_only__'
+                  return (
+                    <tr
+                      key={ev.key}
+                      style={{
+                        borderBottom: '1px solid var(--ge-paper-2)',
+                        background: isCheckout ? '#f0fdf4' : '#eff6ff',
+                      }}
+                    >
+                      <td style={{ padding: '8px 12px', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', color: 'var(--ge-ink-3)', font: '500 11px/1.3 var(--font-mono)' }}>
+                        {new Date(ev.time).toLocaleString(dateLocale, {
+                          month: 'short', day: 'numeric',
+                          hour: '2-digit', minute: '2-digit', second: '2-digit',
+                        })}
+                      </td>
+                      <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 4,
+                          padding: '2px 8px', borderRadius: 999,
+                          font: '600 11px/1.4 var(--font-sans)',
+                          background: isCheckout ? '#dcfce7' : '#dbeafe',
+                          color: isCheckout ? '#15803d' : '#1d4ed8',
+                        }}>
+                          {isCheckout ? '↑ 退室' : '↓ 入室'}
+                          {isCheckoutOnly && (
+                            <span style={{ font: '500 10px/1 var(--font-sans)', color: '#9a3412', marginLeft: 2 }}>※</span>
+                          )}
+                        </span>
+                      </td>
+                      <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>
+                        <Link
+                          href={`/admin/visits/${ev.visit.id}`}
+                          style={{ font: '500 12px/1.3 var(--font-sans)', color: 'var(--ge-accent)', textDecoration: 'none' }}
+                        >
+                          {ev.visit.visitors?.name ?? '—'}
+                        </Link>
+                      </td>
+                      <td style={{ padding: '8px 12px', color: 'var(--ge-ink-2)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {ev.visit.visitors?.company ?? '—'}
+                      </td>
+                      <td style={{ padding: '8px 12px', color: isCheckoutOnly ? '#9a3412' : 'var(--ge-ink-2)', whiteSpace: 'nowrap' }}>
+                        {isCheckoutOnly ? '退室のみ ※' : ev.visit.purpose}
+                      </td>
+                      <td style={{ padding: '8px 12px', color: 'var(--ge-ink-3)', whiteSpace: 'nowrap' }}>
+                        {ev.visit.stores?.name ?? '—'}
+                      </td>
+                      <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+                        <Link
+                          href={`/admin/visits/${ev.visit.id}`}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 4,
+                            padding: '3px 8px', borderRadius: 4,
+                            font: '500 11px/1 var(--font-sans)',
+                            color: 'var(--ge-accent)', background: 'var(--ge-accent-soft)',
+                            border: '1px solid var(--ge-accent-line)', textDecoration: 'none',
+                          }}
+                        >詳細 →</Link>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+          <div style={{ padding: '8px 14px', borderTop: '1px solid var(--ge-line)', font: '400 10px/1 var(--font-sans)', color: 'var(--ge-ink-4)' }}>
+            ※ 入室記録なしで退室した来訪者です。
+            <Link href="/admin/visits/mismatch" style={{ marginLeft: 8, color: 'var(--ge-accent)', textDecoration: 'none' }}>
+              アンマッチ詳細 →
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* ── テーブル ─────────────────────────────────────────────────── */}
+      {viewMode === 'table' && (
       <div style={{ background: '#fff', borderRadius: 6, border: '1px solid var(--ge-line)', overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           {/* ── ヘッダー行 ── */}
@@ -674,6 +832,7 @@ export default function VisitsPage() {
           </tbody>
         </table>
       </div>
+      )}
 
       {/* ── ページネーション ──────────────────────────────────────────── */}
       {totalPages > 1 && (

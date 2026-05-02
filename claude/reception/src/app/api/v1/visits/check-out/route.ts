@@ -2,6 +2,52 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { validateQrToken } from '@/lib/qr/validate'
 
+// 入室記録なしで退室した visit を識別するマーカー
+export const CHECKOUT_ONLY_PURPOSE = '__checkout_only__'
+
+/** areas テーブルから store_id を取得 */
+async function getStoreId(
+  supabase: ReturnType<typeof createAdminClient>,
+  areaId: string,
+): Promise<string | null> {
+  const { data } = await supabase
+    .from('areas')
+    .select('store_id')
+    .eq('id', areaId)
+    .single()
+  return (data as { store_id: string } | null)?.store_id ?? null
+}
+
+/** 入室記録なし → 退室専用 visit を作成して ID を返す */
+async function createCheckoutOnlyVisit(
+  supabase: ReturnType<typeof createAdminClient>,
+  opts: {
+    tenantId: string
+    visitorId: string
+    areaId: string
+  },
+): Promise<string | null> {
+  const storeId = await getStoreId(supabase, opts.areaId)
+  if (!storeId) return null          // area が見つからない場合はスキップ
+
+  const now = new Date().toISOString()
+  const { data } = await supabase
+    .from('visits')
+    .insert({
+      tenant_id:   opts.tenantId,
+      visitor_id:  opts.visitorId,
+      area_id:     opts.areaId,
+      store_id:    storeId,
+      purpose:     CHECKOUT_ONLY_PURPOSE,
+      status:      'checked_out',
+      check_in_at:  now,
+      check_out_at: now,
+    })
+    .select('id')
+    .single()
+  return (data as { id: string } | null)?.id ?? null
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
@@ -21,7 +67,7 @@ export async function POST(req: NextRequest) {
 
     let visitToCheckout: { id: string; visitor_id: string } | null = null
 
-    // Priority 1: visitorId (face auth checkout)
+    // ── Priority 1: visitorId (顔認証退室) ───────────────────────────────
     if (visitorId) {
       const { data } = await supabase
         .from('visits')
@@ -31,14 +77,21 @@ export async function POST(req: NextRequest) {
         .eq('status', 'checked_in')
         .order('check_in_at', { ascending: false })
         .limit(1)
-        .single()
+        .maybeSingle()
 
-      if (!data) {
-        return NextResponse.json({ error: '入室記録が見つかりません' }, { status: 404 })
+      if (data) {
+        visitToCheckout = data
+      } else {
+        // 入室記録なし → 退室専用 visit を作成
+        const newId = await createCheckoutOnlyVisit(supabase, {
+          tenantId:  qr.tenantId!,
+          visitorId: visitorId as string,
+          areaId:    qr.areaId!,
+        })
+        return NextResponse.json({ success: true, visitId: newId, tenantId: qr.tenantId })
       }
-      visitToCheckout = data
 
-    // Priority 2: preToken (QR scan checkout)
+    // ── Priority 2: preToken (QR スキャン退室) ───────────────────────────
     } else if (preToken) {
       const { data: pre } = await supabase
         .from('pre_registrations')
@@ -59,16 +112,23 @@ export async function POST(req: NextRequest) {
         .eq('status', 'checked_in')
         .order('check_in_at', { ascending: false })
         .limit(1)
-        .single()
+        .maybeSingle()
 
-      if (!data) {
-        return NextResponse.json({ error: '入室記録が見つかりません' }, { status: 404 })
+      if (data) {
+        visitToCheckout = data
+      } else {
+        // 入室記録なし → 退室専用 visit を作成
+        const newId = await createCheckoutOnlyVisit(supabase, {
+          tenantId:  qr.tenantId!,
+          visitorId: pre.visitor_id as string,
+          areaId:    qr.areaId!,
+        })
+        return NextResponse.json({ success: true, visitId: newId, tenantId: qr.tenantId })
       }
-      visitToCheckout = data
 
-    // Priority 3: deviceToken / area fallback
+    // ── Priority 3: deviceToken / エリア フォールバック ──────────────────
     } else {
-      const { data: visits } = await supabase
+      const { data: checkedInVisits } = await supabase
         .from('visits')
         .select('id, visitor_id, visitors(device_token)')
         .eq('area_id', qr.areaId!)
@@ -76,45 +136,67 @@ export async function POST(req: NextRequest) {
         .eq('status', 'checked_in')
         .order('check_in_at', { ascending: false })
 
-      if (!visits || visits.length === 0) {
-        return NextResponse.json(
-          { error: '入室記録が見つかりません' },
-          { status: 404 }
-        )
-      }
+      if (checkedInVisits && checkedInVisits.length > 0) {
+        // 入室記録あり → device_token で絞り込み or 最新を使う
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        visitToCheckout = checkedInVisits[0] as any
+        if (deviceToken) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const matched = (checkedInVisits as any[]).find((v: any) => {
+            const vis = v.visitors
+            if (Array.isArray(vis)) return vis[0]?.device_token === deviceToken
+            return vis?.device_token === deviceToken
+          })
+          if (matched) visitToCheckout = matched
+        }
+      } else {
+        // 入室記録なし → device_token から visitor を探して退室専用 visit 作成
+        if (deviceToken) {
+          const { data: visitor } = await supabase
+            .from('visitors')
+            .select('id')
+            .eq('device_token', deviceToken)
+            .eq('tenant_id', qr.tenantId!)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
 
-      visitToCheckout = visits[0]
-      if (deviceToken) {
-        const matched = visits.find(
-          (v: any) => v.visitors?.device_token === deviceToken
-        )
-        if (matched) visitToCheckout = matched
+          if (visitor) {
+            const newId = await createCheckoutOnlyVisit(supabase, {
+              tenantId:  qr.tenantId!,
+              visitorId: (visitor as { id: string }).id,
+              areaId:    qr.areaId!,
+            })
+            return NextResponse.json({ success: true, visitId: newId, tenantId: qr.tenantId })
+          }
+        }
+
+        // visitor も特定できない場合でも退室は許可（記録は作成しない）
+        return NextResponse.json({ success: true, visitId: null, tenantId: qr.tenantId })
       }
     }
 
-    // Update visit status
+    if (!visitToCheckout) {
+      return NextResponse.json({ success: true, visitId: null, tenantId: qr.tenantId })
+    }
+
+    // visit を checked_out に更新
     const { error: updateError } = await supabase
       .from('visits')
       .update({
-        status: 'checked_out',
+        status:       'checked_out',
         check_out_at: new Date().toISOString(),
       })
       .eq('id', visitToCheckout.id)
 
     if (updateError) {
       console.error('Checkout error:', updateError)
-      return NextResponse.json(
-        { error: '退室処理に失敗しました' },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: '退室処理に失敗しました' }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, visitId: visitToCheckout.id, tenantId: qr.tenantId })
   } catch (err) {
     console.error('Checkout error:', err)
-    return NextResponse.json(
-      { error: 'サーバーエラーが発生しました' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'サーバーエラーが発生しました' }, { status: 500 })
   }
 }
