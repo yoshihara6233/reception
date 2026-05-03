@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { Suspense, useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useLocale } from '@/lib/i18n/useLocale'
@@ -219,7 +219,7 @@ function buildTimeline(visits: Visit[]): TimelineEvent[] {
 
 // ── メインページ ──────────────────────────────────────────────────────────────
 
-export default function VisitsPage() {
+function VisitsPageInner() {
   const { t, locale } = useLocale()
   const dateLocale = locale === 'zh' ? 'zh-CN' : locale === 'ko' ? 'ko-KR' : locale === 'en' ? 'en-US' : 'ja-JP'
   const searchParams = useSearchParams()
@@ -847,5 +847,13 @@ export default function VisitsPage() {
         }
       `}</style>
     </div>
+  )
+}
+
+export default function VisitsPage() {
+  return (
+    <Suspense>
+      <VisitsPageInner />
+    </Suspense>
   )
 }

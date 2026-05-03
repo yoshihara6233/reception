@@ -7,6 +7,7 @@
  * の 4 タブを各ページに統一して表示する。
  */
 
+import { Suspense } from 'react'
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 
@@ -25,7 +26,7 @@ const TABS: Tab[] = [
   { key: 'baggage-review', href: '/admin/baggage/review',   label: '手荷物レビュー', icon: '🔍', variant: 'normal'  },
 ]
 
-export function VisitsNavBar() {
+function NavBarInner() {
   const pathname     = usePathname()
   const searchParams = useSearchParams()
   const view         = searchParams.get('view')
@@ -84,5 +85,28 @@ export function VisitsNavBar() {
         )
       })}
     </div>
+  )
+}
+
+/** useSearchParams を内包するため Suspense でラップ済み */
+export function VisitsNavBar() {
+  return (
+    <Suspense fallback={
+      <div style={{ display: 'flex', gap: 4 }}>
+        {TABS.map(tab => (
+          <div key={tab.key} style={{
+            padding: '5px 12px', borderRadius: 4,
+            background: 'var(--ge-paper-2)',
+            font: '500 11px/1 var(--font-sans)', color: 'transparent',
+            border: '1px solid var(--ge-line)',
+            userSelect: 'none',
+          }}>
+            {tab.icon} {tab.label}
+          </div>
+        ))}
+      </div>
+    }>
+      <NavBarInner />
+    </Suspense>
   )
 }
