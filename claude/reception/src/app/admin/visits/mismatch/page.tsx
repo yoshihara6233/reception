@@ -10,6 +10,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { VisitsNavBar } from '@/app/admin/_components/VisitsNavBar'
 
 interface MismatchVisit {
   id: string
@@ -177,14 +178,14 @@ export default function MismatchPage() {
 
   return (
     <div>
+      {/* ── ナビゲーション ───────────────────────────────────────────── */}
+      <div style={{ marginBottom: 16 }}>
+        <VisitsNavBar />
+      </div>
+
       {/* ── ヘッダー ────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, font: '400 12px/1 var(--font-sans)', color: 'var(--ge-ink-4)' }}>
-            <Link href="/admin/visits" style={{ color: 'var(--ge-accent)', textDecoration: 'none' }}>来訪履歴</Link>
-            <span>›</span>
-            <span>入退室アンマッチ</span>
-          </div>
           <h1 style={{ font: '700 24px/1.2 var(--font-sans)', color: '#1e3a5f', margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
             入退室アンマッチ
             {!loading && data && totalMismatch > 0 && (

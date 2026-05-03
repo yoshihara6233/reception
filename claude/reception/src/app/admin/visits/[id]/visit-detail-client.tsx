@@ -1,96 +1,240 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useLocale } from '@/lib/i18n/useLocale'
 
-// ── 録画ビューアー定数（recording/page.tsx と共通） ───────────────────────────
+// ── 録画ビューアー型定義 ──────────────────────────────────────────────────────
 
-type MockCamera = { slot: 1 | 2; label: string; model: string; cameraId: string }
-type EventMarker = { t: number; label: string; color: string }
+type CameraInfo = {
+  slot: number
+  label: string
+  cameraId: string
+  hlsUrl: string | null
+}
 
-const MOCK_CAMERAS: MockCamera[] = [
-  { slot: 1, label: '受付カウンター',   model: 'WV-S1536LN  2688×1520', cameraId: 'ipro-cam-001' },
-  { slot: 2, label: '手荷物検査デスク', model: 'WV-X2531LN  1920×1080', cameraId: 'ipro-cam-002' },
-]
-const MOCK_DURATION_SEC = 600
-const MOCK_EVENTS: EventMarker[] = [
-  { t: 60,  label: '入室',         color: 'bg-purple-500' },
-  { t: 120, label: '手荷物申告',   color: 'bg-amber-500'  },
-  { t: 185, label: '撮影',         color: 'bg-blue-500'   },
-  { t: 340, label: 'スタッフ審査', color: 'bg-emerald-500' },
-  { t: 510, label: '退室',         color: 'bg-orange-500' },
-]
+type DeclarationData = {
+  id: string
+  vms_connected: boolean
+  inspection_started_at: string | null
+  inspection_ended_at: string | null
+  cameras: CameraInfo[]
+}
 
-function fmtClock(sec: number) {
+function fmtTime(sec: number) {
   const m = Math.floor(sec / 60).toString().padStart(2, '0')
   const s = Math.floor(sec % 60).toString().padStart(2, '0')
   return `${m}:${s}`
 }
 
-// ── カメラパネル ──────────────────────────────────────────────────────────────
+function wallClockTime(inspectionStartedIso: string | null, positionSec: number): string {
+  if (!inspectionStartedIso) return fmtTime(positionSec)
+  const dt = new Date(new Date(inspectionStartedIso).getTime() + positionSec * 1000)
+  return dt.toLocaleString('ja-JP', {
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  })
+}
 
-function CameraPanel({ cam, position, playing, speed }: {
-  cam: MockCamera; position: number; playing: boolean; speed: number
+function wallClockFull(inspectionStartedIso: string | null, positionSec: number): string {
+  if (!inspectionStartedIso) return fmtTime(positionSec)
+  const dt = new Date(new Date(inspectionStartedIso).getTime() + positionSec * 1000)
+  return dt.toLocaleString('ja-JP', {
+    month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  })
+}
+
+// ── HLS プレーヤーパネル ──────────────────────────────────────────────────────
+
+function HlsVideoPanel({
+  cam, hlsUrl, playing, seekCmd, inspectionStartedIso, onDurationChange, onTimeUpdate,
+}: {
+  cam: CameraInfo
+  hlsUrl: string
+  playing: boolean
+  seekCmd?: { to: number; v: number }
+  inspectionStartedIso: string | null
+  onDurationChange?: (d: number) => void
+  onTimeUpdate?: (t: number) => void
 }) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const [currentTime, setCurrentTime] = useState(0)
+
+  useEffect(() => {
+    if (!videoRef.current || !hlsUrl) return
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let hlsInstance: any = null
+    const load = async () => {
+      const Hls = (await import('hls.js')).default
+      if (!Hls.isSupported()) {
+        if (videoRef.current) videoRef.current.src = hlsUrl
+        return
+      }
+      const hls = new Hls()
+      hlsInstance = hls
+      hls.loadSource(hlsUrl)
+      hls.attachMedia(videoRef.current!)
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        if (videoRef.current) onDurationChange?.(videoRef.current.duration || 0)
+      })
+    }
+    load()
+    return () => { hlsInstance?.destroy?.() }
+  }, [hlsUrl, onDurationChange])
+
+  useEffect(() => {
+    if (!videoRef.current) return
+    if (playing) videoRef.current.play().catch(() => {})
+    else videoRef.current.pause()
+  }, [playing])
+
+  useEffect(() => {
+    if (seekCmd === undefined || !videoRef.current) return
+    videoRef.current.currentTime = seekCmd.to
+  }, [seekCmd])
+
+  useEffect(() => {
+    const v = videoRef.current
+    if (!v) return
+    const handler = () => {
+      setCurrentTime(v.currentTime)
+      onTimeUpdate?.(v.currentTime)
+    }
+    v.addEventListener('timeupdate', handler)
+    return () => v.removeEventListener('timeupdate', handler)
+  }, [onTimeUpdate])
+
   return (
-    <div className="relative aspect-video bg-gradient-to-br from-gray-900 via-slate-900 to-gray-800 rounded-xl overflow-hidden">
-      <div className="absolute inset-0 opacity-10" style={{
-        backgroundImage: 'linear-gradient(to right,white 1px,transparent 1px),linear-gradient(to bottom,white 1px,transparent 1px)',
-        backgroundSize: '40px 40px',
-      }} />
+    <div className="relative aspect-video bg-black rounded-xl overflow-hidden">
+      <video ref={videoRef} className="w-full h-full object-contain" playsInline muted />
       <div className="absolute top-2 left-2 text-[10px] text-white/80 font-mono bg-black/50 rounded px-2 py-0.5 leading-tight">
         🔴 REC · カメラ{cam.slot} · {cam.label}
-        <div className="text-white/50 text-[9px]">{cam.model}</div>
       </div>
-      <div className="absolute top-2 right-2 text-[10px] text-white/80 font-mono bg-black/50 rounded px-2 py-0.5 tabular-nums">
-        {new Date(Date.now() - (MOCK_DURATION_SEC - position) * 1000).toLocaleString('ja-JP')}
+      <div className="absolute top-2 right-2 text-[10px] text-white/60 font-mono bg-black/50 rounded px-2 py-0.5">
+        {cam.cameraId}
       </div>
-      <div className="absolute bottom-2 right-2 text-[10px] text-white/60 font-mono">
-        {playing ? `▶ ×${speed}` : '⏸'}
-      </div>
-      <div className="absolute bottom-2 left-2 text-[9px] text-white/40 font-mono">
-        HLS: /recordings/{cam.cameraId}-{position}/stream.m3u8
-      </div>
-      <div className="absolute inset-0 flex items-center justify-center">
-        <div className={`w-14 h-14 rounded-full border-2 border-white/40 flex items-center justify-center text-xl text-white/70 ${playing ? 'bg-white/5' : 'bg-black/20'}`}>
-          {playing ? '⏸' : '▶'}
-        </div>
+      <div className="absolute bottom-2 left-2 flex items-center gap-1.5 bg-black/60 rounded px-2.5 py-1">
+        {playing && <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block" />}
+        <span className="text-white font-mono text-xs tabular-nums tracking-wide">
+          {wallClockTime(inspectionStartedIso, currentTime)}
+        </span>
       </div>
     </div>
   )
 }
 
-// ── インライン録画ビューアー（動画モード用） ─────────────────────────────────
+// ── カメラ未設定パネル ────────────────────────────────────────────────────────
+
+function NoCameraPanel({ cam, reason }: { cam: CameraInfo; reason: string }) {
+  return (
+    <div className="relative aspect-video bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl overflow-hidden flex flex-col items-center justify-center gap-2">
+      <span className="text-3xl">📷</span>
+      <p className="text-sm font-medium text-gray-600">カメラ{cam.slot} · {cam.label}</p>
+      <p className="text-xs text-gray-400 text-center px-4">{reason}</p>
+    </div>
+  )
+}
+
+// ── インライン録画ビューアー ──────────────────────────────────────────────────
 
 function InlineRecordingViewer({ baggageId, visitId }: { baggageId: string; visitId: string }) {
+  const [data, setData]       = useState<DeclarationData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [loadErr, setLoadErr] = useState<string | null>(null)
+
   const [playing, setPlaying]   = useState(false)
-  const [position, setPosition] = useState(120)
-  const [speed, setSpeed]       = useState(1)
+  const [position, setPosition] = useState(0)
+  const [seekCmd, setSeekCmd]   = useState<{ to: number; v: number } | undefined>(undefined)
+  const seekingRef = useRef(false)
+  const [duration, setDuration] = useState(0)
   const [toast, setToast]       = useState<string | null>(null)
   const timelineRef = useRef<HTMLDivElement>(null)
 
-  const posPct = (position / MOCK_DURATION_SEC) * 100
-
-  const fireToast = (msg: string) => {
+  const fireToast = useCallback((msg: string) => {
     setToast(msg)
     setTimeout(() => setToast(null), 2500)
-  }
+  }, [])
+
+  useEffect(() => {
+    fetch(`/api/v1/admin/baggage/${baggageId}`)
+      .then(r => r.ok ? r.json() : Promise.reject(r))
+      .then((d: DeclarationData) => setData(d))
+      .catch(() => setLoadErr('録画情報の読み込みに失敗しました'))
+      .finally(() => setLoading(false))
+  }, [baggageId])
+
+  const cameras: CameraInfo[] = data?.cameras?.length
+    ? data.cameras
+    : [
+        { slot: 1, label: '受付カウンター',   cameraId: '', hlsUrl: null },
+        { slot: 2, label: '手荷物検査デスク', cameraId: '', hlsUrl: null },
+      ]
+
+  const anyHls         = cameras.some(c => c.hlsUrl)
+  const vmsConnected   = data?.vms_connected ?? false
+  const inspectionStarted = data?.inspection_started_at ?? null
+
+  const posPct = duration > 0 ? (position / duration) * 100 : 0
+
+  const seek = useCallback((target: number) => {
+    const clamped = Math.max(0, Math.min(duration || 0, target))
+    seekingRef.current = true
+    setPosition(clamped)
+    setSeekCmd(prev => ({ to: clamped, v: (prev?.v ?? 0) + 1 }))
+    setTimeout(() => { seekingRef.current = false }, 200)
+  }, [duration])
 
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!timelineRef.current) return
+    if (!timelineRef.current || !duration) return
     const rect = timelineRef.current.getBoundingClientRect()
-    const pct = (e.clientX - rect.left) / rect.width
-    setPosition(Math.max(0, Math.min(MOCK_DURATION_SEC, pct * MOCK_DURATION_SEC)))
+    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+    seek(pct * duration)
+  }
+
+  const onTimeUpdate = useCallback((t: number) => {
+    if (!seekingRef.current) setPosition(t)
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-8 text-gray-400 text-sm">
+        <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
+        録画情報を読み込み中...
+      </div>
+    )
+  }
+
+  if (loadErr) {
+    return <div className="py-4 text-sm text-red-500">{loadErr}</div>
   }
 
   return (
     <div className="space-y-2">
-      {/* モックバナー */}
+      {/* ヘッダー */}
       <div className="flex items-center justify-between">
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-medium">
-          🚧 モック（i-PRO Remo 未接続）
-        </span>
+        <div className="flex items-center gap-2">
+          {anyHls ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-medium">
+              ✅ 映像あり
+            </span>
+          ) : vmsConnected ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-medium">
+              ⚠️ 録画なし
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 text-[10px] font-medium">
+              📷 VMS 未設定
+            </span>
+          )}
+          {inspectionStarted && (
+            <span className="text-[10px] text-gray-400 font-mono">
+              {new Date(inspectionStarted).toLocaleString('ja-JP', {
+                month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', second: '2-digit',
+              })}〜
+            </span>
+          )}
+        </div>
         <Link
           href={`/admin/baggage/${baggageId}/recording?visitId=${visitId}`}
           target="_blank"
@@ -100,146 +244,132 @@ function InlineRecordingViewer({ baggageId, visitId }: { baggageId: string; visi
         </Link>
       </div>
 
-      {/* カメラ 2 面 */}
+      {/* カメラ映像 */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-        {MOCK_CAMERAS.map(cam => (
+        {cameras.map(cam => (
           <div key={cam.slot} className="relative">
-            <CameraPanel cam={cam} position={position} playing={playing} speed={speed} />
-            <button
-              onClick={() => fireToast(`📥 ${cam.label} の録画を MP4 でダウンロード（cameraId: ${cam.cameraId}）`)}
-              className="absolute bottom-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-white/90 text-[11px] text-[var(--ge-accent)] font-medium shadow hover:bg-white"
-            >
-              📥 MP4 で取得
-            </button>
+            {cam.hlsUrl ? (
+              <HlsVideoPanel
+                cam={cam}
+                hlsUrl={cam.hlsUrl}
+                playing={playing}
+                seekCmd={seekCmd}
+                inspectionStartedIso={inspectionStarted}
+                onDurationChange={d => { if (d > 0) setDuration(d) }}
+                onTimeUpdate={onTimeUpdate}
+              />
+            ) : (
+              <NoCameraPanel
+                cam={cam}
+                reason={
+                  !vmsConnected
+                    ? '店舗設定でVMS接続とカメラIDを設定してください'
+                    : !cam.cameraId
+                    ? 'このスロットにカメラIDが設定されていません'
+                    : `この時間帯の録画が見つかりませんでした (${cam.cameraId})`
+                }
+              />
+            )}
           </div>
         ))}
       </div>
 
-      {/* タイムライン + コントロール */}
-      <div className="bg-gray-50 rounded-xl px-4 py-3 space-y-3">
-        {/* コントロールバー */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={() => setPosition(Math.max(0, position - 10))}
-            className="w-8 h-8 rounded-full border border-gray-200 bg-white hover:bg-gray-50 text-sm flex items-center justify-center"
-            title="10秒戻る"
-          >⏮</button>
-          <button
-            onClick={() => setPlaying(p => !p)}
-            className="w-10 h-10 rounded-full bg-[var(--ge-accent)] text-white text-base hover:bg-[var(--ge-accent-ink)] flex items-center justify-center"
-            title={playing ? '一時停止' : '再生（両カメラ同時）'}
-          >{playing ? '⏸' : '▶'}</button>
-          <button
-            onClick={() => setPosition(Math.min(MOCK_DURATION_SEC, position + 10))}
-            className="w-8 h-8 rounded-full border border-gray-200 bg-white hover:bg-gray-50 text-sm flex items-center justify-center"
-            title="10秒進む"
-          >⏭</button>
-          <div className="flex items-center gap-1">
-            {[0.5, 1, 2, 4].map(s => (
-              <button
-                key={s}
-                onClick={() => setSpeed(s)}
-                className={`px-2 py-0.5 text-xs rounded ${speed === s ? 'bg-[var(--ge-accent)] text-white' : 'text-gray-500 hover:bg-gray-200'}`}
-              >×{s}</button>
-            ))}
-          </div>
-          <span className="text-[10px] text-gray-400">両カメラ同期</span>
-          <div className="flex-1" />
-          <span className="text-xs text-gray-500 font-mono tabular-nums">
-            {fmtClock(position)} / {fmtClock(MOCK_DURATION_SEC)}
-          </span>
-        </div>
-
-        {/* シークバー */}
-        <div
-          ref={timelineRef}
-          onClick={handleSeek}
-          className="relative h-7 bg-gray-200 rounded-lg cursor-pointer group"
-        >
-          <div className="absolute inset-y-0 left-0 bg-[var(--ge-accent)]/20 rounded-lg" style={{ width: `${posPct}%` }} />
-          <div className="absolute top-0 bottom-0 w-0.5 bg-[var(--ge-accent)]" style={{ left: `${posPct}%` }} />
-          {MOCK_EVENTS.map(ev => (
-            <div
-              key={ev.label}
-              className="absolute top-0 bottom-0 w-1 group/ev"
-              style={{ left: `${(ev.t / MOCK_DURATION_SEC) * 100}%` }}
-            >
-              <div className={`absolute inset-0 ${ev.color}`} />
-              <div className="absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] bg-gray-800 text-white px-1.5 py-0.5 rounded opacity-0 group-hover/ev:opacity-100 transition-opacity pointer-events-none">
-                {ev.label} · {fmtClock(ev.t)}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* イベント凡例 */}
-        <div className="flex items-center gap-3 flex-wrap text-[11px] text-gray-500">
-          {MOCK_EVENTS.map(ev => (
+      {/* 再生コントロール */}
+      {anyHls ? (
+        <div className="bg-gray-50 rounded-xl px-4 py-3 space-y-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
-              key={ev.label}
-              onClick={() => setPosition(ev.t)}
-              className="flex items-center gap-1.5 hover:text-gray-800 transition-colors"
-            >
-              <span className={`w-2 h-2 ${ev.color} rounded-full`} />
-              {ev.label}（{fmtClock(ev.t)}）
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* アクション */}
-      <div className="flex gap-2 flex-wrap">
-        <button
-          onClick={() => fireToast('📥 両カメラをまとめて MP4 ダウンロード（本番: /recordings/{id}/download ×2）')}
-          className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-[var(--ge-accent)] text-white rounded-xl text-xs font-medium hover:bg-[var(--ge-accent-ink)]"
-        >
-          📥 両カメラを MP4 ダウンロード
-        </button>
-        <button
-          onClick={() => fireToast(`📎 スナップショットを申告レコードに添付（${fmtClock(position)}）`)}
-          className="flex-1 flex items-center justify-center gap-1.5 py-2 border border-gray-200 rounded-xl text-xs text-gray-700 hover:bg-gray-50"
-        >
-          📎 現在フレームを添付
-        </button>
-        <button
-          onClick={() => fireToast(`🔖 ブックマーク: ${fmtClock(position)}（両カメラ）`)}
-          className="flex items-center justify-center gap-1.5 px-3 py-2 border border-gray-200 rounded-xl text-xs text-gray-700 hover:bg-gray-50"
-        >
-          🔖
-        </button>
-      </div>
-
-      {/* i-PRO Remo 接続情報 */}
-      <div className="grid grid-cols-2 gap-2">
-        <div className="bg-white rounded-xl border border-gray-100 p-3">
-          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">i-PRO Remo 接続</p>
-          <dl className="text-[11px] space-y-1">
-            {[
-              ['Endpoint', 'remo.i-pro.com'],
-              ['Tenant', '—（未設定）'],
-              ['カメラ数', `${MOCK_CAMERAS.length} / 2 台`],
-              ['録画保管元', '現地レコーダ'],
-            ].map(([k, v]) => (
-              <div key={k} className="flex justify-between gap-2">
-                <dt className="text-gray-400">{k}</dt>
-                <dd className="font-mono text-gray-700 truncate">{v}</dd>
+              onClick={() => seek(position - 10)}
+              className="w-8 h-8 rounded-full border border-gray-200 bg-white hover:bg-gray-50 text-sm flex items-center justify-center"
+              title="10秒戻る"
+            >⏮</button>
+            <button
+              onClick={() => setPlaying(p => !p)}
+              className="w-10 h-10 rounded-full bg-[var(--ge-accent)] text-white text-base hover:bg-[var(--ge-accent-ink)] flex items-center justify-center"
+            >{playing ? '⏸' : '▶'}</button>
+            <button
+              onClick={() => seek(position + 10)}
+              className="w-8 h-8 rounded-full border border-gray-200 bg-white hover:bg-gray-50 text-sm flex items-center justify-center"
+              title="10秒進む"
+            >⏭</button>
+            <span className="text-[10px] text-gray-400">両カメラ同期</span>
+            {inspectionStarted && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-white border border-gray-200 rounded-lg ml-1">
+                <span className="text-[10px] text-gray-400">再生時刻</span>
+                <span className="text-xs font-mono font-semibold text-gray-800 tabular-nums">
+                  {wallClockFull(inspectionStarted, position)}
+                </span>
               </div>
-            ))}
-            <div className="flex justify-between gap-2">
-              <dt className="text-gray-400">Status</dt>
-              <dd><span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 text-[10px] font-medium">未接続</span></dd>
+            )}
+            <div className="flex-1" />
+            <span className="text-xs text-gray-500 font-mono tabular-nums">
+              {fmtTime(position)} / {duration > 0 ? fmtTime(duration) : '--:--'}
+            </span>
+          </div>
+
+          {/* シークバー */}
+          <div
+            ref={timelineRef}
+            onClick={handleSeek}
+            className="relative h-7 bg-gray-200 rounded-lg cursor-pointer"
+          >
+            <div className="absolute inset-y-0 left-0 bg-[var(--ge-accent)]/20 rounded-lg" style={{ width: `${posPct}%` }} />
+            <div className="absolute top-0 bottom-0 w-0.5 bg-[var(--ge-accent)]" style={{ left: `${posPct}%` }} />
+            {inspectionStarted && duration > 0 && (
+              <div
+                className="absolute -top-5 text-[10px] font-mono text-[var(--ge-accent)] whitespace-nowrap -translate-x-1/2 pointer-events-none"
+                style={{ left: `${posPct}%` }}
+              >
+                {wallClockTime(inspectionStarted, position)}
+              </div>
+            )}
+          </div>
+          {inspectionStarted && (
+            <div className="flex justify-between text-[10px] text-gray-400 font-mono px-0.5">
+              <span>{new Date(inspectionStarted).toLocaleString('ja-JP', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+              {duration > 0 && <span>{wallClockFull(inspectionStarted, duration)}</span>}
             </div>
-          </dl>
+          )}
         </div>
-        <div className="bg-amber-50/60 border border-amber-100 rounded-xl p-3 text-[10px] text-amber-900 space-y-1">
-          <p className="font-semibold">本番接続時の差し替え</p>
-          <ul className="list-disc list-inside space-y-0.5 opacity-80">
-            <li>カメラ登録: <code>store_cameras</code></li>
-            <li>録画検索: <code>GET /cameras/{'{id}'}/recordings</code></li>
-            <li>再生: <code>GET /recordings/{'{id}'}/stream</code></li>
-            <li>MP4: <code>GET /recordings/{'{id}'}/download</code></li>
-          </ul>
+      ) : (
+        <div className="flex items-start gap-3 p-3 bg-amber-50 rounded-xl border border-amber-100 text-xs text-amber-900">
+          <span className="text-base mt-0.5">📝</span>
+          <div>
+            <p className="font-semibold mb-1">映像を表示するには</p>
+            <ol className="list-decimal list-inside space-y-0.5 opacity-90">
+              <li>店舗設定 → カメラ タブ → VMS URL と API Key を登録</li>
+              <li>カメラID — スロット2（手荷物）にカメラIDを入力して保存</li>
+              <li>エリア設定で検査モードを「映像」に変更</li>
+            </ol>
+          </div>
         </div>
+      )}
+
+      {/* VMS 接続情報 */}
+      <div className="bg-white rounded-xl border border-gray-100 p-3">
+        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">カメラ接続情報</p>
+        <dl className="text-[11px] space-y-1">
+          <div className="flex justify-between gap-2">
+            <dt className="text-gray-400">VMS</dt>
+            <dd>
+              {vmsConnected
+                ? <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-medium">接続済</span>
+                : <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 text-[10px]">未設定</span>
+              }
+            </dd>
+          </div>
+          {cameras.map(cam => (
+            <div key={cam.slot} className="flex justify-between gap-2">
+              <dt className="text-gray-400">カメラ{cam.slot} · {cam.label}</dt>
+              <dd className="font-mono text-gray-600 truncate max-w-[160px]">
+                {cam.cameraId
+                  ? <span className={cam.hlsUrl ? 'text-emerald-600' : 'text-amber-600'}>{cam.cameraId}</span>
+                  : <span className="text-gray-300">未設定</span>
+                }
+              </dd>
+            </div>
+          ))}
+        </dl>
       </div>
 
       {/* Toast */}

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useSiteConfig } from '@/lib/site-config'
+import { VisitsNavBar } from '@/app/admin/_components/VisitsNavBar'
 
 // ── 型 ────────────────────────────────────────────────────────────────────────
 
@@ -310,15 +311,13 @@ function SelectPhase({
   })()
 
   return (
-    <div className="max-w-xl mx-auto">
+    <div>
+      <div className="mb-4">
+        <VisitsNavBar />
+      </div>
+      <div className="max-w-xl mx-auto">
       <div className="flex items-center gap-3 mb-6">
-        <button
-          onClick={() => router.push('/admin/visits')}
-          className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
-        >
-          ← 受付履歴
-        </button>
-        <h1 className="text-2xl font-bold text-[#1e3a5f]">日次レビュー</h1>
+        <h1 className="text-2xl font-bold text-[#1e3a5f]">手荷物レビュー</h1>
       </div>
 
       {!loadingDates && totalPending > 0 && (
@@ -424,6 +423,7 @@ function SelectPhase({
           {buttonLabel}
         </button>
       </div>
+    </div>
     </div>
   )
 }

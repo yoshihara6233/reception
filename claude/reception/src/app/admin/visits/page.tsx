@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { useLocale } from '@/lib/i18n/useLocale'
+import { VisitsNavBar } from '@/app/admin/_components/VisitsNavBar'
 
 // ── 型 ────────────────────────────────────────────────────────────────────────
 
@@ -220,6 +222,8 @@ function buildTimeline(visits: Visit[]): TimelineEvent[] {
 export default function VisitsPage() {
   const { t, locale } = useLocale()
   const dateLocale = locale === 'zh' ? 'zh-CN' : locale === 'ko' ? 'ko-KR' : locale === 'en' ? 'en-US' : 'ja-JP'
+  const searchParams = useSearchParams()
+  const viewMode = searchParams.get('view') === 'timeline' ? 'timeline' : 'table'
 
   const [visits,    setVisits]    = useState<Visit[]>([])
   const [total,     setTotal]     = useState(0)
@@ -228,7 +232,6 @@ export default function VisitsPage() {
   const [exporting, setExporting] = useState(false)
   const [stores,    setStores]    = useState<Store[]>([])
   const [purposes,  setPurposes]  = useState<string[]>([])
-  const [viewMode,  setViewMode]  = useState<'table' | 'timeline'>('table')
 
   // 選択状態
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -402,57 +405,7 @@ export default function VisitsPage() {
               絞り込みクリア
             </button>
           )}
-          {/* タイムライン / テーブル トグル */}
-          <div style={{
-            display: 'flex', borderRadius: 4, overflow: 'hidden',
-            border: '1px solid var(--ge-line)',
-          }}>
-            {(['table', 'timeline'] as const).map(mode => (
-              <button
-                key={mode}
-                onClick={() => setViewMode(mode)}
-                style={{
-                  padding: '5px 10px', cursor: 'pointer',
-                  font: '500 11px/1 var(--font-sans)',
-                  background: viewMode === mode ? 'var(--ge-accent)' : '#fff',
-                  color: viewMode === mode ? '#fff' : 'var(--ge-ink-3)',
-                  border: 'none', outline: 'none',
-                }}
-              >
-                {mode === 'table' ? '📋 テーブル' : '⏱ タイムライン'}
-              </button>
-            ))}
-          </div>
-
-          {/* アンマッチ確認リンク */}
-          <Link
-            href="/admin/visits/mismatch"
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 5,
-              padding: '5px 12px', borderRadius: 4,
-              font: '500 11px/1 var(--font-sans)', color: '#b91c1c',
-              background: '#fef2f2', border: '1px solid #fecaca',
-              textDecoration: 'none',
-            }}
-          >
-            ⚠️ アンマッチ確認
-          </Link>
-
-          <Link
-            href="/admin/baggage/review"
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 5,
-              padding: '5px 12px', borderRadius: 4,
-              font: '500 11px/1 var(--font-sans)', color: '#fff',
-              background: 'var(--ge-accent)', border: '1px solid var(--ge-accent)',
-              textDecoration: 'none',
-            }}
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-            </svg>
-            手荷物レビュー
-          </Link>
+          <VisitsNavBar />
           <button
             onClick={() => handleExport(false)}
             disabled={exporting}
