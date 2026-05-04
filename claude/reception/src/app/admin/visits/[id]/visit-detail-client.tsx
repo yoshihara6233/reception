@@ -59,16 +59,20 @@ function HlsVideoPanel({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [currentTime, setCurrentTime] = useState(0)
+  const [hlsError, setHlsError]       = useState<string | null>(null)
 
   // Stable refs so HLS init effect doesn't re-fire when callbacks change identity
   const onDurationChangeRef = useRef(onDurationChange)
   const onTimeUpdateRef     = useRef(onTimeUpdate)
+  const playingRef          = useRef(playing)
   useEffect(() => { onDurationChangeRef.current = onDurationChange }, [onDurationChange])
   useEffect(() => { onTimeUpdateRef.current     = onTimeUpdate     }, [onTimeUpdate])
+  useEffect(() => { playingRef.current          = playing          }, [playing])
 
   // ── HLS 初期化 (hlsUrl が変わったときだけ再実行) ───────────────────────────
   useEffect(() => {
     if (!videoRef.current || !hlsUrl) return
+    setHlsError(null)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let hlsInstance: any = null
     const load = async () => {
@@ -82,6 +86,7 @@ function HlsVideoPanel({
           if (isFinite(v.duration) && v.duration > 0) onDurationChangeRef.current?.(v.duration)
         }
         v.addEventListener('durationchange', onDc)
+        if (playingRef.current) v.play().catch(() => {})
         return
       }
 
@@ -99,10 +104,27 @@ function HlsVideoPanel({
         }
       })
 
-      // MANIFEST_PARSED: VOD の場合は videoElement の duration がすでに確定していることもある
+      // MANIFEST_PARSED: メディアソースが確定 → 再生中なら play() を即時発行
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         const d = videoRef.current?.duration ?? 0
         if (isFinite(d) && d > 0) onDurationChangeRef.current?.(d)
+        // playing=true のまま HLS が遅れてロードされた場合もここで再生を開始する
+        if (playingRef.current) {
+          videoRef.current?.play().catch(() => {})
+        }
+      })
+
+      // ERROR: ネットワーク障害・アクセストークン期限切れ（403）など
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      hls.on(Hls.Events.ERROR, (_e: any, data: any) => {
+        if (data.fatal) {
+          const type = data.type === 'networkError'
+            ? 'ネットワークエラー — VMS に接続できません（アクセストークンが期限切れの可能性があります）'
+            : data.type === 'mediaError'
+            ? 'メディアエラー — 録画データの読み込みに失敗しました'
+            : `HLS エラー: ${data.details ?? '不明'}`
+          setHlsError(type)
+        }
       })
     }
     load()
@@ -146,6 +168,16 @@ function HlsVideoPanel({
   return (
     <div className="relative aspect-video bg-black rounded-xl overflow-hidden">
       <video ref={videoRef} className="w-full h-full object-contain" playsInline muted />
+      {/* HLS エラーオーバーレイ */}
+      {hlsError && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 px-4">
+          <span className="text-2xl mb-2">⚠️</span>
+          <p className="text-white text-xs text-center leading-relaxed">{hlsError}</p>
+          <p className="text-white/50 text-[10px] mt-2 text-center">
+            ページを再読み込みすると再取得します
+          </p>
+        </div>
+      )}
       <div className="absolute top-2 left-2 text-[10px] text-white/80 font-mono bg-black/50 rounded px-2 py-0.5 leading-tight">
         🔴 REC · カメラ{cam.slot} · {cam.label}
       </div>

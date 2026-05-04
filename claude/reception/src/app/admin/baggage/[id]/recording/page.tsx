@@ -88,26 +88,69 @@ function HlsVideoPanel({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [currentTime, setCurrentTime] = useState(0)
+  const [hlsError, setHlsError] = useState<string | null>(null)
+
+  // Stabilize callbacks via refs so they don't appear in useEffect deps
+  const onDurationChangeRef = useRef(onDurationChange)
+  const onTimeUpdateRef     = useRef(onTimeUpdate)
+  const playingRef          = useRef(playing)
+  useEffect(() => { onDurationChangeRef.current = onDurationChange }, [onDurationChange])
+  useEffect(() => { onTimeUpdateRef.current     = onTimeUpdate     }, [onTimeUpdate])
+  useEffect(() => { playingRef.current          = playing          }, [playing])
 
   useEffect(() => {
     if (!videoRef.current || !hlsUrl) return
+    setHlsError(null)
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let hlsInstance: any = null
 
     const load = async () => {
       const Hls = (await import('hls.js')).default
+
+      // Native HLS (Safari)
       if (!Hls.isSupported()) {
-        if (videoRef.current) videoRef.current.src = hlsUrl
+        const v = videoRef.current!
+        v.src = hlsUrl
+        const onDc = () => {
+          if (isFinite(v.duration) && v.duration > 0) onDurationChangeRef.current?.(v.duration)
+        }
+        v.addEventListener('durationchange', onDc)
+        if (playingRef.current) v.play().catch(() => {})
         return
       }
-      const hls = new Hls()
+
+      const hls = new Hls({ enableWorker: true })
       hlsInstance = hls
       hls.loadSource(hlsUrl)
       hls.attachMedia(videoRef.current!)
+
+      // LEVEL_LOADED is reliable for duration (totalduration is populated here)
+      hls.on(Hls.Events.LEVEL_LOADED, (_e: any, data: any) => {
+        const total: number | undefined = data.details?.totalduration
+        if (total && isFinite(total) && total > 0) {
+          onDurationChangeRef.current?.(total)
+        }
+      })
+
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        if (videoRef.current) {
-          onDurationChange?.(videoRef.current.duration || 0)
+        // duration may still be 0 here; LEVEL_LOADED is the primary source
+        const d = videoRef.current?.duration ?? 0
+        if (isFinite(d) && d > 0) onDurationChangeRef.current?.(d)
+        // Auto-play if the play button was already pressed before HLS finished loading
+        if (playingRef.current) {
+          videoRef.current?.play().catch(() => {})
+        }
+      })
+
+      hls.on(Hls.Events.ERROR, (_e: any, data: any) => {
+        if (data.fatal) {
+          const msg = data.type === 'networkError'
+            ? 'ネットワークエラー — VMS に接続できません（アクセストークンが期限切れの可能性があります）'
+            : data.type === 'mediaError'
+            ? 'メディアエラー — 録画データの読み込みに失敗しました'
+            : `HLS エラー: ${data.details ?? '不明'}`
+          setHlsError(msg)
         }
       })
     }
@@ -115,7 +158,19 @@ function HlsVideoPanel({
     load()
 
     return () => { hlsInstance?.destroy?.() }
-  }, [hlsUrl, onDurationChange])
+  }, [hlsUrl]) // deps stabilized via refs — callbacks excluded intentionally
+
+  // durationchange on the <video> element as secondary source
+  useEffect(() => {
+    const v = videoRef.current
+    if (!v) return
+    const handler = () => {
+      const d = v.duration
+      if (isFinite(d) && d > 0) onDurationChangeRef.current?.(d)
+    }
+    v.addEventListener('durationchange', handler)
+    return () => v.removeEventListener('durationchange', handler)
+  }, [])
 
   // 再生 / 停止
   useEffect(() => {
@@ -136,15 +191,26 @@ function HlsVideoPanel({
     if (!v) return
     const handler = () => {
       setCurrentTime(v.currentTime)
-      onTimeUpdate?.(v.currentTime)
+      onTimeUpdateRef.current?.(v.currentTime)
     }
     v.addEventListener('timeupdate', handler)
     return () => v.removeEventListener('timeupdate', handler)
-  }, [onTimeUpdate])  // onTimeUpdate 側で seekingRef をチェック
+  }, []) // stabilized via onTimeUpdateRef
 
   return (
     <div className="relative aspect-video bg-black rounded-xl overflow-hidden">
       <video ref={videoRef} className="w-full h-full object-contain" playsInline muted />
+
+      {/* HLS エラーオーバーレイ */}
+      {hlsError && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 px-4">
+          <span className="text-2xl mb-2">⚠️</span>
+          <p className="text-white text-xs text-center leading-relaxed">{hlsError}</p>
+          <p className="text-white/50 text-[10px] mt-2 text-center">
+            ページを再読み込みすると再取得します
+          </p>
+        </div>
+      )}
 
       {/* カメララベル (左上) */}
       <div className="absolute top-2 left-2 text-[10px] text-white/80 font-mono bg-black/50 rounded px-2 py-0.5 leading-tight">

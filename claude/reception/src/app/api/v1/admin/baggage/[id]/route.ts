@@ -16,12 +16,16 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getAdminContext } from '@/lib/supabase/admin-context'
 import { createVmsClientFromSettings } from '@/lib/vms/client'
 
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const ctx = await getAdminContext()
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const { id } = await params
 
   const admin = createAdminClient()
@@ -89,17 +93,18 @@ export async function GET(
     vmsConnected = Boolean(vms)
 
     // Resolve HLS URL for each camera slot
+    //
+    // Order of priority:
+    //   1. getVodUrl() — always call VMS to get a freshly-signed URL (access_token is time-limited;
+    //      the stored vms_hls_url may have an expired token, especially for old recordings)
+    //   2. vms_hls_url stored in DB — fallback when VMS call fails (network outage, VMS down)
     cameras = await Promise.all(
       (slots || []).map(async s => {
         const cameraId = s.vms_camera_id || s.ipro_camera_id || `cam-${s.slot}`
         let hlsUrl: string | null = null
 
-        // 1. Already stored in DB
-        if (decl.vms_hls_url) {
-          hlsUrl = decl.vms_hls_url
-
-        // 2. On-demand via getVodUrl (OSS-VMS: camera name + unix timestamp → VOD HLS)
-        } else if (vms && decl.inspection_started_at && (s.vms_camera_id || s.ipro_camera_id)) {
+        // 1. On-demand via getVodUrl — always preferred: returns fresh access_token
+        if (vms && decl.inspection_started_at && (s.vms_camera_id || s.ipro_camera_id)) {
           try {
             const result = await vms.getVodUrl(
               cameraId,
@@ -107,7 +112,12 @@ export async function GET(
               decl.inspection_ended_at ?? undefined,
             )
             hlsUrl = result.hls_url || null
-          } catch { /* non-fatal */ }
+          } catch { /* non-fatal — fall through to stored URL */ }
+        }
+
+        // 2. Fallback: stored URL (may have expired token, but better than nothing)
+        if (!hlsUrl && decl.vms_hls_url) {
+          hlsUrl = decl.vms_hls_url
         }
 
         return { slot: s.slot, label: s.label, cameraId, hlsUrl }
