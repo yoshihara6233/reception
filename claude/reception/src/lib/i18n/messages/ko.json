@@ -158,6 +158,21 @@
     "loggingIn": "로그인 중...",
     "staff": "직원 관리",
     "consent": "동의 설정",
-    "preRegistrations": "사전 등록 관리"
+    "preRegistrations": "사전 등록 관리",
+    "logs": "작업 로그",
+    "manual": "운영 매뉴얼",
+    "persons": "방문자 관리",
+    "consentTemplate": "동의서 템플릿",
+    "managementSection": "{name} 관리",
+    "settingsSection": "설정",
+    "manualSection": "매뉴얼",
+    "storesList": "{name} 매장"
+  },
+  "baggage": {
+    "subtitle": "수하물 검사가 필요합니다",
+    "declarationLabel": "소지품을 신고해 주세요",
+    "declarationPlaceholder": "예: 노트북, 서류 등",
+    "submit": "신고하고 계속",
+    "skip": "건너뛰기"
   }
 }

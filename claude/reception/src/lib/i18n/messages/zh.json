@@ -158,6 +158,21 @@
     "loggingIn": "登录中...",
     "staff": "员工管理",
     "consent": "同意设置",
-    "preRegistrations": "预登记管理"
+    "preRegistrations": "预登记管理",
+    "logs": "操作日志",
+    "manual": "操作手册",
+    "persons": "访客管理",
+    "consentTemplate": "同意书模板",
+    "managementSection": "{name}管理",
+    "settingsSection": "设置",
+    "manualSection": "手册",
+    "storesList": "{name}门店"
+  },
+  "baggage": {
+    "subtitle": "需要进行行李检查",
+    "declarationLabel": "请申报您携带的物品",
+    "declarationPlaceholder": "例：笔记本电脑、文件等",
+    "submit": "申报并继续",
+    "skip": "跳过"
   }
 }

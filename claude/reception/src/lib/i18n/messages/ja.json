@@ -158,6 +158,21 @@
     "loggingIn": "ログイン中...",
     "staff": "スタッフ管理",
     "consent": "同意設定",
-    "preRegistrations": "事前登録管理"
+    "preRegistrations": "事前登録管理",
+    "logs": "操作ログ",
+    "manual": "操作マニュアル",
+    "persons": "来店者管理",
+    "consentTemplate": "同意書テンプレート",
+    "managementSection": "{name}管理",
+    "settingsSection": "設定",
+    "manualSection": "マニュアル",
+    "storesList": "{name}一覧"
+  },
+  "baggage": {
+    "subtitle": "荷物検査を行います",
+    "declarationLabel": "荷物の内容を申告してください",
+    "declarationPlaceholder": "例：ノートPC、書類など",
+    "submit": "申告して次へ",
+    "skip": "スキップ"
   }
 }

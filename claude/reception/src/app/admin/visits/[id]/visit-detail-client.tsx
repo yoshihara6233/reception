@@ -60,27 +60,66 @@ function HlsVideoPanel({
   const videoRef = useRef<HTMLVideoElement>(null)
   const [currentTime, setCurrentTime] = useState(0)
 
+  // Stable refs so HLS init effect doesn't re-fire when callbacks change identity
+  const onDurationChangeRef = useRef(onDurationChange)
+  const onTimeUpdateRef     = useRef(onTimeUpdate)
+  useEffect(() => { onDurationChangeRef.current = onDurationChange }, [onDurationChange])
+  useEffect(() => { onTimeUpdateRef.current     = onTimeUpdate     }, [onTimeUpdate])
+
+  // ── HLS 初期化 (hlsUrl が変わったときだけ再実行) ───────────────────────────
   useEffect(() => {
     if (!videoRef.current || !hlsUrl) return
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let hlsInstance: any = null
     const load = async () => {
       const Hls = (await import('hls.js')).default
+
+      // Native HLS (Safari) — durationchange で取得
       if (!Hls.isSupported()) {
-        if (videoRef.current) videoRef.current.src = hlsUrl
+        const v = videoRef.current!
+        v.src = hlsUrl
+        const onDc = () => {
+          if (isFinite(v.duration) && v.duration > 0) onDurationChangeRef.current?.(v.duration)
+        }
+        v.addEventListener('durationchange', onDc)
         return
       }
-      const hls = new Hls()
+
+      const hls = new Hls({ enableWorker: true })
       hlsInstance = hls
       hls.loadSource(hlsUrl)
       hls.attachMedia(videoRef.current!)
+
+      // LEVEL_LOADED: hls.js が全セグメントを把握した時点で totalduration が確定する
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      hls.on(Hls.Events.LEVEL_LOADED, (_e: any, data: any) => {
+        const total: number | undefined = data.details?.totalduration
+        if (total && isFinite(total) && total > 0) {
+          onDurationChangeRef.current?.(total)
+        }
+      })
+
+      // MANIFEST_PARSED: VOD の場合は videoElement の duration がすでに確定していることもある
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        if (videoRef.current) onDurationChange?.(videoRef.current.duration || 0)
+        const d = videoRef.current?.duration ?? 0
+        if (isFinite(d) && d > 0) onDurationChangeRef.current?.(d)
       })
     }
     load()
     return () => { hlsInstance?.destroy?.() }
-  }, [hlsUrl, onDurationChange])
+  }, [hlsUrl]) // onDurationChange を依存から除外 — ref 経由で最新値を参照
+
+  // ── video element の durationchange も購読 (hls.js 経由でも発火する) ────────
+  useEffect(() => {
+    const v = videoRef.current
+    if (!v) return
+    const handler = () => {
+      const d = v.duration
+      if (isFinite(d) && d > 0) onDurationChangeRef.current?.(d)
+    }
+    v.addEventListener('durationchange', handler)
+    return () => v.removeEventListener('durationchange', handler)
+  }, [])
 
   useEffect(() => {
     if (!videoRef.current) return
@@ -98,11 +137,11 @@ function HlsVideoPanel({
     if (!v) return
     const handler = () => {
       setCurrentTime(v.currentTime)
-      onTimeUpdate?.(v.currentTime)
+      onTimeUpdateRef.current?.(v.currentTime)
     }
     v.addEventListener('timeupdate', handler)
     return () => v.removeEventListener('timeupdate', handler)
-  }, [onTimeUpdate])
+  }, []) // onTimeUpdate を依存から除外 — ref 経由で最新値を参照
 
   return (
     <div className="relative aspect-video bg-black rounded-xl overflow-hidden">
@@ -153,6 +192,11 @@ function InlineRecordingViewer({ baggageId, visitId }: { baggageId: string; visi
   const fireToast = useCallback((msg: string) => {
     setToast(msg)
     setTimeout(() => setToast(null), 2500)
+  }, [])
+
+  // カメラ間で duration の最大値を採用 (cam1/cam2 で長さが微妙に異なる場合に備える)
+  const handleDurationChange = useCallback((d: number) => {
+    setDuration(prev => (d > prev ? d : prev))
   }, [])
 
   useEffect(() => {
@@ -255,7 +299,7 @@ function InlineRecordingViewer({ baggageId, visitId }: { baggageId: string; visi
                 playing={playing}
                 seekCmd={seekCmd}
                 inspectionStartedIso={inspectionStarted}
-                onDurationChange={d => { if (d > 0) setDuration(d) }}
+                onDurationChange={handleDurationChange}
                 onTimeUpdate={onTimeUpdate}
               />
             ) : (

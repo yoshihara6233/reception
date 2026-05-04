@@ -158,6 +158,21 @@
     "loggingIn": "Logging in...",
     "staff": "Staff",
     "consent": "Consent",
-    "preRegistrations": "Pre-Registrations"
+    "preRegistrations": "Pre-Registrations",
+    "logs": "Audit Logs",
+    "manual": "Manual",
+    "persons": "Visitor Management",
+    "consentTemplate": "Consent Template",
+    "managementSection": "{name} Mgmt",
+    "settingsSection": "Settings",
+    "manualSection": "Manual",
+    "storesList": "{name} Stores"
+  },
+  "baggage": {
+    "subtitle": "Baggage inspection required",
+    "declarationLabel": "Please declare your belongings",
+    "declarationPlaceholder": "e.g. Laptop, Documents",
+    "submit": "Declare and Continue",
+    "skip": "Skip"
   }
 }
