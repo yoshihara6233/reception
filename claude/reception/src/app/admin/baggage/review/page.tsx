@@ -312,13 +312,11 @@ function SelectPhase({
 
   return (
     <div>
-      <div className="mb-4">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold text-[#1e3a5f]">手荷物レビュー</h1>
         <VisitsNavBar />
       </div>
       <div className="max-w-xl mx-auto">
-      <div className="flex items-center gap-3 mb-6">
-        <h1 className="text-2xl font-bold text-[#1e3a5f]">手荷物レビュー</h1>
-      </div>
 
       {!loadingDates && totalPending > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4 mb-5">

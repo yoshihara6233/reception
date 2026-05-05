@@ -178,11 +178,6 @@ export default function MismatchPage() {
 
   return (
     <div>
-      {/* ── ナビゲーション ───────────────────────────────────────────── */}
-      <div style={{ marginBottom: 16 }}>
-        <VisitsNavBar />
-      </div>
-
       {/* ── ヘッダー ────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
@@ -214,8 +209,12 @@ export default function MismatchPage() {
           </p>
         </div>
 
-        {/* 日付選択 */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {/* 右側: ナビゲーション + 日付選択 */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
+          <VisitsNavBar />
+
+          {/* 日付選択 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
             onClick={() => {
               const d = new Date(date)
@@ -254,6 +253,7 @@ export default function MismatchPage() {
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}
           >›</button>
+          </div>
         </div>
       </div>
 
