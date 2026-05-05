@@ -65,6 +65,7 @@ export async function GET(
     label: string
     cameraId: string
     hlsUrl: string | null
+    _debug?: string
   }[] = []
   let vmsConnected = false
 
@@ -92,35 +93,53 @@ export async function GET(
     const vms = createVmsClientFromSettings(settings)
     vmsConnected = Boolean(vms)
 
-    // Resolve HLS URL for each camera slot
-    //
-    // Order of priority:
-    //   1. getVodUrl() — always call VMS to get a freshly-signed URL (access_token is time-limited;
-    //      the stored vms_hls_url may have an expired token, especially for old recordings)
-    //   2. vms_hls_url stored in DB — fallback when VMS call fails (network outage, VMS down)
+    console.log(`[baggage/${id}] storeId=${storeId} vmsConnected=${vmsConnected} slots=${slots?.length ?? 0} inspection_started_at=${decl.inspection_started_at} vms_hls_url_stored=${!!decl.vms_hls_url}`)
+
     cameras = await Promise.all(
       (slots || []).map(async s => {
         const cameraId = s.vms_camera_id || s.ipro_camera_id || `cam-${s.slot}`
         let hlsUrl: string | null = null
+        let debugNote = ''
+
+        const canCallVod = Boolean(vms && decl.inspection_started_at && (s.vms_camera_id || s.ipro_camera_id))
+
+        if (!vms) {
+          debugNote = 'vms_not_configured'
+        } else if (!decl.inspection_started_at) {
+          debugNote = 'no_inspection_started_at'
+        } else if (!s.vms_camera_id && !s.ipro_camera_id) {
+          debugNote = 'no_camera_id_in_store_cameras'
+        }
 
         // 1. On-demand via getVodUrl — always preferred: returns fresh access_token
-        if (vms && decl.inspection_started_at && (s.vms_camera_id || s.ipro_camera_id)) {
+        if (canCallVod) {
           try {
-            const result = await vms.getVodUrl(
+            const result = await vms!.getVodUrl(
               cameraId,
-              decl.inspection_started_at,
+              decl.inspection_started_at!,
               decl.inspection_ended_at ?? undefined,
             )
             hlsUrl = result.hls_url || null
-          } catch { /* non-fatal — fall through to stored URL */ }
+            debugNote = hlsUrl ? 'vodUrl_ok' : 'vodUrl_returned_empty'
+            console.log(`[baggage/${id}] cam=${cameraId} getVodUrl → ${hlsUrl ? hlsUrl.slice(0, 80) : 'null'}`)
+          } catch (e) {
+            debugNote = `vodUrl_error: ${e instanceof Error ? e.message : String(e)}`
+            console.error(`[baggage/${id}] cam=${cameraId} getVodUrl failed:`, e)
+          }
         }
 
         // 2. Fallback: stored URL (may have expired token, but better than nothing)
         if (!hlsUrl && decl.vms_hls_url) {
           hlsUrl = decl.vms_hls_url
+          debugNote += '+fallback_stored_url'
+          console.log(`[baggage/${id}] cam=${cameraId} using stored vms_hls_url (may be expired)`)
         }
 
-        return { slot: s.slot, label: s.label, cameraId, hlsUrl }
+        if (!hlsUrl) {
+          console.log(`[baggage/${id}] cam=${cameraId} no hlsUrl available. debug=${debugNote}`)
+        }
+
+        return { slot: s.slot, label: s.label, cameraId, hlsUrl, _debug: debugNote || 'unknown' }
       })
     )
   }
@@ -139,6 +158,6 @@ export async function GET(
     inspection_started_at: decl.inspection_started_at,
     inspection_ended_at: decl.inspection_ended_at,
     vms_connected: vmsConnected,
-    cameras,
+    cameras: cameras.map(({ _debug, ...c }) => ({ ...c, _debug })),
   })
 }

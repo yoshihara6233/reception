@@ -11,6 +11,7 @@ type CameraInfo = {
   label: string
   cameraId: string
   hlsUrl: string | null
+  _debug?: string
 }
 
 type DeclarationData = {
@@ -117,13 +118,18 @@ function HlsVideoPanel({
       // ERROR: ネットワーク障害・アクセストークン期限切れ（403）など
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       hls.on(Hls.Events.ERROR, (_e: any, data: any) => {
+        const code: number | undefined = data.response?.code
+        console.warn('[HLS ERROR]', data.type, data.details, 'fatal:', data.fatal, 'code:', code)
         if (data.fatal) {
           const type = data.type === 'networkError'
-            ? 'ネットワークエラー — VMS に接続できません（アクセストークンが期限切れの可能性があります）'
+            ? `ネットワークエラー (${code ?? '?'}) — VMS に接続できません（アクセストークンが期限切れの可能性があります）`
             : data.type === 'mediaError'
             ? 'メディアエラー — 録画データの読み込みに失敗しました'
             : `HLS エラー: ${data.details ?? '不明'}`
           setHlsError(type)
+        } else if (data.type === 'networkError' && (code === 403 || code === 401)) {
+          // Non-fatal 403/401 on a segment = expired access_token
+          setHlsError(`セグメント取得 ${code} — アクセストークンが期限切れです。ページを再読み込みまたは「再取得」してください。`)
         }
       })
     }
@@ -219,6 +225,8 @@ function InlineRecordingViewer({ baggageId, visitId }: { baggageId: string; visi
   const seekingRef = useRef(false)
   const [duration, setDuration] = useState(0)
   const [toast, setToast]       = useState<string | null>(null)
+  const [showDebug, setShowDebug] = useState(false)
+  const [refreshCount, setRefreshCount] = useState(0)
   const timelineRef = useRef<HTMLDivElement>(null)
 
   const fireToast = useCallback((msg: string) => {
@@ -231,13 +239,28 @@ function InlineRecordingViewer({ baggageId, visitId }: { baggageId: string; visi
     setDuration(prev => (d > prev ? d : prev))
   }, [])
 
+  // 再取得: URL を refresh させるためカウンターを上げる
+  const handleRefresh = useCallback(() => {
+    setLoading(true)
+    setLoadErr(null)
+    setData(null)
+    setDuration(0)
+    setPosition(0)
+    setPlaying(false)
+    setRefreshCount(c => c + 1)
+  }, [])
+
   useEffect(() => {
     fetch(`/api/v1/admin/baggage/${baggageId}`)
       .then(r => r.ok ? r.json() : Promise.reject(r))
-      .then((d: DeclarationData) => setData(d))
+      .then((d: DeclarationData) => {
+        console.log('[InlineRecordingViewer] API response:', d)
+        setData(d)
+      })
       .catch(() => setLoadErr('録画情報の読み込みに失敗しました'))
       .finally(() => setLoading(false))
-  }, [baggageId])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baggageId, refreshCount])
 
   const cameras: CameraInfo[] = data?.cameras?.length
     ? data.cameras
@@ -288,7 +311,7 @@ function InlineRecordingViewer({ baggageId, visitId }: { baggageId: string; visi
     <div className="space-y-2">
       {/* ヘッダー */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {anyHls ? (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-medium">
               ✅ 映像あり
@@ -310,6 +333,19 @@ function InlineRecordingViewer({ baggageId, visitId }: { baggageId: string; visi
               })}〜
             </span>
           )}
+          <button
+            onClick={handleRefresh}
+            className="text-[10px] text-gray-400 hover:text-[var(--ge-accent)] border border-gray-200 rounded px-1.5 py-0.5"
+            title="URL を再取得して HLS を再初期化"
+          >
+            🔄 再取得
+          </button>
+          <button
+            onClick={() => setShowDebug(v => !v)}
+            className="text-[10px] text-gray-300 hover:text-gray-500 border border-gray-100 rounded px-1.5 py-0.5"
+          >
+            {showDebug ? '診断を隠す' : '診断'}
+          </button>
         </div>
         <Link
           href={`/admin/baggage/${baggageId}/recording?visitId=${visitId}`}
@@ -319,6 +355,24 @@ function InlineRecordingViewer({ baggageId, visitId }: { baggageId: string; visi
           別画面で開く ↗
         </Link>
       </div>
+
+      {/* 診断パネル */}
+      {showDebug && data && (
+        <div className="bg-gray-900 rounded-xl p-3 text-[10px] font-mono text-gray-300 space-y-1">
+          <p className="text-gray-500 mb-1">▼ 診断情報 (VMS URL 解決)</p>
+          <p>vms_connected: <span className={vmsConnected ? 'text-emerald-400' : 'text-red-400'}>{String(vmsConnected)}</span></p>
+          <p>inspection_started_at: <span className="text-yellow-300">{inspectionStarted ?? 'null'}</span></p>
+          {cameras.map(c => (
+            <div key={c.slot} className="mt-1 pl-2 border-l border-gray-700">
+              <p className="text-gray-400">カメラ{c.slot} [{c.label}] cameraId={c.cameraId || '(未設定)'}</p>
+              <p>debug: <span className="text-yellow-300">{(c as CameraInfo & {_debug?: string})._debug ?? '—'}</span></p>
+              <p>hlsUrl: <span className={c.hlsUrl ? 'text-emerald-400' : 'text-red-400'}>
+                {c.hlsUrl ? c.hlsUrl.slice(0, 100) + (c.hlsUrl.length > 100 ? '…' : '') : 'null'}
+              </span></p>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* カメラ映像 */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
