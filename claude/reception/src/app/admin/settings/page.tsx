@@ -8,6 +8,8 @@ interface Settings {
   require_face_photo: string
   require_baggage_inspection_checkin: string
   require_baggage_inspection_checkout: string
+  baggage_review_checkin: boolean
+  baggage_review_checkout: boolean
   visit_purposes: string[]
   photo_retention_days: number
   visit_retention_days: number
@@ -28,6 +30,8 @@ const defaultSettings: Settings = {
   require_face_photo: 'optional',
   require_baggage_inspection_checkin: 'none',
   require_baggage_inspection_checkout: 'none',
+  baggage_review_checkin: true,
+  baggage_review_checkout: true,
   visit_purposes: ['定期配送', 'メンテナンス', '商談', '監査', 'その他'],
   photo_retention_days: 90,
   visit_retention_days: 365,
@@ -67,6 +71,28 @@ function PillGroup({ value, options, onChange, disabled }: PillGroupProps) {
         </button>
       ))}
     </div>
+  )
+}
+
+// ── トグルスイッチ ────────────────────────────────────────────────────────────
+
+function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => !disabled && onChange(!checked)}
+      className={`relative inline-flex h-6 w-11 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+        checked ? 'bg-[#1e3a5f]' : 'bg-gray-200'
+      } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+    >
+      <span
+        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+          checked ? 'translate-x-5' : 'translate-x-0'
+        }`}
+      />
+    </button>
   )
 }
 
@@ -439,6 +465,52 @@ export default function SettingsPage() {
                 options={BAGGAGE_OPTIONS}
                 onChange={v => update('require_baggage_inspection_checkout', v)}
               />
+            </SettingRow>
+          </div>
+        </div>
+
+        {/* ── 手荷物検査レビュー ──────────────────────────────────────── */}
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <div className="px-6 pt-5 pb-2 border-b border-gray-100">
+            <SectionHeader icon="🔍" title="手荷物検査レビュー" desc="管理者によるレビュー審査が必要なタイミングを設定します" />
+          </div>
+          <div className="px-6">
+            <SettingRow
+              label="入室時のレビュー"
+              desc="入室時の手荷物検査結果をレビュー対象にする"
+              overridden={selectedStore !== 'tenant' && isOverridden('baggage_review_checkin', overrideKeys)}
+              tenantValue={tenantSettings.baggage_review_checkin ? 'ON' : 'OFF'}
+              showReset={selectedStore !== 'tenant'}
+              onReset={() => resetField('baggage_review_checkin')}
+            >
+              <div className="flex items-center gap-2">
+                <Toggle
+                  checked={settings.baggage_review_checkin}
+                  onChange={v => update('baggage_review_checkin', v)}
+                />
+                <span className="text-xs font-semibold min-w-[24px]" style={{ color: settings.baggage_review_checkin ? '#1e3a5f' : '#9ca3af' }}>
+                  {settings.baggage_review_checkin ? 'ON' : 'OFF'}
+                </span>
+              </div>
+            </SettingRow>
+
+            <SettingRow
+              label="退室時のレビュー"
+              desc="退室時の手荷物検査結果をレビュー対象にする"
+              overridden={selectedStore !== 'tenant' && isOverridden('baggage_review_checkout', overrideKeys)}
+              tenantValue={tenantSettings.baggage_review_checkout ? 'ON' : 'OFF'}
+              showReset={selectedStore !== 'tenant'}
+              onReset={() => resetField('baggage_review_checkout')}
+            >
+              <div className="flex items-center gap-2">
+                <Toggle
+                  checked={settings.baggage_review_checkout}
+                  onChange={v => update('baggage_review_checkout', v)}
+                />
+                <span className="text-xs font-semibold min-w-[24px]" style={{ color: settings.baggage_review_checkout ? '#1e3a5f' : '#9ca3af' }}>
+                  {settings.baggage_review_checkout ? 'ON' : 'OFF'}
+                </span>
+              </div>
             </SettingRow>
           </div>
         </div>
