@@ -1098,21 +1098,19 @@ function VisitsPageInner() {
                     </button>
                   )}
                 </div>
-              ) : (
-                displayedVisits.map(visit => {
+              ) : (() => {
+                const listEvents = buildTimeline(displayedVisits, sortDir)
+                return listEvents.map(ev => {
+                  const visit = ev.visit
                   const isActive = selectedVisitId === visit.id
-                  const statusStripe: Record<string, string> = {
-                    checked_in:  '#22c55e',
-                    checked_out: '#94a3b8',
-                    auto_closed: '#f59e0b',
-                  }
-                  const stripeColor = statusStripe[visit.status] ?? '#cbd5e1'
+                  const isCheckin = ev.type === 'checkin'
+                  const stripeColor = isCheckin ? '#22c55e' : '#94a3b8'
                   return (
                     <div
-                      key={visit.id}
+                      key={ev.key}
                       onClick={() => setSelectedVisitId(visit.id)}
                       style={{
-                        display: 'flex', gap: 10, padding: '10px 12px 10px 14px',
+                        display: 'flex', gap: 8, padding: '8px 12px 8px 14px',
                         cursor: 'pointer',
                         borderBottom: '1px solid var(--ge-paper-2)',
                         borderLeft: `3px solid ${isActive ? 'var(--ge-accent)' : stripeColor}`,
@@ -1120,6 +1118,19 @@ function VisitsPageInner() {
                         transition: 'background 0.08s',
                       }}
                     >
+                      {/* 入室/退室バッジ */}
+                      <div style={{ flexShrink: 0, paddingTop: 2 }}>
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 2,
+                          padding: '2px 5px', borderRadius: 4,
+                          font: '600 9px/1.2 var(--font-sans)',
+                          ...(isCheckin
+                            ? { background: '#dcfce7', color: '#15803d' }
+                            : { background: '#f1f5f9', color: '#64748b' }),
+                        }}>
+                          {isCheckin ? '↓入室' : '↑退室'}
+                        </span>
+                      </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{
                           font: '500 12px/1.3 var(--font-sans)',
@@ -1129,32 +1140,31 @@ function VisitsPageInner() {
                           {visit.visitors?.name ?? '—'}
                         </div>
                         <div style={{
-                          font: '400 11px/1.3 var(--font-sans)', color: 'var(--ge-ink-3)',
-                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2,
+                          font: '400 10px/1.3 var(--font-sans)', color: 'var(--ge-ink-3)',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1,
                         }}>
                           {visit.visitors?.company ?? '—'}
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3 }}>
                           <span style={{ font: '400 10px/1 var(--font-mono)', color: 'var(--ge-ink-4)', fontVariantNumeric: 'tabular-nums' }}>
-                            {new Date(visit.check_in_at).toLocaleString(dateLocale, {
+                            {new Date(ev.time).toLocaleString(dateLocale, {
                               month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
                             })}
                           </span>
                           {visit.stores?.name && (
-                            <span style={{ font: '400 10px/1 var(--font-sans)', color: 'var(--ge-ink-4)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 80 }}>
+                            <span style={{ font: '400 10px/1 var(--font-sans)', color: 'var(--ge-ink-4)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 70 }}>
                               {visit.stores.name}
                             </span>
                           )}
                         </div>
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flexShrink: 0 }}>
-                        <StatusBadge status={visit.status} t={t} />
                         <BaggageBadge decls={visit.baggage_declarations} />
                       </div>
                     </div>
                   )
                 })
-              )}
+              })()}
             </div>
 
             {/* ページネーション */}
