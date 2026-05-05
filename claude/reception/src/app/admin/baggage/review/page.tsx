@@ -204,13 +204,6 @@ function CameraViewer({ baggageId }: { baggageId: string }) {
         <button className="text-xs text-white/30 hover:text-white/60 px-2 py-1 rounded hover:bg-white/10 transition-colors">
           🔖 ブックマーク
         </button>
-        <Link
-          href={`/admin/baggage/${baggageId}/recording`}
-          target="_blank"
-          className="ml-auto text-xs text-[var(--ge-accent)]/50 hover:text-[var(--ge-accent)] transition-colors"
-        >
-          別画面で開く ↗
-        </Link>
       </div>
     </div>
   )
