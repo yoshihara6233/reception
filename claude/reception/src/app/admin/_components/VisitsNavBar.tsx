@@ -3,13 +3,12 @@
 /**
  * 来訪管理ページ共通ナビゲーションバー
  *
- * テーブル / タイムライン / アンマッチ確認 / 手荷物レビュー
- * の 4 タブを各ページに統一して表示する。
+ * 来訪一覧 / アンマッチ確認 / 手荷物レビュー
  */
 
 import { Suspense } from 'react'
 import Link from 'next/link'
-import { usePathname, useSearchParams } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 
 type Tab = {
   key: string
@@ -20,20 +19,16 @@ type Tab = {
 }
 
 const TABS: Tab[] = [
-  { key: 'table',          href: '/admin/visits',           label: 'テーブル',       icon: '📋', variant: 'normal'  },
-  { key: 'timeline',       href: '/admin/visits?view=timeline', label: 'タイムライン', icon: '⏱', variant: 'normal'  },
-  { key: 'mismatch',       href: '/admin/visits/mismatch',  label: 'アンマッチ確認', icon: '⚠️', variant: 'normal'  },
-  { key: 'baggage-review', href: '/admin/baggage/review',   label: '手荷物レビュー', icon: '🔍', variant: 'normal'  },
+  { key: 'table',          href: '/admin/visits',          label: '来訪一覧',       icon: '📋', variant: 'normal'  },
+  { key: 'mismatch',       href: '/admin/visits/mismatch', label: 'アンマッチ確認', icon: '⚠️', variant: 'normal'  },
+  { key: 'baggage-review', href: '/admin/baggage/review',  label: '手荷物レビュー', icon: '🔍', variant: 'normal'  },
 ]
 
 function NavBarInner() {
-  const pathname     = usePathname()
-  const searchParams = useSearchParams()
-  const view         = searchParams.get('view')
+  const pathname = usePathname()
 
   function isActive(tab: Tab): boolean {
-    if (tab.key === 'table')          return pathname === '/admin/visits' && view !== 'timeline'
-    if (tab.key === 'timeline')       return pathname === '/admin/visits' && view === 'timeline'
+    if (tab.key === 'table')          return pathname === '/admin/visits'
     if (tab.key === 'mismatch')       return pathname === '/admin/visits/mismatch'
     if (tab.key === 'baggage-review') return pathname.startsWith('/admin/baggage/review')
     return false

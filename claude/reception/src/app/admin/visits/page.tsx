@@ -2,7 +2,7 @@
 
 import { Suspense, useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
+
 import { useLocale } from '@/lib/i18n/useLocale'
 import { VisitsNavBar } from '@/app/admin/_components/VisitsNavBar'
 import { InlineRecordingViewer, BaggageReviewControls } from '@/app/admin/_components/baggage-viewer'
@@ -570,8 +570,6 @@ function buildTimeline(visits: Visit[], sortDir: SortDir = 'desc'): TimelineEven
 function VisitsPageInner() {
   const { t, locale } = useLocale()
   const dateLocale = locale === 'zh' ? 'zh-CN' : locale === 'ko' ? 'ko-KR' : locale === 'en' ? 'en-US' : 'ja-JP'
-  const searchParams = useSearchParams()
-  const viewMode = searchParams.get('view') === 'timeline' ? 'timeline' : 'table'
 
   const [visits,    setVisits]    = useState<Visit[]>([])
   const [total,     setTotal]     = useState(0)
@@ -590,9 +588,6 @@ function VisitsPageInner() {
   // 手荷物フィルター（クライアントサイド）
   const [baggageFilter, setBaggageFilter] = useState<'' | 'flagged' | 'pending' | 'cleared' | 'none'>('')
 
-  // タイムライン種別フィルター（クライアントサイド）
-  const [timelineTypeFilter, setTimelineTypeFilter] = useState<'' | 'checkin' | 'checkout'>('')
-
   const [filters,  setFilters]  = useState<Filters>(EMPTY_FILTERS)
   const [sortCol,  setSortCol]  = useState<SortCol>('check_in_at')
   const [sortDir,  setSortDir]  = useState<SortDir>('desc')
@@ -600,7 +595,7 @@ function VisitsPageInner() {
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const perPage = 20
   const totalPages = Math.ceil(total / perPage)
-  const hasFilters = Object.values(filters).some(v => v !== '') || !!baggageFilter || !!timelineTypeFilter
+  const hasFilters = Object.values(filters).some(v => v !== '') || !!baggageFilter
 
   // ── 店舗一覧・目的一覧 ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -659,7 +654,6 @@ function VisitsPageInner() {
   const clearFilters = () => {
     setFilters(EMPTY_FILTERS)
     setBaggageFilter('')
-    setTimelineTypeFilter('')
     applyFilters(EMPTY_FILTERS, sortCol, sortDir)
   }
 
@@ -819,192 +813,8 @@ function VisitsPageInner() {
         </div>
       )}
 
-      {/* ── タイムライン ─────────────────────────────────────────────── */}
-      {viewMode === 'timeline' && (() => {
-        const tlEvents = buildTimeline(displayedVisits, sortDir).filter(ev =>
-          !timelineTypeFilter || ev.type === timelineTypeFilter
-        )
-        const selectStyle: React.CSSProperties = {
-          width: '100%', padding: '4px 8px',
-          font: '400 11px/1.4 var(--font-sans)', color: 'var(--ge-ink-3)',
-          background: '#fff', border: '1px solid var(--ge-line)', borderRadius: 4, outline: 'none',
-        }
-        return (
-          <div style={{ background: '#fff', borderRadius: 6, border: '1px solid var(--ge-line)', overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-              <thead>
-                <tr style={{ background: 'var(--ge-paper)', borderBottom: '1px solid var(--ge-line)' }}>
-                  <SortTh col="check_in_at" label="時刻" {...sortProps} />
-                  <th style={{ padding: '8px 12px', textAlign: 'left', font: '500 11px/1 var(--font-sans)', color: 'var(--ge-ink-4)', whiteSpace: 'nowrap' }}>種別</th>
-                  <SortTh col={null} label={t('admin.visitor')} {...sortProps} />
-                  <SortTh col={null} label={t('admin.company')} {...sortProps} />
-                  <SortTh col="purpose" label={t('admin.purpose')} {...sortProps} />
-                  <SortTh col={null} label={t('admin.store')} {...sortProps} />
-                  <th style={{ width: 80 }} />
-                </tr>
-                <tr style={{ background: '#fff', borderBottom: '1px solid var(--ge-line)' }}>
-                  <td style={{ padding: '4px 6px', minWidth: 160 }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                      <FilterInput value={filters.dateFrom} onChange={v => updateFilter('dateFrom', v)} type="date" />
-                      <FilterInput value={filters.dateTo}   onChange={v => updateFilter('dateTo',   v)} type="date" />
-                    </div>
-                  </td>
-                  <td style={{ padding: '4px 6px', minWidth: 100 }}>
-                    <select
-                      value={timelineTypeFilter}
-                      onChange={e => setTimelineTypeFilter(e.target.value as typeof timelineTypeFilter)}
-                      style={{ ...selectStyle, color: timelineTypeFilter ? 'var(--ge-ink)' : 'var(--ge-ink-4)' }}
-                    >
-                      <option value="">すべて</option>
-                      <option value="checkin">↓ 入室</option>
-                      <option value="checkout">↑ 退室</option>
-                    </select>
-                  </td>
-                  <td style={{ padding: '4px 6px' }}>
-                    <FilterInput value={filters.q} onChange={v => updateFilter('q', v)} placeholder="氏名で絞込" />
-                  </td>
-                  <td style={{ padding: '4px 6px' }}>
-                    <FilterInput value={filters.company} onChange={v => updateFilter('company', v)} placeholder="会社名で絞込" />
-                  </td>
-                  <td style={{ padding: '4px 6px' }}>
-                    <select
-                      value={filters.purpose}
-                      onChange={e => updateFilter('purpose', e.target.value)}
-                      style={{ ...selectStyle, color: filters.purpose ? 'var(--ge-ink)' : 'var(--ge-ink-4)' }}
-                    >
-                      <option value="">すべて</option>
-                      {purposes.map(p => <option key={p} value={p}>{p}</option>)}
-                    </select>
-                  </td>
-                  <td style={{ padding: '4px 6px' }}>
-                    <select
-                      value={filters.storeId}
-                      onChange={e => updateFilter('storeId', e.target.value)}
-                      style={selectStyle}
-                    >
-                      <option value="">すべて</option>
-                      {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
-                  </td>
-                  <td />
-                </tr>
-              </thead>
-
-              <tbody>
-                {loading ? (
-                  [...Array(6)].map((_, i) => (
-                    <tr key={i} style={{ borderBottom: '1px solid var(--ge-paper-2)' }}>
-                      {[...Array(7)].map((_, j) => (
-                        <td key={j} style={{ padding: '10px 12px' }}>
-                          <div style={{
-                            height: 12, borderRadius: 3, background: 'var(--ge-paper-2)',
-                            width: `${50 + (i * j + 13) % 40}%`,
-                            animation: 'pulse 1.5s ease-in-out infinite',
-                          }} />
-                        </td>
-                      ))}
-                    </tr>
-                  ))
-                ) : tlEvents.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', padding: '48px 0', color: 'var(--ge-ink-4)', font: '400 13px/1 var(--font-sans)' }}>
-                      {hasFilters || timelineTypeFilter ? (
-                        <div>
-                          <p style={{ marginBottom: 8 }}>条件に一致するイベントがありません</p>
-                          <button
-                            onClick={clearFilters}
-                            style={{ font: '500 11px/1 var(--font-sans)', color: 'var(--ge-accent)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
-                          >
-                            絞り込みをクリア
-                          </button>
-                        </div>
-                      ) : t('admin.noVisits')}
-                    </td>
-                  </tr>
-                ) : tlEvents.map(ev => {
-                  const isCheckout    = ev.type === 'checkout'
-                  const isCheckoutOnly = ev.visit.purpose === '__checkout_only__'
-                  return (
-                    <tr
-                      key={ev.key}
-                      style={{
-                        borderBottom: '1px solid var(--ge-paper-2)',
-                        background: isCheckout ? '#f0fdf4' : '#eff6ff',
-                      }}
-                    >
-                      <td style={{ padding: '8px 12px', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', color: 'var(--ge-ink-3)', font: '500 11px/1.3 var(--font-mono)' }}>
-                        {new Date(ev.time).toLocaleString(dateLocale, {
-                          month: 'short', day: 'numeric',
-                          hour: '2-digit', minute: '2-digit', second: '2-digit',
-                        })}
-                      </td>
-                      <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>
-                        <span style={{
-                          display: 'inline-flex', alignItems: 'center', gap: 4,
-                          padding: '2px 8px', borderRadius: 999,
-                          font: '600 11px/1.4 var(--font-sans)',
-                          background: isCheckout ? '#dcfce7' : '#dbeafe',
-                          color: isCheckout ? '#15803d' : '#1d4ed8',
-                        }}>
-                          {isCheckout ? '↑ 退室' : '↓ 入室'}
-                          {isCheckoutOnly && (
-                            <span style={{ font: '500 10px/1 var(--font-sans)', color: '#9a3412', marginLeft: 2 }}>※</span>
-                          )}
-                        </span>
-                      </td>
-                      <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>
-                        <Link
-                          href={`/admin/visits/${ev.visit.id}`}
-                          style={{ font: '500 12px/1.3 var(--font-sans)', color: 'var(--ge-accent)', textDecoration: 'none' }}
-                        >
-                          {ev.visit.visitors?.name ?? '—'}
-                        </Link>
-                      </td>
-                      <td style={{ padding: '8px 12px', color: 'var(--ge-ink-2)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {ev.visit.visitors?.company ?? '—'}
-                      </td>
-                      <td style={{ padding: '8px 12px', color: isCheckoutOnly ? '#9a3412' : 'var(--ge-ink-2)', whiteSpace: 'nowrap' }}>
-                        {isCheckoutOnly ? '退室のみ ※' : ev.visit.purpose}
-                      </td>
-                      <td style={{ padding: '8px 12px', color: 'var(--ge-ink-3)', whiteSpace: 'nowrap' }}>
-                        {ev.visit.stores?.name ?? '—'}
-                      </td>
-                      <td style={{ padding: '8px 12px', textAlign: 'right' }}>
-                        <Link
-                          href={`/admin/visits/${ev.visit.id}`}
-                          style={{
-                            display: 'inline-flex', alignItems: 'center', gap: 4,
-                            padding: '3px 8px', borderRadius: 4,
-                            font: '500 11px/1 var(--font-sans)',
-                            color: 'var(--ge-accent)', background: 'var(--ge-accent-soft)',
-                            border: '1px solid var(--ge-accent-line)', textDecoration: 'none',
-                          }}
-                        >詳細 →</Link>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-
-            <div style={{ padding: '8px 14px', borderTop: '1px solid var(--ge-line)', font: '400 10px/1 var(--font-sans)', color: 'var(--ge-ink-4)' }}>
-              ※ 入室記録なしで退室した来訪者です。
-              <Link href="/admin/visits/mismatch" style={{ marginLeft: 8, color: 'var(--ge-accent)', textDecoration: 'none' }}>
-                アンマッチ詳細 →
-              </Link>
-              {tlEvents.length > 0 && (
-                <span style={{ marginLeft: 16 }}>
-                  {tlEvents.length} イベント表示中
-                </span>
-              )}
-            </div>
-          </div>
-        )
-      })()}
-
-      {/* ── スプリットペイン（テーブルモード） ──────────────────────────── */}
-      {viewMode === 'table' && (
-        <div style={{
+      {/* ── スプリットペイン ──────────────────────────── */}
+      <div style={{
           display: 'flex',
           marginLeft: -32, marginRight: -32, marginBottom: -32,
           height: 'calc(100vh - 112px)',
@@ -1214,7 +1024,6 @@ function VisitsPageInner() {
             )}
           </div>
         </div>
-      )}
 
       <style>{`
         @keyframes pulse {
