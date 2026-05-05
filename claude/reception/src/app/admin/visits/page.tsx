@@ -350,17 +350,6 @@ function VisitDetailPanel({
             >
               🔒 PDF出力
             </a>
-            <Link
-              href={`/admin/visits/${visitId}`}
-              style={{
-                padding: '4px 10px', borderRadius: 5,
-                font: '500 11px/1 var(--font-sans)', color: '#1e3a5f',
-                background: '#eff6ff', border: '1px solid #bfdbfe',
-                textDecoration: 'none', whiteSpace: 'nowrap',
-              }}
-            >
-              全詳細 →
-            </Link>
           </div>
         </div>
       </div>
