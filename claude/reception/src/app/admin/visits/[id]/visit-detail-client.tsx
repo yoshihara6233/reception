@@ -347,13 +347,6 @@ export function InlineRecordingViewer({ baggageId, visitId }: { baggageId: strin
             {showDebug ? '診断を隠す' : '診断'}
           </button>
         </div>
-        <Link
-          href={`/admin/baggage/${baggageId}/recording?visitId=${visitId}`}
-          target="_blank"
-          className="text-xs text-[var(--ge-accent)] hover:underline"
-        >
-          別画面で開く ↗
-        </Link>
       </div>
 
       {/* 診断パネル */}
