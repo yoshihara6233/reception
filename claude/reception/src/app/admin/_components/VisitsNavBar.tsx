@@ -22,7 +22,7 @@ type Tab = {
 const TABS: Tab[] = [
   { key: 'table',          href: '/admin/visits',           label: 'テーブル',       icon: '📋', variant: 'normal'  },
   { key: 'timeline',       href: '/admin/visits?view=timeline', label: 'タイムライン', icon: '⏱', variant: 'normal'  },
-  { key: 'mismatch',       href: '/admin/visits/mismatch',  label: 'アンマッチ確認', icon: '⚠️', variant: 'warning' },
+  { key: 'mismatch',       href: '/admin/visits/mismatch',  label: 'アンマッチ確認', icon: '⚠️', variant: 'normal'  },
   { key: 'baggage-review', href: '/admin/baggage/review',   label: '手荷物レビュー', icon: '🔍', variant: 'normal'  },
 ]
 
