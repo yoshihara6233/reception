@@ -366,38 +366,32 @@ function VisitDetailPanel({
       </div>
 
       {/* ── 来訪情報 ── */}
-      <div className="bg-white rounded-2xl shadow-sm p-5 mb-4">
-        <p style={{ font: '600 11px/1 var(--font-sans)', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>
-          来訪情報
-        </p>
-        <dl style={{ display: 'grid', gridTemplateColumns: '100px 1fr', rowGap: 10 }}>
-          <dt style={infoLabelStyle}>目的</dt>
-          <dd style={infoValueStyle}>{detail.purpose}</dd>
-          <dt style={infoLabelStyle}>店舗</dt>
-          <dd style={infoValueStyle}>{detail.store_name ?? '—'}</dd>
-          {detail.area_name && (<>
-            <dt style={infoLabelStyle}>エリア</dt>
-            <dd style={infoValueStyle}>{detail.area_name}</dd>
-          </>)}
-          <dt style={infoLabelStyle}>入室</dt>
-          <dd style={{ ...infoValueStyle, fontVariantNumeric: 'tabular-nums' }}>
-            {new Date(detail.check_in_at).toLocaleString(dateLocale)}
-          </dd>
-          <dt style={infoLabelStyle}>退室</dt>
-          <dd style={{ ...infoValueStyle, fontVariantNumeric: 'tabular-nums' }}>
-            {detail.check_out_at
-              ? new Date(detail.check_out_at).toLocaleString(dateLocale)
-              : <span style={{ color: '#d1d5db' }}>未退室</span>}
-          </dd>
-          {detail.visitor?.phone && (<>
-            <dt style={infoLabelStyle}>電話番号</dt>
-            <dd style={infoValueStyle}>{detail.visitor.phone}</dd>
-          </>)}
-          {detail.visitor?.email && (<>
-            <dt style={infoLabelStyle}>メール</dt>
-            <dd style={{ ...infoValueStyle, wordBreak: 'break-all' }}>{detail.visitor.email}</dd>
-          </>)}
-        </dl>
+      <div className="bg-white rounded-2xl shadow-sm px-5 py-3 mb-4">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 0, flexWrap: 'wrap' }}>
+          {[
+            { label: '目的', value: detail.purpose },
+            { label: '店舗', value: detail.store_name ?? '—' },
+            ...(detail.area_name ? [{ label: 'エリア', value: detail.area_name }] : []),
+            { label: '入室', value: new Date(detail.check_in_at).toLocaleString(dateLocale) },
+            { label: '退室', value: detail.check_out_at ? new Date(detail.check_out_at).toLocaleString(dateLocale) : null },
+            ...(detail.visitor?.phone ? [{ label: '電話番号', value: detail.visitor.phone }] : []),
+            ...(detail.visitor?.email ? [{ label: 'メール', value: detail.visitor.email }] : []),
+          ].map((item, i, arr) => (
+            <div key={item.label} style={{ display: 'flex', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, padding: '0 12px' }}>
+                <span style={{ font: '400 11px/1 var(--font-sans)', color: '#9ca3af', whiteSpace: 'nowrap' }}>
+                  {item.label}
+                </span>
+                <span style={{ font: '500 12px/1 var(--font-sans)', color: 'var(--ge-ink)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+                  {item.value ?? <span style={{ color: '#d1d5db' }}>未退室</span>}
+                </span>
+              </div>
+              {i < arr.length - 1 && (
+                <span style={{ width: 1, height: 14, background: '#e2e8f0', flexShrink: 0 }} />
+              )}
+            </div>
+          ))}
+        </div>
 
         {/* 退室処理ボタン */}
         {detail.status === 'checked_in' && (
