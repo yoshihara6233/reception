@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useLocale } from '@/lib/i18n/useLocale'
 import { VisitsNavBar } from '@/app/admin/_components/VisitsNavBar'
-import { InlineRecordingViewer, BaggageReviewControls } from '@/app/admin/visits/[id]/visit-detail-client'
+import { InlineRecordingViewer, BaggageReviewControls } from '@/app/admin/_components/baggage-viewer'
 
 // ── 型 ────────────────────────────────────────────────────────────────────────
 
