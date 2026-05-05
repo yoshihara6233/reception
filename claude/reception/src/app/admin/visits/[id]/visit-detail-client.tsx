@@ -214,7 +214,7 @@ function NoCameraPanel({ cam, reason }: { cam: CameraInfo; reason: string }) {
 
 // ── インライン録画ビューアー ──────────────────────────────────────────────────
 
-function InlineRecordingViewer({ baggageId, visitId }: { baggageId: string; visitId: string }) {
+export function InlineRecordingViewer({ baggageId, visitId }: { baggageId: string; visitId: string }) {
   const [data, setData]       = useState<DeclarationData | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadErr, setLoadErr] = useState<string | null>(null)
@@ -606,7 +606,7 @@ function BaggagePhotoPanel({ label, url, placeholder }: {
 
 // ── 審査コントロール ────────────────────────────────────────────────────────
 
-function BaggageReviewControls({
+export function BaggageReviewControls({
   baggageId, currentStatus, staffNotes: initNotes, reviewedAt, onUpdated,
 }: {
   baggageId: string

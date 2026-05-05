@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useLocale } from '@/lib/i18n/useLocale'
 import { VisitsNavBar } from '@/app/admin/_components/VisitsNavBar'
+import { InlineRecordingViewer, BaggageReviewControls } from '@/app/admin/visits/[id]/visit-detail-client'
 
 // ── 型 ────────────────────────────────────────────────────────────────────────
 
@@ -242,21 +243,27 @@ function VisitDetailPanel({
   dateLocale: string
   t: (k: string) => string
 }) {
-  const [detail, setDetail]       = useState<VisitDetail | null>(null)
-  const [loading, setLoading]     = useState(true)
-  const [error, setError]         = useState(false)
+  const [detail, setDetail]           = useState<VisitDetail | null>(null)
+  const [loading, setLoading]         = useState(true)
+  const [error, setError]             = useState(false)
   const [checkingOut, setCheckingOut] = useState(false)
+  const [baggage, setBaggage]         = useState<VisitDetail['baggage']>([])
 
   useEffect(() => {
     setLoading(true)
     setError(false)
     setDetail(null)
+    setBaggage([])
     fetch(`/api/v1/admin/visits/${visitId}`)
       .then(r => {
         if (!r.ok) throw new Error('not found')
         return r.json()
       })
-      .then((d: VisitDetail) => { setDetail(d); setLoading(false) })
+      .then((d: VisitDetail) => {
+        setDetail(d)
+        setBaggage(d.baggage)
+        setLoading(false)
+      })
       .catch(() => { setError(true); setLoading(false) })
   }, [visitId])
 
@@ -274,13 +281,20 @@ function VisitDetailPanel({
     }
   }
 
+  const handleBaggageUpdated = (bdId: string, status: string, notes: string) => {
+    setBaggage(prev => prev.map(bd =>
+      bd.id === bdId
+        ? { ...bd, status, staff_notes: notes, reviewed_at: new Date().toISOString() }
+        : bd
+    ))
+  }
+
   if (loading) return (
     <div style={{ padding: 24 }}>
-      {[140, 100, 80, 120].map((w, i) => (
+      {[180, 120, 100, 140, 80].map((w, i) => (
         <div key={i} style={{
-          height: 14, borderRadius: 4, marginBottom: 12,
-          background: 'var(--ge-paper-2)',
-          width: w,
+          height: 14, borderRadius: 4, marginBottom: 14,
+          background: 'var(--ge-paper-2)', width: w,
           animation: 'pulse 1.5s ease-in-out infinite',
         }} />
       ))}
@@ -298,245 +312,257 @@ function VisitDetailPanel({
     </div>
   )
 
-  const facePhoto = detail.photos.find(p => p.type === 'face')
-  const cardPhoto = detail.photos.find(p => p.type === 'card')
+  const visitorPhotos = detail.photos.filter(p => p.type === 'face' || p.type === 'card')
+  const ocrPhoto      = detail.photos.find(p => p.ocrResult)
 
-  const labelStyle: React.CSSProperties = {
-    font: '500 10px/1 var(--font-sans)', color: 'var(--ge-ink-4)',
-    textTransform: 'uppercase', letterSpacing: '0.05em',
+  const infoLabelStyle: React.CSSProperties = {
+    font: '400 11px/1 var(--font-sans)', color: '#9ca3af',
   }
-  const valueStyle: React.CSSProperties = {
-    font: '400 12px/1.4 var(--font-sans)', color: 'var(--ge-ink)',
-    marginTop: 2,
+  const infoValueStyle: React.CSSProperties = {
+    font: '500 12px/1.4 var(--font-sans)', color: '#1e3a5f',
+  }
+
+  const statusStyles: Record<string, React.CSSProperties> = {
+    checked_in:  { background: '#dcfce7', color: '#15803d' },
+    checked_out: { background: '#f1f5f9', color: '#64748b' },
+    auto_closed: { background: '#fef9c3', color: '#a16207' },
+  }
+  const statusLabels: Record<string, string> = {
+    checked_in:  t('admin.statusCheckedIn'),
+    checked_out: t('admin.statusCheckedOut'),
+    auto_closed: t('admin.statusAutoClosed'),
   }
 
   return (
-    <div style={{ padding: 24, maxWidth: 680 }}>
+    <div style={{ padding: '20px 24px 32px' }}>
+
       {/* ── ヘッダー ── */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
         <div>
-          <h2 style={{ font: '700 18px/1.2 var(--font-sans)', color: '#1e3a5f', margin: 0 }}>
+          <h2 style={{ font: '700 20px/1.2 var(--font-sans)', color: '#1e3a5f', margin: 0 }}>
             {detail.visitor?.name ?? '—'}
           </h2>
-          <p style={{ font: '400 12px/1.4 var(--font-sans)', color: 'var(--ge-ink-3)', margin: '4px 0 0' }}>
+          <p style={{ font: '400 12px/1.5 var(--font-sans)', color: '#6b7280', margin: '3px 0 0' }}>
             {detail.visitor?.company ?? '—'}
-            {detail.visitor?.department && ` / ${detail.visitor.department}`}
+            {detail.visitor?.department && ` · ${detail.visitor.department}`}
           </p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-          <StatusBadge status={detail.status} t={t} />
-          <Link
-            href={`/admin/visits/${visitId}`}
-            style={{
-              padding: '4px 10px', borderRadius: 4,
-              font: '500 11px/1 var(--font-sans)', color: 'var(--ge-accent)',
-              background: 'var(--ge-accent-soft)', border: '1px solid var(--ge-accent-line)',
-              textDecoration: 'none', whiteSpace: 'nowrap',
-            }}
-          >
-            詳細ページ →
-          </Link>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
+          <span style={{
+            padding: '3px 10px', borderRadius: 999,
+            font: '500 11px/1.4 var(--font-sans)',
+            ...(statusStyles[detail.status] ?? {}),
+          }}>
+            {statusLabels[detail.status] ?? detail.status}
+          </span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <a
+              href={`/admin/visits/${visitId}/evidence`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                padding: '4px 10px', borderRadius: 5,
+                font: '500 11px/1 var(--font-sans)', color: '#fff',
+                background: '#0f1a2e', textDecoration: 'none',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              🔒 PDF出力
+            </a>
+            <Link
+              href={`/admin/visits/${visitId}`}
+              style={{
+                padding: '4px 10px', borderRadius: 5,
+                font: '500 11px/1 var(--font-sans)', color: '#1e3a5f',
+                background: '#eff6ff', border: '1px solid #bfdbfe',
+                textDecoration: 'none', whiteSpace: 'nowrap',
+              }}
+            >
+              全詳細 →
+            </Link>
+          </div>
         </div>
       </div>
 
       {/* ── 来訪情報 ── */}
-      <div style={{
-        background: '#fff', borderRadius: 8, border: '1px solid var(--ge-line)',
-        padding: 16, marginBottom: 16,
-      }}>
-        <div style={{ font: '600 11px/1 var(--font-sans)', color: 'var(--ge-ink-3)', marginBottom: 12 }}>
+      <div className="bg-white rounded-2xl shadow-sm p-5 mb-4">
+        <p style={{ font: '600 11px/1 var(--font-sans)', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>
           来訪情報
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 24px' }}>
-          <div>
-            <div style={labelStyle}>目的</div>
-            <div style={valueStyle}>{detail.purpose}</div>
+        </p>
+        <dl style={{ display: 'grid', gridTemplateColumns: '100px 1fr', rowGap: 10 }}>
+          <dt style={infoLabelStyle}>目的</dt>
+          <dd style={infoValueStyle}>{detail.purpose}</dd>
+          <dt style={infoLabelStyle}>店舗</dt>
+          <dd style={infoValueStyle}>{detail.store_name ?? '—'}</dd>
+          {detail.area_name && (<>
+            <dt style={infoLabelStyle}>エリア</dt>
+            <dd style={infoValueStyle}>{detail.area_name}</dd>
+          </>)}
+          <dt style={infoLabelStyle}>入室</dt>
+          <dd style={{ ...infoValueStyle, fontVariantNumeric: 'tabular-nums' }}>
+            {new Date(detail.check_in_at).toLocaleString(dateLocale)}
+          </dd>
+          <dt style={infoLabelStyle}>退室</dt>
+          <dd style={{ ...infoValueStyle, fontVariantNumeric: 'tabular-nums' }}>
+            {detail.check_out_at
+              ? new Date(detail.check_out_at).toLocaleString(dateLocale)
+              : <span style={{ color: '#d1d5db' }}>未退室</span>}
+          </dd>
+          {detail.visitor?.phone && (<>
+            <dt style={infoLabelStyle}>電話番号</dt>
+            <dd style={infoValueStyle}>{detail.visitor.phone}</dd>
+          </>)}
+          {detail.visitor?.email && (<>
+            <dt style={infoLabelStyle}>メール</dt>
+            <dd style={{ ...infoValueStyle, wordBreak: 'break-all' }}>{detail.visitor.email}</dd>
+          </>)}
+        </dl>
+
+        {/* 退室処理ボタン */}
+        {detail.status === 'checked_in' && (
+          <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid #f1f5f9' }}>
+            <button
+              onClick={handleCheckout}
+              disabled={checkingOut}
+              style={{
+                padding: '7px 18px', borderRadius: 6,
+                font: '600 12px/1 var(--font-sans)', color: '#fff',
+                background: checkingOut ? '#94a3b8' : '#1e3a5f',
+                border: 'none', cursor: checkingOut ? 'default' : 'pointer',
+                opacity: checkingOut ? 0.7 : 1,
+              }}
+            >
+              {checkingOut ? '処理中...' : '退室処理'}
+            </button>
           </div>
-          <div>
-            <div style={labelStyle}>店舗 / エリア</div>
-            <div style={valueStyle}>
-              {detail.store_name ?? '—'}
-              {detail.area_name && ` / ${detail.area_name}`}
-            </div>
-          </div>
-          <div>
-            <div style={labelStyle}>入室</div>
-            <div style={{ ...valueStyle, fontVariantNumeric: 'tabular-nums' }}>
-              {new Date(detail.check_in_at).toLocaleString(dateLocale, {
-                month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
-              })}
-            </div>
-          </div>
-          <div>
-            <div style={labelStyle}>退室</div>
-            <div style={{ ...valueStyle, fontVariantNumeric: 'tabular-nums' }}>
-              {detail.check_out_at
-                ? new Date(detail.check_out_at).toLocaleString(dateLocale, {
-                    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
-                  })
-                : <span style={{ color: 'var(--ge-line-2)' }}>未退室</span>}
-            </div>
-          </div>
-        </div>
+        )}
       </div>
 
-      {/* ── 来訪者情報 ── */}
-      {detail.visitor && (
-        <div style={{
-          background: '#fff', borderRadius: 8, border: '1px solid var(--ge-line)',
-          padding: 16, marginBottom: 16,
-        }}>
-          <div style={{ font: '600 11px/1 var(--font-sans)', color: 'var(--ge-ink-3)', marginBottom: 12 }}>
-            来訪者情報
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 24px' }}>
-            {detail.visitor.phone && (
-              <div>
-                <div style={labelStyle}>電話番号</div>
-                <div style={valueStyle}>{detail.visitor.phone}</div>
-              </div>
-            )}
-            {detail.visitor.email && (
-              <div>
-                <div style={labelStyle}>メール</div>
-                <div style={{ ...valueStyle, wordBreak: 'break-all' }}>{detail.visitor.email}</div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── 写真 ── */}
-      {(facePhoto || cardPhoto) && (
-        <div style={{
-          background: '#fff', borderRadius: 8, border: '1px solid var(--ge-line)',
-          padding: 16, marginBottom: 16,
-        }}>
-          <div style={{ font: '600 11px/1 var(--font-sans)', color: 'var(--ge-ink-3)', marginBottom: 12 }}>
-            写真
-          </div>
-          <div style={{ display: 'flex', gap: 12 }}>
-            {facePhoto?.signedUrl && (
-              <div>
-                <div style={labelStyle}>顔写真</div>
-                <img
-                  src={facePhoto.signedUrl}
-                  alt="顔写真"
-                  style={{
-                    width: 80, height: 80, objectFit: 'cover',
-                    borderRadius: 6, border: '1px solid var(--ge-line)',
-                    marginTop: 6, display: 'block',
-                  }}
-                />
-              </div>
-            )}
-            {cardPhoto?.signedUrl && (
-              <div>
-                <div style={labelStyle}>名刺</div>
-                <img
-                  src={cardPhoto.signedUrl}
-                  alt="名刺"
-                  style={{
-                    width: 140, height: 80, objectFit: 'cover',
-                    borderRadius: 6, border: '1px solid var(--ge-line)',
-                    marginTop: 6, display: 'block',
-                  }}
-                />
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── 手荷物 ── */}
-      {detail.baggage.length > 0 && (
-        <div style={{
-          background: '#fff', borderRadius: 8, border: '1px solid var(--ge-line)',
-          padding: 16, marginBottom: 16,
-        }}>
-          <div style={{ font: '600 11px/1 var(--font-sans)', color: 'var(--ge-ink-3)', marginBottom: 12 }}>
-            手荷物申告 ({detail.baggage.length}件)
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {detail.baggage.map(bd => {
-              const statusColors: Record<string, { bg: string; color: string }> = {
-                cleared: { bg: '#f0fdf4', color: '#15803d' },
-                flagged:  { bg: '#fef2f2', color: '#b91c1c' },
-                pending:  { bg: '#fefce8', color: '#a16207' },
-              }
-              const sc = statusColors[bd.status] ?? { bg: 'var(--ge-paper)', color: 'var(--ge-ink-3)' }
+      {/* ── 来訪者写真 ── */}
+      {visitorPhotos.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-sm p-5 mb-4">
+          <p style={{ font: '600 11px/1 var(--font-sans)', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>
+            来訪者写真
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+            {visitorPhotos.map(photo => {
+              const label = photo.type === 'card' ? t('admin.businessCard') : t('admin.facePhoto')
               return (
-                <div key={bd.id} style={{
-                  padding: '10px 12px', borderRadius: 6,
-                  background: sc.bg, border: `1px solid ${sc.color}22`,
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <div key={photo.id} style={{ position: 'relative' }}>
+                  <div style={{
+                    borderRadius: 12, overflow: 'hidden',
+                    background: '#f0f2f5', aspectRatio: '4/3',
+                    position: 'relative',
+                  }}>
+                    {photo.signedUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={photo.signedUrl} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af', font: '400 11px/1 var(--font-sans)' }}>
+                        {label}
+                      </div>
+                    )}
                     <span style={{
-                      padding: '1px 6px', borderRadius: 999,
-                      font: '500 10px/1.4 var(--font-sans)',
-                      background: sc.bg, color: sc.color,
-                      border: `1px solid ${sc.color}44`,
+                      position: 'absolute', bottom: 6, left: 6,
+                      background: 'rgba(0,0,0,0.5)', color: '#fff',
+                      font: '500 10px/1 var(--font-sans)', padding: '2px 6px', borderRadius: 4,
                     }}>
-                      {bd.status === 'cleared' ? '✓ 済' : bd.status === 'flagged' ? '🚩 フラグ' : '⚠️ 未審査'}
-                    </span>
-                    <span style={{ font: '400 11px/1 var(--font-sans)', color: 'var(--ge-ink-3)' }}>
-                      {bd.context === 'checkin' ? '入室時' : '退室時'}
-                      {bd.inspection_mode && ` · ${bd.inspection_mode === 'video' ? '🎥 動画' : '📷 写真'}`}
+                      {label}
                     </span>
                   </div>
-                  {bd.declaration_text && (
-                    <p style={{ font: '400 11px/1.5 var(--font-sans)', color: 'var(--ge-ink-2)', margin: 0 }}>
-                      {bd.declaration_text}
-                    </p>
-                  )}
-                  {bd.vms_hls_url && (
-                    <Link
-                      href={`/admin/baggage/${bd.id}/recording`}
-                      style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 6,
-                        font: '500 11px/1 var(--font-sans)', color: '#7c3aed',
-                        textDecoration: 'none',
-                      }}
-                    >
-                      録画を見る →
-                    </Link>
-                  )}
                 </div>
               )
             })}
           </div>
+          {ocrPhoto && (
+            <div style={{ marginTop: 10, padding: 12, background: '#f0f2f5', borderRadius: 10 }}>
+              <p style={{ font: '500 10px/1 var(--font-sans)', color: '#6b7280', marginBottom: 6 }}>
+                {t('admin.ocrResult')}
+              </p>
+              <pre style={{ font: '400 10px/1.5 var(--font-mono)', color: '#374151', margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                {JSON.stringify(ocrPhoto.ocrResult, null, 2)}
+              </pre>
+            </div>
+          )}
         </div>
       )}
 
-      {/* ── アクション ── */}
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        {detail.status === 'checked_in' && (
-          <button
-            onClick={handleCheckout}
-            disabled={checkingOut}
-            style={{
-              padding: '7px 16px', borderRadius: 5, cursor: checkingOut ? 'default' : 'pointer',
-              font: '600 12px/1 var(--font-sans)', color: '#fff',
-              background: checkingOut ? '#94a3b8' : '#1e3a5f',
-              border: 'none',
-              opacity: checkingOut ? 0.6 : 1,
-            }}
-          >
-            {checkingOut ? '処理中...' : '退室処理'}
-          </button>
-        )}
-        <Link
-          href={`/admin/visits/${visitId}`}
-          style={{
-            padding: '7px 14px', borderRadius: 5,
-            font: '500 12px/1 var(--font-sans)', color: 'var(--ge-ink-3)',
-            background: 'var(--ge-paper-2)', border: '1px solid var(--ge-line)',
-            textDecoration: 'none',
-          }}
-        >
-          全詳細を見る
-        </Link>
-      </div>
+      {/* ── 手荷物検査 ── */}
+      {baggage.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {baggage.map(bd => (
+            <div key={bd.id} className="bg-white rounded-2xl shadow-sm overflow-hidden">
+              {/* ヘッダー */}
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '12px 16px', background: '#f8fafc',
+                borderBottom: '1px solid #f1f5f9',
+              }}>
+                <span>🧳</span>
+                <span style={{ font: '600 13px/1 var(--font-sans)', color: '#1e3a5f' }}>
+                  手荷物検査 — {bd.context === 'checkin' ? '入室時' : '退室時'}
+                </span>
+                <span style={{
+                  padding: '2px 8px', borderRadius: 999,
+                  font: '500 10px/1.4 var(--font-sans)',
+                  ...(bd.inspection_mode === 'video'
+                    ? { background: '#ede9fe', color: '#7c3aed' }
+                    : { background: '#dbeafe', color: '#1d4ed8' }),
+                }}>
+                  {bd.inspection_mode === 'video' ? '🎥 動画' : '📷 写真'}
+                </span>
+              </div>
+
+              <div style={{ padding: '16px' }}>
+                {/* 動画モード */}
+                {bd.inspection_mode === 'video' ? (
+                  <InlineRecordingViewer baggageId={bd.id} visitId={visitId} />
+                ) : (
+                  /* 写真モード */
+                  <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+                    {[
+                      { label: '荷物の内容', url: bd.photoContentsUrl },
+                      { label: 'バッグ外観（空）', url: bd.photoEmptyUrl },
+                    ].map(({ label, url }) => (
+                      <div key={label} style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ font: '400 10px/1 var(--font-sans)', color: '#9ca3af', marginBottom: 6 }}>{label}</p>
+                        <div style={{ borderRadius: 10, overflow: 'hidden', background: '#f3f4f6', aspectRatio: '4/3', position: 'relative' }}>
+                          {url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={url} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          ) : (
+                            <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                              <span style={{ fontSize: 24, opacity: 0.3 }}>📦</span>
+                              <span style={{ font: '400 10px/1 var(--font-sans)', color: '#9ca3af' }}>写真なし</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* 申告内容 */}
+                {bd.declaration_text && (
+                  <div style={{ padding: '10px 12px', background: '#f0f4f8', borderRadius: 10, marginBottom: 12 }}>
+                    <p style={{ font: '500 10px/1 var(--font-sans)', color: '#6b7280', marginBottom: 4 }}>申告内容</p>
+                    <p style={{ font: '400 12px/1.5 var(--font-sans)', color: '#374151', margin: 0 }}>{bd.declaration_text}</p>
+                  </div>
+                )}
+
+                {/* 審査コントロール */}
+                <BaggageReviewControls
+                  baggageId={bd.id}
+                  currentStatus={bd.status}
+                  staffNotes={bd.staff_notes}
+                  reviewedAt={bd.reviewed_at}
+                  onUpdated={(status, notes) => handleBaggageUpdated(bd.id, status, notes)}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
