@@ -22,14 +22,27 @@ export async function POST(req: NextRequest) {
   }
 
   let dataUrl: string
+  let token: string | undefined
   try {
     const body = await req.json()
     dataUrl = body.dataUrl
+    token = body.token
     if (!dataUrl?.startsWith('data:image')) {
       return NextResponse.json({ error: 'Invalid image data' }, { status: 400 })
     }
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+  }
+
+  // VULN-003 FIX: Require a valid QR token so only kiosk visitors can trigger OCR.
+  // Without this, anyone can call the endpoint and exhaust Anthropic API credits.
+  if (!token) {
+    return NextResponse.json({ error: 'QR token required' }, { status: 401 })
+  }
+  const { validateQrToken } = await import('@/lib/qr/validate')
+  const qr = await validateQrToken(token)
+  if (!qr.valid) {
+    return NextResponse.json({ error: 'Invalid QR token', result: null }, { status: 403 })
   }
 
   // Strip the data URL prefix → get base64 + mediaType

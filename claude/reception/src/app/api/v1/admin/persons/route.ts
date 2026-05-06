@@ -11,14 +11,16 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-
-const TENANT_ID = '00000000-0000-0000-0000-000000000001' // TODO: from auth
+import { getAdminContext } from '@/lib/supabase/admin-context'
 
 export const dynamic = 'force-dynamic'
 
 // ── GET ────────────────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
+  const ctx = await getAdminContext()
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const { searchParams } = new URL(req.url)
   const type = searchParams.get('type') || 'all'
   const q    = searchParams.get('q') || ''
@@ -33,7 +35,7 @@ export async function GET(req: NextRequest) {
     const { data: recentVisits } = await supabase
       .from('visits')
       .select('visitor_id, check_in_at')
-      .eq('tenant_id', TENANT_ID)
+      .eq('tenant_id', ctx.tenant_id)
       .gte('check_in_at', thirtyDaysAgo)
       .order('check_in_at', { ascending: false })
 
@@ -52,7 +54,7 @@ export async function GET(req: NextRequest) {
     let query = supabase
       .from('visitors')
       .select('id, name, company, department, phone, email, person_type, employee_code, notes, face_id, face_registered_at, is_registered, created_at')
-      .eq('tenant_id', TENANT_ID)
+      .eq('tenant_id', ctx.tenant_id)
       .eq('person_type', 'visitor')
       .in('id', visitorIds)
 
@@ -82,7 +84,7 @@ export async function GET(req: NextRequest) {
   let query = supabase
     .from('visitors')
     .select('id, name, company, department, phone, email, person_type, employee_code, notes, face_id, face_registered_at, is_registered, created_at')
-    .eq('tenant_id', TENANT_ID)
+    .eq('tenant_id', ctx.tenant_id)
     .neq('person_type', 'visitor')
     .order('created_at', { ascending: false })
 
@@ -105,6 +107,9 @@ export async function GET(req: NextRequest) {
 // ── POST ───────────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  const ctx = await getAdminContext()
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   try {
     const body = await req.json()
     const { name, company, department, phone, email, person_type, employee_code, notes } = body
@@ -122,7 +127,7 @@ export async function POST(req: NextRequest) {
     const { data, error } = await supabase
       .from('visitors')
       .insert({
-        tenant_id:     TENANT_ID,
+        tenant_id:     ctx.tenant_id,
         name:          name.trim(),
         company:       company?.trim() || '',
         department:    department?.trim() || null,
@@ -149,6 +154,9 @@ export async function POST(req: NextRequest) {
 // ── PATCH ──────────────────────────────────────────────────────────────────────
 
 export async function PATCH(req: NextRequest) {
+  const ctx = await getAdminContext()
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   try {
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')
@@ -169,7 +177,7 @@ export async function PATCH(req: NextRequest) {
         .from('visitors')
         .select('face_id, tenant_id')
         .eq('id', id)
-        .eq('tenant_id', TENANT_ID)
+        .eq('tenant_id', ctx.tenant_id)
         .single()
 
       if (visitor?.face_id) {
@@ -199,7 +207,7 @@ export async function PATCH(req: NextRequest) {
           face_auth_consent:  false,
         })
         .eq('id', id)
-        .eq('tenant_id', TENANT_ID)
+        .eq('tenant_id', ctx.tenant_id)
 
       if (error) return NextResponse.json({ error: error.message }, { status: 500 })
       return NextResponse.json({ ok: true })
@@ -225,7 +233,7 @@ export async function PATCH(req: NextRequest) {
       .from('visitors')
       .update(updateFields)
       .eq('id', id)
-      .eq('tenant_id', TENANT_ID)
+      .eq('tenant_id', ctx.tenant_id)
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ ok: true })
@@ -237,6 +245,9 @@ export async function PATCH(req: NextRequest) {
 // ── DELETE ─────────────────────────────────────────────────────────────────────
 
 export async function DELETE(req: NextRequest) {
+  const ctx = await getAdminContext()
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   try {
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')
@@ -248,7 +259,7 @@ export async function DELETE(req: NextRequest) {
       .from('visitors')
       .select('face_id, tenant_id')
       .eq('id', id)
-      .eq('tenant_id', TENANT_ID)
+      .eq('tenant_id', ctx.tenant_id)
       .single()
 
     if (visitor?.face_id && process.env.AWS_ACCESS_KEY_ID) {
@@ -264,7 +275,7 @@ export async function DELETE(req: NextRequest) {
       .from('visitors')
       .delete()
       .eq('id', id)
-      .eq('tenant_id', TENANT_ID)
+      .eq('tenant_id', ctx.tenant_id)
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ ok: true })

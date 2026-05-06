@@ -247,11 +247,6 @@ export function ReceptionContent({ token, storeName, areaName, preToken }: Props
     iconBg: GE.successSoft, subColor: GE.neutral,
     tagBg: GE.successSoft, tagColor: GE.success, arrow: GE.border,
   }
-  const outGhost: OptionRowConfig = {
-    bg: GE.paper, border: GE.border, color: '#1e293b',
-    iconBg: '#fff', subColor: GE.subtle,
-    tagBg: GE.paperDark, tagColor: GE.neutral, arrow: GE.border,
-  }
 
   return (
     <div style={{
@@ -375,14 +370,6 @@ export function ReceptionContent({ token, storeName, areaName, preToken }: Props
           cfg={outSecondary}
         />
 
-        <OptionRow
-          href={`/r/${token}/checkout`}
-          icon={<NewIcon size={24} color={GE.neutral} />}
-          label={ja('はじめての方・手動退室', 'Manual Check-Out', '初次访客·手动离场', '처음 방문하시는 분·수동 퇴실')}
-          sub={ja('お名前・情報を入力して退室', 'Enter your name to check out', '输入姓名及信息离场', '이름·정보를 입력하여 퇴실')}
-          variant="ghost"
-          cfg={outGhost}
-        />
       </main>
 
       {/* ── フッター ───────────────────────────────────────────────────── */}

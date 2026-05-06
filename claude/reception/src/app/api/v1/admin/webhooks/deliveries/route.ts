@@ -1,18 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getAdminContext } from '@/lib/supabase/admin-context'
 
 export const dynamic = 'force-dynamic'
 
-const TENANT_ID = '00000000-0000-0000-0000-000000000001' // TODO: from auth
-
 export async function GET(_req: NextRequest) {
+  const ctx = await getAdminContext()
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const supabase = createAdminClient()
 
   // Get endpoint IDs for this tenant
   const { data: endpoints } = await supabase
     .from('webhook_endpoints')
     .select('id')
-    .eq('tenant_id', TENANT_ID)
+    .eq('tenant_id', ctx.tenant_id)
 
   if (!endpoints?.length) {
     return NextResponse.json({ deliveries: [] })

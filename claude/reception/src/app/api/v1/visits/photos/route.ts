@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { validateQrToken } from '@/lib/qr/validate'
+
+// VULN-009 FIX: Enforce max upload size server-side (5 MB base64 decoded ≈ 3.75 MB raw)
+const MAX_PHOTO_BYTES = 5 * 1024 * 1024
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { visitId, tenantId, type } = body
+    const { visitId, tenantId, type, token } = body
     // photoData は旧キー名 (baggage upload から来る)、dataUrl は新キー名
     const dataUrl: string = body.dataUrl ?? body.photoData
 
@@ -17,6 +21,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: '不正なphotoタイプです' }, { status: 400 })
     }
 
+    // VULN-002 FIX: Require QR token and verify the visit belongs to the same tenant/area.
+    // Without this check, any caller could inject photos into arbitrary visits.
+    if (!token) {
+      return NextResponse.json({ error: 'QRトークンが必要です' }, { status: 401 })
+    }
+    const qr = await validateQrToken(token)
+    if (!qr.valid) {
+      return NextResponse.json({ error: qr.error }, { status: 403 })
+    }
+    // The tenantId in the body must match the QR token's tenant
+    if (qr.tenantId !== tenantId) {
+      return NextResponse.json({ error: '不正なテナントIDです' }, { status: 403 })
+    }
+
     // Convert base64 dataURL → Buffer
     const base64 = dataUrl.split(',')[1]
     if (!base64) {
@@ -24,7 +42,27 @@ export async function POST(req: NextRequest) {
     }
     const buffer = Buffer.from(base64, 'base64')
 
+    // VULN-009 FIX: Reject oversized payloads
+    if (buffer.length > MAX_PHOTO_BYTES) {
+      return NextResponse.json(
+        { error: `写真サイズが上限（${MAX_PHOTO_BYTES / 1024 / 1024}MB）を超えています` },
+        { status: 413 }
+      )
+    }
+
     const supabase = createAdminClient()
+
+    // Verify the visitId actually belongs to this tenant (prevent cross-tenant injection)
+    const { data: visit } = await supabase
+      .from('visits')
+      .select('id')
+      .eq('id', visitId)
+      .eq('tenant_id', tenantId)
+      .maybeSingle()
+
+    if (!visit) {
+      return NextResponse.json({ error: '来訪記録が見つかりません' }, { status: 404 })
+    }
 
     const storagePath = `${tenantId}/${visitId}/${type}_${Date.now()}.jpg`
 

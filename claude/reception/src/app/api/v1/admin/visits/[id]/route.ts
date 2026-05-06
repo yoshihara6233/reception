@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getAdminContext } from '@/lib/supabase/admin-context'
+import { createVmsClientFromSettings } from '@/lib/vms/client'
 
 async function makeSignedUrl(
   supabase: ReturnType<typeof createAdminClient>,
@@ -31,7 +32,7 @@ export async function GET(
   const { data: visit, error } = await supabase
     .from('visits')
     .select(`
-      id, purpose, status, check_in_at, check_out_at,
+      id, purpose, status, check_in_at, check_out_at, store_id,
       visitors(id, name, company, department, phone, email),
       stores(name),
       areas(name),
@@ -91,6 +92,70 @@ export async function GET(
     })
   )
 
+  // ── 来訪時映像 (VMS VOD) ──────────────────────────────────────────────────────
+  let checkin_vod_url: string | null  = null
+  let checkout_vod_url: string | null = null
+
+  const storeId = visit.store_id
+  if (storeId) {
+    try {
+      const [{ data: slots }, { data: store }] = await Promise.all([
+        supabase
+          .from('store_cameras')
+          .select('slot, vms_camera_id, ipro_camera_id, is_active')
+          .eq('store_id', storeId)
+          .eq('is_active', true)
+          .order('slot'),
+        supabase
+          .from('stores')
+          .select('settings')
+          .eq('id', storeId)
+          .single(),
+      ])
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const settings = store?.settings as any
+      const vms = createVmsClientFromSettings(settings)
+
+      if (vms && slots && slots.length > 0) {
+        // slot=1 を受付カメラとして使用。なければ最初のスロットを使用
+        const receptionCam = slots.find(s => s.slot === 1) ?? slots[0]
+        const cameraId = receptionCam.vms_camera_id || receptionCam.ipro_camera_id
+
+        if (cameraId) {
+          const VOD_BEFORE_SEC = 5    // ボタン操作の5秒前から
+          const VOD_AFTER_SEC  = 60   // その後1分間
+
+          // 入室映像
+          if (visit.check_in_at) {
+            try {
+              const from = new Date(new Date(visit.check_in_at).getTime() - VOD_BEFORE_SEC * 1000).toISOString()
+              const to   = new Date(new Date(visit.check_in_at).getTime() + VOD_AFTER_SEC  * 1000).toISOString()
+              const res  = await vms.getVodUrl(cameraId, from, to)
+              checkin_vod_url = res.hls_url || null
+            } catch (e) {
+              console.warn('[visits/id] checkin VOD fetch failed:', e)
+            }
+          }
+
+          // 退室映像
+          if (visit.check_out_at) {
+            try {
+              const from = new Date(new Date(visit.check_out_at).getTime() - VOD_BEFORE_SEC * 1000).toISOString()
+              const to   = new Date(new Date(visit.check_out_at).getTime() + VOD_AFTER_SEC  * 1000).toISOString()
+              const res  = await vms.getVodUrl(cameraId, from, to)
+              checkout_vod_url = res.hls_url || null
+            } catch (e) {
+              console.warn('[visits/id] checkout VOD fetch failed:', e)
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[visits/id] VMS VOD fetch failed (non-blocking):', e)
+    }
+  }
+
   return NextResponse.json({
     id:          visit.id,
     purpose:     visit.purpose,
@@ -111,5 +176,7 @@ export async function GET(
     area_name:  (visit.areas  as any)?.name ?? null,
     photos:     photosWithUrls,
     baggage:    baggageWithUrls,
+    checkin_vod_url,
+    checkout_vod_url,
   })
 }

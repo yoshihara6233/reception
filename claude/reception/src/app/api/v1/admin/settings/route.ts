@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-
-const TENANT_ID = '00000000-0000-0000-0000-000000000001' // TODO: from auth
+import { getAdminContext } from '@/lib/supabase/admin-context'
 
 /**
  * GET /api/v1/admin/settings
@@ -10,6 +9,9 @@ const TENANT_ID = '00000000-0000-0000-0000-000000000001' // TODO: from auth
  */
 export async function GET(req: NextRequest) {
   try {
+    const ctx = await getAdminContext()
+    if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const supabase = createAdminClient()
     const storeId = req.nextUrl.searchParams.get('storeId')
 
@@ -17,7 +19,7 @@ export async function GET(req: NextRequest) {
     const { data: tenant } = await supabase
       .from('tenants')
       .select('settings')
-      .eq('id', TENANT_ID)
+      .eq('id', ctx.tenant_id)
       .single()
 
     const tenantSettings = (tenant?.settings as Record<string, unknown>) || {}
@@ -31,7 +33,7 @@ export async function GET(req: NextRequest) {
       .from('stores')
       .select('settings')
       .eq('id', storeId)
-      .eq('tenant_id', TENANT_ID)
+      .eq('tenant_id', ctx.tenant_id)
       .single()
 
     const storeSettings = (store?.settings as Record<string, unknown>) || {}
@@ -57,6 +59,9 @@ export async function GET(req: NextRequest) {
  */
 export async function PUT(req: NextRequest) {
   try {
+    const ctx = await getAdminContext()
+    if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const body = await req.json()
     const supabase = createAdminClient()
     const storeId = req.nextUrl.searchParams.get('storeId')
@@ -66,7 +71,7 @@ export async function PUT(req: NextRequest) {
       const { data: tenant } = await supabase
         .from('tenants')
         .select('settings')
-        .eq('id', TENANT_ID)
+        .eq('id', ctx.tenant_id)
         .single()
 
       const currentSettings = (tenant?.settings as Record<string, unknown>) || {}
@@ -75,7 +80,7 @@ export async function PUT(req: NextRequest) {
       const { error } = await supabase
         .from('tenants')
         .update({ settings: newSettings, updated_at: new Date().toISOString() })
-        .eq('id', TENANT_ID)
+        .eq('id', ctx.tenant_id)
 
       if (error) return NextResponse.json({ error: error.message }, { status: 500 })
       return NextResponse.json({ success: true, settings: newSettings, scope: 'tenant' })
@@ -86,7 +91,7 @@ export async function PUT(req: NextRequest) {
       .from('stores')
       .select('settings')
       .eq('id', storeId)
-      .eq('tenant_id', TENANT_ID)
+      .eq('tenant_id', ctx.tenant_id)
       .single()
 
     if (!store) return NextResponse.json({ error: '店舗が見つかりません' }, { status: 404 })
@@ -98,7 +103,7 @@ export async function PUT(req: NextRequest) {
       .from('stores')
       .update({ settings: newStoreSettings })
       .eq('id', storeId)
-      .eq('tenant_id', TENANT_ID)
+      .eq('tenant_id', ctx.tenant_id)
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ success: true, settings: newStoreSettings, scope: 'store' })
@@ -113,6 +118,9 @@ export async function PUT(req: NextRequest) {
  */
 export async function DELETE(req: NextRequest) {
   try {
+    const ctx = await getAdminContext()
+    if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const supabase = createAdminClient()
     const storeId = req.nextUrl.searchParams.get('storeId')
     const key = req.nextUrl.searchParams.get('key')
@@ -125,7 +133,7 @@ export async function DELETE(req: NextRequest) {
       .from('stores')
       .select('settings')
       .eq('id', storeId)
-      .eq('tenant_id', TENANT_ID)
+      .eq('tenant_id', ctx.tenant_id)
       .single()
 
     if (!store) return NextResponse.json({ error: '店舗が見つかりません' }, { status: 404 })

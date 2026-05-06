@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getAdminContext } from '@/lib/supabase/admin-context'
 import crypto from 'crypto'
 
 export const dynamic = 'force-dynamic'
-
-const TENANT_ID = '00000000-0000-0000-0000-000000000001' // TODO: from auth
 
 function maskSecret(secret: string): string {
   if (secret.length <= 8) return '****'
@@ -12,12 +11,15 @@ function maskSecret(secret: string): string {
 }
 
 export async function GET(_req: NextRequest) {
+  const ctx = await getAdminContext()
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const supabase = createAdminClient()
 
   const { data, error } = await supabase
     .from('webhook_endpoints')
     .select('id, url, events, enabled, retry_count, last_error, created_at, secret')
-    .eq('tenant_id', TENANT_ID)
+    .eq('tenant_id', ctx.tenant_id)
     .order('created_at', { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -31,6 +33,9 @@ export async function GET(_req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const ctx = await getAdminContext()
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const supabase = createAdminClient()
   const body = await req.json()
   const { url, events } = body
@@ -44,7 +49,7 @@ export async function POST(req: NextRequest) {
   const { data, error } = await supabase
     .from('webhook_endpoints')
     .insert({
-      tenant_id: TENANT_ID,
+      tenant_id: ctx.tenant_id,
       url,
       secret,
       events,
@@ -60,6 +65,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const ctx = await getAdminContext()
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const supabase = createAdminClient()
   const { searchParams } = req.nextUrl
   const id = searchParams.get('id')
@@ -70,7 +78,7 @@ export async function DELETE(req: NextRequest) {
     .from('webhook_endpoints')
     .delete()
     .eq('id', id)
-    .eq('tenant_id', TENANT_ID)
+    .eq('tenant_id', ctx.tenant_id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true })

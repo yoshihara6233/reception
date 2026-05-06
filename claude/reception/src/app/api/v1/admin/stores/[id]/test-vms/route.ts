@@ -14,9 +14,13 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getAdminContext } from '@/lib/supabase/admin-context'
 import { createVmsClient } from '@/lib/vms/client'
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const ctx = await getAdminContext()
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const { id: storeId } = await params
   const body = await req.json().catch(() => ({}))
 

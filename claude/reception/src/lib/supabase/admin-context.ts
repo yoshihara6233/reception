@@ -51,8 +51,20 @@ export async function getAdminContext(): Promise<AdminContext | null> {
     }
   }
 
-  // 3. No row found — auto-create for single-tenant bootstrap
-  //    (matches the seed.sql single-tenant setup)
+  // 3. No admin_users row found.
+  //
+  // VULN-008 FIX: The previous implementation auto-created a tenant_admin record for
+  // ANY authenticated Supabase user, allowing privilege escalation in multi-tenant mode.
+  //
+  // Now: auto-create is gated behind ALLOW_ADMIN_AUTO_CREATE=true (dev/seed only).
+  // In production, users must be explicitly invited via POST /api/v1/admin/users.
+  const allowAutoCreate = process.env.ALLOW_ADMIN_AUTO_CREATE === 'true'
+  if (!allowAutoCreate) {
+    console.warn('[admin-context] auth user has no admin_users row — access denied (set ALLOW_ADMIN_AUTO_CREATE=true for initial setup only)')
+    return null
+  }
+
+  // Bootstrap: only runs when explicitly enabled (initial setup)
   const { data: created, error: createError } = await supabase
     .from('admin_users')
     .insert({
@@ -67,14 +79,7 @@ export async function getAdminContext(): Promise<AdminContext | null> {
 
   if (createError || !created) {
     console.error('[admin-context] auto-create admin_users failed:', createError)
-    // Last resort: return a context with the demo tenant anyway so read operations work
-    return {
-      id: '00000000-0000-0000-0000-000000000000',
-      tenant_id: DEMO_TENANT_ID,
-      role: 'tenant_admin',
-      store_ids: [],
-      authUserId: user.id,
-    }
+    return null
   }
 
   return {

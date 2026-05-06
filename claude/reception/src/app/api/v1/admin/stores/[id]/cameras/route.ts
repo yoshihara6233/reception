@@ -18,8 +18,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-
-const TENANT_ID = '00000000-0000-0000-0000-000000000001' // TODO: from auth
+import { getAdminContext } from '@/lib/supabase/admin-context'
 
 interface CameraSlot {
   slot: 1 | 2
@@ -31,6 +30,9 @@ interface CameraSlot {
 }
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const ctx = await getAdminContext()
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const { id: storeId } = await params
   const admin = createAdminClient()
 
@@ -60,6 +62,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const ctx = await getAdminContext()
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const { id: storeId } = await params
   const admin = createAdminClient()
   const body = await req.json()
@@ -86,7 +91,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         .maybeSingle()
 
       const rowData = {
-        tenant_id: TENANT_ID,
+        tenant_id: ctx.tenant_id,
         store_id: storeId,
         slot: slot.slot,
         label: slot.label,

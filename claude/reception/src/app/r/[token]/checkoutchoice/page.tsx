@@ -10,7 +10,6 @@ import {
   OptionCard,
   FaceIcon,
   QrScanIcon,
-  NewPersonIcon,
 } from '../reception-shell'
 
 export default function CheckOutChoicePage() {
@@ -51,15 +50,6 @@ export default function CheckOutChoicePage() {
         theme={theme}
       />
 
-      {/* はじめての方 / 手動退室 — ghost */}
-      <OptionCard
-        href={`/r/${params.token}/checkout`}
-        icon={<NewPersonIcon size={32} color="#64748b" />}
-        label={ja('はじめての方・手動退室', 'Manual Check-Out')}
-        sub={ja('お名前・情報を入力して退室', 'Enter your name to check out')}
-        variant="ghost"
-        theme={theme}
-      />
     </ReceptionShell>
   )
 }

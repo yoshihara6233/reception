@@ -66,6 +66,8 @@ interface VisitDetail {
   store_name: string | null
   area_name: string | null
   photos: Array<{ id: string; type: string; signedUrl: string | null; ocrResult: unknown }>
+  checkin_vod_url: string | null
+  checkout_vod_url: string | null
   baggage: Array<{
     id: string
     context: string
@@ -81,6 +83,99 @@ interface VisitDetail {
     photoContentsUrl: string | null
     photoEmptyUrl: string | null
   }>
+}
+
+// ── 来訪時映像プレーヤー ──────────────────────────────────────────────────────────
+
+function VisitCameraPlayer({ label, hlsUrl, eventTime }: {
+  label: string
+  hlsUrl: string
+  eventTime: string
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [playing, setPlaying] = useState(false)
+
+  useEffect(() => {
+    const el = videoRef.current
+    if (!el || !hlsUrl) return
+    setError(null)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let hlsInst: any = null
+
+    const load = async () => {
+      const Hls = (await import('hls.js')).default
+      if (!Hls.isSupported()) {
+        el.src = hlsUrl
+        return
+      }
+      const hls = new Hls({ enableWorker: true })
+      hlsInst = hls
+      hls.loadSource(hlsUrl)
+      hls.attachMedia(el)
+      hls.on(Hls.Events.ERROR, (_: unknown, data: { fatal?: boolean; details?: string }) => {
+        if (data.fatal) setError(data.details ?? 'HLS error')
+      })
+    }
+    load().catch(e => setError(String(e)))
+
+    return () => {
+      if (hlsInst) { hlsInst.destroy(); hlsInst = null }
+      el.src = ''
+    }
+  }, [hlsUrl])
+
+  const togglePlay = () => {
+    const el = videoRef.current
+    if (!el) return
+    if (el.paused) { el.play().catch(() => {}); setPlaying(true) }
+    else           { el.pause();                 setPlaying(false) }
+  }
+
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+        <span style={{ font: '500 11px/1 var(--font-sans)', color: '#64748b' }}>{label}</span>
+        <span style={{ font: '400 10px/1 var(--font-sans)', color: '#9ca3af', fontVariantNumeric: 'tabular-nums' }}>
+          {new Date(eventTime).toLocaleString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
+        </span>
+      </div>
+      {error ? (
+        <div style={{
+          borderRadius: 10, background: '#fef2f2', padding: '10px 14px',
+          font: '400 11px/1.4 var(--font-sans)', color: '#ef4444',
+        }}>
+          映像を読み込めませんでした
+        </div>
+      ) : (
+        <div style={{ position: 'relative', borderRadius: 10, overflow: 'hidden', background: '#0f172a', cursor: 'pointer' }}
+          onClick={togglePlay}>
+          <video
+            ref={videoRef}
+            style={{ width: '100%', display: 'block', maxHeight: 200 }}
+            playsInline
+            preload="metadata"
+          />
+          {!playing && (
+            <div style={{
+              position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'rgba(0,0,0,0.35)',
+            }}>
+              <div style={{
+                width: 40, height: 40, borderRadius: '50%',
+                background: 'rgba(255,255,255,0.85)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="#1e3a5f">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ── サブコンポーネント ─────────────────────────────────────────────────────────
@@ -401,6 +496,29 @@ function VisitDetailPanel({
           </div>
         )}
       </div>
+
+      {/* ── 来訪時映像 ── */}
+      {(detail.checkin_vod_url || detail.checkout_vod_url) && (
+        <div className="bg-white rounded-2xl shadow-sm p-5 mb-4">
+          <p style={{ font: '600 11px/1 var(--font-sans)', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>
+            来訪時映像
+          </p>
+          {detail.checkin_vod_url && (
+            <VisitCameraPlayer
+              label="入室"
+              hlsUrl={detail.checkin_vod_url}
+              eventTime={detail.check_in_at}
+            />
+          )}
+          {detail.checkout_vod_url && detail.check_out_at && (
+            <VisitCameraPlayer
+              label="退室"
+              hlsUrl={detail.checkout_vod_url}
+              eventTime={detail.check_out_at}
+            />
+          )}
+        </div>
+      )}
 
       {/* ── 来訪者写真 ── */}
       {visitorPhotos.length > 0 && (

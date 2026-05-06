@@ -13,6 +13,7 @@ export default function CheckoutPage() {
   const { announce } = useAnnounce()
   const [submitting, setSubmitting] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [checkoutVisitId, setCheckoutVisitId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [countdown, setCountdown] = useState(5)
   const [baggageRequired, setBaggageRequired] = useState(false)
@@ -173,6 +174,7 @@ export default function CheckoutPage() {
         await submitBaggageDeclaration(visitId, tenantId)
       }
 
+      setCheckoutVisitId(visitId ?? null)
       setSuccess(true)
       announce('checkout-done')
     } catch (err) {
@@ -211,9 +213,16 @@ export default function CheckoutPage() {
           <div className="absolute bottom-0 left-0 right-0 h-5 bg-[#f0f2f5] rounded-t-[20px]" />
         </div>
         <div className="px-5 -mt-1 flex-1 space-y-4">
-          <div className="bg-white rounded-2xl p-6 shadow-sm text-center">
-            <p className="text-gray-500 text-sm">お疲れ様でした。またのお越しをお待ちしております。</p>
-          </div>
+          {checkoutVisitId ? (
+            <div className="bg-white rounded-2xl p-6 shadow-sm text-center">
+              <p className="text-gray-500 text-sm">お疲れ様でした。またのお越しをお待ちしております。</p>
+            </div>
+          ) : (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 shadow-sm">
+              <p className="text-sm font-medium text-amber-800 mb-1">⚠️ 来訪記録が見つかりませんでした</p>
+              <p className="text-xs text-amber-700">入室記録が確認できなかったため、退室記録は作成されませんでした。スタッフにお声がけください。</p>
+            </div>
+          )}
           <a
             href={`/r/${params.token}`}
             className="block w-full py-4 bg-[#1e3a5f] text-white text-center text-sm font-semibold rounded-2xl shadow-sm"

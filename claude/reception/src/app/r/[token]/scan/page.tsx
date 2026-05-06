@@ -50,7 +50,14 @@ export default function ScanQrPage() {
           router.replace(`/r/${params.token}/consent?pre=${preToken}`)
         }
       } else if (url.pathname.startsWith('/r/')) {
-        router.replace(url.pathname + url.search)
+        // 受付キオスク自体のQRコードがスキャンされた（preTokenなし）→ エラー表示
+        setErrorMsg(L(
+          'これは受付キオスクのQRコードです。スマートフォンに届いた事前登録メールのQRコードをかざしてください。',
+          'This is the kiosk QR code. Please scan the pre-registration QR code sent to your smartphone.',
+          '这是接待台的二维码，请扫描发送到您手机的预注册二维码。',
+          '이것은 키오스크 QR 코드입니다. 스마트폰으로 받은 사전 등록 이메일의 QR 코드를 제시해 주세요.',
+        ))
+        setPhase('error')
       } else {
         setErrorMsg(L('このQRコードは対応していません。事前登録QRをかざしてください。', 'QR code not recognized. Please show your pre-registration QR.', '此二维码不受支持，请出示预注册二维码。', '이 QR 코드는 지원되지 않습니다. 사전 등록 QR 코드를 제시해 주세요.'))
         setPhase('error')

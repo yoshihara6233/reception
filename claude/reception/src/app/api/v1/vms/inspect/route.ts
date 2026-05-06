@@ -15,8 +15,13 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getAdminContext } from '@/lib/supabase/admin-context'
 
+// VULN-005 FIX: VMS inspect endpoint now requires admin authentication
 export async function POST(req: NextRequest) {
+  const ctx = await getAdminContext()
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   try {
     const { declarationId, visitId } = await req.json()
 

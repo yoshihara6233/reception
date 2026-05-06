@@ -27,11 +27,11 @@ type NavItem = {
 
 // ── 1行目に直接並べるオペレーションリンク ────────────────────────────────────
 
-const OP_LINKS: NavItem[] = [
-  { href: '/admin/dashboard', icon: <LayoutDashboard size={14} strokeWidth={1.5} />, label: 'ダッシュボード', exact: true },
-  { href: '/admin/visits',    icon: <ClipboardList   size={14} strokeWidth={1.5} />, label: '受付履歴' },
-  { href: '/admin/analytics', icon: <BarChart3       size={14} strokeWidth={1.5} />, label: 'アナリティクス' },
-]
+const OP_LINK_DEFS = [
+  { href: '/admin/dashboard', icon: <LayoutDashboard size={14} strokeWidth={1.5} />, key: 'dashboard', exact: true },
+  { href: '/admin/visits',    icon: <ClipboardList   size={14} strokeWidth={1.5} />, key: 'visits' },
+  { href: '/admin/analytics', icon: <BarChart3       size={14} strokeWidth={1.5} />, key: 'analytics' },
+] as const
 
 const OP_PATHS = ['/admin/dashboard', '/admin/visits', '/admin/analytics']
 
@@ -45,25 +45,19 @@ const SECTION_PATHS: Record<SectionKey, string[]> = {
 
 // OP_LINKS のパスはセクション判定から除外（currentSection=nullになる）
 
-const SECTION_META: Record<SectionKey, { label: (loc: string) => string }> = {
-  management: { label: loc => `${loc}管理` },
-  settings:   { label: () => '設定' },
-  manual:     { label: () => 'マニュアル' },
-}
-
-const SUB_NAV: Record<SectionKey, NavItem[]> = {
+const SUB_NAV_DEFS: Record<SectionKey, { href: string; icon: React.ReactNode; key: string; exact?: boolean }[]> = {
   management: [
-    { href: '/admin/stores',  icon: <Building2   size={14} strokeWidth={1.5} />, label: loc => `${loc}一覧` },
-    { href: '/admin/persons', icon: <UserCheck   size={14} strokeWidth={1.5} />, label: '来店者管理' },
+    { href: '/admin/stores',  icon: <Building2   size={14} strokeWidth={1.5} />, key: 'stores' },
+    { href: '/admin/persons', icon: <UserCheck   size={14} strokeWidth={1.5} />, key: 'persons' },
   ],
   settings: [
-    { href: '/admin/settings',         icon: <Settings   size={14} strokeWidth={1.5} />, label: '受付設定', exact: true },
-    { href: '/admin/settings/consent', icon: <FileText   size={14} strokeWidth={1.5} />, label: '同意書テンプレート' },
-    { href: '/admin/users',            icon: <Users      size={14} strokeWidth={1.5} />, label: 'ユーザー管理' },
-    { href: '/admin/logs',             icon: <ScrollText size={14} strokeWidth={1.5} />, label: '操作ログ' },
+    { href: '/admin/settings',         icon: <Settings   size={14} strokeWidth={1.5} />, key: 'settings', exact: true },
+    { href: '/admin/settings/consent', icon: <FileText   size={14} strokeWidth={1.5} />, key: 'consentTemplate' },
+    { href: '/admin/users',            icon: <Users      size={14} strokeWidth={1.5} />, key: 'users' },
+    { href: '/admin/logs',             icon: <ScrollText size={14} strokeWidth={1.5} />, key: 'logs' },
   ],
   manual: [
-    { href: '/admin/manual', icon: <BookOpen size={14} strokeWidth={1.5} />, label: '操作マニュアル', exact: true },
+    { href: '/admin/manual', icon: <BookOpen size={14} strokeWidth={1.5} />, key: 'manual', exact: true },
   ],
 }
 
@@ -86,7 +80,7 @@ function resolveLabel(label: string | ((loc: string) => string), loc: string): s
 // ── コンポーネント ────────────────────────────────────────────────────────────
 
 export function AdminTopNav() {
-  const { locale, setLocale } = useLocale()
+  const { locale, setLocale, t } = useLocale()
   const pathname = usePathname()
   const { locationName } = useSiteConfig()
   const { role, name, email } = useAdminAccess()
@@ -97,6 +91,26 @@ export function AdminTopNav() {
     (Object.entries(SECTION_PATHS) as [SectionKey, string[]][]).find(([, paths]) =>
       paths.some(p => pathname === p || pathname.startsWith(p + '/'))
     )?.[0] ?? null
+
+  // i18n labels built inside component (hooks must not be called at module level)
+  const OP_LINKS: NavItem[] = OP_LINK_DEFS.map(d => ({ ...d, label: t(`admin.${d.key}`) }))
+
+  const SECTION_META: Record<SectionKey, { label: (loc: string) => string }> = {
+    management: { label: loc => t('admin.managementSection').replace('{name}', loc) },
+    settings:   { label: () => t('admin.settingsSection') },
+    manual:     { label: () => t('admin.manualSection') },
+  }
+
+  const SUB_NAV: Record<SectionKey, NavItem[]> = {
+    management: SUB_NAV_DEFS.management.map(d => ({
+      ...d,
+      label: d.key === 'stores'
+        ? t('admin.storesList', { name: locationName })
+        : t(`admin.${d.key}`),
+    })),
+    settings:   SUB_NAV_DEFS.settings.map(d => ({ ...d, label: t(`admin.${d.key}`) })),
+    manual:     SUB_NAV_DEFS.manual.map(d => ({ ...d, label: t(`admin.${d.key}`) })),
+  }
 
   const subNavItems = currentSection ? SUB_NAV[currentSection] : null
 

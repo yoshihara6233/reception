@@ -12,12 +12,39 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { getAdminContext } from '@/lib/supabase/admin-context'
+
+// SSRF safe-list: only allow fetching from URLs that pass the same check as webhooks
+function isAllowedVmsUrl(rawUrl: string): boolean {
+  let parsed: URL
+  try {
+    parsed = new URL(rawUrl)
+  } catch {
+    return false
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false
+  const host = parsed.hostname.toLowerCase()
+  // Block cloud metadata endpoints
+  if (host === '169.254.169.254' || host === 'metadata.google.internal') return false
+  // VMS servers are typically on-premise (private IPs are OK here, localhost is not)
+  if (host === 'localhost') return false
+  return true
+}
 
 export async function POST(req: NextRequest) {
+  // Require admin auth — this endpoint makes server-side requests to arbitrary URLs
+  const ctx = await getAdminContext()
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const { vmsUrl, vmsApiKey } = await req.json()
 
   if (!vmsUrl || !vmsApiKey) {
     return NextResponse.json({ error: 'vmsUrl と vmsApiKey は必須です' }, { status: 400 })
+  }
+
+  // SSRF guard: block metadata endpoints (VMS may be on private network, that is acceptable)
+  if (!isAllowedVmsUrl(vmsUrl)) {
+    return NextResponse.json({ error: '不正なVMS URLです' }, { status: 400 })
   }
 
   try {

@@ -115,13 +115,17 @@ function groupByVisitor(visits: RawVisit[]): VisitorRow[] {
     const sname = v.stores?.name
     if (sname && !row.stores.includes(sname)) row.stores.push(sname)
 
-    // 入室時刻（checkout_only は check_in_at が null なので除外される）
-    const ci = fmtTime(v.check_in_at)
-    if (ci && !row.checkins.includes(ci)) row.checkins.push(ci)
+    // 入室時刻（checkout_only は check_in_at に退室時刻が入っているため除外）
+    if (v.mismatch_type !== 'checkout_only') {
+      const ci = fmtTime(v.check_in_at)
+      if (ci && !row.checkins.includes(ci)) row.checkins.push(ci)
+    }
 
-    // 退室時刻
-    const co = fmtTime(v.check_out_at)
-    if (co && !row.checkouts.includes(co)) row.checkouts.push(co)
+    // 退室時刻（unmatched_checkin は退室なし扱いのため除外）
+    if (v.mismatch_type !== 'unmatched_checkin') {
+      const co = fmtTime(v.check_out_at)
+      if (co && !row.checkouts.includes(co)) row.checkouts.push(co)
+    }
   }
 
   // 時刻を昇順ソート

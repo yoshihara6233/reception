@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { generateQrToken } from '@/lib/qr/generate'
+import { getAdminContext } from '@/lib/supabase/admin-context'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
+  const ctx = await getAdminContext()
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const supabase = createAdminClient()
-  const tenantId = '00000000-0000-0000-0000-000000000001'
+  const tenantId = ctx.tenant_id
   const { data } = await supabase
     .from('stores')
     .select('id, name')
@@ -17,9 +20,11 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    const ctx = await getAdminContext()
+    if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     const body = await req.json()
     const { name, address } = body
-    const tenantId = '00000000-0000-0000-0000-000000000001' // TODO: from auth
+    const tenantId = ctx.tenant_id
 
     if (!name?.trim()) {
       return NextResponse.json({ error: '店舗名は必須です' }, { status: 400 })
@@ -61,6 +66,8 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
+    const ctx = await getAdminContext()
+    if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     const { searchParams } = req.nextUrl
     const id = searchParams.get('id')
     if (!id) return NextResponse.json({ error: 'idが必要です' }, { status: 400 })

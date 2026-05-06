@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getAdminContext } from '@/lib/supabase/admin-context'
 
 export const dynamic = 'force-dynamic'
 
-const TENANT_ID = '00000000-0000-0000-0000-000000000001' // TODO: from auth
-
 export async function GET(req: NextRequest) {
+  const ctx = await getAdminContext()
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const supabase = createAdminClient()
   const { searchParams } = req.nextUrl
   const storeId = searchParams.get('storeId') || ''
@@ -13,7 +15,7 @@ export async function GET(req: NextRequest) {
   let query = supabase
     .from('visits')
     .select('purpose, check_in_at')
-    .eq('tenant_id', TENANT_ID)
+    .eq('tenant_id', ctx.tenant_id)
     .not('check_in_at', 'is', null)
     .not('purpose', 'is', null)
 
