@@ -75,7 +75,6 @@ export async function GET(
         .from('store_cameras')
         .select('slot, label, ipro_camera_id, vms_camera_id, is_active')
         .eq('store_id', storeId)
-        .eq('is_active', true)
         .order('slot'),
       admin
         .from('stores')
