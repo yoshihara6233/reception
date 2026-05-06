@@ -313,9 +313,10 @@ function FilterInput({ value, onChange, placeholder, type = 'text' }: {
 // ── 来訪詳細パネル ─────────────────────────────────────────────────────────────
 
 function VisitDetailPanel({
-  visitId, dateLocale, t,
+  visitId, eventType, dateLocale, t,
 }: {
   visitId: string
+  eventType: 'checkin' | 'checkout'
   dateLocale: string
   t: (k: string) => string
 }) {
@@ -388,8 +389,32 @@ function VisitDetailPanel({
     </div>
   )
 
-  const visitorPhotos = detail.photos.filter(p => p.type === 'face' || p.type === 'card')
-  const ocrPhoto      = detail.photos.find(p => p.ocrResult)
+  const isCheckinView = eventType === 'checkin'
+  const visitorPhotos = isCheckinView ? detail.photos.filter(p => p.type === 'face' || p.type === 'card') : []
+  const ocrPhoto      = isCheckinView ? detail.photos.find(p => p.ocrResult) : undefined
+  const filteredBaggage = baggage.filter(bd => bd.context === eventType)
+
+  // 来訪情報フィールド
+  const infoFields: { label: string; value: string | null }[] = isCheckinView ? [
+    { label: '目的',    value: detail.purpose },
+    { label: '店舗',    value: detail.store_name ?? '—' },
+    ...(detail.area_name ? [{ label: 'エリア', value: detail.area_name }] : []),
+    { label: '入室時刻', value: new Date(detail.check_in_at).toLocaleString(dateLocale) },
+    ...(detail.visitor?.phone ? [{ label: '電話番号', value: detail.visitor.phone }] : []),
+    ...(detail.visitor?.email ? [{ label: 'メール', value: detail.visitor.email }] : []),
+  ] : [
+    { label: '店舗',    value: detail.store_name ?? '—' },
+    { label: '退室時刻', value: detail.check_out_at ? new Date(detail.check_out_at).toLocaleString(dateLocale) : null },
+    ...(detail.check_out_at ? [{
+      label: '滞在時間',
+      value: (() => {
+        const ms = new Date(detail.check_out_at!).getTime() - new Date(detail.check_in_at).getTime()
+        const h = Math.floor(ms / 3600000)
+        const m = Math.floor((ms % 3600000) / 60000)
+        return h > 0 ? `${h}時間${m}分` : `${m}分`
+      })(),
+    }] : []),
+  ]
 
   const infoLabelStyle: React.CSSProperties = {
     font: '400 11px/1 var(--font-sans)', color: '#9ca3af',
@@ -415,6 +440,17 @@ function VisitDetailPanel({
       {/* ── ヘッダー ── */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
         <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+            <span style={{
+              padding: '2px 7px', borderRadius: 4,
+              font: '600 10px/1.4 var(--font-sans)',
+              ...(isCheckinView
+                ? { background: '#dcfce7', color: '#15803d' }
+                : { background: '#f1f5f9', color: '#64748b' }),
+            }}>
+              {isCheckinView ? '↓ 入室' : '↑ 退室'}
+            </span>
+          </div>
           <h2 style={{ font: '700 20px/1.2 var(--font-sans)', color: '#1e3a5f', margin: 0 }}>
             {detail.visitor?.name ?? '—'}
           </h2>
@@ -452,15 +488,7 @@ function VisitDetailPanel({
       {/* ── 来訪情報 ── */}
       <div className="bg-white rounded-2xl shadow-sm px-5 py-3 mb-4">
         <div style={{ display: 'flex', alignItems: 'center', gap: 0, flexWrap: 'wrap' }}>
-          {[
-            { label: '目的', value: detail.purpose },
-            { label: '店舗', value: detail.store_name ?? '—' },
-            ...(detail.area_name ? [{ label: 'エリア', value: detail.area_name }] : []),
-            { label: '入室', value: new Date(detail.check_in_at).toLocaleString(dateLocale) },
-            { label: '退室', value: detail.check_out_at ? new Date(detail.check_out_at).toLocaleString(dateLocale) : null },
-            ...(detail.visitor?.phone ? [{ label: '電話番号', value: detail.visitor.phone }] : []),
-            ...(detail.visitor?.email ? [{ label: 'メール', value: detail.visitor.email }] : []),
-          ].map((item, i, arr) => (
+          {infoFields.map((item, i, arr) => (
             <div key={item.label} style={{ display: 'flex', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, padding: '0 12px' }}>
                 <span style={{ font: '400 11px/1 var(--font-sans)', color: '#9ca3af', whiteSpace: 'nowrap' }}>
@@ -477,8 +505,8 @@ function VisitDetailPanel({
           ))}
         </div>
 
-        {/* 退室処理ボタン */}
-        {detail.status === 'checked_in' && (
+        {/* 退室処理ボタン（入室ビューのみ） */}
+        {isCheckinView && detail.status === 'checked_in' && (
           <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid #f1f5f9' }}>
             <button
               onClick={handleCheckout}
@@ -497,26 +525,29 @@ function VisitDetailPanel({
         )}
       </div>
 
-      {/* ── 来訪時映像 ── */}
-      {(detail.checkin_vod_url || detail.checkout_vod_url) && (
+      {/* ── 来訪時映像（イベント別） ── */}
+      {isCheckinView && detail.checkin_vod_url && (
         <div className="bg-white rounded-2xl shadow-sm p-5 mb-4">
           <p style={{ font: '600 11px/1 var(--font-sans)', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>
-            来訪時映像
+            入室時映像
           </p>
-          {detail.checkin_vod_url && (
-            <VisitCameraPlayer
-              label="入室"
-              hlsUrl={detail.checkin_vod_url}
-              eventTime={detail.check_in_at}
-            />
-          )}
-          {detail.checkout_vod_url && detail.check_out_at && (
-            <VisitCameraPlayer
-              label="退室"
-              hlsUrl={detail.checkout_vod_url}
-              eventTime={detail.check_out_at}
-            />
-          )}
+          <VisitCameraPlayer
+            label="入室"
+            hlsUrl={detail.checkin_vod_url}
+            eventTime={detail.check_in_at}
+          />
+        </div>
+      )}
+      {!isCheckinView && detail.checkout_vod_url && detail.check_out_at && (
+        <div className="bg-white rounded-2xl shadow-sm p-5 mb-4">
+          <p style={{ font: '600 11px/1 var(--font-sans)', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>
+            退室時映像
+          </p>
+          <VisitCameraPlayer
+            label="退室"
+            hlsUrl={detail.checkout_vod_url}
+            eventTime={detail.check_out_at}
+          />
         </div>
       )}
 
@@ -569,10 +600,10 @@ function VisitDetailPanel({
         </div>
       )}
 
-      {/* ── 手荷物検査 ── */}
-      {baggage.length > 0 && (
+      {/* ── 手荷物検査（イベント別） ── */}
+      {filteredBaggage.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {baggage.map(bd => (
+          {filteredBaggage.map(bd => (
             <div key={bd.id} className="bg-white rounded-2xl shadow-sm overflow-hidden">
               {/* ヘッダー */}
               <div style={{
@@ -687,7 +718,7 @@ function VisitsPageInner() {
   const [purposes,  setPurposes]  = useState<string[]>([])
 
   // 選択状態（スプリットペインでは詳細表示に使う）
-  const [selectedVisitId, setSelectedVisitId] = useState<string | null>(null)
+  const [selectedEvent, setSelectedEvent] = useState<{ visitId: string; type: 'checkin' | 'checkout' } | null>(null)
 
   // 一括選択（CSV出力用）
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -1019,13 +1050,13 @@ function VisitsPageInner() {
                 const listEvents = buildTimeline(displayedVisits, sortDir)
                 return listEvents.map(ev => {
                   const visit = ev.visit
-                  const isActive = selectedVisitId === visit.id
+                  const isActive = selectedEvent?.visitId === visit.id && selectedEvent?.type === ev.type
                   const isCheckin = ev.type === 'checkin'
                   const stripeColor = isCheckin ? '#22c55e' : '#94a3b8'
                   return (
                     <div
                       key={ev.key}
-                      onClick={() => setSelectedVisitId(visit.id)}
+                      onClick={() => setSelectedEvent({ visitId: visit.id, type: ev.type })}
                       style={{
                         display: 'flex', gap: 8, padding: '8px 12px 8px 14px',
                         cursor: 'pointer',
@@ -1110,8 +1141,8 @@ function VisitsPageInner() {
 
           {/* ── 右パネル: 詳細 ── */}
           <div style={{ flex: 1, overflowY: 'auto', background: '#f8fafc', minWidth: 0 }}>
-            {selectedVisitId ? (
-              <VisitDetailPanel visitId={selectedVisitId} dateLocale={dateLocale} t={t} />
+            {selectedEvent ? (
+              <VisitDetailPanel visitId={selectedEvent.visitId} eventType={selectedEvent.type} dateLocale={dateLocale} t={t} />
             ) : (
               <div style={{
                 display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
