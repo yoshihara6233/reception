@@ -8,6 +8,7 @@ const navKeys = [
   { href: '/admin/dashboard', key: 'dashboard', icon: '📊' },
   { href: '/admin/visits', key: 'visits', icon: '📋' },
   { href: '/admin/analytics', key: 'analytics', icon: '📈' },
+  { href: '/admin/reports', key: 'reports', icon: '📄' },
   { href: '/admin/stores', key: 'stores', icon: '🏪' },
   { href: '/admin/pre-registrations', key: 'preRegistrations', icon: '🎫' },
   { href: '/admin/settings', key: 'settings', icon: '⚙️' },
