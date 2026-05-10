@@ -11,7 +11,7 @@ import { canAccess } from '@/lib/acl'
 import {
   LayoutDashboard, ClipboardList, Luggage, BarChart3,
   Building2, Settings, Users, ScrollText, BookOpen,
-  FileText, UserCheck,
+  FileText, UserCheck, FileDown,
 } from 'lucide-react'
 
 // ── 型 ──────────────────────────────────────────────────────────────────────
@@ -31,9 +31,10 @@ const OP_LINK_DEFS = [
   { href: '/admin/dashboard', icon: <LayoutDashboard size={14} strokeWidth={1.5} />, key: 'dashboard', exact: true },
   { href: '/admin/visits',    icon: <ClipboardList   size={14} strokeWidth={1.5} />, key: 'visits' },
   { href: '/admin/analytics', icon: <BarChart3       size={14} strokeWidth={1.5} />, key: 'analytics' },
+  { href: '/admin/reports',   icon: <FileDown        size={14} strokeWidth={1.5} />, key: 'reports' },
 ] as const
 
-const OP_PATHS = ['/admin/dashboard', '/admin/visits', '/admin/analytics']
+const OP_PATHS = ['/admin/dashboard', '/admin/visits', '/admin/analytics', '/admin/reports']
 
 // ── セクション（サブナビあり） ────────────────────────────────────────────────
 
