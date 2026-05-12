@@ -121,7 +121,7 @@ export default function CardCapturePage() {
       const res = await fetch('/api/v1/ocr/business-card', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dataUrl }),
+        body: JSON.stringify({ dataUrl, token: params.token }),
       })
 
       if (res.ok) {
