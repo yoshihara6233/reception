@@ -163,9 +163,18 @@ async function _handler(
 
       try {
         const live = await vms.getLiveStream(resolvedId!)
-        // OSS-VMS の hls_url には access_token が含まれており、ブラウザから直接再生可能。
-        // CORS は VMS 側で CORS_ALLOWED_ORIGIN に受付 SaaS のオリジンを設定済み。
-        return { ...base, vms_uuid: resolvedId, hls_url: live.hls_url, error: null }
+        // VMS が内部ネットワーク上にある場合や CORS 未設定の場合でも再生できるよう
+        // hls_url をサーバーサイドプロキシ経由に変換する。
+        const hlsPath = (() => {
+          try {
+            const u = new URL(live.hls_url)
+            return u.pathname + u.search
+          } catch {
+            return live.hls_url.startsWith('/') ? live.hls_url : `/${live.hls_url}`
+          }
+        })()
+        const proxyUrl = `/api/v1/vms/hls-proxy?store=${encodeURIComponent(storeId)}&path=${encodeURIComponent(hlsPath)}`
+        return { ...base, vms_uuid: resolvedId, hls_url: proxyUrl, error: null }
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'ライブ取得失敗'
         return { ...base, vms_uuid: resolvedId, error: msg }
