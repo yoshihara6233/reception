@@ -89,6 +89,15 @@ export default function LoginPage() {
           >
             {loading ? t('admin.loggingIn') : t('admin.loginButton')}
           </button>
+
+          <div className="text-center pt-1">
+            <a
+              href="/admin/forgot-password"
+              className="text-sm text-gray-400 hover:text-[#1e3a5f]"
+            >
+              パスワードをお忘れの方
+            </a>
+          </div>
         </form>
       </div>
     </div>
