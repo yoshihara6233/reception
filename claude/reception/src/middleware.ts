@@ -112,8 +112,9 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // Protect /admin/* routes (except /admin/login)
-  if (pathname.startsWith('/admin') && !pathname.startsWith('/admin/login')) {
+  // Protect /admin/* routes (except public auth pages)
+  const adminPublicPaths = ['/admin/login', '/admin/forgot-password', '/admin/reset-password']
+  if (pathname.startsWith('/admin') && !adminPublicPaths.some(p => pathname.startsWith(p))) {
     if (!user) {
       const url = request.nextUrl.clone()
       url.pathname = '/admin/login'
