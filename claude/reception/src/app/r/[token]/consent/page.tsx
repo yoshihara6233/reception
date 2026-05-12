@@ -153,9 +153,9 @@ export default function ConsentPage() {
   const l = (locale as Locale) in labels.title ? (locale as Locale) : 'ja'
 
   return (
-    <div className="min-h-screen bg-[#f0f2f5]">
+    <div className="h-screen bg-[#f0f2f5] flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="bg-gradient-to-br from-[#1e3a5f] to-[#2c4f7c] px-6 pt-10 pb-8 text-white relative">
+      <div className="bg-gradient-to-br from-[#1e3a5f] to-[#2c4f7c] px-6 pt-10 pb-8 text-white relative flex-shrink-0">
         <div className="flex items-center justify-center gap-1 mb-4">
           <span className="w-6 h-1 rounded-full bg-white" />
           <span className="w-6 h-1 rounded-full bg-white/30" />
@@ -177,16 +177,16 @@ export default function ConsentPage() {
         <div className="absolute bottom-0 left-0 right-0 h-5 bg-[#f0f2f5] rounded-t-[20px]" />
       </div>
 
-      <div className="px-5 -mt-1 pb-8">
-        {/* Consent body */}
-        <div className="bg-white rounded-2xl p-5 shadow-sm mb-4 max-h-72 overflow-y-auto">
+      <div className="px-5 -mt-1 flex flex-col flex-1 min-h-0 pb-6">
+        {/* Consent body — fills remaining space */}
+        <div className="bg-white rounded-2xl p-5 shadow-sm mb-4 flex-1 overflow-y-auto min-h-0">
           <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
             {body}
           </div>
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3 mb-4">
+          <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3 mb-4 flex-shrink-0">
             {error}
           </div>
         )}
@@ -195,7 +195,7 @@ export default function ConsentPage() {
         <button
           onClick={handleAgree}
           disabled={submitting}
-          className="w-full py-4 bg-[#1e3a5f] text-white rounded-[14px] text-base font-semibold disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 mb-3"
+          className="w-full py-4 bg-[#1e3a5f] text-white rounded-[14px] text-base font-semibold disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 mb-3 flex-shrink-0"
         >
           {submitting
             ? <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -205,12 +205,12 @@ export default function ConsentPage() {
 
         <button
           onClick={() => router.back()}
-          className="w-full py-3 text-gray-500 text-sm font-medium"
+          className="w-full py-3 text-gray-500 text-sm font-medium flex-shrink-0"
         >
           {labels.decline[l]}
         </button>
 
-        <p className="text-center text-xs text-gray-400 mt-4">
+        <p className="text-center text-xs text-gray-400 mt-3 flex-shrink-0">
           🔒{' '}
           {l === 'ja' ? 'データは暗号化して安全に管理されます' : 'Your data is encrypted and secure'}
         </p>

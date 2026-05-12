@@ -47,6 +47,7 @@ export default function BaggagePage() {
   const [inspectionMode, setInspectionMode] = useState<'photo' | 'video'>('photo')
   const [baggageRequired, setBaggageRequired] = useState(false)
   const [cameraAvailable, setCameraAvailable] = useState(true)
+  const [kioskMode, setKioskMode] = useState(false)
 
   // 店舗設定読み込み
   useEffect(() => {
@@ -67,6 +68,7 @@ export default function BaggagePage() {
         const mode = val === 'video' ? 'video' : 'photo'
         setInspectionMode(mode)
         setBaggageRequired(false) // no longer used for photo, keep for compat
+        setKioskMode(!!s.kiosk_mode)
       }
     } catch { /* ignore */ }
     if (!navigator.mediaDevices?.getUserMedia) setCameraAvailable(false)
@@ -83,13 +85,15 @@ export default function BaggagePage() {
       return
     }
     try {
-      const stream = await startCamera(videoRef.current, { facingMode: 'environment' })
+      // キオスクモード（固定タブレット）は手前カメラ、通常（スマホ）は背面カメラ
+      const facingMode = kioskMode ? 'user' : 'environment'
+      const stream = await startCamera(videoRef.current, { facingMode })
       streamRef.current = stream
     } catch {
       setCameraAvailable(false)
       setPhase('declare')
     }
-  }, [])
+  }, [kioskMode])
 
   useEffect(() => {
     if (phase === 'camera_contents' || phase === 'camera_empty') {

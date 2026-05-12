@@ -25,6 +25,7 @@ export default function CardCapturePage() {
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [scanProgress, setScanProgress] = useState<string>('名刺を読み取り中...')
   const [cardRequired, setCardRequired] = useState(false)
+  const [kioskMode, setKioskMode] = useState(false)
 
   // 店舗設定を読み込む
   useEffect(() => {
@@ -33,6 +34,7 @@ export default function CardCapturePage() {
       if (raw) {
         const s = JSON.parse(raw)
         setCardRequired(s.require_business_card === 'required')
+        setKioskMode(!!s.kiosk_mode)
       }
     } catch { /* ignore */ }
   }, [])
@@ -49,7 +51,9 @@ export default function CardCapturePage() {
       return
     }
     try {
-      const stream = await startCamera(videoRef.current, { facingMode: 'environment' })
+      // キオスクモード（固定タブレット）は手前カメラ、通常（スマホ）は背面カメラ
+      const facingMode = kioskMode ? 'user' : 'environment'
+      const stream = await startCamera(videoRef.current, { facingMode })
       streamRef.current = stream
     } catch (err) {
       const name = (err as DOMException).name
@@ -64,7 +68,7 @@ export default function CardCapturePage() {
       }
       setPhase('error')
     }
-  }, [])
+  }, [kioskMode])
 
   useEffect(() => {
     initCamera()
