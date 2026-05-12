@@ -149,8 +149,8 @@ export default function FaceCapturePage() {
       </div>
 
       {/* Camera / Preview */}
-      <div className="flex-1 flex items-center justify-center px-6">
-        <div className="relative w-64 h-80 rounded-2xl overflow-hidden">
+      <div className="flex-1 flex items-center justify-center px-4">
+        <div className="relative w-full max-w-xs aspect-[3/4] rounded-2xl overflow-hidden">
           {phase === 'camera' && (
             <>
               <video
@@ -160,8 +160,11 @@ export default function FaceCapturePage() {
                 autoPlay
                 muted
               />
-              {/* Oval guide */}
-              <div className="absolute inset-8 border-2 border-white/50 rounded-full pointer-events-none" />
+              {/* Oval guide — large enough for face at ~50cm */}
+              <div className="absolute inset-4 border-2 border-white/60 rounded-full pointer-events-none" />
+              <div className="absolute bottom-3 left-0 right-0 text-center text-white/50 text-xs">
+                約50cmの距離で顔を枠に合わせてください
+              </div>
             </>
           )}
           {phase === 'preview' && capturedImage && (
