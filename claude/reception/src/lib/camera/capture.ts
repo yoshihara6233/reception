@@ -28,15 +28,31 @@ export async function startCamera(
   return stream
 }
 
-export function captureFrame(videoElement: HTMLVideoElement): Blob | null {
+/**
+ * @param zoom 1.0 = full frame, 2.0 = center crop at 2× zoom
+ *             キオスクタブレット固定時は 2.0 で約50cm距離の顔にフィット
+ */
+export function captureFrame(videoElement: HTMLVideoElement, zoom = 1): Blob | null {
+  const vw = videoElement.videoWidth
+  const vh = videoElement.videoHeight
+
   const canvas = document.createElement('canvas')
-  canvas.width = videoElement.videoWidth
-  canvas.height = videoElement.videoHeight
+  canvas.width = vw
+  canvas.height = vh
 
   const ctx = canvas.getContext('2d')
   if (!ctx) return null
 
-  ctx.drawImage(videoElement, 0, 0)
+  if (zoom > 1) {
+    // Center-crop: show only the inner 1/zoom area, stretched to full resolution
+    const cropW = vw / zoom
+    const cropH = vh / zoom
+    const srcX = (vw - cropW) / 2
+    const srcY = (vh - cropH) / 2
+    ctx.drawImage(videoElement, srcX, srcY, cropW, cropH, 0, 0, vw, vh)
+  } else {
+    ctx.drawImage(videoElement, 0, 0)
+  }
 
   // Convert to blob synchronously via dataURL for simplicity
   const dataUrl = canvas.toDataURL('image/jpeg', 0.85)

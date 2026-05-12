@@ -20,6 +20,10 @@ export default function FaceCapturePage() {
   const [capturedBlob, setCapturedBlob] = useState<Blob | null>(null)
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [faceRequired, setFaceRequired] = useState(false)
+  const [kioskMode, setKioskMode] = useState(false)
+
+  // キオスク固定タブレットでは 2× ズームで約50cm距離に合わせる
+  const KIOSK_ZOOM = 2
 
   // 店舗設定を読み込む
   useEffect(() => {
@@ -28,6 +32,7 @@ export default function FaceCapturePage() {
       if (raw) {
         const s = JSON.parse(raw)
         setFaceRequired(s.require_face_photo === 'required')
+        setKioskMode(!!s.kiosk_mode)
         // hidden の場合はスキップして手荷物検査へ（手荷物側でさらにスキップ判定）
         if (s.require_face_photo === 'hidden') {
           router.replace(`/r/${params.token}/baggage?context=checkin`)
@@ -82,7 +87,7 @@ export default function FaceCapturePage() {
 
   const handleCapture = () => {
     if (!videoRef.current) return
-    const blob = captureFrame(videoRef.current)
+    const blob = captureFrame(videoRef.current, kioskMode ? KIOSK_ZOOM : 1)
     if (blob) {
       setCapturedBlob(blob)
       setCapturedImage(URL.createObjectURL(blob))
@@ -150,18 +155,25 @@ export default function FaceCapturePage() {
 
       {/* Camera / Preview */}
       <div className="flex-1 flex items-center justify-center px-4">
-        <div className="relative w-full max-w-xs aspect-[3/4] rounded-2xl overflow-hidden">
+        {/* キオスクモードはコンテナを大きくして顔が50cmで収まるようにする */}
+        <div className={`relative aspect-[3/4] rounded-2xl overflow-hidden ${kioskMode ? 'w-full max-w-sm' : 'w-full max-w-xs'}`}>
           {phase === 'camera' && (
             <>
               <video
                 ref={videoRef}
-                className="w-full h-full object-cover scale-x-[-1]"
+                className="w-full h-full object-cover"
+                style={{
+                  // キオスク: 2×ズーム表示（中央クロップと合わせる） + 左右反転
+                  transform: kioskMode
+                    ? `scaleX(-1) scale(${KIOSK_ZOOM})`
+                    : 'scaleX(-1)',
+                }}
                 playsInline
                 autoPlay
                 muted
               />
-              {/* Oval guide — large enough for face at ~50cm */}
-              <div className="absolute inset-4 border-2 border-white/60 rounded-full pointer-events-none" />
+              {/* Oval guide */}
+              <div className={`absolute border-2 border-white/60 rounded-full pointer-events-none ${kioskMode ? 'inset-3' : 'inset-4'}`} />
               <div className="absolute bottom-3 left-0 right-0 text-center text-white/50 text-xs">
                 約50cmの距離で顔を枠に合わせてください
               </div>
