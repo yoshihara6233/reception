@@ -46,6 +46,17 @@ export default function FaceAuthPage() {
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [errorMsg, setErrorMsg]   = useState<string | null>(null)
   const [countdown, setCountdown] = useState(5)
+  const [kioskMode, setKioskMode] = useState(false)
+
+  // キオスク固定タブレットでは 2× ズームで約50cm距離に合わせる
+  const KIOSK_ZOOM = 2
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('reception-area-settings')
+      if (raw) setKioskMode(!!JSON.parse(raw).kiosk_mode)
+    } catch { /* ignore */ }
+  }, [])
 
   // ── カメラ起動 ───────────────────────────────────────────────────────────────
 
@@ -82,7 +93,7 @@ export default function FaceAuthPage() {
 
   const handleCapture = async () => {
     if (!videoRef.current) return
-    const blob = captureFrame(videoRef.current)
+    const blob = captureFrame(videoRef.current, kioskMode ? KIOSK_ZOOM : 1)
     if (!blob) return
 
     if (streamRef.current) stopCamera(streamRef.current)
@@ -432,21 +443,29 @@ export default function FaceAuthPage() {
 
       {/* Camera / Captured preview */}
       <div className="flex-1 flex items-center justify-center px-6">
-        <div className="relative w-64 h-80 rounded-3xl overflow-hidden bg-gray-900">
+        {/* キオスクモードはコンテナを大きくして顔が50cmで収まるようにする */}
+        <div className={`relative rounded-3xl overflow-hidden bg-gray-900 ${kioskMode ? 'w-full max-w-sm aspect-[3/4]' : 'w-64 h-80'}`}>
           {/* カメラ映像 */}
           {phase === 'camera' && (
             <>
               <video
                 ref={videoRef}
-                className="w-full h-full object-cover scale-x-[-1]"
+                className="w-full h-full object-cover"
+                style={{
+                  transform: kioskMode
+                    ? `scaleX(-1) scale(${KIOSK_ZOOM})`
+                    : 'scaleX(-1)',
+                }}
                 playsInline
                 autoPlay
                 muted
               />
               {/* 顔ガイド楕円 */}
-              <div className="absolute inset-8 border-2 border-white/60 rounded-full pointer-events-none" />
+              <div className={`absolute border-2 border-white/60 rounded-full pointer-events-none ${kioskMode ? 'inset-3' : 'inset-8'}`} />
               <div className="absolute bottom-3 left-0 right-0 text-center">
-                <p className="text-white/50 text-xs">顔を枠内に収めてください</p>
+                <p className="text-white/50 text-xs">
+                  {kioskMode ? '約50cmの距離で顔を枠に合わせてください' : '顔を枠内に収めてください'}
+                </p>
               </div>
             </>
           )}
