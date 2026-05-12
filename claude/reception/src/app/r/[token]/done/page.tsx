@@ -8,16 +8,25 @@ import { useAnnounce } from '@/lib/speech/useAnnounce'
 export default function DonePage() {
   const [visitId, setVisitId] = useState<string>('')
   const [hasFace, setHasFace] = useState<boolean | null>(null)  // null = loading
+  const [kioskMode, setKioskMode] = useState(false)
   const { t, locale } = useLocale()
   const { announce } = useAnnounce()
   const params = useParams<{ token: string }>()
 
-  const [countdown, setCountdown] = useState(5)
+  // キオスクモード: 15秒、通常: 5秒
+  const COUNTDOWN_SEC = kioskMode ? 15 : 5
+  const [countdown, setCountdown] = useState(COUNTDOWN_SEC)
 
   useEffect(() => {
     const id = sessionStorage.getItem('reception-visit-id') || ''
     setVisitId(id)
     announce('done')
+
+    // キオスクモード検出
+    try {
+      const raw = sessionStorage.getItem('reception-area-settings')
+      if (raw) setKioskMode(!!JSON.parse(raw).kiosk_mode)
+    } catch { /* ignore */ }
 
     // 顔登録済みかチェック (visitId → visitorId → face_id)
     if (id) {
@@ -30,8 +39,9 @@ export default function DonePage() {
     }
   }, [announce])
 
-  // 5秒カウントダウン → TOPへ自動遷移
+  // カウントダウン → TOPへ自動遷移
   useEffect(() => {
+    setCountdown(COUNTDOWN_SEC)
     const timer = setInterval(() => {
       setCountdown(c => {
         if (c <= 1) {
@@ -43,7 +53,8 @@ export default function DonePage() {
       })
     }, 1000)
     return () => clearInterval(timer)
-  }, [params.token])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.token, COUNTDOWN_SEC])
 
   const shortId = visitId.slice(0, 8).toUpperCase()
 
@@ -99,8 +110,8 @@ export default function DonePage() {
           </div>
         </div>
 
-        {/* 顔認証登録バナー: 未登録の場合のみ表示 */}
-        {hasFace === false && visitId && (
+        {/* 顔認証登録バナー: 未登録 かつ 非キオスクモードのみ表示 */}
+        {!kioskMode && hasFace === false && visitId && (
           <a
             href={faceRegUrl}
             className="flex items-center gap-3 bg-white rounded-2xl p-5 shadow-sm mb-4 group hover:bg-[#f8f9ff] transition-colors"
@@ -120,14 +131,34 @@ export default function DonePage() {
           </a>
         )}
 
-        {/* Back to top button */}
-        <a
-          href={`/r/${params.token}`}
-          className="block w-full py-4 bg-[#1e3a5f] text-white text-center text-sm font-semibold rounded-2xl shadow-sm"
-        >
-          {backLabel}
-          <span className="ml-2 text-white/60 text-xs font-normal">({countdown}秒後に自動で戻ります)</span>
-        </a>
+        {/* キオスクモード: 大きな「次の方へ」ボタン + プログレスバー */}
+        {kioskMode ? (
+          <div className="mb-2">
+            <a
+              href={`/r/${params.token}`}
+              className="flex flex-col items-center justify-center w-full py-7 bg-[#1e3a5f] text-white text-center rounded-2xl shadow-sm gap-1"
+            >
+              <span className="text-xl font-bold tracking-wide">次の方へ →</span>
+              <span className="text-white/60 text-sm font-normal">{countdown}秒後に自動で画面が戻ります</span>
+            </a>
+            {/* プログレスバー */}
+            <div className="mt-3 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-[#1e3a5f] rounded-full transition-all duration-1000"
+                style={{ width: `${(countdown / COUNTDOWN_SEC) * 100}%` }}
+              />
+            </div>
+          </div>
+        ) : (
+          /* 通常モード: 従来のボタン */
+          <a
+            href={`/r/${params.token}`}
+            className="block w-full py-4 bg-[#1e3a5f] text-white text-center text-sm font-semibold rounded-2xl shadow-sm"
+          >
+            {backLabel}
+            <span className="ml-2 text-white/60 text-xs font-normal">({countdown}秒後に自動で戻ります)</span>
+          </a>
+        )}
       </div>
 
       {/* Footer */}

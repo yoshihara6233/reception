@@ -13,6 +13,7 @@ interface Settings {
   visit_purposes: string[]
   photo_retention_days: number
   visit_retention_days: number
+  kiosk_mode: boolean
 }
 
 interface Store {
@@ -35,6 +36,7 @@ const defaultSettings: Settings = {
   visit_purposes: ['定期配送', 'メンテナンス', '商談', '監査', 'その他'],
   photo_retention_days: 90,
   visit_retention_days: 365,
+  kiosk_mode: false,
 }
 
 function isOverridden(key: keyof Settings, overrideKeys: Set<keyof Settings>): boolean {
@@ -392,6 +394,39 @@ export default function SettingsPage() {
       </div>
 
       <div className="space-y-5">
+
+        {/* ── 端末・キオスクモード ──────────────────────────────────────── */}
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <div className="px-6 pt-5 pb-2 border-b border-gray-100">
+            <SectionHeader icon="🖥️" title="端末モード" desc="設置型タブレット（iPadなど）をキオスクとして使う場合に有効にします" />
+          </div>
+          <div className="px-6">
+            <SettingRow
+              label="キオスクモード"
+              desc="タブレット設置型向け。スリープ防止・自動リセット・大画面レイアウトが有効になります"
+              overridden={selectedStore !== 'tenant' && isOverridden('kiosk_mode', overrideKeys)}
+              tenantValue={tenantSettings.kiosk_mode ? 'ON' : 'OFF'}
+              showReset={selectedStore !== 'tenant'}
+              onReset={() => resetField('kiosk_mode')}
+            >
+              <div className="flex items-center gap-3">
+                <Toggle
+                  checked={settings.kiosk_mode}
+                  onChange={v => update('kiosk_mode', v)}
+                />
+                <span className={`text-xs font-medium ${settings.kiosk_mode ? 'text-blue-600' : 'text-gray-400'}`}>
+                  {settings.kiosk_mode ? 'タブレット（設置型）' : 'スマートフォン（携帯型）'}
+                </span>
+              </div>
+            </SettingRow>
+            {settings.kiosk_mode && (
+              <div className="mb-4 px-3 py-3 bg-blue-50 border border-blue-100 rounded-xl text-xs text-blue-700 leading-relaxed">
+                <p className="font-semibold mb-1">📋 PWA（ホーム画面追加）での利用を推奨します</p>
+                <p>Safari → 共有ボタン → 「ホーム画面に追加」でブラウザUIが非表示になり、フルスクリーンで動作します。充電しながら設置してください。</p>
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* ── 受付フロー ─────────────────────────────────────────────────── */}
         <div className="bg-white rounded-2xl shadow-sm overflow-hidden">

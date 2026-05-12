@@ -12,6 +12,7 @@ const DEFAULT_SETTINGS = {
   visit_purposes: ['定期配送', 'メンテナンス', '商談', '監査', 'その他'],
   require_baggage_inspection_checkin: 'none',
   require_baggage_inspection_checkout: 'none',
+  kiosk_mode: false,
 }
 
 export async function GET(req: NextRequest) {
@@ -74,6 +75,10 @@ export async function GET(req: NextRequest) {
       storeSettings.require_baggage_inspection_checkout ??
       tenantSettings.require_baggage_inspection_checkout ??
       DEFAULT_SETTINGS.require_baggage_inspection_checkout,
+    kiosk_mode:
+      storeSettings.kiosk_mode ??
+      tenantSettings.kiosk_mode ??
+      DEFAULT_SETTINGS.kiosk_mode,
   }
 
   return NextResponse.json({ settings: merged })

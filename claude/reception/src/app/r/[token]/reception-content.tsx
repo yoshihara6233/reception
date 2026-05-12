@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useLocale } from '@/lib/i18n/useLocale'
 import { useAnnounce } from '@/lib/speech/useAnnounce'
+import { useKioskMode } from '@/lib/kiosk/useKioskMode'
 
 // ── Genesis Edge brand tokens ─────────────────────────────────────────────────
 const GE = {
@@ -90,20 +91,25 @@ interface OptionRowConfig {
 }
 
 function OptionRow({
-  href, icon, label, sub, tag, variant, cfg,
+  href, icon, label, sub, tag, variant, cfg, kiosk,
 }: {
   href: string; icon: React.ReactNode; label: string; sub: string
-  tag?: string; variant: RowVariant; cfg: OptionRowConfig
+  tag?: string; variant: RowVariant; cfg: OptionRowConfig; kiosk?: boolean
 }) {
+  const iconW = kiosk ? 64 : 50
+  const rowPadding = kiosk ? '20px 20px' : '14px 14px'
+  const labelFont = kiosk ? '600 17px/1.3 var(--font-sans)' : '600 15px/1.3 var(--font-sans)'
+  const subFont = kiosk ? '400 13px/1.5 var(--font-sans)' : '400 11px/1.5 var(--font-sans)'
+
   return (
     <a
       href={href}
       style={{
-        display: 'flex', alignItems: 'center', gap: 12,
-        padding: '14px 14px',
+        display: 'flex', alignItems: 'center', gap: 14,
+        padding: rowPadding,
         background: cfg.bg,
         border: `1.5px solid ${cfg.border}`,
-        borderRadius: 12,
+        borderRadius: kiosk ? 16 : 12,
         textDecoration: 'none',
         color: cfg.color,
         WebkitTapHighlightColor: 'transparent',
@@ -111,7 +117,7 @@ function OptionRow({
     >
       {/* icon */}
       <span style={{
-        width: 50, height: 50, borderRadius: 10, flexShrink: 0,
+        width: iconW, height: iconW, borderRadius: kiosk ? 14 : 10, flexShrink: 0,
         background: cfg.iconBg,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
@@ -121,7 +127,7 @@ function OptionRow({
       {/* text */}
       <span style={{ flex: 1, minWidth: 0 }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          <span style={{ font: `600 15px/1.3 var(--font-sans)` }}>{label}</span>
+          <span style={{ font: labelFont }}>{label}</span>
           {tag && (
             <span style={{
               font: `600 10px/1 var(--font-mono)`, letterSpacing: '0.08em',
@@ -132,13 +138,13 @@ function OptionRow({
         </span>
         <span style={{
           display: 'block', marginTop: 3,
-          font: `400 11px/1.5 var(--font-sans)`,
+          font: subFont,
           color: cfg.subColor,
         }}>{sub}</span>
       </span>
 
       {/* arrow */}
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+      <svg width={kiosk ? 18 : 14} height={kiosk ? 18 : 14} viewBox="0 0 24 24" fill="none"
         stroke={cfg.arrow} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
         style={{ flexShrink: 0 }}>
         <path d="M9 18l6-6-6-6"/>
@@ -195,6 +201,8 @@ interface Props {
 export function ReceptionContent({ token, storeName, areaName, preToken }: Props) {
   const { locale } = useLocale()
   const { announce } = useAnnounce()
+  const [kioskMode, setKioskMode] = useState(false)
+
   const ja = (j: string, e: string, z: string = e, k: string = e) => {
     if (locale === 'zh') return z
     if (locale === 'ko') return k
@@ -208,10 +216,20 @@ export function ReceptionContent({ token, storeName, areaName, preToken }: Props
     fetch(`/api/v1/area-settings?token=${token}`)
       .then(r => r.ok ? r.json() : { settings: null })
       .then(data => {
-        if (data.settings) sessionStorage.setItem('reception-area-settings', JSON.stringify(data.settings))
+        if (data.settings) {
+          sessionStorage.setItem('reception-area-settings', JSON.stringify(data.settings))
+          setKioskMode(!!data.settings.kiosk_mode)
+        }
       })
       .catch(() => {})
   }, [token])
+
+  // キオスクモード有効時: スリープ防止 + 2分無操作でTOPリセット
+  useKioskMode({
+    enableWakeLock: kioskMode,
+    enableIdleReset: kioskMode,
+    idleTimeoutMs: 120_000,
+  })
 
   useEffect(() => {
     if (preToken) window.location.replace(`/r/${token}/consent?pre=${preToken}`)
@@ -248,32 +266,54 @@ export function ReceptionContent({ token, storeName, areaName, preToken }: Props
     tagBg: GE.successSoft, tagColor: GE.success, arrow: GE.border,
   }
 
+  // タブレット（キオスク）向けのサイズ調整
+  const pad = kioskMode ? 24 : 14
+  const headingSize = kioskMode ? '26px' : '20px'
+  const subSize = kioskMode ? '15px' : '12px'
+  const rowPad = kioskMode ? '20px 20px' : '14px 14px'
+  const iconSize = kioskMode ? 60 : 50
+  const labelSize = kioskMode ? '17px' : '15px'
+  const rowGap = kioskMode ? 12 : 8
+
   return (
     <div style={{
       minHeight: '100svh', display: 'flex', flexDirection: 'column',
       background: GE.paper, fontFamily: 'var(--font-sans)',
     }}>
       {/* ── 上部カラーバー ─────────────────────────────────────────────── */}
-      <div style={{ height: 4, background: `linear-gradient(90deg, ${GE.inkDark} 0%, ${GE.ink} 50%, ${GE.success} 100%)` }} />
+      <div style={{ height: kioskMode ? 6 : 4, background: `linear-gradient(90deg, ${GE.inkDark} 0%, ${GE.ink} 50%, ${GE.success} 100%)` }} />
 
       {/* ── ヘッダー ───────────────────────────────────────────────────── */}
       <header style={{
         background: '#fff', borderBottom: `1px solid ${GE.border}`,
-        padding: '16px 20px', textAlign: 'center',
+        padding: kioskMode ? '24px 28px' : '16px 20px', textAlign: 'center',
       }}>
         <p style={{ font: `500 10px/1 var(--font-mono)`, letterSpacing: '0.16em', textTransform: 'uppercase', color: GE.subtle, marginBottom: 6 }}>
           Genesis Edge · Reception
         </p>
-        <h1 style={{ font: `700 20px/1.2 var(--font-sans)`, color: GE.inkDark, margin: 0 }}>
+        <h1 style={{ font: `700 ${headingSize}/1.2 var(--font-sans)`, color: GE.inkDark, margin: 0 }}>
           {storeName}
         </h1>
-        <p style={{ font: `400 12px/1.4 var(--font-sans)`, color: GE.neutral, marginTop: 3 }}>
+        <p style={{ font: `400 ${subSize}/1.4 var(--font-sans)`, color: GE.neutral, marginTop: 4 }}>
           {areaName}
         </p>
+        {kioskMode && (
+          <p style={{ font: `500 11px/1 var(--font-mono)`, letterSpacing: '0.1em', color: GE.subtle, marginTop: 8, textTransform: 'uppercase' }}>
+            🖥️ Kiosk Mode
+          </p>
+        )}
       </header>
 
       {/* ── コンテンツ ─────────────────────────────────────────────────── */}
-      <main style={{ flex: 1, padding: '14px 14px 20px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <main style={{
+        flex: 1,
+        padding: `${pad}px ${pad}px 20px`,
+        display: 'flex', flexDirection: 'column', gap: rowGap,
+        // タブレット: 中央寄せ + 最大幅
+        maxWidth: kioskMode ? 560 : undefined,
+        margin: kioskMode ? '0 auto' : undefined,
+        width: kioskMode ? '100%' : undefined,
+      }}>
 
         {/* ━━━ 入室セクション ━━━ */}
         <SectionHeader
@@ -287,31 +327,34 @@ export function ReceptionContent({ token, storeName, areaName, preToken }: Props
 
         <OptionRow
           href={`/r/${token}/face-auth?mode=checkin`}
-          icon={<FaceIcon size={26} color="#fff" />}
+          icon={<FaceIcon size={kioskMode ? 32 : 26} color="#fff" />}
           label={ja('顔認証でチェックイン', 'Face ID Check-In', '刷脸入场', '얼굴 인식으로 입실')}
           sub={ja('登録済みの方はすぐに入室できます', 'Instant entry for registered visitors', '已注册用户可立即入场', '등록된 분은 바로 입실 가능합니다')}
           tag={ja('推奨', 'REC', '推荐', '추천')}
           variant="primary"
           cfg={inPrimary}
+          kiosk={kioskMode}
         />
 
         <OptionRow
           href={`/r/${token}/scan?mode=checkin`}
-          icon={<QrIcon size={24} color={GE.ink} />}
+          icon={<QrIcon size={kioskMode ? 30 : 24} color={GE.ink} />}
           label={ja('QRコードで入室', 'QR Code Check-In', '扫码入场', 'QR 코드로 입실')}
           sub={ja('メールで届いたQRコードをスキャン', 'Scan the QR code from your email', '扫描邮件中的二维码', '이메일로 받은 QR 코드를 스캔하세요')}
           tag="QR"
           variant="secondary"
           cfg={inSecondary}
+          kiosk={kioskMode}
         />
 
         <OptionRow
           href={`/r/${token}/consent`}
-          icon={<NewIcon size={24} color={GE.neutral} />}
+          icon={<NewIcon size={kioskMode ? 30 : 24} color={GE.neutral} />}
           label={ja('はじめての方', 'New Visitor', '初次访客', '처음 방문하시는 분')}
           sub={ja('フォームに情報を入力して入室', 'Fill in the form to check in', '填写表格入场', '양식을 작성하여 입실')}
           variant="ghost"
           cfg={inGhost}
+          kiosk={kioskMode}
         />
 
         {/* 顔認証初回登録リンク */}
@@ -352,22 +395,24 @@ export function ReceptionContent({ token, storeName, areaName, preToken }: Props
 
         <OptionRow
           href={`/r/${token}/face-auth?mode=checkout`}
-          icon={<FaceIcon size={26} color="#fff" />}
+          icon={<FaceIcon size={kioskMode ? 32 : 26} color="#fff" />}
           label={ja('顔認証で退室', 'Face ID Check-Out', '刷脸离场', '얼굴 인식으로 퇴실')}
           sub={ja('カメラで顔をスキャンして退室', 'Scan your face to check out', '扫描人脸离场', '카메라로 얼굴을 스캔하여 퇴실')}
           tag={ja('推奨', 'REC', '推荐', '추천')}
           variant="primary"
           cfg={outPrimary}
+          kiosk={kioskMode}
         />
 
         <OptionRow
           href={`/r/${token}/scan?mode=checkout`}
-          icon={<QrIcon size={24} color={GE.success} />}
+          icon={<QrIcon size={kioskMode ? 30 : 24} color={GE.success} />}
           label={ja('QRコードで退室', 'QR Code Check-Out', '扫码离场', 'QR 코드로 퇴실')}
           sub={ja('入室時のQRコードをスキャン', 'Scan your check-in QR code', '扫描入场时的二维码', '입실 시 QR 코드를 스캔하세요')}
           tag="QR"
           variant="secondary"
           cfg={outSecondary}
+          kiosk={kioskMode}
         />
 
       </main>
