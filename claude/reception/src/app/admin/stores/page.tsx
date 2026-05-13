@@ -506,7 +506,7 @@ export default function StoresPage() {
       display: 'flex', gap: 0,
       height: 'calc(100vh - 92px)',
       overflow: 'hidden',
-      margin: '-32px -32px -32px -32px',
+      margin: '0 -32px -32px -32px',
     }}>
 
       {/* ── 左パネル（店舗一覧） ─────────────────────────────────────────────── */}
