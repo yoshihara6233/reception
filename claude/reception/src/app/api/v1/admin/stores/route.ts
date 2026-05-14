@@ -64,6 +64,53 @@ export async function POST(req: NextRequest) {
   }
 }
 
+export async function DELETE(req: NextRequest) {
+  try {
+    const ctx = await getAdminContext()
+    if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const { searchParams } = req.nextUrl
+    const id = searchParams.get('id')
+    if (!id) return NextResponse.json({ error: 'idが必要です' }, { status: 400 })
+
+    const supabase = createAdminClient()
+
+    // テナント所有確認
+    const { data: store } = await supabase
+      .from('stores')
+      .select('id')
+      .eq('id', id)
+      .eq('tenant_id', ctx.tenant_id)
+      .single()
+    if (!store) return NextResponse.json({ error: '店舗が見つかりません' }, { status: 404 })
+
+    // 訪問履歴の有無を確認
+    const { count } = await supabase
+      .from('visits')
+      .select('id', { count: 'exact', head: true })
+      .eq('store_id', id)
+
+    if ((count ?? 0) > 0) {
+      // 履歴あり → 無効化（soft delete）
+      const { error } = await supabase
+        .from('stores')
+        .update({ is_active: false })
+        .eq('id', id)
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ ok: true, soft: true })
+    } else {
+      // 履歴なし → 物理削除（関連エリア・スタッフを先に削除）
+      await supabase.from('areas').delete().eq('store_id', id)
+      await supabase.from('store_members').delete().eq('store_id', id)
+      const { error } = await supabase.from('stores').delete().eq('id', id)
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ ok: true, soft: false })
+    }
+  } catch {
+    return NextResponse.json({ error: 'サーバーエラー' }, { status: 500 })
+  }
+}
+
 export async function PATCH(req: NextRequest) {
   try {
     const ctx = await getAdminContext()

@@ -239,6 +239,18 @@ export default function StoresPage() {
     if (tab === 'cameras') fetchCameras(selectedId)
   }
 
+  // ── 店舗削除 ───────────────────────────────────────────────────────────────
+
+  const handleDeleteStore = async () => {
+    if (!selectedId) return
+    if (!confirm('この店舗を削除しますか？\n訪問履歴がある場合は無効化されます。')) return
+    const res  = await fetch(`/api/v1/admin/stores?id=${selectedId}`, { method: 'DELETE' })
+    const data = await res.json()
+    if (!res.ok) { alert(data.error ?? '削除に失敗しました'); return }
+    setSelectedId(null)
+    await fetchStores()
+  }
+
   // ── 店舗保存 ───────────────────────────────────────────────────────────────
 
   const handleSave = async () => {
@@ -626,13 +638,25 @@ export default function StoresPage() {
             <div style={{ background: '#fff', borderRadius: 8, border: '1px solid var(--ge-line)', padding: 20, marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
                 <h2 style={{ font: '700 16px/1 var(--font-sans)', color: 'var(--ge-ink)', margin: 0 }}>{selectedStore.name}</h2>
-                <span style={{
-                  padding: '3px 10px', borderRadius: 999, font: '500 11px/1.4 var(--font-sans)',
-                  background: selectedStore.is_active ? 'var(--ge-success-soft)' : 'var(--ge-paper-2)',
-                  color: selectedStore.is_active ? 'var(--ge-success)' : 'var(--ge-ink-4)',
-                }}>
-                  {selectedStore.is_active ? '稼働中' : '停止中'}
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{
+                    padding: '3px 10px', borderRadius: 999, font: '500 11px/1.4 var(--font-sans)',
+                    background: selectedStore.is_active ? 'var(--ge-success-soft)' : 'var(--ge-paper-2)',
+                    color: selectedStore.is_active ? 'var(--ge-success)' : 'var(--ge-ink-4)',
+                  }}>
+                    {selectedStore.is_active ? '稼働中' : '停止中'}
+                  </span>
+                  <button
+                    onClick={handleDeleteStore}
+                    style={{
+                      padding: '3px 10px', borderRadius: 4, cursor: 'pointer',
+                      font: '500 11px/1 var(--font-sans)', color: '#dc2626',
+                      background: '#fef2f2', border: '1px solid #fecaca',
+                    }}
+                  >
+                    削除
+                  </button>
+                </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <div>
