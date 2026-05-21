@@ -19,21 +19,21 @@ export default function ForgotPasswordPage() {
       const res = await fetch('/api/v1/admin/auth/reset-link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email,
-          redirectTo: `${window.location.origin}/admin/reset-password`,
-        }),
+        body: JSON.stringify({ email }),
       })
 
       const data = await res.json()
-      if (!res.ok || !data.action_link) {
+      if (!res.ok || !data.email_otp) {
         setError(data.error ?? '送信に失敗しました。メールアドレスを確認してください。')
         setSubmitting(false)
         return
       }
 
-      // 生成されたリンクに直接リダイレクト（メール経由不要）
-      window.location.href = data.action_link
+      // action_link 経由だと Supabase の redirect URL allowlist にハマる。
+      // 代わりに OTP をクエリに乗せて直接リセットページへ遷移し、
+      // verifyOtp をクライアント側で呼ぶ（allowlist 不要）。
+      const params = new URLSearchParams({ email, token: data.email_otp })
+      router.push(`/admin/reset-password?${params.toString()}`)
     } catch {
       setError('ネットワークエラーが発生しました')
       setSubmitting(false)

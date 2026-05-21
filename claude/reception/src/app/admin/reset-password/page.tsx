@@ -17,42 +17,65 @@ export default function ResetPasswordPage() {
   useEffect(() => {
     const supabase = createClient()
     let cancelled = false
-    let resolved = false
 
     async function bootstrap() {
-      const code = new URL(window.location.href).searchParams.get('code')
+      const url = new URL(window.location.href)
+      const token = url.searchParams.get('token')
+      const email  = url.searchParams.get('email')
+      const code   = url.searchParams.get('code')
+
+      // --- パターン1: forgot-password から OTP + email で遷移してきた場合 ---
+      // Supabase の redirect URL allowlist を一切経由しない
+      if (token && email) {
+        const { error: verifyErr } = await supabase.auth.verifyOtp({
+          email,
+          token,
+          type: 'recovery',
+        })
+        if (verifyErr) {
+          if (!cancelled) setSessionError('リンクが無効または期限切れです。もう一度お試しください。')
+          return
+        }
+        if (!cancelled) setReady(true)
+        return
+      }
+
+      // --- パターン2: PKCE code ---
       if (code) {
         const { error: exErr } = await supabase.auth.exchangeCodeForSession(code)
         if (exErr) {
           if (!cancelled) setSessionError('リンクが無効または期限切れです。もう一度お試しください。')
           return
         }
+        if (!cancelled) setReady(true)
+        return
       }
+
+      // --- パターン3: 既存セッション or URL hash からの PASSWORD_RECOVERY ---
       const { data } = await supabase.auth.getSession()
       if (cancelled) return
       if (data.session) {
-        resolved = true
         setReady(true)
-      } else {
-        // Wait briefly for PASSWORD_RECOVERY event from detectSessionInUrl
-        const { data: sub } = supabase.auth.onAuthStateChange((event) => {
-          if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
-            resolved = true
-            setReady(true)
-            sub.subscription.unsubscribe()
-          }
-        })
-        setTimeout(() => {
-          if (!cancelled && !resolved) {
-            setSessionError('リンクが無効または期限切れです。もう一度お試しください。')
-          }
-        }, 3000)
+        return
       }
+
+      let resolved = false
+      const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+        if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
+          resolved = true
+          if (!cancelled) setReady(true)
+          sub.subscription.unsubscribe()
+        }
+      })
+      setTimeout(() => {
+        if (!cancelled && !resolved) {
+          setSessionError('リンクが無効または期限切れです。もう一度お試しください。')
+        }
+      }, 3000)
     }
+
     bootstrap()
-
     return () => { cancelled = true }
-
   }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {

@@ -45,7 +45,12 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    return NextResponse.json({ action_link: data.properties.action_link })
+    // email_otp も返す → クライアントが verifyOtp を直接呼べる
+    // （Supabase の redirect URL allowlist を経由しない）
+    return NextResponse.json({
+      action_link: data.properties.action_link,
+      email_otp:   data.properties.email_otp,
+    })
   } catch {
     return NextResponse.json({ error: 'サーバーエラー' }, { status: 500 })
   }
