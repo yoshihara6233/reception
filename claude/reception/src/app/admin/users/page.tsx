@@ -18,10 +18,27 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchUsers()
   }, [])
+
+  async function handleDeleteUser(id: string, name: string) {
+    if (!confirm(`「${name}」を削除しますか？この操作は取り消せません。`)) return
+    setDeletingId(id)
+    try {
+      const res = await fetch(`/api/v1/admin/users?id=${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const data = await res.json()
+        alert(data.error || '削除に失敗しました')
+        return
+      }
+      await fetchUsers()
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   async function fetchUsers() {
     setLoading(true)
@@ -82,12 +99,21 @@ export default function UsersPage() {
                     {new Date(user.created_at).toLocaleDateString(dateLocale)}
                   </td>
                   <td className="px-6 py-3">
-                    <button
-                      onClick={() => setEditingUser(user)}
-                      className="text-xs text-[#1e3a5f] hover:underline font-medium px-2 py-1 rounded hover:bg-[#1e3a5f]/10"
-                    >
-                      編集
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setEditingUser(user)}
+                        className="text-xs text-[#1e3a5f] hover:underline font-medium px-2 py-1 rounded hover:bg-[#1e3a5f]/10"
+                      >
+                        編集
+                      </button>
+                      <button
+                        onClick={() => handleDeleteUser(user.id, user.name)}
+                        disabled={deletingId === user.id}
+                        className="text-xs text-red-500 hover:underline font-medium px-2 py-1 rounded hover:bg-red-50 disabled:opacity-40"
+                      >
+                        {deletingId === user.id ? '削除中...' : '削除'}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))

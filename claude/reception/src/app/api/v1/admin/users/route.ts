@@ -65,6 +65,57 @@ export async function POST(req: NextRequest) {
   }
 }
 
+export async function DELETE(req: NextRequest) {
+  try {
+    const ctx = await getAdminContext()
+    if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    if (ctx.role !== 'tenant_admin') {
+      return NextResponse.json({ error: '権限がありません' }, { status: 403 })
+    }
+
+    const { searchParams } = new URL(req.url)
+    const id = searchParams.get('id')
+    if (!id) return NextResponse.json({ error: 'id は必須です' }, { status: 400 })
+
+    const supabase = createAdminClient()
+
+    // Fetch the user scoped to caller's tenant to get auth_user_id
+    const { data: adminUser, error: fetchError } = await supabase
+      .from('admin_users')
+      .select('auth_user_id')
+      .eq('id', id)
+      .eq('tenant_id', ctx.tenant_id)
+      .single()
+
+    if (fetchError || !adminUser) {
+      return NextResponse.json({ error: 'ユーザが見つかりません' }, { status: 404 })
+    }
+
+    // Delete from admin_users first
+    const { error: dbError } = await supabase
+      .from('admin_users')
+      .delete()
+      .eq('id', id)
+      .eq('tenant_id', ctx.tenant_id)
+
+    if (dbError) {
+      return NextResponse.json({ error: dbError.message }, { status: 500 })
+    }
+
+    // Delete from Supabase auth
+    const { error: authError } = await supabase.auth.admin.deleteUser(adminUser.auth_user_id)
+    if (authError) {
+      // DB row is already gone — log but don't fail the request
+      console.error('Failed to delete auth user:', authError.message)
+    }
+
+    return NextResponse.json({ success: true })
+  } catch {
+    return NextResponse.json({ error: 'サーバーエラー' }, { status: 500 })
+  }
+}
+
 export async function PATCH(req: NextRequest) {
   try {
     const ctx = await getAdminContext()
