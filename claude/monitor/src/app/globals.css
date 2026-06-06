@@ -1,0 +1,91 @@
+@import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+
+/* Class-based dark mode: dark: variants apply only under a .dark ancestor.
+   Scoped to /security via ThemeToggle — other sections are unaffected. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Genesis Edge — dark control-center palette (案A) as Tailwind theme colors.
+   Use as dark:bg-gedbg2 / dark:text-gedink / dark:border-gedline etc. */
+@theme {
+  --color-gedbg:     #0E1013;
+  --color-gedbg2:    #14171C;
+  --color-gedbg3:    #1C2028;
+  --color-gedline:   #2A2F38;
+  --color-gedink:    #E8E6E0;
+  --color-gedink2:   #A8A8AE;
+  --color-gedink3:   #6E6E75;
+  --color-gedaccent: #6A90C8;
+}
+
+:root {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --header-bg:  #0f172a;
+  --header-fg:  #f8fafc;
+  --status-bg:  #1e293b;
+  --tree-bg:    #f8fafc;
+  --tree-fg:    #1e293b;
+  --panel-border: #e2e8f0;
+}
+
+html, body { height: 100%; }
+body {
+  font-family: "SF Pro Text", -apple-system, "Hiragino Kaku Gothic ProN",
+    "Yu Gothic UI", system-ui, sans-serif;
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 13px;
+  overflow: hidden;
+}
+
+.leaflet-container { width: 100%; height: 100%; }
+
+/* =========================================================================
+   App-wide dark mode (Genesis Edge dark palette)
+   The app uses hardcoded slate/white utility classes. Rather than annotate
+   every element with dark: variants, remap the common surface / text / border
+   utilities under a .dark ancestor. Section-specific dark: variants (e.g.
+   /security accent buttons) still apply and take the same GE values.
+   Placed after `@import "tailwindcss"` so these win utility-class ties.
+   ========================================================================= */
+.dark body { background: #0E1013; color: #E8E6E0; }
+
+/* Surfaces */
+.dark .bg-white        { background-color: #14171C; }
+.dark .bg-slate-50     { background-color: #14171C; }
+.dark .bg-slate-100    { background-color: #0E1013; }
+.dark .hover\:bg-slate-50:hover  { background-color: #1C2028; }
+.dark .hover\:bg-slate-100:hover { background-color: #1C2028; }
+.dark .bg-slate-200    { background-color: #1C2028; }
+
+/* Text */
+.dark .text-slate-900  { color: #E8E6E0; }
+.dark .text-slate-800  { color: #E8E6E0; }
+.dark .text-slate-700  { color: #C7C7CC; }
+.dark .text-slate-600  { color: #A8A8AE; }
+.dark .text-slate-500  { color: #6E6E75; }
+.dark .text-slate-400  { color: #6E6E75; }
+
+/* Borders / dividers */
+.dark .border-slate-200 { border-color: #2A2F38; }
+.dark .border-slate-300 { border-color: #2A2F38; }
+.dark .border-slate-100 { border-color: #2A2F38; }
+.dark [class~="divide-slate-100"] > *,
+.dark [class~="divide-slate-200"] > * { border-color: #2A2F38; }
+
+/* Form fields */
+.dark input, .dark select, .dark textarea { background-color: #1C2028; color: #E8E6E0; border-color: #2A2F38; }
+.dark input::placeholder, .dark textarea::placeholder { color: #6E6E75; }
+
+/* =========================================================================
+   F26: Map alert-zoom pulse animation
+   ========================================================================= */
+@keyframes intereco-alert-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+  70%  { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+.intereco-alert-pulse {
+  animation: intereco-alert-pulse 1.6s infinite;
+}

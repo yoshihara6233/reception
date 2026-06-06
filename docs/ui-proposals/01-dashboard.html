@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<title>案 1: Modern Dashboard — レコーダ統合監視</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Hiragino Kaku Gothic ProN", "Yu Gothic UI", system-ui, sans-serif;
+    background: #f8fafc; color: #0f172a; font-size: 14px; line-height: 1.5;
+  }
+  .layout { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+
+  /* Sidebar */
+  aside {
+    background: #fff; border-right: 1px solid #e2e8f0; padding: 20px 12px;
+  }
+  .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; padding: 0 8px 16px; }
+  .brand-dot { width: 24px; height: 24px; border-radius: 6px; background: linear-gradient(135deg, #3b82f6, #6366f1); }
+  nav a {
+    display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px;
+    color: #475569; text-decoration: none; font-size: 13px; margin-bottom: 2px;
+  }
+  nav a.active { background: #eff6ff; color: #1d4ed8; font-weight: 600; }
+  nav a:hover:not(.active) { background: #f1f5f9; }
+  .nav-icon { width: 14px; height: 14px; background: currentColor; mask-size: contain; opacity: .7; }
+
+  /* Top bar */
+  main { display: flex; flex-direction: column; }
+  header.topbar {
+    background: #fff; border-bottom: 1px solid #e2e8f0; padding: 12px 24px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .crumb { font-size: 13px; color: #64748b; }
+  .crumb b { color: #0f172a; }
+  .topbar-right { display: flex; gap: 12px; align-items: center; }
+  .search { background: #f1f5f9; padding: 6px 12px; border-radius: 6px; font-size: 12px; color: #64748b; min-width: 240px; }
+  .avatar { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #f59e0b, #ef4444); }
+
+  /* Content */
+  .content { padding: 24px; }
+  .row { display: grid; gap: 16px; margin-bottom: 16px; }
+  .row.r1 { grid-template-columns: repeat(4, 1fr); }
+  .row.r2 { grid-template-columns: 2fr 1fr; }
+  .row.r3 { grid-template-columns: 1fr; }
+
+  .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; }
+  .stat .label { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
+  .stat .val   { font-size: 24px; font-weight: 700; margin-top: 2px; }
+  .stat .delta { font-size: 11px; margin-top: 2px; }
+  .delta.up { color: #16a34a; }
+  .delta.down { color: #dc2626; }
+
+  /* Map widget (mock) */
+  .map-card { padding: 0; overflow: hidden; }
+  .map-head { padding: 12px 16px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
+  .map-head h3 { font-size: 14px; font-weight: 600; }
+  .map-mock {
+    height: 360px; position: relative;
+    background:
+      radial-gradient(circle at 35% 45%, #dbeafe 1px, transparent 2px),
+      radial-gradient(circle at 65% 30%, #dbeafe 1px, transparent 2px),
+      linear-gradient(135deg, #f0f9ff, #e0f2fe);
+    background-size: 30px 30px, 40px 40px, 100% 100%;
+  }
+  .pin { position: absolute; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
+  .pin.ok { background: #22c55e; }
+  .pin.warn { background: #f59e0b; }
+  .pin.err { background: #ef4444; }
+  .pin.off { background: #9ca3af; }
+
+  /* Alert list */
+  .alert-card h3 { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+  .alert {
+    padding: 10px 0; border-bottom: 1px solid #f1f5f9; display: flex; gap: 12px; align-items: flex-start;
+    font-size: 12px;
+  }
+  .alert:last-child { border-bottom: 0; }
+  .alert-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; }
+  .alert .store { font-weight: 600; color: #0f172a; }
+  .alert .meta  { color: #64748b; font-size: 11px; margin-top: 2px; }
+
+  /* Recent monitoring */
+  .table-card { padding: 0; }
+  .table-card h3 { font-size: 14px; font-weight: 600; padding: 16px; border-bottom: 1px solid #e2e8f0; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 10px 16px; text-align: left; font-size: 12px; border-bottom: 1px solid #f1f5f9; }
+  th { color: #64748b; font-weight: 600; background: #fafbfc; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+  .b-live  { background: #ecfdf5; color: #15803d; }
+  .b-vod   { background: #fef3c7; color: #b45309; }
+  .b-grid  { background: #dbeafe; color: #1d4ed8; }
+
+  .note { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 10px 14px; font-size: 12px; color: #1e3a8a; margin: 16px 24px 0; }
+</style>
+</head>
+<body>
+  <div class="layout">
+    <aside>
+      <div class="brand"><span class="brand-dot"></span><span>Recorder Monitor</span></div>
+      <nav>
+        <a href="#" class="active">▣ ダッシュボード</a>
+        <a href="#">🗺 店舗マップ</a>
+        <a href="#">📹 16分割監視</a>
+        <a href="#">🎥 ライブ</a>
+        <a href="#">⏪ 録画再生</a>
+        <a href="#">🔔 アラート</a>
+        <a href="#">📊 レポート</a>
+        <a href="#">⚙ 設定</a>
+      </nav>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div class="crumb">ホーム / <b>ダッシュボード</b></div>
+        <div class="topbar-right">
+          <div class="search">🔍 店舗名・住所で検索 …</div>
+          <div class="avatar"></div>
+        </div>
+      </header>
+
+      <div class="note">案 1: <b>Modern Dashboard</b> — KPI と地図が並ぶ管理職向け SaaS ダッシュボード。日次のヘルスチェックや経営層への報告と相性が良い。</div>
+
+      <div class="content">
+        <div class="row r1">
+          <div class="card stat"><div class="label">登録店舗</div><div class="val">10,000</div><div class="delta up">+24 (今月)</div></div>
+          <div class="card stat"><div class="label">エッジ稼働</div><div class="val">9,847</div><div class="delta up">98.5%</div></div>
+          <div class="card stat"><div class="label">本日の監視</div><div class="val">2h 18m</div><div class="delta down">−12m vs 昨日</div></div>
+          <div class="card stat"><div class="label">同時視聴</div><div class="val">23</div><div class="delta up">+5</div></div>
+        </div>
+
+        <div class="row r2">
+          <div class="card map-card">
+            <div class="map-head">
+              <h3>店舗マップ</h3>
+              <span style="font-size:11px;color:#64748b">10,000 店舗 — クラスタリング表示</span>
+            </div>
+            <div class="map-mock">
+              <div class="pin ok" style="left:18%;top:30%"></div>
+              <div class="pin ok" style="left:24%;top:45%"></div>
+              <div class="pin warn" style="left:32%;top:38%"></div>
+              <div class="pin ok" style="left:42%;top:52%"></div>
+              <div class="pin off" style="left:55%;top:28%"></div>
+              <div class="pin ok" style="left:62%;top:60%"></div>
+              <div class="pin err" style="left:71%;top:42%"></div>
+              <div class="pin ok" style="left:78%;top:55%"></div>
+              <div class="pin ok" style="left:48%;top:72%"></div>
+            </div>
+          </div>
+
+          <div class="card alert-card">
+            <h3>アラート（直近1時間）</h3>
+            <div class="alert"><div class="alert-dot" style="background:#ef4444"></div><div><div class="store">新宿東店</div><div class="meta">エッジオフライン・3 分前</div></div></div>
+            <div class="alert"><div class="alert-dot" style="background:#f59e0b"></div><div><div class="store">渋谷南店</div><div class="meta">ch12 RTSP 接続不安定・12 分前</div></div></div>
+            <div class="alert"><div class="alert-dot" style="background:#f59e0b"></div><div><div class="store">大阪梅田店</div><div class="meta">CPU 使用率 85%・27 分前</div></div></div>
+            <div class="alert"><div class="alert-dot" style="background:#3b82f6"></div><div><div class="store">福岡天神店</div><div class="meta">監視時間制限到達・35 分前</div></div></div>
+          </div>
+        </div>
+
+        <div class="row r3">
+          <div class="card table-card">
+            <h3>最近のモニタリング</h3>
+            <table>
+              <tr><th>時刻</th><th>店舗</th><th>カメラ</th><th>モード</th><th>オペレータ</th><th>時間</th></tr>
+              <tr><td>14:32</td><td>新宿東店</td><td>ch3: レジ</td><td><span class="badge b-live">ライブ</span></td><td>佐藤</td><td>4 分</td></tr>
+              <tr><td>14:18</td><td>渋谷南店</td><td>16分割</td><td><span class="badge b-grid">監視</span></td><td>田中</td><td>12 分</td></tr>
+              <tr><td>13:45</td><td>横浜西店</td><td>ch7: 入口</td><td><span class="badge b-vod">再生</span></td><td>佐藤</td><td>8 分</td></tr>
+              <tr><td>13:22</td><td>名古屋栄店</td><td>16分割</td><td><span class="badge b-grid">監視</span></td><td>鈴木</td><td>15 分</td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

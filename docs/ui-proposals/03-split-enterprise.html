@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<title>案 3: Split Enterprise — レコーダ統合監視</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body, html { height: 100%; }
+  body {
+    font-family: "SF Pro Text", -apple-system, "Hiragino Kaku Gothic ProN", system-ui, sans-serif;
+    font-size: 13px; color: #1e293b; overflow: hidden;
+  }
+
+  /* Header bar */
+  header {
+    background: #0f172a; color: white; padding: 8px 16px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid #1e293b;
+  }
+  .brand { font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+  .brand-dot { width: 18px; height: 18px; border-radius: 4px; background: linear-gradient(135deg,#3b82f6,#8b5cf6); }
+  .menu { display: flex; gap: 4px; font-size: 12px; }
+  .menu a { color: #cbd5e1; text-decoration: none; padding: 4px 10px; border-radius: 4px; }
+  .menu a.active { background: #1e293b; color: white; }
+  .user { font-size: 12px; color: #cbd5e1; display: flex; align-items: center; gap: 8px; }
+  .user .av { width: 24px; height: 24px; border-radius: 50%; background: linear-gradient(135deg,#f59e0b,#ef4444); }
+
+  /* 3-column layout */
+  .layout {
+    display: grid;
+    grid-template-columns: 280px 1fr 360px;
+    height: calc(100vh - 38px);
+  }
+
+  /* Left: tree */
+  .left { background: #f8fafc; border-right: 1px solid #e2e8f0; overflow-y: auto; }
+  .panel-head {
+    padding: 8px 12px; border-bottom: 1px solid #e2e8f0; background: white;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #64748b;
+  }
+  .filter-box { padding: 8px 10px; }
+  .filter-box input { width: 100%; padding: 5px 8px; border: 1px solid #e2e8f0; border-radius: 4px; font-size: 12px; }
+  .tree { padding: 4px 0 12px; font-size: 12px; }
+  .t-group { padding: 4px 10px; font-weight: 700; color: #334155; cursor: pointer; user-select: none; }
+  .t-store {
+    padding: 4px 10px 4px 28px; cursor: pointer; display: flex; align-items: center; gap: 6px;
+  }
+  .t-store:hover { background: #f1f5f9; }
+  .t-store.selected { background: #dbeafe; color: #1d4ed8; font-weight: 600; }
+  .t-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+  /* Middle: main viewer */
+  .center { background: #f1f5f9; overflow-y: auto; }
+  .toolbar {
+    background: white; border-bottom: 1px solid #e2e8f0;
+    padding: 8px 14px; display: flex; align-items: center; justify-content: space-between;
+  }
+  .crumb { font-size: 12px; color: #475569; }
+  .crumb b { color: #0f172a; }
+  .tools { display: flex; gap: 4px; }
+  .tools button {
+    background: white; border: 1px solid #e2e8f0; padding: 5px 12px; border-radius: 4px;
+    font-size: 12px; cursor: pointer; color: #475569;
+  }
+  .tools button.primary { background: #2563eb; color: white; border-color: #2563eb; }
+  .tools button:hover:not(.primary) { background: #f1f5f9; }
+
+  .viewport { padding: 14px; }
+  .grid16 {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px;
+    background: #0f172a; padding: 2px; border-radius: 4px; aspect-ratio: 16/9;
+  }
+  .cell {
+    background: linear-gradient(135deg, #1e293b, #0f172a);
+    position: relative; overflow: hidden; cursor: pointer;
+  }
+  .cell::after {
+    content: attr(data-ch); position: absolute; left: 4px; bottom: 4px;
+    color: white; font-size: 10px; background: rgba(0,0,0,0.6); padding: 2px 6px; border-radius: 2px;
+  }
+  .cell::before {
+    content: attr(data-name); position: absolute; right: 4px; top: 4px;
+    color: rgba(255,255,255,0.7); font-size: 9px;
+  }
+  .cell:hover { outline: 2px solid #3b82f6; outline-offset: -2px; }
+  .cell.live { background: linear-gradient(135deg, #1e3a8a, #2563eb); }
+
+  .ts-bar {
+    background: white; margin-top: 12px; border-radius: 4px; border: 1px solid #e2e8f0; padding: 10px 14px;
+  }
+  .ts-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .ts-track { flex: 1; height: 6px; background: #e2e8f0; border-radius: 3px; position: relative; }
+  .ts-fill  { position: absolute; left: 0; top: 0; bottom: 0; width: 35%; background: #2563eb; border-radius: 3px; }
+  .ts-handle { position: absolute; left: 35%; top: -4px; width: 14px; height: 14px; background: white; border: 2px solid #2563eb; border-radius: 50%; transform: translateX(-50%); }
+
+  /* Right: detail */
+  .right { background: white; border-left: 1px solid #e2e8f0; overflow-y: auto; }
+  .right-section { padding: 14px; border-bottom: 1px solid #e2e8f0; }
+  .right-section h4 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #64748b; margin-bottom: 8px; }
+  .kv { display: grid; grid-template-columns: 100px 1fr; gap: 6px 8px; font-size: 12px; }
+  .kv dt { color: #64748b; }
+  .kv dd { color: #0f172a; }
+  .status-badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; background: #dcfce7; color: #166534; }
+
+  .cam-list { font-size: 12px; }
+  .cam-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #f1f5f9; }
+  .cam-row:last-child { border: 0; }
+
+  .note { background: #fffbeb; border-top: 1px solid #fde68a; padding: 6px 14px; font-size: 11px; color: #92400e; }
+
+  /* Status bar */
+  .statusbar {
+    position: fixed; bottom: 0; left: 0; right: 0; height: 22px;
+    background: #1e293b; color: #cbd5e1; font-size: 11px; display: flex; align-items: center;
+    padding: 0 12px; gap: 14px; border-top: 1px solid #334155;
+  }
+  .statusbar .sep { color: #475569; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="brand"><span class="brand-dot"></span>Recorder Monitor — Enterprise</div>
+    <div class="menu">
+      <a href="#" class="active">監視</a>
+      <a href="#">再生</a>
+      <a href="#">レポート</a>
+      <a href="#">マスタ</a>
+      <a href="#">ログ</a>
+      <a href="#">設定</a>
+    </div>
+    <div class="user"><span>佐藤 健一</span><div class="av"></div></div>
+  </header>
+
+  <div class="layout">
+    <!-- Tree -->
+    <aside class="left">
+      <div class="panel-head">店舗ツリー <span style="color:#0f172a">9,847/10,000</span></div>
+      <div class="filter-box"><input placeholder="店舗名で絞り込み …" /></div>
+      <div class="tree">
+        <div class="t-group">▾ 関東エリア (3,210)</div>
+        <div class="t-store"><span class="t-dot" style="background:#22c55e"></span>新宿東店</div>
+        <div class="t-store selected"><span class="t-dot" style="background:#22c55e"></span>渋谷南店</div>
+        <div class="t-store"><span class="t-dot" style="background:#f59e0b"></span>池袋北店</div>
+        <div class="t-store"><span class="t-dot" style="background:#22c55e"></span>横浜西店</div>
+        <div class="t-store"><span class="t-dot" style="background:#22c55e"></span>大宮店</div>
+        <div class="t-store"><span class="t-dot" style="background:#9ca3af"></span>千葉中央店</div>
+        <div class="t-group">▸ 関西エリア (2,104)</div>
+        <div class="t-group">▸ 中部エリア (1,856)</div>
+        <div class="t-group">▾ 九州エリア (1,012)</div>
+        <div class="t-store"><span class="t-dot" style="background:#22c55e"></span>福岡天神店</div>
+        <div class="t-store"><span class="t-dot" style="background:#ef4444"></span>博多駅前店</div>
+        <div class="t-store"><span class="t-dot" style="background:#22c55e"></span>熊本店</div>
+        <div class="t-group">▸ 北海道エリア (487)</div>
+        <div class="t-group">▸ 東北エリア (912)</div>
+        <div class="t-group">▸ 中国エリア (478)</div>
+        <div class="t-group">▸ 四国エリア (188)</div>
+      </div>
+    </aside>
+
+    <!-- Center -->
+    <main class="center">
+      <div class="toolbar">
+        <div class="crumb">関東 / <b>渋谷南店</b> / 16分割監視</div>
+        <div class="tools">
+          <button>地図表示</button>
+          <button class="primary">▶ 監視開始</button>
+          <button>⏪ 録画再生</button>
+          <button>📷 スナップ</button>
+          <button>⛶ 全画面</button>
+        </div>
+      </div>
+
+      <div class="viewport">
+        <div class="grid16">
+          <div class="cell" data-ch="01" data-name="入口"></div>
+          <div class="cell" data-ch="02" data-name="店頭"></div>
+          <div class="cell live" data-ch="03" data-name="レジ"></div>
+          <div class="cell" data-ch="04" data-name="陳列棚"></div>
+          <div class="cell" data-ch="05" data-name="バックヤード"></div>
+          <div class="cell" data-ch="06" data-name="冷蔵庫"></div>
+          <div class="cell" data-ch="07" data-name="駐車場"></div>
+          <div class="cell" data-ch="08" data-name="搬入口"></div>
+          <div class="cell" data-ch="09" data-name="休憩室"></div>
+          <div class="cell" data-ch="10" data-name="事務所"></div>
+          <div class="cell" data-ch="11" data-name="通路1"></div>
+          <div class="cell" data-ch="12" data-name="通路2"></div>
+          <div class="cell" data-ch="13" data-name="非常口"></div>
+          <div class="cell" data-ch="14" data-name="屋上"></div>
+          <div class="cell" data-ch="15" data-name="トイレ前"></div>
+          <div class="cell" data-ch="16" data-name="金庫室"></div>
+        </div>
+
+        <div class="ts-bar">
+          <div class="ts-row">
+            <button class="tools" style="border:1px solid #e2e8f0;padding:4px 8px;border-radius:4px;background:white;cursor:pointer;">⏪</button>
+            <button class="tools" style="border:1px solid #e2e8f0;padding:4px 8px;border-radius:4px;background:white;cursor:pointer;">⏸</button>
+            <button class="tools" style="border:1px solid #e2e8f0;padding:4px 8px;border-radius:4px;background:white;cursor:pointer;">⏩</button>
+            <span style="font-variant-numeric:tabular-nums">14:32:18</span>
+            <div class="ts-track">
+              <div class="ts-fill"></div>
+              <div class="ts-handle"></div>
+            </div>
+            <span style="font-variant-numeric:tabular-nums;color:#64748b">/ 24:00:00</span>
+            <select style="border:1px solid #e2e8f0;padding:3px 6px;border-radius:4px;font-size:12px;">
+              <option>×1</option><option>×2</option><option>×4</option><option>×8</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Right: detail panel -->
+    <aside class="right">
+      <div class="right-section">
+        <h4>店舗情報</h4>
+        <dl class="kv">
+          <dt>店舗名</dt><dd>渋谷南店</dd>
+          <dt>店舗 ID</dt><dd>S-0042</dd>
+          <dt>住所</dt><dd>渋谷区道玄坂 1-2-3</dd>
+          <dt>エリア</dt><dd>関東</dd>
+          <dt>状態</dt><dd><span class="status-badge">● オンライン</span></dd>
+          <dt>最終接続</dt><dd>2026-05-19 14:32</dd>
+        </dl>
+      </div>
+
+      <div class="right-section">
+        <h4>エッジサーバ</h4>
+        <dl class="kv">
+          <dt>機種</dt><dd>Edge-N100-v2</dd>
+          <dt>バージョン</dt><dd>0.4.2</dd>
+          <dt>CPU</dt><dd>23%</dd>
+          <dt>稼働時間</dt><dd>42 日 13 時間</dd>
+          <dt>モード</dt><dd>grid</dd>
+        </dl>
+      </div>
+
+      <div class="right-section">
+        <h4>レコーダ</h4>
+        <dl class="kv">
+          <dt>ベンダ</dt><dd>i-PRO</dd>
+          <dt>機種</dt><dd>WJ-NX410KG</dd>
+          <dt>IP</dt><dd>192.168.1.10</dd>
+        </dl>
+      </div>
+
+      <div class="right-section">
+        <h4>カメラ一覧 (16)</h4>
+        <div class="cam-list">
+          <div class="cam-row"><span>ch01 入口</span><span style="color:#16a34a">● 接続</span></div>
+          <div class="cam-row"><span>ch02 店頭</span><span style="color:#16a34a">● 接続</span></div>
+          <div class="cam-row"><span>ch03 レジ</span><span style="color:#1d4ed8">● ライブ中</span></div>
+          <div class="cam-row"><span>ch04 陳列棚</span><span style="color:#16a34a">● 接続</span></div>
+          <div class="cam-row"><span>ch12 通路2</span><span style="color:#dc2626">● エラー</span></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="statusbar">
+    <span>● 接続中</span><span class="sep">|</span>
+    <span>9,847 / 10,000 店舗オンライン</span><span class="sep">|</span>
+    <span>同時視聴: 23</span><span class="sep">|</span>
+    <span>本日のモニタ時間: 1h 18m / 2h 制限</span>
+    <span style="margin-left:auto">v0.4.2</span>
+  </div>
+</body>
+</html>

@@ -1,0 +1,113 @@
+# F51.F: 検証環境用 docker-compose
+#
+# 用途:
+#   - PoC ラボでの動作確認
+#   - Phase 3 着手時のローカル検証
+#
+# Usage:
+#   cd docs/tier3/monitoring
+#   docker compose up -d
+#
+#   # アクセス
+#   open http://localhost:9090   # Prometheus
+#   open http://localhost:3000   # Grafana (admin / changeme)
+#   open http://localhost:9093   # Alertmanager
+#
+# 本番では Tier 3 サーバに直接デプロイし、各サービスを systemd で管理する想定。
+
+version: '3.8'
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.0.1
+    container_name: intereco-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./alert-rules.yml:/etc/prometheus/alert-rules.yml:ro
+      - prom-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'   # POST /-/reload で動的設定変更可能
+      - '--web.enable-admin-api'
+    ports:
+      - "9090:9090"
+    extra_hosts:
+      # ローカル edge-agent (host network) にアクセス
+      - "host.docker.internal:host-gateway"
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.0
+    container_name: intereco-alertmanager
+    restart: unless-stopped
+    volumes:
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - am-data:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+    ports:
+      - "9093:9093"
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    container_name: intereco-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: 'changeme'
+      GF_USERS_ALLOW_SIGN_UP:     'false'
+      GF_AUTH_ANONYMOUS_ENABLED:  'false'
+      # Prod では OIDC / LDAP に切替
+      GF_LOG_LEVEL:               'warn'
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - ./grafana-dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+      - ./grafana-dashboard-overview.json:/var/lib/grafana/dashboards/overview.json:ro
+      - ./grafana-dashboard-slo.json:/var/lib/grafana/dashboards/slo.json:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+      - loki
+
+  loki:
+    image: grafana/loki:3.3.2
+    container_name: intereco-loki
+    restart: unless-stopped
+    volumes:
+      - ./loki-config.yml:/etc/loki/local-config.yml:ro
+      - loki-data:/loki
+    command: -config.file=/etc/loki/local-config.yml
+    ports:
+      - "3100:3100"
+
+  # (任意) Promtail — edge-agent ログ収集
+  # 本番では edge-agent と同じホストに置く
+  # promtail:
+  #   image: grafana/promtail:3.3.2
+  #   container_name: intereco-promtail
+  #   volumes:
+  #     - ./promtail-config.yml:/etc/promtail/config.yml:ro
+  #     - /var/log:/var/log:ro
+  #   command: -config.file=/etc/promtail/config.yml
+
+  # (任意) Node Exporter — システムメトリクス収集
+  # 本番では各 Tier 3 サーバに直接インストール
+  # node-exporter:
+  #   image: prom/node-exporter:v1.8.2
+  #   container_name: intereco-node-exporter
+  #   command:
+  #     - '--path.rootfs=/host'
+  #   ports:
+  #     - "9100:9100"
+  #   volumes:
+  #     - /:/host:ro,rslave
+
+volumes:
+  prom-data:
+  am-data:
+  grafana-data:
+  loki-data:

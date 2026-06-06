@@ -1,0 +1,84 @@
+# F51.F: Prometheus scrape configuration for Tier 3 edge-agent
+#
+# 配置: /etc/prometheus/prometheus.yml
+# リロード: SIGHUP or POST /-/reload
+#
+# 前提:
+#   - edge-agent が METRICS_PORT=9464 で起動済 (デフォルト)
+#   - 各 Tier 3 サーバから target ホストへの疎通 OK
+#   - Alertmanager が :9093 で稼働
+#
+# Phase 3 後半で本番投入。テスト環境は docker-compose で同居。
+
+global:
+  scrape_interval:     15s
+  scrape_timeout:      10s
+  evaluation_interval: 15s
+  external_labels:
+    # 環境識別 (prod / staging / dev)
+    env:        prod
+    cluster:    intereco-tier3-jp
+
+# ── アラート ─────────────────────────────────────────────────────────────────
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - 'alertmanager:9093'
+
+rule_files:
+  - 'alert-rules.yml'
+
+# ── スクレイプ対象 ──────────────────────────────────────────────────────────
+scrape_configs:
+  # ── 中央エージェント本体 ──
+  - job_name: 'intereco-edge-central'
+    static_configs:
+      - targets:
+          - 'edge-central-01.intereco.jp:9464'
+          - 'edge-central-02.intereco.jp:9464'
+        labels:
+          service: 'edge-agent'
+          mode:    'central'
+    metrics_path: /metrics
+    scheme:       http
+
+  # ── システムメトリクス (node_exporter) ──
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets:
+          - 'edge-central-01.intereco.jp:9100'
+          - 'edge-central-02.intereco.jp:9100'
+        labels:
+          service: 'host'
+
+  # ── Prometheus 自身 (self-monitoring) ──
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # ── Alertmanager 自身 ──
+  - job_name: 'alertmanager'
+    static_configs:
+      - targets: ['alertmanager:9093']
+
+  # ── Grafana 自身 ──
+  - job_name: 'grafana'
+    static_configs:
+      - targets: ['grafana:3000']
+    metrics_path: /metrics
+
+  # ── Supabase (将来) ──
+  # Supabase Cloud は metrics export を直接サポートしないので、
+  # 別途 supabase-exporter コンテナを立てる予定 (Phase 4)
+  # - job_name: 'supabase-exporter'
+  #   static_configs:
+  #     - targets: ['supabase-exporter:9187']
+
+# ── Remote write (長期保存) ─────────────────────────────────────────────────
+# Phase 4 で Mimir / Cortex / Grafana Cloud 連携を検討
+# remote_write:
+#   - url: 'https://prometheus-prod.example.com/api/v1/write'
+#     basic_auth:
+#       username: 'intereco'
+#       password_file: /etc/prometheus/remote-password

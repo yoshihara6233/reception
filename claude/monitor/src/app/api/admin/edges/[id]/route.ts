@@ -1,0 +1,37 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
+import { requireAdmin } from '@/lib/admin/guard'
+
+const PatchBody = z.object({
+  name:          z.string().min(1).max(120).optional(),
+  agent_version: z.string().nullable().optional(),
+})
+
+export async function PUT(
+  req: NextRequest,
+  ctx: { params: Promise<{ id: string }> },
+) {
+  const guard = await requireAdmin()
+  if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status })
+
+  const { id } = await ctx.params
+  const parsed = PatchBody.safeParse(await req.json())
+  if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
+
+  const { error } = await guard.supa.from('edge_devices').update(parsed.data).eq('id', id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true })
+}
+
+export async function DELETE(
+  _req: NextRequest,
+  ctx: { params: Promise<{ id: string }> },
+) {
+  const guard = await requireAdmin()
+  if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status })
+
+  const { id } = await ctx.params
+  const { error } = await guard.supa.from('edge_devices').delete().eq('id', id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true })
+}

@@ -1,0 +1,25 @@
+[Unit]
+Description=Recorder Monitoring Edge Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=edge
+WorkingDirectory=/opt/edge-agent
+EnvironmentFile=/etc/edge-agent/agent.env
+ExecStart=/usr/bin/node /opt/edge-agent/dist/index.js
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/tmp/edge-agent /var/log/edge-agent
+
+[Install]
+WantedBy=multi-user.target

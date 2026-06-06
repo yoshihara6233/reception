@@ -1,0 +1,1077 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<title>BCP Jアラート連携機能 設計仕様書 v1.0</title>
+<style>
+  :root {
+    --primary: #1e3a8a;
+    --accent: #2563eb;
+    --bg: #f8fafc;
+    --card: #ffffff;
+    --border: #e2e8f0;
+    --text: #1e293b;
+    --muted: #64748b;
+    --ok: #15803d;
+    --warn: #b45309;
+    --danger: #b91c1c;
+    --bcp: #7c3aed;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Hiragino Kaku Gothic ProN", "Yu Gothic UI",
+      "Segoe UI", system-ui, sans-serif;
+    margin: 0; padding: 0; color: var(--text); background: var(--bg);
+    line-height: 1.7; font-size: 14px;
+  }
+  .container { max-width: 1080px; margin: 0 auto; padding: 32px 40px; }
+  header.cover {
+    background: linear-gradient(135deg, #4c1d95 0%, #7c3aed 60%, #2563eb 100%);
+    color: #fff; padding: 56px 40px;
+  }
+  header.cover .title { font-size: 28px; font-weight: 700; letter-spacing: 0.02em; }
+  header.cover .sub { font-size: 15px; opacity: 0.85; margin-top: 8px; }
+  header.cover .meta {
+    margin-top: 24px; display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 12px; font-size: 12px;
+  }
+  header.cover .meta div b { display: block; opacity: 0.7; margin-bottom: 2px; font-weight: 500; }
+  header.cover .scale-badges { margin-top: 18px; display: flex; gap: 12px; flex-wrap: wrap; }
+  header.cover .scale-badges span {
+    background: rgba(255,255,255,0.18); padding: 6px 14px; border-radius: 16px;
+    font-size: 13px; font-weight: 600;
+  }
+  h1 {
+    color: var(--primary); border-bottom: 3px solid var(--primary);
+    padding-bottom: 8px; margin-top: 48px; font-size: 22px;
+  }
+  h2 {
+    color: var(--accent); margin-top: 32px; font-size: 17px;
+    border-left: 4px solid var(--accent); padding-left: 10px;
+  }
+  h3 { font-size: 15px; margin-top: 24px; color: #334155; }
+  h4 { font-size: 13px; margin-top: 16px; color: #475569; font-weight: 600; }
+  table {
+    width: 100%; border-collapse: collapse; margin: 12px 0 20px;
+    background: var(--card); font-size: 13px;
+  }
+  th, td {
+    border: 1px solid var(--border); padding: 8px 10px; text-align: left;
+    vertical-align: top;
+  }
+  th { background: #eff6ff; color: var(--primary); font-weight: 600; }
+  tr:nth-child(even) td { background: #fafbfc; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.center, th.center { text-align: center; }
+  pre, code {
+    font-family: "SF Mono", Consolas, Monaco, monospace; font-size: 12px;
+  }
+  pre {
+    background: #0f172a; color: #e2e8f0; padding: 14px 16px; border-radius: 6px;
+    overflow-x: auto; line-height: 1.5;
+  }
+  code { background: #eef2ff; color: #1e3a8a; padding: 1px 5px; border-radius: 3px; }
+  pre code { background: transparent; color: inherit; padding: 0; }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 6px;
+    padding: 16px 20px; margin: 16px 0;
+  }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+  .badge.ok { background: #dcfce7; color: var(--ok); }
+  .badge.warn { background: #fef3c7; color: var(--warn); }
+  .badge.danger { background: #fee2e2; color: var(--danger); }
+  .badge.info { background: #dbeafe; color: var(--accent); }
+  .badge.bcp { background: #ede9fe; color: var(--bcp); }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 3px 0; }
+  .note { background: #fffbeb; border-left: 4px solid #f59e0b; padding: 10px 14px; margin: 12px 0; border-radius: 4px; font-size: 13px; }
+  .key { background: #ecfdf5; border-left: 4px solid #10b981; padding: 12px 16px; margin: 16px 0; border-radius: 4px; }
+  .key b { color: #065f46; }
+  .danger-note { background: #fff1f2; border-left: 4px solid #f43f5e; padding: 10px 14px; margin: 12px 0; border-radius: 4px; font-size: 13px; }
+  .ascii { background: #0f172a; color: #e2e8f0; padding: 18px; border-radius: 6px; font-family: "SF Mono", Consolas, Monaco, monospace; white-space: pre; font-size: 12px; line-height: 1.5; overflow-x: auto; }
+  .toc { background: #fff; padding: 16px 24px; border: 1px solid var(--border); border-radius: 6px; margin: 24px 0; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .toc ol { padding-left: 22px; }
+  .toc li { margin: 4px 0; }
+  .decision {
+    border: 1px solid #c4b5fd; border-radius: 6px;
+    margin: 16px 0; overflow: hidden;
+  }
+  .decision-header {
+    background: #7c3aed; color: #fff;
+    padding: 8px 14px; font-weight: 600; font-size: 13px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .decision-body { padding: 12px 14px; background: #faf5ff; font-size: 13px; }
+  .decision-body .adopted { color: #059669; font-weight: 600; }
+  .flow-step {
+    display: flex; gap: 12px; margin: 8px 0; align-items: flex-start;
+  }
+  .flow-num {
+    background: var(--accent); color: #fff;
+    border-radius: 50%; width: 22px; height: 22px; min-width: 22px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; margin-top: 2px;
+  }
+  .status-pending  { background: #fef3c7; color: #92400e; }
+  .status-recording{ background: #dbeafe; color: #1e40af; }
+  .status-uploaded { background: #e0e7ff; color: #3730a3; }
+  .status-generated{ background: #ede9fe; color: #5b21b6; }
+  .status-completed{ background: #dcfce7; color: #14532d; }
+  .status-failed   { background: #fee2e2; color: #991b1b; }
+  .total-row td { background: #eff6ff !important; font-weight: 700; color: var(--primary); }
+  .highlight-row td { background: #fef3c7 !important; }
+  .wireframe {
+    background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px;
+    padding: 16px; font-family: "SF Mono", Consolas, Monaco, monospace;
+    font-size: 12px; line-height: 1.5; white-space: pre; overflow-x: auto;
+    color: #1e293b;
+  }
+  .footer { color: var(--muted); font-size: 12px; text-align: center; padding: 40px 0 24px; }
+  @media print {
+    body { background: white; font-size: 11pt; }
+    .container { padding: 0; }
+    h1 { page-break-before: always; }
+    h1:first-of-type { page-break-before: avoid; }
+    header.cover { page-break-after: always; }
+    .decision { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ============================================================ COVER ============================================================ -->
+<header class="cover">
+  <div class="title">🚨 BCP Jアラート連携機能</div>
+  <div class="sub">レコーダ統合監視システム BCPモジュール 設計仕様書</div>
+  <div class="sub" style="margin-top:4px">機能設計 / アーキテクチャ / DB設計 / エンジニアリングレビュー</div>
+  <div class="scale-badges">
+    <span>気象庁XML 60秒ポーリング</span>
+    <span>自動録画（Uniview NVR対応）</span>
+    <span>PDF報告書自動生成</span>
+    <span>Resend メール通知</span>
+  </div>
+  <div class="meta">
+    <div><b>文書種別</b>機能設計書 兼 エンジニアリングレビュー</div>
+    <div><b>版数</b>v1.0</div>
+    <div><b>作成日</b>2026-05-28</div>
+    <div><b>ステータス</b>設計承認済・実装完了</div>
+  </div>
+</header>
+
+<div class="container">
+
+<!-- ============================================================ TOC ============================================================ -->
+<div class="toc">
+  <b>目次</b>
+  <ol>
+    <li><a href="#background">背景・課題</a></li>
+    <li><a href="#requirements">要件定義</a></li>
+    <li><a href="#approach">アプローチ選定</a></li>
+    <li><a href="#architecture">システムアーキテクチャ</a></li>
+    <li><a href="#jalert">Jアラート受信サービス</a></li>
+    <li><a href="#db">DBスキーマ（新規4テーブル）</a></li>
+    <li><a href="#edge">エッジエージェント拡張</a></li>
+    <li><a href="#pdf">PDF報告書自動生成</a></li>
+    <li><a href="#email">メール通知（2段階）</a></li>
+    <li><a href="#ui">BCPレビュー画面</a></li>
+    <li><a href="#decisions">エンジニアリングレビュー（D1〜D8）</a></li>
+    <li><a href="#failure">障害モード分析</a></li>
+    <li><a href="#scope">スコープ外</a></li>
+    <li><a href="#tasks">実装タスク一覧</a></li>
+    <li><a href="#success">成功指標</a></li>
+  </ol>
+</div>
+
+<!-- ============================================================ 1. BACKGROUND ============================================================ -->
+<h1 id="background">1. 背景・課題</h1>
+
+<h2>問題の本質</h2>
+<p>Jアラート発令時、店舗担当者は手動でNVR/DVRを検索して発令前後の映像を確認し、手動で報告書を作成している。BCP（事業継続計画）の証跡として<strong>「発令時刻前後の映像保全」</strong>と<strong>「自動報告書」</strong>を顧客が求めている。</p>
+
+<h2>現状ワークフロー（As-Is）</h2>
+<div class="card">
+  <div class="flow-step"><div class="flow-num">1</div><div>Jアラート発令（サイレン・スマートフォン通知）</div></div>
+  <div class="flow-step"><div class="flow-num">2</div><div>担当者がNVRを<strong>手動操作</strong>して発令時刻近辺を検索</div></div>
+  <div class="flow-step"><div class="flow-num">3</div><div>映像を目視確認して内容をメモ or スクリーンショット</div></div>
+  <div class="flow-step"><div class="flow-num">4</div><div>Word や Excel で報告書を手作業で作成</div></div>
+  <div class="flow-step"><div class="flow-num">5</div><div>上長・当局・保険会社へ提出</div></div>
+</div>
+<div class="danger-note">⏱ <strong>ロスタイム：発令〜報告書完成まで平均 2〜4 時間</strong></div>
+
+<!-- ============================================================ 2. REQUIREMENTS ============================================================ -->
+<h1 id="requirements">2. 要件定義</h1>
+
+<h2>最低要件（顧客確認済み）</h2>
+<table>
+  <thead>
+    <tr><th>#</th><th>要件</th><th>優先度</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>R1</td><td>Jアラート受信を自動検知</td><td><span class="badge danger">必須</span></td></tr>
+    <tr><td>R2</td><td>発令前後の映像を自動保全（クラウドストレージへ）</td><td><span class="badge danger">必須</span></td></tr>
+    <tr><td>R3</td><td>担当者への自動メール通知（映像リンク ＋ 報告書PDF添付）</td><td><span class="badge danger">必須</span></td></tr>
+    <tr><td>R4</td><td>monitor app 上でBCPイベント一覧・詳細が確認できる</td><td><span class="badge warn">推奨</span></td></tr>
+    <tr><td>R5</td><td>手動テストトリガーで全フローが確認できる</td><td><span class="badge warn">推奨</span></td></tr>
+  </tbody>
+</table>
+
+<h2>設計前提</h2>
+<ol>
+  <li>Jアラート受信はクラウド側が外部API経由で行う（気象庁XML 無料フィード）</li>
+  <li>映像はNVRに既に存在するため「保存」でなく「取得・転送」が本質</li>
+  <li>既存のVODモード（edge-agent）を録画取得の基盤として活用する</li>
+  <li>i-PRO NVRはVOD未実装（Phase 8）のためMVPでスキップ、Univiewer店舗のみ対応</li>
+  <li>将来的に当局・保険会社への提出用途が生じる可能性がある</li>
+</ol>
+
+<!-- ============================================================ 3. APPROACH ============================================================ -->
+<h1 id="approach">3. アプローチ選定</h1>
+
+<table>
+  <thead>
+    <tr><th>案</th><th>概要</th><th>工数</th><th>採否</th><th>理由</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>A：MVP</td>
+      <td>クラウドJアラート受信→エッジ自動録画→PDF自動メール送信</td>
+      <td>M（2〜3週間）</td>
+      <td><span class="badge warn">非採用</span></td>
+      <td>確認画面なし。設定は固定値。顧客デモに弱い。</td>
+    </tr>
+    <tr class="highlight-row">
+      <td><strong>B：フル機能</strong></td>
+      <td>MVP＋専用BCPレビュー画面＋手動テストトリガー＋店舗設定</td>
+      <td>L（CC: 3〜4日）</td>
+      <td><span class="badge ok">採用</span></td>
+      <td>担当者がmonitor app内で発令履歴・映像・報告書を一元管理。テスト可能。</td>
+    </tr>
+    <tr>
+      <td>C：軽量統合型</td>
+      <td>通知のみ。録画・報告書は手動。</td>
+      <td>S（〜1週間）</td>
+      <td><span class="badge danger">非採用</span></td>
+      <td>顧客要件の自動録画・報告書を満たさない。</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ 4. ARCHITECTURE ============================================================ -->
+<h1 id="architecture">4. システムアーキテクチャ</h1>
+
+<h2>データフロー全体図</h2>
+<div class="ascii">気象庁XML Feed (60s poll)
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Supabase Edge Function: jalert-poller                           │
+│  1. Atom Feed 取得 → 新着 VPWW54 / VXSE51 エントリを抽出       │
+│  2. 重複チェック: alert_source が bcp_events に既存？           │
+│  3. area_code 照合: store.area_code.startsWith(code.slice(0,2)) │
+│  4. 照合店舗ごとに bcp_events INSERT (status='pending')         │
+│  5. 各店舗: オンライン全デバイスに pending_command 書き込み     │
+│  6. メール①送信: "Jアラート発令、録画中"                        │
+└────────────────────┬────────────────────────────────────────────┘
+                     │ edge_devices.pending_command (2s poll)
+                     ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Edge Agent: bcp.ts                                              │
+│  state: idle → bcp (via toBcp())                                │
+│                                                                  │
+│  ┌─ Semaphore(4) ──────────────────────────────────────────┐   │
+│  │  カメラごと (max 4 並列 RTSP):                          │   │
+│  │  ├── i-PRO? → skipped_ipro                              │   │
+│  │  └── Uniview:                                            │   │
+│  │      liveRtspUrl() → FFmpeg → /tmp/bcp_&lt;id&gt;_ch&lt;N&gt;.mp4  │   │
+│  │      → Supabase Storage へアップロード → /tmp 削除      │   │
+│  │      → bcp_clips レコード更新                            │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│  完了: successCount 判定                                         │
+│  ├── success &gt; 0 → bcp_events.status = 'clips_uploaded'        │
+│  └── success = 0 → bcp_events.status = 'failed' + 失敗メール   │
+└────────────────────┬────────────────────────────────────────────┘
+                     │ Postgres trigger: 全クリップ終端？
+                     ▼ (複数デバイス対応: trg_bcp_clips_complete)
+┌─────────────────────────────────────────────────────────────────┐
+│  Next.js API Route: POST /api/bcp-webhook                        │
+│  filter: status === 'clips_uploaded'                             │
+│                                                                  │
+│  PDF 生成:                                                        │
+│  → bcp_clips + recorder_cameras JOIN で取得                     │
+│  → @react-pdf/renderer → A4 PDF                                 │
+│  → Supabase Storage (bcp-reports/) → bcp_reports レコード       │
+│  → メール②送信: "録画完了、PDF添付"                             │
+│  → bcp_events.status = 'completed'                              │
+└─────────────────────────────────────────────────────────────────┘</div>
+
+<h2>エッジエージェント ステートマシン（更新後）</h2>
+<div class="ascii">        ┌─────────────────────────────────────────┐
+        │              StateMachine                │
+        │                                          │
+        │  idle ──┬──► grid                        │
+        │         ├──► live                        │
+        │         ├──► vod                         │
+        │         └──► bcp ──────────────────┐     │
+        │                                    │     │
+        │  bcp ──► bcp (skip if active) ◄───┘     │  [NEW]
+        │       └──► idle (完了 / 失敗)            │
+        │                                          │
+        │  any ──► error                            │
+        └─────────────────────────────────────────┘</div>
+
+<!-- ============================================================ 5. JALERT ============================================================ -->
+<h1 id="jalert">5. Jアラート受信サービス</h1>
+
+<table>
+  <thead>
+    <tr><th>項目</th><th>内容</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>フィードURL</td><td><code>https://www.data.jma.go.jp/developer/xml/feed/extra.xml</code></td></tr>
+    <tr><td>フォーマット</td><td>Atom Feed + 個別電文XML（VPWW54: 全国瞬時警報 / VXSE51: 緊急地震速報）</td></tr>
+    <tr><td>コスト</td><td><span class="badge ok">無料</span>（気象庁防災情報XMLサービス）</td></tr>
+    <tr><td>検知方法</td><td>60秒間隔ポーリング。<code>&lt;updated&gt;</code> タイムスタンプで新着判定</td></tr>
+    <tr><td>実装場所</td><td>Supabase Edge Function cron（<code>* * * * *</code> = 1分間隔）</td></tr>
+    <tr><td>最大遅延</td><td>60秒（ポーリング起因）。顧客周知済み。</td></tr>
+  </tbody>
+</table>
+
+<h2>地域コードマッチングロジック</h2>
+<p>JIS X 0402 市区町村コード（6桁）を使用。プレフィックス一致で都道府県レベルの照合を実現する。</p>
+<pre><code>// 実装: jalert-poller/index.ts
+// alert.area_code = '130001'（東京都） →
+//   stores.area_code が '13' で始まる全店舗に送信
+// alert.area_code = '131130'（渋谷区） →
+//   '131130' と完全一致する店舗のみ
+
+store.area_code.startsWith(alertAreaCode.slice(0, 2)) ||
+store.area_code === alertAreaCode</code></pre>
+
+<div class="note">⚠️ <strong>SLAについて</strong>: 気象庁XMLポーリング使用時、5分SLAは保証不可（最大60秒の検知遅延あり）。顧客に周知済み。</div>
+
+<h2>受信データ例（JMA XML）</h2>
+<pre><code>&lt;AlertMessage&gt;
+  &lt;Headline&gt;弾道ミサイル発射情報&lt;/Headline&gt;
+  &lt;Effective&gt;2026-05-28T10:00:00+09:00&lt;/Effective&gt;
+  &lt;Area&gt;
+    &lt;AreaCode&gt;130001&lt;/AreaCode&gt;  &lt;!-- 東京都 --&gt;
+  &lt;/Area&gt;
+&lt;/AlertMessage&gt;</code></pre>
+
+<!-- ============================================================ 6. DB SCHEMA ============================================================ -->
+<h1 id="db">6. DBスキーマ（新規4テーブル）</h1>
+
+<h2>bcp_events — BCPイベント</h2>
+<table>
+  <thead>
+    <tr><th>カラム</th><th>型</th><th>説明</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>id</code></td><td>uuid PK</td><td>自動生成</td></tr>
+    <tr><td><code>store_id</code></td><td>uuid FK → stores</td><td>対象店舗</td></tr>
+    <tr><td><code>alert_source</code></td><td>text</td><td>JMA イベントID（重複排除キー）</td></tr>
+    <tr><td><code>alert_type</code></td><td>text</td><td>missile / earthquake / tsunami / test</td></tr>
+    <tr><td><code>alert_issued_at</code></td><td>timestamptz</td><td>発令日時（JMA準拠）</td></tr>
+    <tr><td><code>area_code</code></td><td>text</td><td>JIS X 0402 市区町村コード</td></tr>
+    <tr><td><code>status</code></td><td>text</td><td>下記ステータスフロー参照</td></tr>
+    <tr><td><code>is_test</code></td><td>boolean</td><td>手動テスト発令フラグ</td></tr>
+    <tr><td><code>created_at</code></td><td>timestamptz</td><td>レコード作成日時</td></tr>
+  </tbody>
+</table>
+
+<h3>bcp_events.status ライフサイクル</h3>
+<div class="card">
+  <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+    <span class="badge status-pending">pending</span>
+    <span>→</span>
+    <span class="badge status-recording">recording</span>
+    <span>→</span>
+    <span class="badge status-uploaded">clips_uploaded</span>
+    <span>→</span>
+    <span class="badge status-generated">report_generated</span>
+    <span>→</span>
+    <span class="badge status-completed">completed</span>
+  </div>
+  <div style="margin-top:8px;">
+    <span class="badge status-failed">failed</span>
+    <span style="font-size:12px; color:var(--muted); margin-left:8px;">↑ 全カメラ失敗 or タイムアウト時</span>
+  </div>
+</div>
+
+<h2>bcp_clips — 録画クリップ（カメラ別）</h2>
+<table>
+  <thead>
+    <tr><th>カラム</th><th>型</th><th>説明</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>id</code></td><td>uuid PK</td><td>自動生成</td></tr>
+    <tr><td><code>event_id</code></td><td>uuid FK → bcp_events</td><td>対象BCPイベント</td></tr>
+    <tr><td><code>camera_id</code></td><td>uuid FK → recorder_cameras</td><td>対象カメラ</td></tr>
+    <tr><td><code>clip_from</code></td><td>timestamptz</td><td>録画開始時刻</td></tr>
+    <tr><td><code>clip_to</code></td><td>timestamptz</td><td>録画終了時刻</td></tr>
+    <tr><td><code>clip_url</code></td><td>text</td><td>Supabase Storage URL（bcp-clips/）</td></tr>
+    <tr><td><code>thumbnail_url</code></td><td>text</td><td>代表フレームURL</td></tr>
+    <tr><td><code>duration_sec</code></td><td>int</td><td>録画秒数</td></tr>
+    <tr><td><code>upload_status</code></td><td>text</td><td>pending / uploading / completed / failed / skipped_ipro</td></tr>
+    <tr><td><code>created_at</code></td><td>timestamptz</td><td>レコード作成日時</td></tr>
+  </tbody>
+</table>
+
+<div class="note">📌 複数エッジデバイスのクリップ完了を集約するため、<strong>Postgres トリガー</strong>（<code>trg_bcp_clips_complete</code>）を実装。全クリップが終端状態（completed / failed / skipped_ipro）になった時点で <code>bcp_events.status = 'clips_uploaded'</code> に自動更新。</div>
+
+<h2>bcp_reports — 報告書</h2>
+<table>
+  <thead>
+    <tr><th>カラム</th><th>型</th><th>説明</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>id</code></td><td>uuid PK</td><td>自動生成</td></tr>
+    <tr><td><code>event_id</code></td><td>uuid FK → bcp_events</td><td>対象BCPイベント</td></tr>
+    <tr><td><code>pdf_url</code></td><td>text</td><td>PDF Storage URL（bcp-reports/）</td></tr>
+    <tr><td><code>generated_at</code></td><td>timestamptz</td><td>生成日時</td></tr>
+    <tr><td><code>sent_to_emails</code></td><td>text[]</td><td>送信済みメールアドレス一覧</td></tr>
+    <tr><td><code>created_at</code></td><td>timestamptz</td><td>レコード作成日時</td></tr>
+  </tbody>
+</table>
+
+<h2>bcp_settings — 店舗ごとのBCP設定</h2>
+<table>
+  <thead>
+    <tr><th>カラム</th><th>型</th><th>デフォルト</th><th>説明</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>id</code></td><td>uuid PK</td><td>—</td><td>自動生成</td></tr>
+    <tr><td><code>store_id</code></td><td>uuid UNIQUE FK</td><td>—</td><td>対象店舗（1:1）</td></tr>
+    <tr><td><code>pre_minutes</code></td><td>int</td><td>3</td><td>発令前録画時間（1〜10分）</td></tr>
+    <tr><td><code>post_minutes</code></td><td>int</td><td>5</td><td>発令後録画時間（1〜30分）</td></tr>
+    <tr><td><code>alert_recipients</code></td><td>text[]</td><td>—</td><td>通知先メール（複数可）</td></tr>
+    <tr><td><code>is_active</code></td><td>boolean</td><td>true</td><td>BCP機能 有効/無効</td></tr>
+    <tr><td><code>created_at / updated_at</code></td><td>timestamptz</td><td>—</td><td>作成・更新日時</td></tr>
+  </tbody>
+</table>
+
+<h2>RLS ポリシー</h2>
+<p>既存の <code>super_admin / tenant_admin / store_manager / viewer</code> パターン（<code>20260519_001_recorder_monitoring.sql</code>）に準拠。テナント管理者・店舗スタッフは自分の店舗のBCPデータのみ参照・操作可能。</p>
+
+<h2>edge_devices.status 制約更新</h2>
+<pre><code>-- BCPモード追加
+ALTER TABLE edge_devices DROP CONSTRAINT edge_devices_status_check;
+ALTER TABLE edge_devices ADD CONSTRAINT edge_devices_status_check
+  CHECK (status IN ('offline','idle','grid','live','vod','bcp','error'));</code></pre>
+
+<!-- ============================================================ 7. EDGE AGENT ============================================================ -->
+<h1 id="edge">7. エッジエージェント拡張</h1>
+
+<h2>新コマンド: start_bcp_capture</h2>
+<pre><code>// claude/edge-agent/src/types.ts に追加
+type EdgeCommand =
+  | { type: 'start_bcp_capture'
+      eventId:    string
+      clips:      Array&lt;{ clipId: string; cameraId: string }&gt;
+      durationSec: number }
+  | /* 既存コマンド ... */
+
+type EdgeState = 'idle' | 'grid' | 'live' | 'vod' | 'bcp' | 'error'  // 'bcp' 追加</code></pre>
+
+<h2>bcp.ts 実装概要</h2>
+<table>
+  <thead>
+    <tr><th>処理</th><th>詳細</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>カメラスキップ</td><td>i-PRO（vendor='ipro'）は <code>upload_status='skipped_ipro'</code> で即スキップ。FFmpeg不起動。</td></tr>
+    <tr><td>RTSP録画</td><td><code>ffmpeg -rtsp_transport tcp -i &lt;rtsp&gt; -t &lt;durationSec&gt; -c copy /tmp/&lt;clipId&gt;.mp4</code></td></tr>
+    <tr><td>ストレージアップロード</td><td>Supabase Storage バケット <code>bcp-clips</code>、パス <code>{eventId}/{clipId}.mp4</code></td></tr>
+    <tr><td>/tmp クリーンアップ</td><td><code>finally</code> ブロックで即時削除（アップロード失敗時も必ず削除）</td></tr>
+    <tr><td>並列制限</td><td>手製セマフォア（<code>semaphore.ts</code>）で同時RTSP接続数を max 4 に制限（Uniview NVR上限）</td></tr>
+    <tr><td>全失敗ガード</td><td><code>successCount === 0</code> の場合 → <code>bcp_events.status='failed'</code> + 失敗メール送信</td></tr>
+    <tr><td>並列実行</td><td><code>Promise.allSettled()</code> — 失敗カメラがあっても他カメラの処理を継続</td></tr>
+  </tbody>
+</table>
+
+<h2>toBcp() — ステートマシン追加</h2>
+<pre><code>// claude/edge-agent/src/state-machine.ts
+async toBcp(cmd: BcpCaptureCommand): Promise&lt;void&gt; {
+  if (this.state === 'bcp') {
+    logger.info({ eventId: cmd.eventId }, 'bcp: already active, skip')
+    return  // 進行中BCP中は新規コマンドを無視
+  }
+  await this.toIdle()
+  this.state = 'bcp'
+  await heartbeat('bcp')
+  try {
+    await runBcpCapture(cmd)
+  } finally {
+    this.state = 'idle'
+    await heartbeat('idle')
+  }
+}</code></pre>
+
+<h2>手製セマフォア</h2>
+<pre><code>// claude/edge-agent/src/util/semaphore.ts
+export class Semaphore {
+  private queue: Array&lt;() =&gt; void&gt; = []
+  private running = 0
+  constructor(private readonly limit: number) {}
+
+  async acquire(): Promise&lt;void&gt; {
+    if (this.running &lt; this.limit) { this.running++; return }
+    await new Promise&lt;void&gt;(res =&gt; this.queue.push(res))
+    this.running++
+  }
+  release(): void {
+    this.running--
+    this.queue.shift()?.()
+  }
+  async run&lt;T&gt;(fn: () =&gt; Promise&lt;T&gt;): Promise&lt;T&gt; {
+    await this.acquire()
+    try { return await fn() }
+    finally { this.release() }
+  }
+}
+
+// bcp.ts での使用
+const sem = new Semaphore(4)  // Uniview NVR 同時 RTSP 上限
+await Promise.allSettled(clips.map(clip =&gt; sem.run(() =&gt; captureCamera(clip))))</code></pre>
+
+<h2>ディスク使用量見積もり</h2>
+<table>
+  <thead>
+    <tr><th>条件</th><th>計算</th><th>値</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>録画ビットレート</td><td>4 Mbps（Uniview H.264 標準）</td><td>4 Mbps</td></tr>
+    <tr><td>録画時間</td><td>pre(3) + post(5) = 8分</td><td>480秒</td></tr>
+    <tr><td>1カメラあたり</td><td>4Mbps × 480s ÷ 8 = 240 MB</td><td>〜240 MB</td></tr>
+    <tr><td>最大同時（セマフォア4）</td><td>240 MB × 4</td><td>〜960 MB</td></tr>
+    <tr class="total-row"><td>ピーク /tmp 使用量</td><td>アップロード完了次第即削除</td><td>＜1 GB</td></tr>
+  </tbody>
+</table>
+<div class="note">NUC クラスのエッジデバイス（通常128GB以上）では問題なし。</div>
+
+<!-- ============================================================ 8. PDF ============================================================ -->
+<h1 id="pdf">8. PDF報告書自動生成</h1>
+
+<h2>トリガー・フロー</h2>
+<ol>
+  <li><code>bcp_events.status = 'clips_uploaded'</code> に更新される（Postgres トリガー経由）</li>
+  <li>Supabase Webhook → <code>POST /api/bcp-webhook</code>（BCP_WEBHOOK_SECRET ヘッダで認証）</li>
+  <li>ハンドラが <code>status === 'clips_uploaded'</code> をフィルタして PDF生成処理を起動</li>
+</ol>
+
+<h2>PDF 生成ライブラリ</h2>
+<p><code>@react-pdf/renderer</code> v3.4.0 — React コンポーネントとして PDF を定義し、<code>renderToBuffer()</code> で Buffer に変換。</p>
+
+<h2>PDF 内容</h2>
+<div class="card">
+  <div class="wireframe">┌─────────────────────────────────────────────┐
+│  BCP対応報告書  [TEST（テスト）]            │
+│  ○○株式会社 △△店                           │
+├────────────┬────────────────────────────────┤
+│ 発令種別   │ 弾道ミサイル発射情報           │
+│ 発令日時   │ 2026-05-28 10:00:00 JST        │
+│ 対象地域   │ 130001（東京都）               │
+│ ステータス │ completed                      │
+│ イベントID │ xxxxxxxx-xxxx-xxxx             │
+├─────────────────────────────────────────────┤
+│  録画クリップ一覧                           │
+├───────────┬──────────────┬──────────┬──────┤
+│ カメラ名  │ 録画開始(JST)│ 録画終了 │ 状態 │
+├───────────┼──────────────┼──────────┼──────┤
+│ CH01      │ 09:57:00     │ 10:05:00 │ 完了 │
+│ CH02      │ 09:57:00     │ 10:05:00 │ 完了 │
+│ CH03(iPRO)│ —            │ —        │ スキ │
+├─────────────────────────────────────────────┤
+│  自動生成: 2026-05-28 10:15:23              │
+│  Intereco BCP System                        │
+└─────────────────────────────────────────────┘</div>
+</div>
+
+<!-- ============================================================ 9. EMAIL ============================================================ -->
+<h1 id="email">9. メール通知（2段階）</h1>
+
+<h2>配信インフラ</h2>
+<p>Resend（<code>RESEND_API_KEY</code>）を使用。送信元: <code>bcp@noreply.intareco.jp</code></p>
+
+<h2>メール① — 発令直後（録画開始時）</h2>
+<div class="card">
+  <table style="margin:0">
+    <tr><td style="font-weight:600; width:80px">件名</td><td><code>[BCP] Jアラート発令 - △△店 (弾道ミサイル発射情報)</code></td></tr>
+    <tr><td style="font-weight:600">本文</td><td>10:00 に △△店 エリアでJアラートが発令されました。<br>発令前後の映像を自動録画しています。完了後に報告書をお送りします。<br>確認画面: https://monitor.xxx.jp/bcp/[event_id]</td></tr>
+    <tr><td style="font-weight:600">タイミング</td><td>jalert-poller がコマンド送信後、即座に送信</td></tr>
+  </table>
+</div>
+
+<h2>メール② — 録画完了後（報告書送付）</h2>
+<div class="card">
+  <table style="margin:0">
+    <tr><td style="font-weight:600; width:80px">件名</td><td><code>[BCP完了] 録画・報告書 - △△店 (弾道ミサイル発射情報)</code></td></tr>
+    <tr><td style="font-weight:600">本文</td><td>録画が完了しました。報告書をPDFで添付します。<br>映像確認: https://monitor.xxx.jp/bcp/[event_id]</td></tr>
+    <tr><td style="font-weight:600">添付</td><td>bcp_report_20260528_100000_store_xxx.pdf</td></tr>
+    <tr><td style="font-weight:600">タイミング</td><td>/api/bcp-webhook ハンドラ内、PDF生成・アップロード後</td></tr>
+  </table>
+</div>
+
+<h2>失敗メール（全カメラ失敗時）</h2>
+<div class="card">
+  <table style="margin:0">
+    <tr><td style="font-weight:600; width:80px">件名</td><td><code>[BCP失敗] 録画失敗 - △△店 (弾道ミサイル発射情報)</code></td></tr>
+    <tr><td style="font-weight:600">本文</td><td>録画に失敗しました。NVRの状態を確認してください。</td></tr>
+    <tr><td style="font-weight:600">タイミング</td><td>successCount === 0 確認後、edge-agent 内から送信</td></tr>
+  </table>
+</div>
+
+<div class="note">テスト発令時は件名に <code>[TEST]</code> プレフィックスを付与。<code>bcp_events.is_test = true</code> で識別。</div>
+
+<!-- ============================================================ 10. UI ============================================================ -->
+<h1 id="ui">10. BCPレビュー画面（monitor app 新規）</h1>
+
+<h2>BCP一覧画面 — <code>/bcp</code></h2>
+<div class="wireframe">┌──────────────────────────────────────────────────────┐
+│ BCP イベント一覧                                      │
+├─────────────┬───────────────┬──────┬──────────┬──────┤
+│ 日時         │ 店舗          │ 種別 │ ステータス│ 操作 │
+├─────────────┼───────────────┼──────┼──────────┼──────┤
+│ 今日 10:00  │ △△店         │ 弾道 │ ● 完了   │ 詳細 │
+│ 昨日 08:30  │ ○○店         │ 地震 │ ● 完了   │ 詳細 │
+│ 先週 14:20  │ □□店         │ 津波 │ ● 完了   │ 詳細 │
+│ [TEST]      │ ○○店         │ test │ ● 完了   │ 詳細 │
+└─────────────┴───────────────┴──────┴──────────┴──────┘
+ステータスバッジ:
+  pending/recording → 黄 (⏳)
+  clips_uploaded/report_generated → 青
+  completed → 緑 ✅
+  failed → 赤 ❌</div>
+
+<h2>BCPイベント詳細画面 — <code>/bcp/[id]</code></h2>
+<div class="wireframe">┌──────────────────────────────────────────────────────┐
+│ ← BCP一覧に戻る                                      │
+│ 弾道ミサイル発射情報  △△店  2026-05-28 10:00         │
+├─────────────┬────────────┬────────────┬─────────────┤
+│ 発令日時     │ エリア     │ 店舗       │ ステータス  │
+│ 10:00 JST   │ 130001     │ △△店      │ ● 完了      │
+├──────────────────────────────────────────────────────┤
+│ 録画クリップ                                          │
+├───────────┬─────────────┬──────────┬────────┬───────┤
+│ カメラ    │ 録画開始    │ 録画終了  │ 秒数   │ 状態  │
+├───────────┼─────────────┼──────────┼────────┼───────┤
+│ CH01      │ 09:57:00    │ 10:05:00 │ 480秒  │ 完了  │
+│ CH02      │ 09:57:00    │ 10:05:00 │ 480秒  │ 完了  │
+│ CH03(iPRO)│ —           │ —        │ —      │ Skip  │
+├──────────────────────────────────────────────────────┤
+│ 報告書                                                │
+│ 生成: 2026-05-28 10:15:23                            │
+│ [📄 PDF ダウンロード]                                 │
+└──────────────────────────────────────────────────────┘</div>
+
+<h2>BCP設定（店舗設定画面内タブ追加）</h2>
+<div class="wireframe">┌────────────────────────────────┐
+│ BCP設定                        │
+│                                │
+│ 前録画時間:  [3] 分 (1〜10)   │
+│ 後録画時間:  [5] 分 (1〜30)   │
+│ 通知先メール:                  │
+│   ✉ manager@example.com [削除] │
+│   ✉ security@example.com [削除]│
+│   [+ メール追加]               │
+│                                │
+│ [🧪 テスト発令を実行]          │
+│   ※ テストメールには           │
+│      [TEST] が付いて送信されます│
+│                                │
+│ [保存]                         │
+└────────────────────────────────┘</div>
+
+<h2>ナビゲーション追加</h2>
+<table>
+  <thead>
+    <tr><th>コンポーネント</th><th>追加内容</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>AdminShell.tsx（左サイドバー）</td><td>🚨 BCP → <code>/bcp</code></td></tr>
+    <tr><td>AppHeader.tsx（デスクトップタブ）</td><td>BCP → <code>/bcp</code></td></tr>
+    <tr><td>BottomNav.tsx（モバイル）</td><td>BCP（アラートアイコン）→ <code>/bcp</code></td></tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ 11. DECISIONS ============================================================ -->
+<h1 id="decisions">11. エンジニアリングレビュー（D1〜D8）</h1>
+
+<div class="decision">
+  <div class="decision-header">
+    <span>D1 — PR構成</span>
+    <span class="badge" style="background:rgba(255,255,255,0.2);color:#fff">採用: 2PR構成</span>
+  </div>
+  <div class="decision-body">
+    <p><span class="adopted">✅ 採用: 2PR構成（Foundation PR → Feature PR）</span></p>
+    <p><strong>PR 1 (Foundation)</strong>: DB migrations + Resend email for monitor + @react-pdf/renderer + Supabase Edge Functions setup</p>
+    <p><strong>PR 2 (BCP Feature)</strong>: edge-agent BCP mode + UI screens + J-Alert poller + PDF webhook + unit tests</p>
+    <p><strong>理由</strong>: email・PDF・Edge Functionsはmonitorに存在せず、全てゼロから追加が必要。インフラ層と機能層を分離することで、PRレビューの認知負荷を下げる。</p>
+    <p><strong>発見した隠れた前提**</strong>: 設計書で「既存インフラ流用」と記載されていたが、実際にはmonitorにemail・PDF・Edge Functionsは一切存在しなかった。</p>
+  </div>
+</div>
+
+<div class="decision">
+  <div class="decision-header">
+    <span>D2 — コマンド配信方式</span>
+    <span class="badge" style="background:rgba(255,255,255,0.2);color:#fff">採用: pending_command ポーリング</span>
+  </div>
+  <div class="decision-body">
+    <p><span class="adopted">✅ 採用: 既存の pending_command ポーリング（2秒間隔）を流用</span></p>
+    <p><strong>経緯</strong>: 設計書は「Supabase Realtime broadcast」と記載していたが、既存の <code>realtime.ts</code> を読んだところ、DBポーリング方式が実装済みだった。Realtimeを新規実装すると2つの並列コマンドパスが生まれ、信頼性特性が異なることが問題になる。</p>
+    <p><strong>利点</strong>: エッジがオフライン中でもコマンドがDB上に残り、再接続後にピックアップ可能。BCP（過去映像取得）では2秒の配信遅延は無視できる。</p>
+  </div>
+</div>
+
+<div class="decision">
+  <div class="decision-header">
+    <span>D3 — BCP進行中の2本目Jアラート処理</span>
+    <span class="badge" style="background:rgba(255,255,255,0.2);color:#fff">採用: スキップ（進行中を中断しない）</span>
+  </div>
+  <div class="decision-body">
+    <p><span class="adopted">✅ 採用: state === 'bcp' の場合、新規コマンドをスキップして継続</span></p>
+    <p><strong>理由</strong>: 現在のBCP録画を中断して再起動すると、進行中のクリップが中途半端なまま残る。多発するJアラートケースでは最初の録画完了を優先する方が証跡として有用。</p>
+  </div>
+</div>
+
+<div class="decision">
+  <div class="decision-header">
+    <span>D4 — /tmp ファイル管理</span>
+    <span class="badge" style="background:rgba(255,255,255,0.2);color:#fff">採用: アップロード後即時削除</span>
+  </div>
+  <div class="decision-body">
+    <p><span class="adopted">✅ 採用: try/finally で即時削除（アップロード失敗時も保証）</span></p>
+    <p><strong>実装</strong>: <code>finally { await fs.unlink(tmpPath).catch(() => {}) }</code></p>
+    <p><strong>理由</strong>: セマフォア4枚では最大〜960 MB のピーク使用量になる。録画完了後に保持し続けるメリットはなく、ストレージ枯渇リスクを避けるため即削除が合理的。</p>
+  </div>
+</div>
+
+<div class="decision">
+  <div class="decision-header">
+    <span>D5 — 複数エッジデバイス対応</span>
+    <span class="badge" style="background:rgba(255,255,255,0.2);color:#fff">採用: 全デバイスに送信</span>
+  </div>
+  <div class="decision-body">
+    <p><span class="adopted">✅ 採用: 店舗の全オンラインデバイスにコマンドを送信（status != 'offline'）</span></p>
+    <p><strong>帰結</strong>: 複数デバイスが並列にクリップを作成するため、各デバイスが直接 <code>bcp_events.status</code> を更新すると競合が発生する。これを解決するため、<strong>Postgres トリガー</strong>（<code>trg_bcp_clips_complete</code>）でDB側が集約を担う。</p>
+  </div>
+</div>
+
+<div class="decision">
+  <div class="decision-header">
+    <span>D6 — 全カメラ失敗時の処理</span>
+    <span class="badge" style="background:rgba(255,255,255,0.2);color:#fff">採用: 失敗ステータス + 失敗メール</span>
+  </div>
+  <div class="decision-body">
+    <p><span class="adopted">✅ 採用: successCount === 0 の場合、status='failed' + 失敗メール送信</span></p>
+    <p><strong>理由</strong>: クリップが1件も存在しない状態でPDF生成を起動すると空のPDFが生成される。ユーザーに「録画に失敗した」ことを明示する方が適切。部分失敗（一部カメラのみ失敗）はclips_uploadedとして扱い、PDFに失敗カメラを記載する。</p>
+  </div>
+</div>
+
+<div class="decision">
+  <div class="decision-header">
+    <span>D7 — RTSP並列接続制限の実装方式</span>
+    <span class="badge" style="background:rgba(255,255,255,0.2);color:#fff">採用: 手製セマフォア</span>
+  </div>
+  <div class="decision-body">
+    <p><span class="adopted">✅ 採用: edge-agent/src/util/semaphore.ts（約30行）を新規実装</span></p>
+    <p><strong>理由</strong>: <code>p-limit</code> など外部パッケージを追加することなく、シンプルな非同期セマフォアを手書きで実装。テスト容易性が高く、依存関係を増やさない。</p>
+  </div>
+</div>
+
+<div class="decision">
+  <div class="decision-header">
+    <span>D8 — テスト追加</span>
+    <span class="badge" style="background:rgba(255,255,255,0.2);color:#fff">採用: vitest + 12ユニットテスト</span>
+  </div>
+  <div class="decision-body">
+    <p><span class="adopted">✅ 採用: edge-agent に vitest をセットアップし、BCP機能のユニットテストを12本追加</span></p>
+    <table style="margin:8px 0">
+      <thead><tr><th>#</th><th>テスト内容</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>ハッピーパス: 全カメラ成功 → successCount === totalCount</td></tr>
+        <tr><td>2</td><td>i-PRO カメラ: skipped_ipro、失敗にカウントしない</td></tr>
+        <tr><td>3</td><td>1カメラ FFmpeg 失敗: そのクリップのみ failed、他は続行</td></tr>
+        <tr><td>4</td><td>全カメラ失敗: bcp_events.status = 'failed' に更新</td></tr>
+        <tr><td>5</td><td>セマフォア: 同時FFmpegプロセスが4を超えない</td></tr>
+        <tr><td>6</td><td>/tmp クリーンアップ: アップロード後（失敗時も）削除される</td></tr>
+        <tr><td>7</td><td>重複BCPコマンド: state=bcp 時に toBcp() が早期リターン</td></tr>
+        <tr><td>8</td><td>FFmpeg 非ゼロ終了: クリップを failed にマーク</td></tr>
+        <tr><td>9</td><td>アップロード失敗: /tmp は削除、クリップは failed</td></tr>
+        <tr><td>10</td><td>空 clips 配列: エラーなく { successCount:0, totalCount:0 } を返す</td></tr>
+        <tr><td>11</td><td>durationSec: FFmpeg の -t 引数に正しく渡される</td></tr>
+        <tr><td>12</td><td>Supabase DB 更新: 各終端状態で bcp_clips.upload_status が更新される</td></tr>
+      </tbody>
+    </table>
+    <p><strong>結果: 12/12 テスト全て合格</strong></p>
+  </div>
+</div>
+
+<!-- ============================================================ 12. FAILURE MODES ============================================================ -->
+<h1 id="failure">12. 障害モード分析</h1>
+
+<table>
+  <thead>
+    <tr><th>コードパス</th><th>障害シナリオ</th><th>エラーハンドリング</th><th>ユーザーへの影響</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Jアラート XML 取得</td>
+      <td>JMA フィードダウン / タイムアウト</td>
+      <td>Edge Function が return、次の1分後に再試行</td>
+      <td>サイレント（イベントが作成されない）</td>
+    </tr>
+    <tr>
+      <td>pending_command 書き込み</td>
+      <td>Supabase DB エラー</td>
+      <td>API が 500 を返す、ポーラーがログ出力</td>
+      <td>サイレント（録画が開始されない）</td>
+    </tr>
+    <tr>
+      <td>エッジエージェント オフライン</td>
+      <td>pending_command がピックアップされない</td>
+      <td>60秒タイムアウト → status='failed' + エラーメール</td>
+      <td><span class="badge ok">失敗メール 通知</span></td>
+    </tr>
+    <tr>
+      <td>FFmpeg RTSP 失敗</td>
+      <td>NVR 到達不能</td>
+      <td>clip.failed、全失敗で event.failed（D6）</td>
+      <td><span class="badge ok">失敗メール 通知</span></td>
+    </tr>
+    <tr>
+      <td>全クリップ失敗</td>
+      <td>NVR が録画中にオフライン</td>
+      <td>successCount=0 → status='failed' + 失敗メール</td>
+      <td><span class="badge ok">失敗メール 通知</span></td>
+    </tr>
+    <tr>
+      <td>Supabase Storage アップロード</td>
+      <td>ストレージ容量超過 / ネットワーク</td>
+      <td>clip.failed（全失敗なら失敗メール）</td>
+      <td>部分失敗は PDF に記載</td>
+    </tr>
+    <tr class="highlight-row">
+      <td>PDF 生成</td>
+      <td>@react-pdf/renderer OOM / クラッシュ</td>
+      <td>Webhook 500 を返す。bcp_events.status は clips_uploaded のまま</td>
+      <td><span class="badge danger">⚠️ サイレント失敗（既知の未解決ギャップ）</span></td>
+    </tr>
+    <tr class="highlight-row">
+      <td>メール送信失敗</td>
+      <td>RESEND_API_KEY 未設定 / Resend 障害</td>
+      <td>catch でサイレント無視（email.ts パターン）</td>
+      <td><span class="badge danger">⚠️ サイレント失敗</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="note">⚠️ <strong>既知ギャップ</strong>: PDF生成失敗時のフォールバック（status='failed' への更新）は今後の改善課題。メール送信失敗の可視化も同様。</div>
+
+<!-- ============================================================ 13. SCOPE ============================================================ -->
+<h1 id="scope">13. スコープ外</h1>
+
+<table>
+  <thead>
+    <tr><th>項目</th><th>除外理由</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>i-PRO NVR BCP 対応</td><td>Phase 8 未実装。クリップは <code>skipped_ipro</code> でスキップ。</td></tr>
+    <tr><td>ブラウザ内映像再生</td><td>/bcp/[id] はStorage URLへのリンク（ダウンロード）。インブラウザプレイヤーは将来拡張。</td></tr>
+    <tr><td>BCP データエクスポート（CSV, ZIP）</td><td>顧客要件に含まれない。</td></tr>
+    <tr><td>プッシュ通知（LINE, SMS）</td><td>要件なし。メールのみ。</td></tr>
+    <tr><td>BCP クリップ保持ポリシー</td><td>設計では未定義。別途TODO。</td></tr>
+    <tr><td>SignalNow Pro 統合</td><td>顧客が気象庁XML（無料）を選択。Pro統合は保留。</td></tr>
+    <tr><td>市区町村レベル以下の地域絞り込み</td><td>JMA VPWW54 は都道府県レベルコードで送信。MVPでは不要。</td></tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ 14. TASKS ============================================================ -->
+<h1 id="tasks">14. 実装タスク一覧</h1>
+
+<h2>PR 1: Foundation</h2>
+<table>
+  <thead>
+    <tr><th>ID</th><th>優先</th><th>モジュール</th><th>内容</th><th>ファイル</th><th>ステータス</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>T1</td><td>P1</td><td>monitor/email</td>
+      <td>Resend emailインフラを monitor に追加</td>
+      <td><code>monitor/src/lib/email/send.ts</code></td>
+      <td><span class="badge ok">✅ 完了</span></td>
+    </tr>
+    <tr>
+      <td>T2</td><td>P1</td><td>monitor/pdf</td>
+      <td>@react-pdf/renderer 追加 + BCP PDFテンプレート</td>
+      <td><code>monitor/src/lib/pdf/bcp-report.tsx</code></td>
+      <td><span class="badge ok">✅ 完了</span></td>
+    </tr>
+    <tr>
+      <td>T3</td><td>P1</td><td>supabase/migrations</td>
+      <td>BCP 4テーブル + edge_devices制約 + pending_command列 + Postgresトリガー</td>
+      <td><code>supabase/migrations/20260528_001_bcp.sql</code></td>
+      <td><span class="badge ok">✅ 完了</span></td>
+    </tr>
+    <tr>
+      <td>T4</td><td>P1</td><td>supabase/functions</td>
+      <td>jalert-poller Edge Function セットアップ（骨格）</td>
+      <td><code>supabase/functions/jalert-poller/index.ts</code></td>
+      <td><span class="badge ok">✅ 完了</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>PR 2: BCP Feature</h2>
+<table>
+  <thead>
+    <tr><th>ID</th><th>優先</th><th>モジュール</th><th>内容</th><th>ファイル</th><th>ステータス</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>T5</td><td>P1</td><td>edge-agent/bcp</td>
+      <td>runBcpCapture() 実装（セマフォア・i-PRO skip・/tmp削除・all-fail検出）</td>
+      <td><code>src/modes/bcp.ts</code><br><code>src/util/semaphore.ts</code></td>
+      <td><span class="badge ok">✅ 完了</span></td>
+    </tr>
+    <tr>
+      <td>T6</td><td>P1</td><td>edge-agent/state-machine</td>
+      <td>toBcp() + skip-if-active ガード</td>
+      <td><code>src/state-machine.ts</code><br><code>src/types.ts</code></td>
+      <td><span class="badge ok">✅ 完了</span></td>
+    </tr>
+    <tr>
+      <td>T7</td><td>P1</td><td>monitor/bcp-webhook</td>
+      <td>PDF生成 webhook ハンドラ（status='clips_uploaded' フィルタ・all-fail ガード）</td>
+      <td><code>src/app/api/bcp-webhook/route.ts</code></td>
+      <td><span class="badge ok">✅ 完了</span></td>
+    </tr>
+    <tr>
+      <td>T8</td><td>P1</td><td>monitor/bcp-ui</td>
+      <td>BCP一覧・詳細画面 + ナビゲーション追加</td>
+      <td><code>src/app/bcp/page.tsx</code><br><code>src/app/bcp/[id]/page.tsx</code></td>
+      <td><span class="badge ok">✅ 完了</span></td>
+    </tr>
+    <tr>
+      <td>T9</td><td>P1</td><td>monitor/jalert-poller</td>
+      <td>J-Alert XMLポーリング実装（重複検知・地域照合・全デバイス送信）</td>
+      <td><code>supabase/functions/jalert-poller/index.ts</code></td>
+      <td><span class="badge ok">✅ 完了</span></td>
+    </tr>
+    <tr>
+      <td>T10</td><td>P2</td><td>edge-agent/tests</td>
+      <td>vitest セットアップ + 12ユニットテスト（全合格）</td>
+      <td><code>vitest.config.ts</code><br><code>src/modes/__tests__/bcp.test.ts</code></td>
+      <td><span class="badge ok">✅ 完了</span></td>
+    </tr>
+    <tr>
+      <td>T11</td><td>P2</td><td>supabase/migrations</td>
+      <td>bcp_clips 集計 Postgres トリガー（T3 に同梱）</td>
+      <td><code>supabase/migrations/20260528_001_bcp.sql</code></td>
+      <td><span class="badge ok">✅ 完了</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>デプロイ前に必要な手動ステップ</h2>
+<table>
+  <thead>
+    <tr><th>#</th><th>作業</th><th>コマンド / 手順</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>npm install（@react-pdf/renderer）</td>
+      <td><code>cd claude/monitor &amp;&amp; npm install</code></td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>型シム削除</td>
+      <td><code>rm claude/monitor/src/types/react-pdf-renderer.d.ts</code></td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>Supabase Storage バケット作成</td>
+      <td>Dashboard で <code>bcp-clips</code>（private）と <code>bcp-reports</code>（private）を作成</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>環境変数追加</td>
+      <td><code>BCP_WEBHOOK_SECRET</code>（任意の文字列）、<code>RESEND_API_KEY</code>（monitor 用）</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>Edge Function デプロイ</td>
+      <td><code>supabase functions deploy jalert-poller --schedule "* * * * *"</code></td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>DB マイグレーション適用</td>
+      <td><code>supabase db push</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ 15. SUCCESS ============================================================ -->
+<h1 id="success">15. 成功指標</h1>
+
+<table>
+  <thead>
+    <tr><th>指標</th><th>目標値</th><th>測定方法</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Jアラート検知からメール①到着まで</td>
+      <td>最大 2分以内</td>
+      <td>ポーリング 60秒 + 処理 60秒以内</td>
+    </tr>
+    <tr>
+      <td>録画完了からPDF付きメール②到着まで</td>
+      <td>15分以内</td>
+      <td>clip_to 〜 email 送信タイムスタンプ差</td>
+    </tr>
+    <tr>
+      <td>monitor app での BCP履歴確認</td>
+      <td>/bcp 画面でイベント一覧・詳細・PDF確認可</td>
+      <td>QAテスト</td>
+    </tr>
+    <tr>
+      <td>手動テスト発令</td>
+      <td>全フロー（録画→PDF→メール）が通る</td>
+      <td>[🧪 テスト発令] ボタン実行</td>
+    </tr>
+    <tr>
+      <td>ユニットテスト</td>
+      <td>12/12 合格</td>
+      <td><code>npx vitest run</code></td>
+    </tr>
+    <tr>
+      <td>対応NVR</td>
+      <td>Uniview NVR 店舗で動作確認</td>
+      <td>実機テスト（i-PRO は Phase 8 で対応）</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="key">
+  <b>📋 ロスタイム削減効果</b><br>
+  現状：発令〜報告書完成まで平均 <strong>2〜4時間</strong><br>
+  目標：発令〜PDF付きメール送信まで <strong>15分以内</strong>（最大 92% 削減）
+</div>
+
+</div><!-- /container -->
+
+<div class="footer">
+  BCP Jアラート連携機能 設計仕様書 v1.0 &nbsp;|&nbsp;
+  生成日: 2026-05-28 &nbsp;|&nbsp;
+  Branch: claude/distracted-mcnulty-075bcd &nbsp;|&nbsp;
+  Intereco レコーダ統合監視システム
+</div>
+
+</body>
+</html>

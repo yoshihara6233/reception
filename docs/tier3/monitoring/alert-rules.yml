@@ -1,0 +1,153 @@
+# F51.F: Alertmanager 用 SLO アラートルール
+#
+# 配置: /etc/prometheus/alert-rules.yml
+# 検証: promtool check rules alert-rules.yml
+#
+# SLO ターゲットは docs/tier3/monitoring/README.md と対応。
+# 各ルールには `summary` と `description` を必ず含め、Slack/メールで読みやすく。
+
+groups:
+  # ── SLO 違反系 ────────────────────────────────────────────────────────────
+  - name: intereco-slo-violations
+    interval: 30s
+    rules:
+      # 死活成功率 < 95%: 24h 移動平均で計算
+      - alert: HeartbeatSuccessRateLow
+        expr: |
+          (
+            sum(rate(edge_heartbeat_total{result="ok"}[24h])) /
+            sum(rate(edge_heartbeat_total[24h]))
+          ) < 0.95
+        for: 5m
+        labels:
+          severity: critical
+          slo:      heartbeat
+        annotations:
+          summary:     "死活監視成功率が 95% を下回りました"
+          description: "過去 24 時間の死活成功率が {{ $value | humanizePercentage }} です。target は 99% です。NVR 接続障害が広範囲に発生している可能性があります。"
+          runbook:     "docs/tier3/operations-runbook.md#heartbeat-failure"
+
+      - alert: HeartbeatSuccessRateWarning
+        expr: |
+          (
+            sum(rate(edge_heartbeat_total{result="ok"}[24h])) /
+            sum(rate(edge_heartbeat_total[24h]))
+          ) < 0.98
+        for: 30m
+        labels:
+          severity: warning
+          slo:      heartbeat
+        annotations:
+          summary:     "死活監視成功率が 98% を下回りました (警告)"
+          description: "過去 24 時間の死活成功率: {{ $value | humanizePercentage }}。SLO target 99% を侵食中。"
+
+      # コマンド成功率 < 95%: 1h 移動平均
+      - alert: CommandSuccessRateLow
+        expr: |
+          (
+            sum(rate(edge_commands_total{result="ok"}[1h])) /
+            sum(rate(edge_commands_total[1h]))
+          ) < 0.95
+        for: 5m
+        labels:
+          severity: critical
+          slo:      commands
+        annotations:
+          summary:     "コマンド成功率が 95% を下回りました"
+          description: "過去 1 時間のコマンド成功率: {{ $value | humanizePercentage }}。target は 99.5%。"
+          runbook:     "docs/tier3/operations-runbook.md#command-failure"
+
+      - alert: CommandLatencyHigh
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(edge_command_duration_seconds_bucket[5m])) by (le)
+          ) > 5
+        for: 10m
+        labels:
+          severity: warning
+          slo:      latency
+        annotations:
+          summary:     "コマンドレイテンシ p95 が 5 秒を超過"
+          description: "p95 = {{ $value }}秒。target ≤ 2 秒。NVR またはネットワーク遅延の可能性。"
+
+  # ── ノード稼働 ────────────────────────────────────────────────────────────
+  - name: intereco-node-availability
+    interval: 30s
+    rules:
+      # 全ノードダウン: 緊急
+      - alert: AllNodesDown
+        expr: |
+          sum(up{job="intereco-edge-central"}) == 0
+        for: 1m
+        labels:
+          severity: critical
+          slo:      node_uptime
+          page:     "true"
+        annotations:
+          summary:     "全ての中央エージェントノードがダウン"
+          description: "Tier 3 集約モードが完全停止。即時対応必要。"
+          runbook:     "docs/tier3/operations-runbook.md#all-nodes-down"
+
+      # 片系ダウン: 警告
+      - alert: HalfNodesDown
+        expr: |
+          sum(up{job="intereco-edge-central"}) == 1
+        for: 5m
+        labels:
+          severity: warning
+          slo:      node_uptime
+        annotations:
+          summary:     "中央エージェントの片系がダウン (HA 縮退)"
+          description: "稼働ノードが 1 台のみ。残ったノードに過剰負荷がかかる可能性。"
+
+      # シャード偏り
+      - alert: ShardImbalance
+        expr: |
+          (max(edge_tenants_assigned) - min(edge_tenants_assigned)) > 1000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary:     "ノード間でシャード割当が偏っています"
+          description: "max - min = {{ $value }} 店舗。ShardManager の rebalance を確認。"
+
+  # ── サーキットブレーカー ──────────────────────────────────────────────────
+  - name: intereco-circuit-breaker
+    interval: 30s
+    rules:
+      - alert: ManyCircuitsOpen
+        expr: |
+          edge_circuit_breaker_open_total > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary:     "サーキットブレーカー OPEN 店舗が 100 を超過"
+          description: "100 店舗以上で NVR 障害発生中。ベンダー側の問題 (例: FW バグ) の可能性。"
+          runbook:     "docs/tier3/operations-runbook.md#circuit-breaker"
+
+  # ── ライフサイクル (EOL/EOS) ──────────────────────────────────────────────
+  - name: intereco-nvr-lifecycle
+    interval: 1h
+    rules:
+      # EOS 経過店舗が存在
+      - alert: NvrEosExceeded
+        expr: |
+          edge_nvr_lifecycle_total{status="nvr_lifecycle_eos"} > 0
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary:     "EOS 経過 NVR が {{ $value }} 店舗で稼働中"
+          description: "メーカーサポート終了の機材で監視運用は推奨されません。置換計画を確認してください。"
+
+      # 6 ヶ月以内 EOS 急増
+      - alert: NvrEosUrgent
+        expr: |
+          edge_nvr_lifecycle_total{status="nvr_lifecycle_urgent"} > 50
+        for: 1h
+        labels:
+          severity: info
+        annotations:
+          summary:     "{{ $value }} 店舗が 6 ヶ月以内に EOS を迎えます"
+          description: "/admin/stores → ライフサイクル管理から置換計画を作成してください。"

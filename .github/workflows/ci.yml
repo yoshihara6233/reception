@@ -1,0 +1,132 @@
+# F46.5: モノレポ CI (Bun workspaces 対応)
+#
+# - 各 app (monitor / edge-agent / shared) を並列に typecheck + test
+# - paths フィルタで「変更があった app だけ」走らせる構成
+# - bun install を 1 回だけ実行 (workspace で全 app の deps が一括で揃う)
+#
+# Phase 0 で本ファイルを追加。Phase 1〜2 でリント・ビルド・E2E を追加予定。
+
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+# 同じ branch の古い run はキャンセル (PR への連打対応)
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── 変更検知 (どの app を走らせるか決める) ──────────────────────────────
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      shared:     ${{ steps.changes.outputs.shared }}
+      monitor:    ${{ steps.changes.outputs.monitor }}
+      edge-agent: ${{ steps.changes.outputs.edge-agent }}
+      docs:       ${{ steps.changes.outputs.docs }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            shared:
+              - 'packages/shared/**'
+              - 'package.json'
+              - 'bun.lockb'
+            monitor:
+              - 'claude/monitor/**'
+              - 'packages/shared/**'
+              - 'package.json'
+              - 'bun.lockb'
+            edge-agent:
+              - 'claude/edge-agent/**'
+              - 'packages/shared/**'
+              - 'package.json'
+              - 'bun.lockb'
+            docs:
+              - 'docs/**'
+              - '**/*.md'
+
+  # ── shared パッケージの typecheck ────────────────────────────────────────
+  shared:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.shared == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.12
+      - name: Install dependencies (workspace)
+        run: bun install --frozen-lockfile
+      - name: Typecheck shared
+        working-directory: packages/shared
+        run: bunx tsc --noEmit
+
+  # ── monitor (Next.js) ───────────────────────────────────────────────────
+  monitor:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.monitor == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.12
+      - name: Install dependencies (workspace)
+        run: bun install --frozen-lockfile
+      - name: Typecheck monitor
+        working-directory: claude/monitor
+        run: ./node_modules/.bin/tsc --noEmit
+      - name: Lint monitor
+        working-directory: claude/monitor
+        run: bun run lint
+        continue-on-error: true  # Phase 0 では lint エラーで CI 落とさない
+
+  # ── edge-agent (Bun) ────────────────────────────────────────────────────
+  edge-agent:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.edge-agent == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.12
+      - name: Install dependencies (workspace)
+        run: bun install --frozen-lockfile
+      - name: Typecheck edge-agent
+        working-directory: claude/edge-agent
+        run: bunx tsc --noEmit
+      - name: Unit tests (vitest)
+        working-directory: claude/edge-agent
+        run: bunx vitest run
+
+  # ── 全 job 完了確認 (PR マージ要件用) ──────────────────────────────────
+  ci-passed:
+    needs: [shared, monitor, edge-agent]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check all jobs
+        run: |
+          # paths-filter で skip された job は 'skipped' 扱いになるので
+          # 'failure' / 'cancelled' のみを失敗とみなす
+          if [[ "${{ needs.shared.result }}" == "failure" ]] || \
+             [[ "${{ needs.monitor.result }}" == "failure" ]] || \
+             [[ "${{ needs.edge-agent.result }}" == "failure" ]]; then
+            echo "::error::One or more CI jobs failed"
+            exit 1
+          fi
+          if [[ "${{ needs.shared.result }}" == "cancelled" ]] || \
+             [[ "${{ needs.monitor.result }}" == "cancelled" ]] || \
+             [[ "${{ needs.edge-agent.result }}" == "cancelled" ]]; then
+            echo "::warning::One or more CI jobs were cancelled"
+            exit 1
+          fi
+          echo "✓ All required jobs passed (or skipped due to no changes)"

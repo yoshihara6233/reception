@@ -1,0 +1,6 @@
+# Supabase project config for monitor app
+# See: https://supabase.com/docs/guides/functions/schedule-functions
+
+[functions.jalert-poller]
+# Poll JMA J-Alert feed every 60 seconds
+schedule = "* * * * *"

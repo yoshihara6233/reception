@@ -1,0 +1,30 @@
+{
+  "name": "intereco-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Intereco Recorder Monitor — multi-store NVR aggregation platform",
+  "workspaces": [
+    "claude/monitor",
+    "claude/edge-agent",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:monitor": "bun --filter monitor dev",
+    "dev:edge": "bun --filter edge-agent dev",
+    "build:monitor": "bun --filter monitor build",
+    "build:edge": "bun --filter edge-agent build",
+    "typecheck": "bun --filter '*' typecheck",
+    "typecheck:monitor": "bun --filter monitor typecheck",
+    "typecheck:edge": "bun --filter edge-agent typecheck",
+    "test": "bun --filter '*' test",
+    "test:edge": "bun --filter edge-agent test",
+    "lint": "bun --filter '*' lint"
+  },
+  "packageManager": "bun@1.3.12",
+  "engines": {
+    "bun": ">=1.3.0"
+  },
+  "dependencies": {
+    "qrcode.react": "^4.2.0"
+  }
+}

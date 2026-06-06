@@ -1,0 +1,1287 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Recording Monitor — 現場の "目" を、止めない。 | Intereco</title>
+<meta name="description" content="既存の NVR をそのまま使い、10,000 店舗の録画を 1 画面で監視する SaaS。i-PRO・Hikvision・Hanwha など 10 ベンダー対応。BCP / 防災 / AI 検知。" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+/* ===== Genesis Edge Design Tokens (流用) ===== */
+:root {
+  /* Neutrals (paper / ink) */
+  --ge-paper:     #F7F5F1;
+  --ge-paper-2:   #EFEBE3;
+  --ge-paper-3:   #E4DED3;
+  --ge-ink:       #0F0F10;
+  --ge-ink-2:     #2A2A2C;
+  --ge-ink-3:     #5B5B5F;
+  --ge-ink-4:     #8C8C90;
+  --ge-line:      #D6CFC1;
+  --ge-line-2:    #B9B0A0;
+
+  /* Accent (藍 / Indigo) */
+  --ge-accent:       #2C4A7E;
+  --ge-accent-ink:   #1B2F52;
+  --ge-accent-soft:  #E4EAF3;
+  --ge-accent-line:  #B8C4DA;
+
+  /* Semantic */
+  --ge-success:      #2F7A4F;
+  --ge-warning:      #B5761A;
+  --ge-danger:       #A3332B;
+
+  /* Typography */
+  --ge-font-jp:    'Noto Sans JP','Hiragino Sans','Yu Gothic',sans-serif;
+  --ge-font-latin: 'Inter Tight','Inter',sans-serif;
+  --ge-font-mono:  'IBM Plex Mono','Menlo',monospace;
+
+  /* Motion */
+  --ge-ease:     cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ge-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Shadows */
+  --ge-shadow-sm: 0 1px 2px rgba(15,15,16,0.06), 0 0 0 1px rgba(15,15,16,0.04);
+  --ge-shadow-md: 0 4px 12px rgba(15,15,16,0.08), 0 0 0 1px rgba(15,15,16,0.04);
+
+  /* Layout */
+  --content-max: 1180px;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--ge-paper);
+  color: var(--ge-ink);
+  font-family: var(--ge-font-jp);
+  font-size: 15px;
+  line-height: 1.75;
+  letter-spacing: 0.01em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+a { color: inherit; text-decoration: none; }
+img { max-width: 100%; display: block; }
+
+/* ===== Type ===== */
+.latin { font-family: var(--ge-font-latin); }
+.mono  { font-family: var(--ge-font-mono); font-feature-settings: "tnum" 1; }
+
+h1, h2, h3, h4 {
+  font-family: var(--ge-font-jp);
+  font-weight: 700;
+  color: var(--ge-ink);
+  letter-spacing: -0.005em;
+  margin: 0;
+}
+.eyebrow {
+  font-family: var(--ge-font-latin);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ge-ink-3);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.eyebrow::before {
+  content: "";
+  display: inline-block;
+  width: 28px;
+  height: 1px;
+  background: var(--ge-line-2);
+}
+
+/* ===== Header ===== */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgba(247, 245, 241, 0.86);
+  backdrop-filter: saturate(140%) blur(10px);
+  -webkit-backdrop-filter: saturate(140%) blur(10px);
+  border-bottom: 1px solid var(--ge-line);
+}
+.site-header .inner {
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: 18px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.logo {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-family: var(--ge-font-latin);
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--ge-ink);
+  letter-spacing: -0.01em;
+}
+.logo .mark {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  background: var(--ge-ink);
+  position: relative;
+  border-radius: 1px;
+  transform: translateY(2px);
+}
+.logo .mark::before {
+  content: "";
+  position: absolute;
+  inset: 4px 4px 4px 4px;
+  border: 1.5px solid var(--ge-paper);
+  border-radius: 50%;
+}
+.logo .sub {
+  font-family: var(--ge-font-jp);
+  font-size: 11px;
+  color: var(--ge-ink-3);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+}
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+.nav a {
+  font-size: 13px;
+  color: var(--ge-ink-2);
+  position: relative;
+  padding: 4px 0;
+  transition: color 0.2s var(--ge-ease);
+}
+.nav a:hover { color: var(--ge-accent); }
+.nav a:hover::after {
+  content: "";
+  position: absolute;
+  left: 0; bottom: -2px;
+  width: 100%;
+  height: 1px;
+  background: var(--ge-accent);
+}
+.nav .cta-mini {
+  padding: 7px 14px;
+  background: var(--ge-ink);
+  color: var(--ge-paper);
+  border-radius: 2px;
+  font-weight: 500;
+  font-size: 13px;
+}
+.nav .cta-mini:hover {
+  background: var(--ge-accent);
+  color: #fff;
+}
+
+/* ===== Section base ===== */
+section { padding: 110px 28px; }
+.container {
+  max-width: var(--content-max);
+  margin: 0 auto;
+}
+.divider {
+  text-align: center;
+  color: var(--ge-ink-4);
+  margin: 0;
+  letter-spacing: 0.3em;
+}
+
+/* ===== Hero ===== */
+.hero {
+  padding: 96px 28px 80px;
+  background:
+    radial-gradient(ellipse 80% 50% at 70% 10%, var(--ge-accent-soft) 0%, transparent 60%),
+    var(--ge-paper);
+  position: relative;
+  overflow: hidden;
+}
+.hero::after {
+  /* subtle grid */
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--ge-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--ge-line) 1px, transparent 1px);
+  background-size: 80px 80px;
+  opacity: 0.18;
+  pointer-events: none;
+  mask-image: radial-gradient(ellipse at center, #000 30%, transparent 80%);
+}
+.hero .container {
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  gap: 72px;
+  align-items: center;
+  position: relative;
+  z-index: 1;
+}
+.hero h1 {
+  font-size: clamp(36px, 4.4vw, 56px);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  margin: 28px 0 24px;
+}
+.hero h1 .accent {
+  color: var(--ge-accent);
+  position: relative;
+}
+.hero h1 .accent::after {
+  content: "";
+  display: block;
+  position: absolute;
+  left: 0; right: 0;
+  bottom: -6px;
+  height: 4px;
+  background: var(--ge-accent);
+  opacity: 0.18;
+  border-radius: 2px;
+}
+.hero p.lead {
+  font-size: 16px;
+  color: var(--ge-ink-2);
+  line-height: 1.85;
+  max-width: 540px;
+  margin: 0 0 36px;
+}
+.hero-meta {
+  display: flex;
+  gap: 22px;
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid var(--ge-line);
+  font-size: 12px;
+  color: var(--ge-ink-3);
+  font-family: var(--ge-font-latin);
+  letter-spacing: 0.06em;
+}
+.hero-meta .item { display: flex; align-items: center; gap: 8px; }
+.hero-meta .dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--ge-success);
+  animation: pulse 2.4s var(--ge-ease) infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(47, 122, 79, 0.35); }
+  50%      { opacity: 0.7; box-shadow: 0 0 0 6px rgba(47, 122, 79, 0); }
+}
+
+/* CTA buttons */
+.cta-row { display: flex; gap: 14px; flex-wrap: wrap; }
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 26px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border-radius: 2px;
+  transition: transform 0.2s var(--ge-ease), background 0.2s var(--ge-ease), color 0.2s var(--ge-ease);
+  cursor: pointer;
+  border: none;
+  font-family: var(--ge-font-jp);
+}
+.btn-primary {
+  background: var(--ge-ink);
+  color: var(--ge-paper);
+}
+.btn-primary:hover { background: var(--ge-accent); transform: translateY(-1px); }
+.btn-primary .arrow { transition: transform 0.2s var(--ge-ease); }
+.btn-primary:hover .arrow { transform: translateX(3px); }
+.btn-ghost {
+  background: transparent;
+  color: var(--ge-ink);
+  border: 1px solid var(--ge-line-2);
+}
+.btn-ghost:hover { border-color: var(--ge-ink); background: var(--ge-paper-2); }
+
+/* Hero visual / dashboard mockup */
+.hero-visual {
+  background: #ffffff;
+  border: 1px solid var(--ge-line);
+  border-radius: 4px;
+  padding: 0;
+  overflow: hidden;
+  box-shadow: var(--ge-shadow-md);
+  position: relative;
+}
+.hv-bar {
+  height: 32px;
+  background: var(--ge-paper-2);
+  border-bottom: 1px solid var(--ge-line);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+}
+.hv-bar .dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--ge-line-2);
+}
+.hv-bar .title {
+  margin-left: 12px;
+  font-family: var(--ge-font-mono);
+  font-size: 11px;
+  color: var(--ge-ink-3);
+  letter-spacing: 0.05em;
+}
+.hv-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--ge-line);
+  padding: 1px;
+  border-bottom: 1px solid var(--ge-line);
+}
+.hv-cell {
+  aspect-ratio: 16/10;
+  background: linear-gradient(135deg, #1d242c 0%, #2c3640 100%);
+  position: relative;
+  overflow: hidden;
+}
+.hv-cell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.06), transparent 60%);
+}
+.hv-cell .label {
+  position: absolute;
+  top: 6px; left: 8px;
+  font-family: var(--ge-font-mono);
+  font-size: 9px;
+  color: rgba(255,255,255,0.75);
+  letter-spacing: 0.05em;
+}
+.hv-cell .live {
+  position: absolute;
+  top: 6px; right: 8px;
+  display: flex; align-items: center; gap: 4px;
+  font-family: var(--ge-font-mono);
+  font-size: 9px;
+  color: rgba(255,255,255,0.9);
+}
+.hv-cell .live::before {
+  content: "";
+  width: 5px; height: 5px;
+  background: #ff5757;
+  border-radius: 50%;
+  display: inline-block;
+}
+.hv-cell.alert {
+  background: linear-gradient(135deg, #3a2222 0%, #4a2e2e 100%);
+  outline: 1px solid var(--ge-danger);
+  outline-offset: -1px;
+}
+.hv-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  background: #fff;
+}
+.hv-stats .s {
+  padding: 14px 18px;
+  border-right: 1px solid var(--ge-line);
+}
+.hv-stats .s:last-child { border-right: none; }
+.hv-stats .k {
+  font-family: var(--ge-font-mono);
+  font-size: 10px;
+  color: var(--ge-ink-3);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.hv-stats .v {
+  font-family: var(--ge-font-latin);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--ge-ink);
+  margin-top: 4px;
+}
+.hv-stats .v .unit {
+  font-size: 12px;
+  color: var(--ge-ink-3);
+  font-weight: 500;
+  margin-left: 3px;
+}
+
+/* ===== Section headers ===== */
+.section-head { margin-bottom: 56px; text-align: center; }
+.section-head h2 {
+  font-size: clamp(28px, 3vw, 38px);
+  line-height: 1.3;
+  margin: 16px auto 0;
+  max-width: 720px;
+}
+.section-head .lead {
+  font-size: 15px;
+  color: var(--ge-ink-3);
+  max-width: 600px;
+  margin: 18px auto 0;
+}
+
+/* ===== Pain points ===== */
+.pain {
+  background: var(--ge-paper-2);
+  border-top: 1px solid var(--ge-line);
+  border-bottom: 1px solid var(--ge-line);
+}
+.pain-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+  margin-top: 56px;
+}
+.pain-card {
+  background: #fff;
+  padding: 32px 26px;
+  border: 1px solid var(--ge-line);
+  border-radius: 3px;
+  position: relative;
+}
+.pain-card .num {
+  font-family: var(--ge-font-latin);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ge-ink-4);
+  letter-spacing: 0.15em;
+}
+.pain-card h3 {
+  font-size: 18px;
+  margin: 16px 0 12px;
+  line-height: 1.5;
+}
+.pain-card p {
+  font-size: 14px;
+  color: var(--ge-ink-3);
+  margin: 0;
+  line-height: 1.8;
+}
+
+/* ===== Capabilities (3 principles) ===== */
+.capabilities { background: var(--ge-paper); }
+.cap-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0;
+  border-top: 1px solid var(--ge-line);
+  border-left: 1px solid var(--ge-line);
+}
+.cap-cell {
+  padding: 44px 36px;
+  border-right: 1px solid var(--ge-line);
+  border-bottom: 1px solid var(--ge-line);
+  background: #fff;
+}
+.cap-cell .label {
+  font-family: var(--ge-font-latin);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  color: var(--ge-accent);
+  text-transform: uppercase;
+}
+.cap-cell h3 {
+  font-size: 22px;
+  margin: 18px 0 14px;
+  line-height: 1.4;
+}
+.cap-cell p {
+  font-size: 14px;
+  color: var(--ge-ink-3);
+  line-height: 1.85;
+  margin: 0;
+}
+
+/* ===== Products / Features ===== */
+.products { background: var(--ge-paper-2); }
+.prod-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 36px;
+}
+.prod-card {
+  background: #fff;
+  border: 1px solid var(--ge-line);
+  border-radius: 3px;
+  padding: 36px 36px 32px;
+  transition: transform 0.25s var(--ge-ease), box-shadow 0.25s var(--ge-ease);
+}
+.prod-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--ge-shadow-md);
+}
+.prod-card .pn {
+  font-family: var(--ge-font-latin);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  color: var(--ge-ink-4);
+}
+.prod-card h3 {
+  font-size: 24px;
+  margin: 14px 0 10px;
+}
+.prod-card .sub {
+  font-family: var(--ge-font-latin);
+  font-size: 13px;
+  color: var(--ge-accent);
+  letter-spacing: 0.04em;
+  margin-bottom: 20px;
+}
+.prod-card p {
+  font-size: 14px;
+  color: var(--ge-ink-2);
+  line-height: 1.85;
+}
+.prod-card .targets {
+  margin-top: 22px;
+  padding-top: 22px;
+  border-top: 1px solid var(--ge-line);
+}
+.prod-card .targets .lbl {
+  font-family: var(--ge-font-mono);
+  font-size: 10px;
+  color: var(--ge-ink-4);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.prod-card .targets ul {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.prod-card .targets li {
+  font-size: 12px;
+  padding: 4px 10px;
+  background: var(--ge-paper-2);
+  border: 1px solid var(--ge-line);
+  border-radius: 2px;
+  color: var(--ge-ink-2);
+}
+.prod-card .more {
+  margin-top: 24px;
+  font-family: var(--ge-font-latin);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ge-accent);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.prod-card .more::after {
+  content: "→";
+  transition: transform 0.2s var(--ge-ease);
+}
+.prod-card:hover .more::after { transform: translateX(4px); }
+
+/* ===== Vendor matrix ===== */
+.vendors { background: var(--ge-paper); }
+.vendor-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1px;
+  background: var(--ge-line);
+  border: 1px solid var(--ge-line);
+  margin-top: 48px;
+}
+.vendor-cell {
+  background: #fff;
+  padding: 26px 18px;
+  text-align: center;
+  font-family: var(--ge-font-latin);
+  position: relative;
+  transition: background 0.2s var(--ge-ease);
+}
+.vendor-cell:hover { background: var(--ge-accent-soft); }
+.vendor-cell .name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ge-ink);
+  letter-spacing: -0.005em;
+}
+.vendor-cell .id {
+  font-family: var(--ge-font-mono);
+  font-size: 10px;
+  color: var(--ge-ink-4);
+  margin-top: 6px;
+  letter-spacing: 0.05em;
+}
+.vendor-cell .status {
+  display: inline-block;
+  margin-top: 12px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ge-success);
+}
+.vendor-cell .badge-phase {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-family: var(--ge-font-mono);
+  font-size: 9px;
+  color: var(--ge-ink-4);
+  letter-spacing: 0.05em;
+}
+.vendor-foot {
+  margin-top: 28px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--ge-ink-3);
+  font-family: var(--ge-font-latin);
+}
+.vendor-foot strong { color: var(--ge-accent); font-weight: 600; }
+
+/* ===== Architecture (2-mode) ===== */
+.arch { background: var(--ge-paper-2); }
+.arch-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 40px;
+  margin-top: 56px;
+}
+.arch-card {
+  background: #fff;
+  border: 1px solid var(--ge-line);
+  padding: 36px 32px;
+  border-radius: 3px;
+}
+.arch-card .tag {
+  display: inline-block;
+  font-family: var(--ge-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--ge-paper);
+  background: var(--ge-ink);
+  padding: 4px 8px;
+  text-transform: uppercase;
+}
+.arch-card h3 {
+  font-size: 20px;
+  margin: 16px 0 8px;
+}
+.arch-card p {
+  font-size: 13.5px;
+  color: var(--ge-ink-3);
+  line-height: 1.85;
+  margin: 0 0 22px;
+}
+.arch-diagram {
+  border: 1px solid var(--ge-line);
+  background: var(--ge-paper);
+  padding: 18px;
+  font-family: var(--ge-font-mono);
+  font-size: 11px;
+  color: var(--ge-ink-3);
+  line-height: 1.7;
+  letter-spacing: 0.02em;
+}
+.arch-diagram .a-box {
+  display: inline-block;
+  padding: 6px 10px;
+  background: #fff;
+  border: 1px solid var(--ge-line-2);
+  color: var(--ge-ink);
+  margin: 4px 4px 4px 0;
+}
+.arch-diagram .a-box.accent { border-color: var(--ge-accent); color: var(--ge-accent); }
+.arch-diagram .a-flow { color: var(--ge-ink-4); }
+
+/* ===== Metrics ===== */
+.metrics {
+  background: var(--ge-ink);
+  color: var(--ge-paper);
+}
+.metrics .eyebrow { color: var(--ge-ink-4); }
+.metrics .eyebrow::before { background: var(--ge-ink-3); }
+.metrics h2 { color: var(--ge-paper); }
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--ge-ink-2);
+  margin-top: 56px;
+}
+.metric {
+  background: var(--ge-ink);
+  padding: 36px 24px;
+  text-align: center;
+}
+.metric .v {
+  font-family: var(--ge-font-latin);
+  font-size: 44px;
+  font-weight: 700;
+  color: var(--ge-paper);
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.metric .v .unit {
+  font-size: 16px;
+  color: var(--ge-ink-4);
+  font-weight: 500;
+  margin-left: 4px;
+}
+.metric .k {
+  margin-top: 12px;
+  font-family: var(--ge-font-jp);
+  font-size: 13px;
+  color: var(--ge-ink-4);
+}
+
+/* ===== CTA section ===== */
+.cta {
+  background: var(--ge-paper);
+  text-align: center;
+  padding: 120px 28px;
+  border-top: 1px solid var(--ge-line);
+}
+.cta h2 {
+  font-size: clamp(28px, 3.4vw, 42px);
+  line-height: 1.35;
+  margin-bottom: 18px;
+  max-width: 740px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.cta p {
+  font-size: 15px;
+  color: var(--ge-ink-3);
+  margin: 0 auto 40px;
+  max-width: 540px;
+}
+.cta .cta-row { justify-content: center; }
+
+/* ===== Footer ===== */
+footer {
+  background: var(--ge-paper-2);
+  border-top: 1px solid var(--ge-line);
+  padding: 64px 28px 36px;
+}
+.foot-grid {
+  max-width: var(--content-max);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 1fr 1fr;
+  gap: 48px;
+}
+.foot-col h4 {
+  font-family: var(--ge-font-latin);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ge-ink-3);
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+.foot-col ul { list-style: none; padding: 0; margin: 0; }
+.foot-col li { margin: 8px 0; font-size: 13px; color: var(--ge-ink-2); }
+.foot-col a:hover { color: var(--ge-accent); }
+.foot-brand p {
+  font-size: 13px;
+  color: var(--ge-ink-3);
+  line-height: 1.85;
+  margin: 12px 0 0;
+  max-width: 320px;
+}
+.foot-bottom {
+  max-width: var(--content-max);
+  margin: 56px auto 0;
+  padding-top: 24px;
+  border-top: 1px solid var(--ge-line);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--ge-font-latin);
+  font-size: 12px;
+  color: var(--ge-ink-4);
+}
+.foot-bottom .legal { display: flex; gap: 18px; }
+
+/* ===== Responsive ===== */
+@media (max-width: 980px) {
+  .hero { padding: 64px 22px 56px; }
+  .hero .container { grid-template-columns: 1fr; gap: 48px; }
+  section { padding: 80px 22px; }
+  .pain-grid { grid-template-columns: 1fr; }
+  .cap-grid { grid-template-columns: 1fr; border-right: 1px solid var(--ge-line); }
+  .prod-grid { grid-template-columns: 1fr; }
+  .vendor-grid { grid-template-columns: repeat(2, 1fr); }
+  .arch-grid { grid-template-columns: 1fr; }
+  .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+  .foot-grid { grid-template-columns: 1fr 1fr; }
+  .nav a:not(.cta-mini) { display: none; }
+}
+@media (max-width: 600px) {
+  .hv-grid { grid-template-columns: repeat(2, 1fr); }
+  .vendor-grid { grid-template-columns: 1fr; }
+  .foot-grid { grid-template-columns: 1fr; }
+  .foot-bottom { flex-direction: column; gap: 14px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ============== HEADER ============== -->
+<header class="site-header">
+  <div class="inner">
+    <a href="#" class="logo">
+      <span class="mark" aria-hidden="true"></span>
+      <span>Recording Monitor<span class="sub">　／ by Intereco</span></span>
+    </a>
+    <nav class="nav">
+      <a href="#problem">課題</a>
+      <a href="#products">プロダクト</a>
+      <a href="#vendors">対応機器</a>
+      <a href="#architecture">構成</a>
+      <a href="#contact" class="cta-mini">お問い合わせ →</a>
+    </nav>
+  </div>
+</header>
+
+<!-- ============== HERO ============== -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-text">
+      <span class="eyebrow">RECORDING MONITOR ／ V5.0</span>
+      <h1>
+        現場の <span class="accent">"目"</span> を、<br>
+        止めない。
+      </h1>
+      <p class="lead">
+        既存の NVR を入れ替えずに、10,000 店舗の録画を 1 画面で監視。<br>
+        死活、BCP、防犯、ライブ映像、過去録画 — 全てを 1 つのクラウドに集約します。
+      </p>
+      <div class="cta-row">
+        <a href="#products" class="btn btn-primary">
+          製品を見る <span class="arrow">→</span>
+        </a>
+        <a href="#contact" class="btn btn-ghost">
+          デモを依頼する
+        </a>
+      </div>
+      <div class="hero-meta">
+        <div class="item"><span class="dot"></span> 10,000 STORES READY</div>
+        <div class="item">10 VENDORS</div>
+        <div class="item">CENTRAL ／ EDGE HYBRID</div>
+      </div>
+    </div>
+
+    <div class="hero-visual" aria-label="Recording Monitor ダッシュボード モックアップ">
+      <div class="hv-bar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="title">monitor.intereco.cloud ／ 16-grid live</span>
+      </div>
+      <div class="hv-grid">
+        <div class="hv-cell"><span class="label">ST-001 CH1</span><span class="live">LIVE</span></div>
+        <div class="hv-cell"><span class="label">ST-001 CH2</span><span class="live">LIVE</span></div>
+        <div class="hv-cell"><span class="label">ST-001 CH3</span><span class="live">LIVE</span></div>
+        <div class="hv-cell alert"><span class="label">ST-001 CH4</span><span class="live">ALERT</span></div>
+        <div class="hv-cell"><span class="label">ST-002 CH1</span><span class="live">LIVE</span></div>
+        <div class="hv-cell"><span class="label">ST-002 CH2</span><span class="live">LIVE</span></div>
+        <div class="hv-cell"><span class="label">ST-002 CH3</span><span class="live">LIVE</span></div>
+        <div class="hv-cell"><span class="label">ST-002 CH4</span><span class="live">LIVE</span></div>
+      </div>
+      <div class="hv-stats">
+        <div class="s">
+          <div class="k">ONLINE</div>
+          <div class="v">9,872<span class="unit">／10,000</span></div>
+        </div>
+        <div class="s">
+          <div class="k">ALERTS</div>
+          <div class="v">3</div>
+        </div>
+        <div class="s">
+          <div class="k">UPTIME</div>
+          <div class="v">99.94<span class="unit">%</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============== PAIN POINTS ============== -->
+<section id="problem" class="pain">
+  <div class="container">
+    <div class="section-head">
+      <span class="eyebrow">THE PROBLEM</span>
+      <h2>多店舗の録画運用は、<br>"見えない" のが当たり前になっていませんか。</h2>
+      <p class="lead">
+        本部から見ても、各店舗の NVR の状況がわからない。
+        止まっていても気付かない。映像を遡るのに 1 店舗ずつ電話する。
+        — それが、いま多くの企業で起きていることです。
+      </p>
+    </div>
+
+    <div class="pain-grid">
+      <div class="pain-card">
+        <div class="num">PAIN ／ 01</div>
+        <h3>"止まったまま" を、誰も知らない。</h3>
+        <p>HDD 故障、ファン停止、PoE 異常。本部から状況を把握するすべがなく、事故が起きた時に初めて録画が止まっていたと知る — そんなケースが頻発しています。</p>
+      </div>
+      <div class="pain-card">
+        <div class="num">PAIN ／ 02</div>
+        <h3>機種がバラバラで、束ねられない。</h3>
+        <p>i-PRO、Hikvision、Hanwha、Dahua、ONVIF 互換 — 拠点ごとに違うベンダー。それぞれ専用クライアントが必要で、横断監視のシステムを組めない。</p>
+      </div>
+      <div class="pain-card">
+        <div class="num">PAIN ／ 03</div>
+        <h3>新規 NVR への入替コストが膨大。</h3>
+        <p>クラウド対応 NVR への全店リプレイスは数億円。費用対効果が成り立たず、現場 NVR は古いまま放置されがちです。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============== CAPABILITIES (3 principles) ============== -->
+<section id="capabilities" class="capabilities">
+  <div class="container">
+    <div class="section-head">
+      <span class="eyebrow">CAPABILITIES</span>
+      <h2>3 つの原則で、現場の "目" を、束ねる。</h2>
+    </div>
+
+    <div class="cap-grid">
+      <div class="cap-cell">
+        <div class="label">01 ／ 既存活用</div>
+        <h3>NVR を、買い替えない。</h3>
+        <p>新規ハードウェアを導入せず、現在お使いの NVR のまま接続。クラウド側のアダプタが、各ベンダー固有の API を吸収します。導入初日に、ROI が成立する設計です。</p>
+      </div>
+      <div class="cap-cell">
+        <div class="label">02 ／ マルチベンダー</div>
+        <h3>1 つの画面に、10 ベンダーを。</h3>
+        <p>i-PRO・Hikvision・Hanwha・Axis・Dahua・Synology・ONVIF 互換まで、合計 10 ベンダーに正式対応。各社のライブ・録画・AI 検知を、同じ操作体験で扱えます。</p>
+      </div>
+      <div class="cap-cell">
+        <div class="label">03 ／ クラウドネイティブ</div>
+        <h3>10,000 店舗を、スケールする。</h3>
+        <p>Active-Active シャーディングと自動フェイルオーバーで、SLO 99.9% を維持。サーキットブレーカーが障害店舗を分離し、全体運用への波及を遮断します。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============== PRODUCTS ============== -->
+<section id="products" class="products">
+  <div class="container">
+    <div class="section-head">
+      <span class="eyebrow">PRODUCTS</span>
+      <h2>3 つの "用途" で、現場と、本部と、社会と。</h2>
+      <p class="lead">
+        ライブ監視 ／ BCP 災害証跡 ／ セキュリティ巡回 — 1 ライセンスで、3 つの用途を同時に。
+      </p>
+    </div>
+
+    <div class="prod-grid">
+      <div class="prod-card">
+        <div class="pn">PRODUCT ／ 01</div>
+        <h3>Recording Monitor / Live</h3>
+        <div class="sub">multi-vendor live & VOD monitoring</div>
+        <p>
+          全店舗の NVR から、リアルタイムにライブ映像と録画を取り出す中核機能。
+          16 分割グリッド、店舗マップ、ライブ／VOD 切替、AI 検知メタデータ表示まで。
+          管理者と本部の "日常運用" を、1 画面に。
+        </p>
+        <div class="targets">
+          <div class="lbl">想定業種</div>
+          <ul>
+            <li>小売チェーン</li>
+            <li>飲食・サービス業</li>
+            <li>金融機関</li>
+            <li>物流センター</li>
+            <li>自治体施設</li>
+          </ul>
+        </div>
+        <a href="#contact" class="more">詳細を見る</a>
+      </div>
+
+      <div class="prod-card">
+        <div class="pn">PRODUCT ／ 02</div>
+        <h3>Recording Monitor / BCP</h3>
+        <div class="sub">disaster evidence ／ J-Alert 連携</div>
+        <p>
+          地震・水害・J-Alert 発令時に、全店舗の前後 30 分を自動でタイムライン化。
+          8 枚スナップショットを PDF レポート化し、保険申請や本部報告に直接使えます。
+          BCP 計画の "形骸化" を、現場映像で防ぐ。
+        </p>
+        <div class="targets">
+          <div class="lbl">想定業種</div>
+          <ul>
+            <li>多店舗 BCP 義務化業種</li>
+            <li>製薬・化学</li>
+            <li>金融機関</li>
+            <li>大学・学校法人</li>
+            <li>自治体</li>
+          </ul>
+        </div>
+        <a href="#contact" class="more">詳細を見る</a>
+      </div>
+    </div>
+
+    <div style="margin-top: 36px;">
+      <div class="prod-card">
+        <div class="pn">PRODUCT ／ 03</div>
+        <h3>Recording Monitor / Security Patrol</h3>
+        <div class="sub">cross-site abnormal queue ／ AI patrol</div>
+        <p>
+          営業時間外、AI が全店舗を自動巡回。人物検知、車両検知、ドア開閉異常を
+          1 つのキューに集約し、警備会社や本部のセキュリティチームが
+          "横断" して優先順位付けできます。1 店舗ずつの監視から、面の監視へ。
+        </p>
+        <div class="targets">
+          <div class="lbl">想定業種</div>
+          <ul>
+            <li>無人店舗・無人ATM</li>
+            <li>夜間営業のチェーン</li>
+            <li>倉庫・流通拠点</li>
+            <li>駐車場運営</li>
+          </ul>
+        </div>
+        <a href="#contact" class="more">詳細を見る</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============== VENDORS ============== -->
+<section id="vendors" class="vendors">
+  <div class="container">
+    <div class="section-head">
+      <span class="eyebrow">SUPPORTED VENDORS</span>
+      <h2>主要 NVR ベンダーに、すべて対応。</h2>
+      <p class="lead">
+        2026 年 6 月時点、10 ベンダーに正式対応。未知のベンダーも ONVIF 汎用アダプタが
+        最低限の機能をカバーします。
+      </p>
+    </div>
+
+    <div class="vendor-grid">
+      <div class="vendor-cell">
+        <span class="badge-phase">P0</span>
+        <div class="name">i-PRO WJ-NX</div>
+        <div class="id">i-pro-nx</div>
+        <span class="status"></span>
+      </div>
+      <div class="vendor-cell">
+        <span class="badge-phase">P0</span>
+        <div class="name">i-PRO WJ-NU</div>
+        <div class="id">i-pro-nu</div>
+        <span class="status"></span>
+      </div>
+      <div class="vendor-cell">
+        <span class="badge-phase">P5</span>
+        <div class="name">i-PRO WJ-GXE500</div>
+        <div class="id">i-pro-gxe500</div>
+        <span class="status"></span>
+      </div>
+      <div class="vendor-cell">
+        <span class="badge-phase">P5</span>
+        <div class="name">Hikvision</div>
+        <div class="id">hikvision (ISAPI)</div>
+        <span class="status"></span>
+      </div>
+      <div class="vendor-cell">
+        <span class="badge-phase">P5</span>
+        <div class="name">Hanwha Wisenet</div>
+        <div class="id">hanwha-wisenet (SUNAPI)</div>
+        <span class="status"></span>
+      </div>
+      <div class="vendor-cell">
+        <span class="badge-phase">P5</span>
+        <div class="name">ONVIF Generic</div>
+        <div class="id">onvif-generic</div>
+        <span class="status"></span>
+      </div>
+      <div class="vendor-cell">
+        <span class="badge-phase">P6</span>
+        <div class="name">Synology Surveillance</div>
+        <div class="id">synology-surveillance</div>
+        <span class="status"></span>
+      </div>
+      <div class="vendor-cell">
+        <span class="badge-phase">P7</span>
+        <div class="name">Axis VAPIX</div>
+        <div class="id">axis-vapix</div>
+        <span class="status"></span>
+      </div>
+      <div class="vendor-cell">
+        <span class="badge-phase">P7</span>
+        <div class="name">Dahua DH-NVR</div>
+        <div class="id">dahua</div>
+        <span class="status"></span>
+      </div>
+      <div class="vendor-cell">
+        <span class="badge-phase">P0</span>
+        <div class="name">Frigate (OSS)</div>
+        <div class="id">frigate</div>
+        <span class="status"></span>
+      </div>
+    </div>
+
+    <p class="vendor-foot">
+      <strong>10 ベンダー</strong> を正式サポート。Phase 8 で <strong>Bosch DIVAR ／ Avigilon ／ Uniview</strong> の追加を予定。<br>
+      新規ベンダー追加は <strong>アダプタ 1 ファイル + レジストリ 1 行</strong> で完結する設計です。
+    </p>
+  </div>
+</section>
+
+<!-- ============== ARCHITECTURE ============== -->
+<section id="architecture" class="arch">
+  <div class="container">
+    <div class="section-head">
+      <span class="eyebrow">ARCHITECTURE</span>
+      <h2>2 つの構成モードを、用途で選べる。</h2>
+      <p class="lead">
+        既存の Mini PC を活かす "各店モード" と、本部で束ねる "中央集約モード"。
+        混在運用も、移行も、いつでも可能です。
+      </p>
+    </div>
+
+    <div class="arch-grid">
+      <div class="arch-card">
+        <span class="tag">MODE A</span>
+        <h3>各店 Mini PC モード</h3>
+        <p>各店舗の Mini PC (Frigate / edge-agent) が録画とライブ配信を担当。LiveKit Cloud 経由で本部 UI に映像をストリームします。既存運用の延長で導入が容易。</p>
+        <div class="arch-diagram">
+          <span class="a-box">店舗 NVR</span>
+          <span class="a-flow">→</span>
+          <span class="a-box">edge-agent</span>
+          <span class="a-flow">→</span>
+          <span class="a-box accent">LiveKit Cloud</span>
+          <span class="a-flow">→</span>
+          <span class="a-box">Monitor UI</span>
+        </div>
+      </div>
+
+      <div class="arch-card">
+        <span class="tag">MODE B</span>
+        <h3>中央集約 (Tier 3) モード</h3>
+        <p>本部サーバ 1 台で 10,000 店舗の NVR を直接ポーリング。Mini PC 不要、初期投資ゼロ。Active-Active HA とサーキットブレーカーで大規模スケールに対応。</p>
+        <div class="arch-diagram">
+          <span class="a-box">店舗 NVR (×10000)</span>
+          <span class="a-flow">→</span>
+          <span class="a-box accent">Central Agent (HA)</span>
+          <span class="a-flow">→</span>
+          <span class="a-box">Monitor UI</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============== METRICS ============== -->
+<section class="metrics">
+  <div class="container">
+    <div class="section-head">
+      <span class="eyebrow">BY THE NUMBERS</span>
+      <h2>数字で見る、Recording Monitor。</h2>
+    </div>
+
+    <div class="metrics-grid">
+      <div class="metric">
+        <div class="v">10<span class="unit">vendors</span></div>
+        <div class="k">対応 NVR ベンダー</div>
+      </div>
+      <div class="metric">
+        <div class="v">10,000<span class="unit">stores</span></div>
+        <div class="k">スケール上限 (設計値)</div>
+      </div>
+      <div class="metric">
+        <div class="v">99.9<span class="unit">% SLO</span></div>
+        <div class="k">死活監視ハートビート</div>
+      </div>
+      <div class="metric">
+        <div class="v">6<span class="unit">h interval</span></div>
+        <div class="k">低コスト監視モード</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============== CTA ============== -->
+<section id="contact" class="cta">
+  <div class="container">
+    <span class="eyebrow">GET STARTED</span>
+    <h2>"見えない録画" を、今日から、見えるものに。</h2>
+    <p>
+      導入相談・PoC・お見積もりまで、まずはお気軽にお問い合わせください。<br>
+      既存 NVR の機種一覧をお預かりすれば、互換性チェックを 1 営業日でお返しします。
+    </p>
+    <div class="cta-row">
+      <a href="mailto:contact@intereco.jp" class="btn btn-primary">
+        お問い合わせ <span class="arrow">→</span>
+      </a>
+      <a href="#" class="btn btn-ghost">
+        デモを依頼する
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ============== FOOTER ============== -->
+<footer>
+  <div class="foot-grid">
+    <div class="foot-col foot-brand">
+      <a href="#" class="logo">
+        <span class="mark" aria-hidden="true"></span>
+        <span>Recording Monitor</span>
+      </a>
+      <p>
+        多店舗 NVR 統合監視 SaaS。既存ハードを活かし、本部から 10,000 店舗の "目" を束ねます。
+      </p>
+    </div>
+    <div class="foot-col">
+      <h4>Products</h4>
+      <ul>
+        <li><a href="#">Live Monitor</a></li>
+        <li><a href="#">BCP</a></li>
+        <li><a href="#">Security Patrol</a></li>
+        <li><a href="#">Roadmap</a></li>
+      </ul>
+    </div>
+    <div class="foot-col">
+      <h4>Company</h4>
+      <ul>
+        <li><a href="#">About Intereco</a></li>
+        <li><a href="#">News</a></li>
+        <li><a href="#">Contact</a></li>
+        <li><a href="#">Careers</a></li>
+      </ul>
+    </div>
+    <div class="foot-col">
+      <h4>Resources</h4>
+      <ul>
+        <li><a href="#">Vendor Matrix</a></li>
+        <li><a href="#">仕様書 (v5.0)</a></li>
+        <li><a href="#">Status</a></li>
+        <li><a href="#">Security</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot-bottom">
+    <div class="latin">© 2026 Intereco K.K. ／ Recording Monitor</div>
+    <div class="legal latin">
+      <a href="#">Privacy</a>
+      <a href="#">Terms</a>
+      <a href="#">Security</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

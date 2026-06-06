@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<title>案 4: SOC Dark Wall — レコーダ統合監視</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body, html { height: 100%; }
+  body {
+    font-family: "Inter", -apple-system, "Hiragino Kaku Gothic ProN", system-ui, sans-serif;
+    background: #0a0a0a; color: #e5e5e5; font-size: 13px; overflow: hidden;
+  }
+
+  /* Top bar */
+  header {
+    background: #0f0f0f; border-bottom: 1px solid #262626; padding: 10px 18px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .brand { font-weight: 700; font-family: "JetBrains Mono", "SF Mono", monospace; font-size: 13px; color: #f97316; letter-spacing: 0.1em; display: flex; align-items: center; gap: 10px; }
+  .brand::before { content: ''; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #ef4444; box-shadow: 0 0 8px #ef4444; animation: pulse-red 1.5s infinite; }
+  @keyframes pulse-red { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+
+  .header-meta {
+    display: flex; gap: 16px; font-family: "JetBrains Mono", "SF Mono", monospace; font-size: 11px;
+  }
+  .meta-item { display: flex; gap: 4px; }
+  .meta-key { color: #737373; }
+  .meta-val { color: #e5e5e5; }
+  .meta-val.alert { color: #ef4444; }
+  .meta-val.ok    { color: #22c55e; }
+
+  .layout { display: grid; grid-template-columns: 240px 1fr; height: calc(100vh - 41px); }
+
+  /* Sidebar */
+  aside.left { background: #0f0f0f; border-right: 1px solid #262626; padding: 12px 0; overflow-y: auto; }
+  .sec-title { padding: 8px 14px; font-size: 10px; color: #737373; text-transform: uppercase; letter-spacing: 0.15em; font-weight: 600; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px; padding: 7px 14px; color: #a3a3a3;
+    text-decoration: none; font-size: 12px; cursor: pointer;
+  }
+  .nav-item:hover { background: #171717; color: #e5e5e5; }
+  .nav-item.active { background: #1f1f1f; color: #f97316; border-left: 2px solid #f97316; padding-left: 12px; font-weight: 600; }
+  .nav-count { margin-left: auto; font-family: "JetBrains Mono", monospace; font-size: 10px; color: #525252; }
+  .nav-count.alert { color: #ef4444; }
+
+  .alerts-feed {
+    margin-top: 16px; border-top: 1px solid #262626; padding: 12px 14px;
+  }
+  .alert-row { padding: 8px 0; border-bottom: 1px solid #1f1f1f; font-size: 11px; }
+  .alert-row:last-child { border: 0; }
+  .alert-time { font-family: "JetBrains Mono", monospace; color: #737373; font-size: 10px; }
+  .alert-msg { color: #e5e5e5; margin-top: 2px; }
+  .alert-msg .lvl { display: inline-block; padding: 0 4px; border-radius: 2px; font-weight: 700; font-family: monospace; font-size: 10px; margin-right: 6px; }
+  .lvl.err  { background: #7f1d1d; color: #fecaca; }
+  .lvl.warn { background: #78350f; color: #fed7aa; }
+  .lvl.info { background: #1e3a8a; color: #bfdbfe; }
+
+  /* Main wall area */
+  main {
+    background: #050505; padding: 8px; display: grid;
+    grid-template-rows: 1fr 220px; gap: 8px;
+  }
+  .wall {
+    display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(4, 1fr);
+    gap: 4px; min-height: 0;
+  }
+  .tile {
+    background: linear-gradient(135deg, #171717, #0a0a0a);
+    border: 1px solid #262626;
+    position: relative; overflow: hidden; cursor: pointer; min-height: 0;
+  }
+  .tile:hover { border-color: #f97316; }
+  .tile-label {
+    position: absolute; left: 6px; top: 6px; font-size: 10px;
+    background: rgba(0,0,0,0.7); color: #e5e5e5; padding: 2px 6px; border-radius: 2px;
+    font-family: "JetBrains Mono", monospace;
+  }
+  .tile-meta {
+    position: absolute; right: 6px; top: 6px; font-size: 9px;
+    background: rgba(0,0,0,0.7); padding: 2px 6px; border-radius: 2px;
+    color: #22c55e; font-family: monospace;
+  }
+  .tile-rec {
+    position: absolute; right: 6px; bottom: 6px; font-size: 10px;
+    color: #ef4444; font-weight: 700; display: flex; align-items: center; gap: 4px;
+  }
+  .tile-rec::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #ef4444; animation: pulse-red 1.5s infinite; }
+  .tile-noise {
+    position: absolute; inset: 0; opacity: 0.04; pointer-events: none;
+    background-image: repeating-linear-gradient(0deg, transparent 0 1px, white 1px 2px);
+  }
+  .tile.alert { border-color: #ef4444; background: linear-gradient(135deg, #450a0a, #1c0a0a); }
+  .tile.alert .tile-label { background: #7f1d1d; color: #fecaca; }
+  .tile.off { background: #0a0a0a; }
+  .tile.off::after { content: 'NO SIGNAL'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #404040; font-family: monospace; font-size: 11px; letter-spacing: 0.2em; }
+
+  /* Bottom controls */
+  .control-bar {
+    background: #0f0f0f; border: 1px solid #262626; display: grid;
+    grid-template-columns: 320px 1fr 320px; gap: 1px; min-height: 0;
+  }
+  .ctrl-section { background: #0a0a0a; padding: 10px 14px; overflow-y: auto; }
+  .ctrl-section h4 {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em; color: #737373;
+    margin-bottom: 8px; font-weight: 600;
+  }
+
+  /* Map widget mini */
+  .map-mini {
+    background: #050505 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Crect fill='%23050505' width='100' height='100'/%3E%3Cpath d='M0,30 Q25,20 50,30 T100,30 M0,70 Q25,60 50,70 T100,70 M30,0 Q20,25 30,50 T30,100 M70,0 Q60,25 70,50 T70,100' fill='none' stroke='%23262626' stroke-width='1'/%3E%3C/svg%3E");
+    position: relative; min-height: 160px;
+  }
+  .map-mini .pin { position: absolute; width: 6px; height: 6px; border-radius: 50%; }
+  .pin.ok  { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+  .pin.warn { background: #f59e0b; box-shadow: 0 0 6px #f59e0b; }
+  .pin.err { background: #ef4444; box-shadow: 0 0 6px #ef4444; animation: pulse-red 1s infinite; }
+
+  /* Quick actions */
+  .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+  .action-btn {
+    background: #171717; border: 1px solid #262626; color: #e5e5e5;
+    padding: 8px; font-size: 11px; cursor: pointer; font-family: inherit;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .action-btn:hover { border-color: #f97316; color: #f97316; }
+  .action-btn.danger { color: #ef4444; border-color: #450a0a; }
+
+  /* Telemetry */
+  .telemetry { font-family: "JetBrains Mono", monospace; font-size: 10px; }
+  .telemetry .row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #1f1f1f; }
+  .telemetry .row:last-child { border: 0; }
+  .telemetry .key { color: #737373; }
+  .telemetry .val { color: #22c55e; }
+  .telemetry .val.warn { color: #f59e0b; }
+  .telemetry .val.err  { color: #ef4444; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="brand">SOC // RECORDER MONITORING</div>
+    <div class="header-meta">
+      <div class="meta-item"><span class="meta-key">UTC:</span><span class="meta-val">2026-05-19 14:32:18</span></div>
+      <div class="meta-item"><span class="meta-key">OPS:</span><span class="meta-val">SATO_K</span></div>
+      <div class="meta-item"><span class="meta-key">STORES:</span><span class="meta-val ok">9847</span><span class="meta-key">/10000</span></div>
+      <div class="meta-item"><span class="meta-key">ALERTS:</span><span class="meta-val alert">12</span></div>
+      <div class="meta-item"><span class="meta-key">SESSION:</span><span class="meta-val">23</span></div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="left">
+      <div class="sec-title">Operations</div>
+      <a class="nav-item active">▣ Wall View <span class="nav-count">16ch</span></a>
+      <a class="nav-item">⛬ Map Recon</a>
+      <a class="nav-item">⏪ Playback</a>
+      <a class="nav-item">⊕ Multi-Store</a>
+
+      <div class="sec-title" style="margin-top:8px">Incidents</div>
+      <a class="nav-item">⚠ Alerts <span class="nav-count alert">12</span></a>
+      <a class="nav-item">⊗ Offline Edges <span class="nav-count alert">153</span></a>
+      <a class="nav-item">⏱ Limit Reached <span class="nav-count">5</span></a>
+
+      <div class="sec-title" style="margin-top:8px">Tools</div>
+      <a class="nav-item">⚙ Devices</a>
+      <a class="nav-item">📊 Reports</a>
+      <a class="nav-item">📁 Audit Log</a>
+
+      <div class="alerts-feed">
+        <div class="sec-title" style="padding-left:0">Live Feed</div>
+        <div class="alert-row">
+          <div class="alert-time">14:32:08</div>
+          <div class="alert-msg"><span class="lvl err">ERR</span>新宿東店: edge offline</div>
+        </div>
+        <div class="alert-row">
+          <div class="alert-time">14:29:42</div>
+          <div class="alert-msg"><span class="lvl warn">WRN</span>渋谷南店: ch12 RTSP timeout</div>
+        </div>
+        <div class="alert-row">
+          <div class="alert-time">14:25:11</div>
+          <div class="alert-msg"><span class="lvl warn">WRN</span>大阪梅田店: CPU 85%</div>
+        </div>
+        <div class="alert-row">
+          <div class="alert-time">14:18:00</div>
+          <div class="alert-msg"><span class="lvl info">INF</span>福岡天神店: 2h limit reached</div>
+        </div>
+        <div class="alert-row">
+          <div class="alert-time">14:12:33</div>
+          <div class="alert-msg"><span class="lvl info">INF</span>OPS sato_k joined</div>
+        </div>
+      </div>
+    </aside>
+
+    <main>
+      <!-- 16-tile wall -->
+      <div class="wall">
+        <div class="tile">
+          <div class="tile-label">CH01 入口</div>
+          <div class="tile-meta">LIVE 24fps</div>
+          <div class="tile-rec">REC</div>
+          <div class="tile-noise"></div>
+        </div>
+        <div class="tile">
+          <div class="tile-label">CH02 店頭</div>
+          <div class="tile-meta">LIVE 24fps</div>
+          <div class="tile-rec">REC</div>
+          <div class="tile-noise"></div>
+        </div>
+        <div class="tile">
+          <div class="tile-label">CH03 レジ</div>
+          <div class="tile-meta">LIVE 24fps</div>
+          <div class="tile-rec">REC</div>
+          <div class="tile-noise"></div>
+        </div>
+        <div class="tile">
+          <div class="tile-label">CH04 陳列棚</div>
+          <div class="tile-meta">LIVE 24fps</div>
+          <div class="tile-rec">REC</div>
+          <div class="tile-noise"></div>
+        </div>
+        <div class="tile">
+          <div class="tile-label">CH05 BO</div>
+          <div class="tile-meta">LIVE 24fps</div>
+          <div class="tile-rec">REC</div>
+          <div class="tile-noise"></div>
+        </div>
+        <div class="tile">
+          <div class="tile-label">CH06 冷蔵</div>
+          <div class="tile-meta">LIVE 24fps</div>
+          <div class="tile-rec">REC</div>
+          <div class="tile-noise"></div>
+        </div>
+        <div class="tile">
+          <div class="tile-label">CH07 駐車</div>
+          <div class="tile-meta">LIVE 24fps</div>
+          <div class="tile-rec">REC</div>
+          <div class="tile-noise"></div>
+        </div>
+        <div class="tile">
+          <div class="tile-label">CH08 搬入</div>
+          <div class="tile-meta">LIVE 24fps</div>
+          <div class="tile-rec">REC</div>
+          <div class="tile-noise"></div>
+        </div>
+        <div class="tile">
+          <div class="tile-label">CH09 休憩</div>
+          <div class="tile-meta">LIVE 24fps</div>
+          <div class="tile-rec">REC</div>
+          <div class="tile-noise"></div>
+        </div>
+        <div class="tile">
+          <div class="tile-label">CH10 事務</div>
+          <div class="tile-meta">LIVE 24fps</div>
+          <div class="tile-rec">REC</div>
+          <div class="tile-noise"></div>
+        </div>
+        <div class="tile">
+          <div class="tile-label">CH11 通路1</div>
+          <div class="tile-meta">LIVE 24fps</div>
+          <div class="tile-rec">REC</div>
+          <div class="tile-noise"></div>
+        </div>
+        <div class="tile alert">
+          <div class="tile-label">CH12 通路2</div>
+          <div class="tile-meta" style="color:#ef4444">DOWN</div>
+          <div class="tile-noise"></div>
+        </div>
+        <div class="tile">
+          <div class="tile-label">CH13 非常口</div>
+          <div class="tile-meta">LIVE 24fps</div>
+          <div class="tile-rec">REC</div>
+          <div class="tile-noise"></div>
+        </div>
+        <div class="tile">
+          <div class="tile-label">CH14 屋上</div>
+          <div class="tile-meta">LIVE 24fps</div>
+          <div class="tile-rec">REC</div>
+          <div class="tile-noise"></div>
+        </div>
+        <div class="tile">
+          <div class="tile-label">CH15 トイレ前</div>
+          <div class="tile-meta">LIVE 24fps</div>
+          <div class="tile-rec">REC</div>
+          <div class="tile-noise"></div>
+        </div>
+        <div class="tile off">
+          <div class="tile-label">CH16</div>
+        </div>
+      </div>
+
+      <!-- Bottom control bar -->
+      <div class="control-bar">
+        <div class="ctrl-section">
+          <h4>Geo Recon</h4>
+          <div class="map-mini">
+            <div class="pin ok"   style="left:20%;top:30%"></div>
+            <div class="pin ok"   style="left:34%;top:48%"></div>
+            <div class="pin warn" style="left:48%;top:32%"></div>
+            <div class="pin err"  style="left:60%;top:55%"></div>
+            <div class="pin ok"   style="left:72%;top:42%"></div>
+            <div class="pin ok"   style="left:80%;top:65%"></div>
+          </div>
+        </div>
+
+        <div class="ctrl-section">
+          <h4>Telemetry — 渋谷南店</h4>
+          <div class="telemetry">
+            <div class="row"><span class="key">edge.status</span><span class="val">GRID</span></div>
+            <div class="row"><span class="key">edge.cpu</span><span class="val">23%</span></div>
+            <div class="row"><span class="key">edge.mem</span><span class="val">1.4G/8.0G</span></div>
+            <div class="row"><span class="key">edge.uptime</span><span class="val">42d 13h</span></div>
+            <div class="row"><span class="key">edge.version</span><span class="val">0.4.2</span></div>
+            <div class="row"><span class="key">recorder.vendor</span><span class="val">i-pro</span></div>
+            <div class="row"><span class="key">recorder.model</span><span class="val">WJ-NX410KG</span></div>
+            <div class="row"><span class="key">rtsp.timeout.ch12</span><span class="val err">14:29:42</span></div>
+            <div class="row"><span class="key">net.latency</span><span class="val">38ms</span></div>
+            <div class="row"><span class="key">livekit.bitrate</span><span class="val">1.2 Mbps</span></div>
+          </div>
+        </div>
+
+        <div class="ctrl-section">
+          <h4>Quick Actions</h4>
+          <div class="actions">
+            <button class="action-btn">⛶ FULL</button>
+            <button class="action-btn">⊕ PTZ</button>
+            <button class="action-btn">📷 SNAP</button>
+            <button class="action-btn">▶ LIVE</button>
+            <button class="action-btn">⏪ VOD</button>
+            <button class="action-btn">🔍 ZOOM</button>
+            <button class="action-btn">⌬ TAG</button>
+            <button class="action-btn danger">⊗ DROP</button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

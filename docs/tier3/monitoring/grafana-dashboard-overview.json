@@ -1,0 +1,94 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "id": null,
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "総コマンド処理数 (24h)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "sum(increase(edge_commands_total[24h]))", "refId": "A" }],
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "総死活実行数 (24h)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "sum(increase(edge_heartbeat_total[24h]))", "refId": "A" }],
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "現在の Adapter Cache サイズ",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "sum(edge_adapter_cache_size)", "refId": "A" }],
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "サーキット OPEN 店舗数",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "edge_circuit_breaker_open_total", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow","value": 10 },
+              { "color": "red",   "value": 100 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "コマンド処理レート (per second, by command)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{
+        "expr": "sum(rate(edge_commands_total[5m])) by (command)",
+        "refId": "A", "legendFormat": "{{command}}"
+      }],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "ベンダー別 死活成功率",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{
+        "expr": "sum(rate(edge_heartbeat_total{result=\"ok\"}[5m])) by (vendor) / sum(rate(edge_heartbeat_total[5m])) by (vendor)",
+        "refId": "A", "legendFormat": "{{vendor}}"
+      }],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 } },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 }
+    },
+    {
+      "id": 7,
+      "type": "logs",
+      "title": "edge-agent ログ (最新)",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [{
+        "expr": "{service=\"edge-agent\"} |~ \"WARN|ERROR\"",
+        "refId": "A"
+      }],
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 12 }
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["intereco", "tier3", "overview"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "timezone": "Asia/Tokyo",
+  "title": "Intereco Tier 3 — Overview",
+  "uid": "intereco-overview",
+  "version": 1
+}

@@ -1,0 +1,13 @@
+# F51.F: Grafana dashboard provisioning (file ベース)
+apiVersion: 1
+
+providers:
+  - name:            'intereco'
+    orgId:           1
+    folder:          'Intereco Tier 3'
+    type:            file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates:  true
+    options:
+      path: /var/lib/grafana/dashboards

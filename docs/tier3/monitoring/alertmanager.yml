@@ -1,0 +1,115 @@
+# F51.F: Alertmanager 設定
+#
+# 配置: /etc/alertmanager/alertmanager.yml
+# 検証: amtool check-config alertmanager.yml
+
+global:
+  resolve_timeout: 5m
+  # SMTP (運用メール通知)
+  smtp_smarthost: 'smtp.intereco.jp:587'
+  smtp_from:      'alerts@intereco.jp'
+  smtp_auth_username: 'alerts@intereco.jp'
+  smtp_auth_password_file: /etc/alertmanager/smtp-password
+
+# テンプレート (日本語化)
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+route:
+  receiver:        'slack-default'
+  group_by:        ['alertname', 'cluster', 'service']
+  group_wait:      30s
+  group_interval:  5m
+  repeat_interval: 4h
+
+  routes:
+    # ── 緊急 (severity=critical + page=true) ──
+    # ノード全滅・全店舗障害は PagerDuty (電話通知)
+    - receiver: 'pagerduty-critical'
+      matchers:
+        - severity = "critical"
+        - page = "true"
+      group_wait: 0s
+      repeat_interval: 30m
+      continue: true   # PagerDuty 後に Slack にも継続
+
+    # ── 緊急だが page なし ──
+    - receiver: 'slack-critical'
+      matchers:
+        - severity = "critical"
+      group_wait: 30s
+      repeat_interval: 1h
+
+    # ── 警告 ──
+    - receiver: 'slack-warnings'
+      matchers:
+        - severity = "warning"
+
+    # ── 情報 (週次ダイジェスト) ──
+    - receiver: 'email-info'
+      matchers:
+        - severity = "info"
+      group_interval: 24h
+      repeat_interval: 7d
+
+# 抑制 (重複アラート防止)
+inhibit_rules:
+  # 全ノードダウンが出ている時、個別ノードの「片系ダウン」アラートは抑制
+  - source_matchers:
+      - alertname = "AllNodesDown"
+    target_matchers:
+      - alertname = "HalfNodesDown"
+    equal: ['cluster']
+
+  # critical が出ている時、同じ slo の warning は抑制
+  - source_matchers:
+      - severity = "critical"
+    target_matchers:
+      - severity = "warning"
+    equal: ['slo', 'cluster']
+
+receivers:
+  # ── PagerDuty (24/7 オンコール) ──
+  - name: 'pagerduty-critical'
+    pagerduty_configs:
+      - service_key_file: /etc/alertmanager/pagerduty-key
+        description: '{{ template "pagerduty.description" . }}'
+        severity:    'critical'
+        links:
+          - href: '{{ .CommonAnnotations.runbook }}'
+            text: 'Runbook'
+          - href: 'https://grafana.intereco.jp/d/intereco-overview'
+            text: 'Grafana'
+
+  # ── Slack 緊急 ──
+  - name: 'slack-critical'
+    slack_configs:
+      - api_url_file: /etc/alertmanager/slack-webhook-critical
+        channel:    '#intereco-alerts-critical'
+        title:      '🔴 [Critical] {{ .GroupLabels.alertname }}'
+        text:       '{{ template "slack.alert" . }}'
+        send_resolved: true
+
+  # ── Slack 警告 ──
+  - name: 'slack-warnings'
+    slack_configs:
+      - api_url_file: /etc/alertmanager/slack-webhook-warnings
+        channel:    '#intereco-alerts'
+        title:      '🟡 [Warning] {{ .GroupLabels.alertname }}'
+        text:       '{{ template "slack.alert" . }}'
+        send_resolved: true
+
+  # ── Slack デフォルト ──
+  - name: 'slack-default'
+    slack_configs:
+      - api_url_file: /etc/alertmanager/slack-webhook-default
+        channel:    '#intereco-alerts'
+        title:      '{{ .GroupLabels.alertname }}'
+
+  # ── メール (週次ダイジェスト) ──
+  - name: 'email-info'
+    email_configs:
+      - to: 'ops@intereco.jp'
+        headers:
+          Subject: '[Intereco] 週次 監視サマリ'
+        send_resolved: false

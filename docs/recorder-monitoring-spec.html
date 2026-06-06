@@ -1,0 +1,1920 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<title>レコーダ統合監視システム 仕様書・基本設計・開発計画 v5.0</title>
+<style>
+  :root {
+    --primary: #1e3a8a;
+    --accent: #2563eb;
+    --bg: #f8fafc;
+    --card: #ffffff;
+    --border: #e2e8f0;
+    --text: #1e293b;
+    --muted: #64748b;
+    --ok: #15803d;
+    --warn: #b45309;
+    --danger: #b91c1c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Hiragino Kaku Gothic ProN", "Yu Gothic UI",
+      "Segoe UI", system-ui, sans-serif;
+    margin: 0; padding: 0; color: var(--text); background: var(--bg);
+    line-height: 1.7; font-size: 14px;
+  }
+  .container { max-width: 1080px; margin: 0 auto; padding: 32px 40px; }
+  header.cover {
+    background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+    color: #fff; padding: 56px 40px;
+  }
+  header.cover .title { font-size: 28px; font-weight: 700; letter-spacing: 0.02em; }
+  header.cover .sub { font-size: 15px; opacity: 0.85; margin-top: 8px; }
+  header.cover .meta {
+    margin-top: 24px; display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 12px; font-size: 12px;
+  }
+  header.cover .meta div b { display: block; opacity: 0.7; margin-bottom: 2px; font-weight: 500; }
+  header.cover .scale-badges { margin-top: 18px; display: flex; gap: 12px; }
+  header.cover .scale-badges span {
+    background: rgba(255,255,255,0.18); padding: 6px 14px; border-radius: 16px;
+    font-size: 13px; font-weight: 600;
+  }
+  h1 {
+    color: var(--primary); border-bottom: 3px solid var(--primary);
+    padding-bottom: 8px; margin-top: 48px; font-size: 22px;
+  }
+  h2 {
+    color: var(--accent); margin-top: 32px; font-size: 17px;
+    border-left: 4px solid var(--accent); padding-left: 10px;
+  }
+  h3 { font-size: 15px; margin-top: 24px; color: #334155; }
+  table {
+    width: 100%; border-collapse: collapse; margin: 12px 0 20px;
+    background: var(--card); font-size: 13px;
+  }
+  th, td {
+    border: 1px solid var(--border); padding: 8px 10px; text-align: left;
+    vertical-align: top;
+  }
+  th { background: #eff6ff; color: var(--primary); font-weight: 600; }
+  tr:nth-child(even) td { background: #fafbfc; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.center, th.center { text-align: center; }
+  pre, code {
+    font-family: "SF Mono", Consolas, Monaco, monospace; font-size: 12px;
+  }
+  pre {
+    background: #0f172a; color: #e2e8f0; padding: 14px 16px; border-radius: 6px;
+    overflow-x: auto; line-height: 1.5;
+  }
+  code { background: #eef2ff; color: #1e3a8a; padding: 1px 5px; border-radius: 3px; }
+  pre code { background: transparent; color: inherit; padding: 0; }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 6px;
+    padding: 16px 20px; margin: 16px 0;
+  }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+  .badge.ok { background: #dcfce7; color: var(--ok); }
+  .badge.warn { background: #fef3c7; color: var(--warn); }
+  .badge.danger { background: #fee2e2; color: var(--danger); }
+  .badge.info { background: #dbeafe; color: var(--accent); }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 3px 0; }
+  .note { background: #fffbeb; border-left: 4px solid #f59e0b; padding: 10px 14px; margin: 12px 0; border-radius: 4px; font-size: 13px; }
+  .key { background: #ecfdf5; border-left: 4px solid #10b981; padding: 12px 16px; margin: 16px 0; border-radius: 4px; }
+  .key b { color: #065f46; }
+  .ascii { background: #0f172a; color: #e2e8f0; padding: 18px; border-radius: 6px; font-family: monospace; white-space: pre; font-size: 12px; line-height: 1.4; overflow-x: auto; }
+  .toc { background: #fff; padding: 16px 24px; border: 1px solid var(--border); border-radius: 6px; margin: 24px 0; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .toc ol { padding-left: 22px; }
+  .total-row td { background: #eff6ff !important; font-weight: 700; color: var(--primary); }
+  .highlight-row td { background: #fef3c7 !important; font-weight: 600; }
+  .footer { color: var(--muted); font-size: 12px; text-align: center; padding: 40px 0 24px; }
+  @media print {
+    body { background: white; font-size: 11pt; }
+    .container { padding: 0; }
+    h1 { page-break-before: always; }
+    h1:first-of-type { page-break-before: avoid; }
+    header.cover { page-break-after: always; }
+  }
+</style>
+</head>
+<body>
+
+<header class="cover">
+  <div class="title">レコーダ統合監視システム</div>
+  <div class="sub">i-PRO / Hikvision / Hanwha / Synology / ONVIF / Frigate / Uniview 7ベンダー対応・Tier 3 中央集約プラットフォーム</div>
+  <div class="sub" style="margin-top:4px">システム仕様書 / 基本設計 / 開発計画 / ランニングコスト / 運用設計</div>
+  <div class="scale-badges">
+    <span>最大 10,000 店舗</span>
+    <span>Tier 3 中央集約モード</span>
+    <span>HA Active-Active</span>
+    <span>8 NVR ベンダー対応</span>
+    <span>BCP / SECURITY / INFRA</span>
+    <span>📱 PWA</span>
+  </div>
+  <div class="meta">
+    <div><b>文書種別</b>仕様書 兼 基本設計書 兼 運用設計</div>
+    <div><b>版数</b>v5.0</div>
+    <div><b>作成日</b>2026-06-04</div>
+    <div><b>対象規模</b>〜10,000 店舗 / 〜160,000 カメラ</div>
+  </div>
+</header>
+
+<div class="container">
+
+<div class="toc">
+  <b>目次</b>
+  <ol>
+    <li><a href="#changelog-v5">v5.0 変更サマリ <span class="badge info">v5.0 新規</span></a></li>
+    <li><a href="#changelog">v4.0 変更サマリ</a></li>
+    <li><a href="#chap1">システム仕様書</a></li>
+    <li><a href="#chap2">基本設計（JPEG ポーリング ＋ VOD のみ WebRTC）</a></li>
+    <li><a href="#chap3">開発計画・工数</a></li>
+    <li><a href="#chap4">ランニングコスト</a></li>
+    <li><a href="#chap5">リスクと前提条件</a></li>
+    <li><a href="#chap6">スマートフォン対応設計</a></li>
+    <li><a href="#chap7">追加機能：BCP / SECURITY / INFRA 監視</a></li>
+    <li><a href="#chap8">Tier 3 中央集約モード <span class="badge info">v5.0 新規</span></a></li>
+    <li><a href="#chap9">NVR ベンダー対応設計 <span class="badge info">v5.0 新規</span></a></li>
+    <li><a href="#chap10">監視スタック ＆ SLO 設計 <span class="badge info">v5.0 新規</span></a></li>
+    <li><a href="#chap11">運用ランブック <span class="badge info">v5.0 新規</span></a></li>
+  </ol>
+</div>
+
+<!-- ===================== v5.0 変更サマリ ===================== -->
+<h1 id="changelog-v5">v5.0 変更サマリ <span class="badge info" style="font-size:13px;vertical-align:middle">Tier 3 + マルチベンダー</span></h1>
+
+<div class="key">
+  <b>v5.0 で起きたこと（一言）</b>
+  <p style="margin:6px 0 0">
+    v4.0 は <b>各店舗 Mini PC + Frigate</b> 前提だった。v5.0 で <b>Tier 3 中央集約モード</b> を追加し、
+    既存 NVR を活かしたまま店舗側ハードウェア追加ゼロで運用できる構成を実装。あわせて
+    <b>対応 NVR ベンダーを 3 → 8 に拡張</b>（i-PRO WJ-NX/NU/GXE500 + Hikvision + Hanwha + Synology + ONVIF 汎用 + Frigate）、
+    <b>HA + Active-Active フェイルオーバー、Circuit Breaker、Prometheus 監視スタック</b>、
+    <b>NVR ライフサイクル管理 (EOL/EOS)</b> を本格実装。
+  </p>
+</div>
+
+<h2>v4.0 → v5.0 主要追加機能</h2>
+<table>
+  <tr><th>カテゴリ</th><th>v4.0 (旧)</th><th>v5.0 (新)</th></tr>
+  <tr>
+    <td>運用モード</td>
+    <td>各店舗 Mini PC + Frigate (per_store_minipc)</td>
+    <td><b>per_store_minipc + central_aggregator の 2 モード共存</b><br>店舗ごとに deployment_mode を選択可能</td>
+  </tr>
+  <tr>
+    <td>対応 NVR ベンダー</td>
+    <td>i-PRO (基本) / Uniview / Frigate (3 種)</td>
+    <td><b>i-PRO WJ-NX/NU/GXE500、Hikvision (ISAPI)、Hanwha Wisenet (SUNAPI)、Synology Surveillance Station、ONVIF 汎用、Frigate (8 種)</b></td>
+  </tr>
+  <tr>
+    <td>NVR アダプタ層</td>
+    <td>(個別実装の直叩き)</td>
+    <td><b><code>NvrAdapter</code> インターフェイス + Registry パターン</b><br>新ベンダー追加 = ファイル 1 個 + registry 1 行</td>
+  </tr>
+  <tr>
+    <td>FW 世代対応</td>
+    <td>固定実装</td>
+    <td><b>FW Version 自動検出 + 世代別 capability マトリックス</b><br>i-PRO v1.x (2018) / v2.x (2020) / v3.x (2022+) / v4.x (2024+) を自動分岐</td>
+  </tr>
+  <tr>
+    <td>HA / 可用性</td>
+    <td>各 Mini PC 単独 (HA なし)</td>
+    <td><b>中央 Active-Active 2 ノード + ShardManager</b><br>失効ノードの担当店舗を 90 秒以内に他ノードがテイクオーバー</td>
+  </tr>
+  <tr>
+    <td>障害隔離</td>
+    <td>なし</td>
+    <td><b>Circuit Breaker (CLOSED / OPEN / HALF_OPEN)</b><br>NVR 障害店舗を即座に隔離、cooldown 後に自動復帰試行</td>
+  </tr>
+  <tr>
+    <td>ハートビート間隔</td>
+    <td>60 秒固定</td>
+    <td><b>per_store_minipc: 60 秒 / central_aggregator: 6 時間</b><br>per-store オーバーライド可能、段階展開 CLI 完備</td>
+  </tr>
+  <tr>
+    <td>監視スタック</td>
+    <td>Supabase クエリのみ</td>
+    <td><b>Prometheus + Grafana + Loki + Alertmanager</b><br>edge-agent が <code>/metrics</code> エンドポイントで自己メトリクス公開</td>
+  </tr>
+  <tr>
+    <td>SLO</td>
+    <td>未定義</td>
+    <td><b>SLO 3 項目定義</b>: 死活成功率 99% / コマンド成功率 99.5% / ノード稼働率 99.9%</td>
+  </tr>
+  <tr>
+    <td>NVR ライフサイクル</td>
+    <td>未対応</td>
+    <td><b>NVR 機種マスタ + EOL/EOS データモデル</b><br>導入日 + 7 年運用ルール + 期限自動アラート</td>
+  </tr>
+  <tr>
+    <td>イベント検知</td>
+    <td>ポーリングのみ</td>
+    <td><b>ONVIF PullPoint Event Push 対応</b><br>motion/video_loss/tampering/ai_person/ai_vehicle を正規化受信</td>
+  </tr>
+  <tr>
+    <td>VOD MP4</td>
+    <td>Uniview / Frigate のみ</td>
+    <td><b>i-PRO + Hikvision (ISAPI ContentMgmt) + Hanwha (SUNAPI backup) + Frigate</b></td>
+  </tr>
+  <tr>
+    <td>負荷試験キット</td>
+    <td>なし</td>
+    <td><b>モック NVR HTTP サーバ + 10k 店舗 seed 投入スクリプト</b></td>
+  </tr>
+  <tr>
+    <td>運用ランブック</td>
+    <td>なし</td>
+    <td><b>障害対応 + 計画作業 + リリース手順 + 災害復旧</b></td>
+  </tr>
+</table>
+
+<h2>v5.0 開発統計</h2>
+<table>
+  <tr><th>項目</th><th>値</th><th>備考</th></tr>
+  <tr><td>マイグレーション</td><td>5 SQL ファイル (665 行)</td><td>F46.6/7/8 + F51.B + F53.F</td></tr>
+  <tr><td>edge-agent ソース</td><td>約 40 ファイル / 6,000+ 行</td><td>adapters / commands / modes/central / scheduler / util</td></tr>
+  <tr><td>edge-agent テスト</td><td><b>14 ファイル / 134 ユニットテスト</b></td><td>fetch mock で実機なし検証</td></tr>
+  <tr><td>monitor 新規画面</td><td>15+ ページ・API ルート</td><td>/admin/nvr-models、/infra/nodes、/infra/slo 等</td></tr>
+  <tr><td>CLI スクリプト</td><td>4 本</td><td>migrate-to-central、heartbeat-rollout、load-test 系</td></tr>
+  <tr><td>監視スタック設定</td><td>9 ファイル</td><td>Prometheus / Alertmanager / Grafana / Loki / docker-compose</td></tr>
+  <tr><td>設計ドキュメント</td><td>12 ファイル / 6,000+ 行</td><td><code>docs/tier3/</code> 配下</td></tr>
+  <tr><td>機材なし開発 完了率</td><td><b>100%</b></td><td>残りは PoC 実機検証のみ (機材待ち)</td></tr>
+</table>
+
+<h2>v5.0 主要設計ドキュメント (docs/tier3/)</h2>
+<table>
+  <tr><th>ファイル</th><th>内容</th></tr>
+  <tr><td><code>nvr-adapter-design.md</code></td><td>NVR Adapter 層の構造 + 拡張ポイント</td></tr>
+  <tr><td><code>firmware-capability-matrix.md</code></td><td>FW Ver 検出 + capability マトリックス</td></tr>
+  <tr><td><code>eol-eos-data-model.md</code></td><td>NVR ライフサイクル DB スキーマ</td></tr>
+  <tr><td><code>vendor-support-matrix.md</code></td><td>8 ベンダー機能比較 + 選定ガイド</td></tr>
+  <tr><td><code>customer-nvr-survey.md</code></td><td>顧客向け機種分布調査票</td></tr>
+  <tr><td><code>phase0-issues.md</code></td><td>Phase 0 を 30 Issue に分割</td></tr>
+  <tr><td><code>ui-mockups.md</code></td><td>/admin/stores NVR タブ + ライフサイクル UI</td></tr>
+  <tr><td><code>monitoring/README.md</code></td><td>Prometheus + Grafana + Loki 構成</td></tr>
+  <tr><td><code>monitoring/alert-rules.yml</code></td><td>9 SLO アラートルール</td></tr>
+  <tr><td><code>monitoring/grafana-dashboard-*.json</code></td><td>2 ダッシュボード (Overview + SLO)</td></tr>
+  <tr><td><code>operations-runbook.md</code></td><td>障害対応 + 計画作業 + リリース手順</td></tr>
+  <tr><td><code>all-migrations-combined.sql</code></td><td>5 マイグレーション統合 SQL</td></tr>
+</table>
+
+<!-- ===================== v4.0 変更サマリ ===================== -->
+<h1 id="changelog">v4.0 変更サマリ <span class="badge info" style="font-size:13px;vertical-align:middle">アーキ転換</span></h1>
+
+<div class="key">
+  <b>v4.0 で起きたこと（一言）</b>
+  <p style="margin:6px 0 0">
+    grid / single live は <b>RTSP → ffmpeg → LiveKit WebRTC をやめ、HTTP JPEG ポーリング</b>に
+    全面切替。LiveKit Cloud は <b>VOD（録画再生）専用</b>に縮退。あわせて
+    <b>BCP（J-Alert クリップ録画）</b>、<b>SECURITY（巡回スナップショット）</b>、
+    <b>INFRA 死活監視</b> の 3 機能を追加し、これらのレポートは PDF で実生成。
+  </p>
+</div>
+
+<h2>主要なアーキ変更</h2>
+<table>
+  <tr>
+    <th>機能</th>
+    <th>v3.0 (旧)</th>
+    <th>v4.0 (新)</th>
+  </tr>
+  <tr>
+    <td>16分割 grid</td>
+    <td>RTSP × 16ch → ffmpeg xstack → JPEG → Storage</td>
+    <td><b>Frigate <code>/api/&lt;cam&gt;/latest.jpg</code> 並列 fetch → sharp 4×4 合成 → Storage</b></td>
+  </tr>
+  <tr>
+    <td>シングルライブ</td>
+    <td>RTSP → go2rtc → ffmpeg WHIP → LiveKit Cloud → ブラウザ WebRTC</td>
+    <td><b>Frigate <code>/api/&lt;cam&gt;/latest.jpg</code> → 1秒間隔 fetch → 個別 Storage<br>ブラウザは &lt;img&gt; を 0.5–1 秒ポーリング</b></td>
+  </tr>
+  <tr>
+    <td>VOD 録画再生</td>
+    <td>Uniview replay RTSP / i-PRO ONVIF → LiveKit Ingress</td>
+    <td><b>Uniview replay RTSP / Frigate clip.mp4 export → ffmpeg WHIP → LiveKit Cloud Ingress</b><br>(時間軸シーク要件のため WebRTC 維持)</td>
+  </tr>
+  <tr>
+    <td>BCP（事業継続）</td>
+    <td>(未対応)</td>
+    <td><b>J-Alert 受信 → 全店舗にクリップ録画指示 → エッジが MP4 アップロード → サムネは Frigate API JPEG → PDF レポート生成</b></td>
+  </tr>
+  <tr>
+    <td>SECURITY（警備巡回）</td>
+    <td>(未対応)</td>
+    <td><b>定刻 or 手動で <code>capture_snapshot</code> 発火 → エッジが Frigate API から JPEG fetch → patrol/ingest に multipart POST → AI 比較 → トリアージ画面</b></td>
+  </tr>
+  <tr>
+    <td>INFRA 監視</td>
+    <td>edge_devices.status を UI で見る程度</td>
+    <td><b>monitor_settings/checks/results/incidents/reports の 5 テーブル + pg_cron 死活掃引 + 無人ストリーム watchdog</b></td>
+  </tr>
+  <tr>
+    <td>レポート PDF</td>
+    <td>(未生成)</td>
+    <td><b>PDFKit + Noto Sans JP で BCP / SECURITY レポート PDF を Storage 公開バケットに生成</b></td>
+  </tr>
+</table>
+
+<h2>主要な「踏んだ罠」と回避策（実装で得た知見）</h2>
+<table>
+  <tr><th>罠</th><th>症状</th><th>対策</th></tr>
+  <tr>
+    <td>macOS AirPlay Receiver が :5000 を専有</td>
+    <td>Frigate API へ届かず VOD/Snapshot が 403</td>
+    <td>System Settings で AirPlay Receiver を OFF。または Docker 側で 5050:5000 に remap し <code>FRIGATE_API_PORT</code> 環境変数で逃がす</td>
+  </tr>
+  <tr>
+    <td>Frigate の <code>auth.enabled=true</code></td>
+    <td>HTTP /api/* が 401</td>
+    <td>dev 環境では <code>config.yml</code> に <code>auth: {enabled: false}</code>。本番は edge 側に Bearer/Cookie 認証実装が必要</td>
+  </tr>
+  <tr>
+    <td>LiveKit Cloud の WHIP エンドポイント</td>
+    <td>素の <code>/rtc/whip?token=</code> は HTTP 200 "OK" を返し ffmpeg が SDP として解釈不能</td>
+    <td>Ingress API で <code>&lt;proj&gt;.whip.livekit.cloud/w/&lt;streamKey&gt;</code> を毎セッション発行、edge は受け取った URL をそのまま <code>-f whip</code> に渡す</td>
+  </tr>
+  <tr>
+    <td>ffmpeg 8.1 の WHIP muxer が TCP ICE 候補で死ぬ</td>
+    <td>LiveKit の SDP answer 先頭の TCP 候補で <code>Protocol tcp is not supported by RTC</code></td>
+    <td>edge-agent 内に localhost WHIP プロキシを立て、<code>a=candidate:... tcp ...</code> 行をストリップして ffmpeg に渡す</td>
+  </tr>
+  <tr>
+    <td>Frigate go2rtc の main stream 不安定</td>
+    <td>16分割 grid の ffmpeg が起動時の 1 frame だけ取れて固着</td>
+    <td>v4.0 で JPEG ポーリング化したため無関係化。残存する VOD 経路では go2rtc <code>&lt;cam&gt;_sub</code> ストリーム使用</td>
+  </tr>
+  <tr>
+    <td>Supabase Storage CDN が認証エンドポイントもキャッシュ</td>
+    <td>edge は新 JPEG を upload しているのにブラウザは同じ md5 を受け取る</td>
+    <td>cloud route 側で storage URL に <code>?t=Date.now()</code> を付加してキャッシュバイパス</td>
+  </tr>
+  <tr>
+    <td>LiveKit Cloud の Ingress quota（free tier 2）</td>
+    <td>VOD シークごとに ingress 作成 → 数回で 429</td>
+    <td><code>/api/livekit/ingress</code> route で同 room の旧 ingress と他 room の INACTIVE を毎回 GC、create 失敗時は 1.5s backoff で 1 回 retry</td>
+  </tr>
+  <tr>
+    <td>ffmpeg の <code>-fflags +nobuffer -probesize 32</code> 過剰最適化</td>
+    <td>RTSP の H.264 SPS/PPS が見つからず "Output file does not contain any stream" で即死</td>
+    <td><code>-fflags +nobuffer</code> のみ残し probesize/analyzeduration は default に戻す</td>
+  </tr>
+  <tr>
+    <td>HTTP MP4 を <code>-re</code> なしで WHIP に流すと UDP バッファ溢れ</td>
+    <td><code>Failed to write packet, ret=-55 No buffer space available</code></td>
+    <td>VOD の Frigate MP4 入力時のみ <code>-re</code> で実時間ペーシング</td>
+  </tr>
+</table>
+
+<!-- ===================== 1. システム仕様書 ===================== -->
+<h1 id="chap1">1. システム仕様書</h1>
+
+<h2>1.1 システム概要</h2>
+<p>
+全国最大 <b>10,000 店舗</b> に設置された監視レコーダ（i-PRO / Uniview）を、
+本部から一元的にリモート監視・録画再生する大規模クラウド統合システム。
+オペレータによる実モニタリング時間は <b>1 日 2 時間以内</b> を前提とし、
+平常時はエッジを待機させる <b>オンデマンド方式</b> を採用してクラウドコストを最適化する。
+</p>
+
+<div class="key">
+  <b>本システムを 10,000 店舗規模で成立させる 4 つの設計原則 (v4.0 改訂)</b>
+  <ol style="margin: 6px 0 0">
+    <li><b>JPEG ポーリング・ファースト:</b> 16分割 / 単一ライブはすべて HTTP JPEG fetch ベース。RTSP→ffmpeg→WHIP→LiveKit の重いスタックは <b>VOD（録画再生）のみ</b>に限定し、依存・コスト・障害面を激減</li>
+    <li><b>オンデマンド起動:</b> 視聴開始時にのみエッジで JPEG ループを起動。誰も見ていない店舗は完全に待機（CPU・帯域・課金とも最小）</li>
+    <li><b>本部 ≪ 店舗 のトラフィック非対称:</b> 大量の店舗データを集中処理せず、視聴中の店舗 (常時数十程度) のみがアクティブ</li>
+    <li><b>マネージド全振り:</b> Vercel + Supabase + LiveKit Cloud で運用人員を最小化し、10,000 店舗規模でも 1 名運用を目標</li>
+  </ol>
+</div>
+
+<h2>1.2 ステークホルダー</h2>
+<table>
+  <tr><th>区分</th><th>役割</th><th>主な利用機能</th><th>想定人数</th></tr>
+  <tr><td>本部監視オペレータ</td><td>巡回監視・異常確認</td><td>地図検索 / 16分割表示 / 単一ライブ / VOD</td><td>20〜50 名</td></tr>
+  <tr><td>エリアマネージャ</td><td>担当エリア店舗の確認</td><td>担当店舗のライブ / VOD</td><td>50〜200 名</td></tr>
+  <tr><td>店舗管理者</td><td>自店舗映像の確認</td><td>自店舗のライブ / VOD</td><td>最大 10,000 名</td></tr>
+  <tr><td>システム管理者</td><td>機器登録・保守</td><td>マスタ管理 / 死活監視 / 操作ログ</td><td>3〜5 名</td></tr>
+</table>
+
+<h2>1.3 機能要件</h2>
+<table>
+  <tr><th style="width:80px">ID</th><th>機能</th><th>要件</th></tr>
+  <tr><td>F-01</td><td>地図検索</td><td>OSM 上に最大 10,000 店舗のマーカーをクラスタリング表示、店舗名・住所・エリアでの検索、ステータス色分け</td></tr>
+  <tr><td>F-02</td><td>16分割表示</td><td>店舗選択時に <b>オンデマンドで</b> エッジが Frigate <code>/api/&lt;cam&gt;/latest.jpg</code> を 16カメラ並列 fetch、sharp で 4×4 合成、Storage に PUT。ブラウザは 5 秒間隔で取得（v4.0 で WebRTC を撤廃）</td></tr>
+  <tr><td>F-03</td><td>単一カメラライブ</td><td>16分割タイルクリックで該当 ch の latest.jpg を 1 秒間隔でポーリング表示。ブラウザは <code>&lt;img&gt;</code> の src を 0.5–1 秒で差し替え（v4.0 で WebRTC を撤廃、用途的に 1–2 fps で十分）</td></tr>
+  <tr><td>F-04</td><td>VOD 再生</td><td>レコーダ内録画への日時指定再生（早送り / 巻き戻し / シーク）。<b>時間軸シークの要件があるため LiveKit Cloud Ingress + WHIP は維持</b>。Frigate は HTTP clip.mp4 export、Uniview は RTSP replay URL → ffmpeg WHIP</td></tr>
+  <tr><td>F-05</td><td>マルチテナント / RBAC</td><td>テナント / エリア / 店舗単位のアクセス制御。RLS による行レベル制御</td></tr>
+  <tr><td>F-06</td><td>エッジ管理</td><td>10,000 台規模のエッジ死活監視・遠隔再起動・遠隔ファーム更新・ログ収集</td></tr>
+  <tr><td>F-07</td><td>レコーダ管理</td><td>i-PRO / Uniview の機種・接続情報・チャネル登録（CSV 一括投入対応）</td></tr>
+  <tr><td>F-08</td><td>認証</td><td>Supabase Auth（メール+パスワード / TOTP MFA / SSO 任意）</td></tr>
+  <tr><td>F-09</td><td>操作ログ</td><td>ライブ視聴・VOD 再生・操作の全アクセスログ（監査証跡 1 年保持）</td></tr>
+  <tr><td>F-10</td><td>セッション制御</td><td>同一ユーザのアイドル自動切断（5 分）・同時セッション上限・最大連続視聴時間制限</td></tr>
+  <tr><td>F-11</td><td>レポート</td><td>店舗別 / オペレータ別のモニタリング実績・利用時間の月次レポート</td></tr>
+  <tr><td>F-12</td><td>BCP（事業継続）</td><td>J-Alert（ミサイル / 地震 / 津波）の自動受信 → 該当エリア全店舗の全カメラに対し事象発生 -3 分〜+5 分のクリップを録画 → Storage にアップロード → PDF レポート生成。手動テスト発令 UI 付き</td></tr>
+  <tr><td>F-13</td><td>SECURITY（警備巡回）</td><td>定刻 or 手動で <code>capture_snapshot</code> 発火、エッジが Frigate API から JPEG fetch → patrol/ingest に multipart POST → ベースライン差分判定 → AI 比較（オプション、店舗毎日次上限あり）→ トリアージ画面 + PDF 巡回レポート</td></tr>
+  <tr><td>F-14</td><td>INFRA 死活監視</td><td>edge_devices 死活掃引（5 分閾値）、無人ストリーム watchdog（90 分 token TTL 超過で stop_stream）、テナント単位 network_outage 検知（&ge;60% 同時 stale）、稼働率レポート（日次/週次/月次）</td></tr>
+  <tr><td>F-15</td><td>レポート PDF 生成</td><td>BCP / SECURITY / INFRA のレポート PDF を PDFKit + Noto Sans JP で自動生成、Storage public バケットにアップロード、ブラウザから直リンクで閲覧可能</td></tr>
+</table>
+
+<h2>1.4 非機能要件（10,000 店舗スケール対応）</h2>
+<table>
+  <tr><th>区分</th><th>項目</th><th>目標値</th></tr>
+  <tr><td>規模</td><td>店舗数</td><td>最大 <b>10,000 店舗</b> / 16ch × 10,000 = <b>160,000 カメラ</b></td></tr>
+  <tr><td>規模</td><td>本部同時アクセス</td><td>最大 100 ユーザ同時ログイン、同時視聴 50 ストリーム</td></tr>
+  <tr><td>運用</td><td>モニタリング時間</td><td><b>1 ユーザあたり 1 日 2 時間以内</b>（システム全体で平均 30 ストリーム × 2h 程度）</td></tr>
+  <tr><td>性能</td><td>16分割 JPEG 起動</td><td>視聴開始指示から <b>3 秒以内</b> に初回 JPEG 表示</td></tr>
+  <tr><td>性能</td><td>16分割 JPEG 更新間隔</td><td>1〜2 秒</td></tr>
+  <tr><td>性能</td><td>単一ライブ遅延</td><td>1〜3 秒（WebRTC）</td></tr>
+  <tr><td>性能</td><td>地図表示</td><td>10,000 店舗をクラスタ表示で 2 秒以内</td></tr>
+  <tr><td>可用性</td><td>クラウド SLA</td><td>Vercel 99.99% / Supabase 99.9% / LiveKit 99.99%</td></tr>
+  <tr><td>可用性</td><td>エッジオフライン検知</td><td>5 分以内に「オフライン」表示、自動再接続（指数バックオフ）</td></tr>
+  <tr><td>セキュリティ</td><td>通信</td><td>全経路 TLS。映像 SRTP（WebRTC 標準）</td></tr>
+  <tr><td>セキュリティ</td><td>認証情報</td><td>レコーダ認証は Supabase Vault 暗号化、平文返却なし</td></tr>
+  <tr><td>セキュリティ</td><td>NW 要件</td><td>店舗側ポート開放不要（アウトバウンド 443 のみ）</td></tr>
+  <tr><td>拡張性</td><td>店舗追加</td><td>無停止で 1 店舗単位追加可能。1,000 店舗単位の一括登録 30 分以内</td></tr>
+  <tr><td>運用性</td><td>エッジ自動更新</td><td>systemd + 自動 OTA。一括更新時はカナリア配信（1% → 10% → 100%）</td></tr>
+  <tr><td>運用性</td><td>運用人員</td><td>10,000 店舗運用で SRE/運用 <b>1 名</b> 目標（マネージド集約による）</td></tr>
+</table>
+
+<h2>1.5 対応機器</h2>
+<table>
+  <tr><th>ベンダ</th><th>機種カテゴリ</th><th>接続方式</th><th>RTSP / API 仕様</th></tr>
+  <tr>
+    <td>i-PRO</td>
+    <td>ネットワークカメラ（直接続）</td>
+    <td>RTSP（ライブ）</td>
+    <td><code>rtsp://user:pass@&lt;cam_ip&gt;:554/MediaInput/h264/stream_1</code></td>
+  </tr>
+  <tr>
+    <td>i-PRO</td>
+    <td>NVR（WJ-NX410 / WJ-NX510 / WJ-NU101 等）</td>
+    <td>ONVIF Profile-G（録画再生）</td>
+    <td>ONVIF クライアントから ReplayURI 取得</td>
+  </tr>
+  <tr>
+    <td>Uniview</td>
+    <td>NVR（NVR301 / NVR302 / NVR304 系）</td>
+    <td>RTSP ライブ</td>
+    <td><code>rtsp://user:pass@&lt;nvr_ip&gt;:554/unicast/c{CH}/s{0|1}/live</code></td>
+  </tr>
+  <tr>
+    <td>Uniview</td>
+    <td>NVR（同上）</td>
+    <td>RTSP 録画再生</td>
+    <td><code>rtsp://user:pass@&lt;nvr_ip&gt;:554/c{CH}/b{startUnix}/e{endUnix}/replay</code></td>
+  </tr>
+  <tr>
+    <td>Frigate <span class="badge info">v4.0 追加</span></td>
+    <td>OSS NVR（Frigate + go2rtc 構成）</td>
+    <td>HTTP JPEG（snapshot）</td>
+    <td><code>http://&lt;host&gt;:5000/api/&lt;camera_name&gt;/latest.jpg</code> ※grid と single live はこれを使用</td>
+  </tr>
+  <tr>
+    <td>Frigate</td>
+    <td>同上</td>
+    <td>HTTP MP4 export（VOD）</td>
+    <td><code>http://&lt;host&gt;:5000/api/&lt;cam&gt;/start/&lt;unixFrom&gt;/end/&lt;unixTo&gt;/clip.mp4</code>（時系列の clip を MP4 で返す）</td>
+  </tr>
+  <tr>
+    <td>Frigate</td>
+    <td>同上（go2rtc 経由）</td>
+    <td>RTSP ライブ（バックアップ）</td>
+    <td><code>rtsp://&lt;host&gt;:8554/&lt;camera_name&gt;[_sub]</code>（VOD 経路に保持、grid/live では未使用）</td>
+  </tr>
+</table>
+
+<div class="note">
+  <b>注:</b> v4.0 で grid / single live は <b>RTSP を使わず</b> 全機種で
+  <code>HTTP JPEG</code>（Frigate は <code>/api/.../latest.jpg</code>、uniview/ipro は ONVIF Profile-S スナップショット予定）に統一。
+  RTSP は <b>VOD（録画再生）の入力</b> および BCP のクリップ録画でのみ使用。
+</div>
+
+<!-- ===================== 2. 基本設計 ===================== -->
+<h1 id="chap2">2. 基本設計（JPEG ポーリング ＋ VOD のみ WebRTC）</h1>
+
+<h2>2.1 システム構成図 (v4.0)</h2>
+<div class="ascii">
+[現地店舗 × 最大10,000]                              [クラウド]
+ ┌───────────────────────────────┐                  ┌─────────────────────────────────────┐
+ │ i-PRO / Uniview NVR           │                  │ Vercel (Next.js 16)                 │
+ │ または Frigate + go2rtc       │                  │  ├ /stores/* /security/* /bcp/*      │
+ │            │                  │                  │  │  /infra/* /map                   │
+ │     RTSP / HTTP JPEG / MP4    │                  │  └ /api/* (commands, ingress, etc.) │
+ │            ▼                  │  Outbound HTTPS  │ Supabase (Team / Enterprise)        │
+ │ ┌───────────────────────────┐ │ ───────────────▶ │  ├ Postgres + RLS + pg_cron         │
+ │ │ Edge Agent (Node 22)      │ │                  │  │  (15+ テーブル, monitor_*, bcp_*│
+ │ │ Idle / Grid / Live / VOD  │ │  pending_command │  │   patrol_*, security_*)         │
+ │ │  / BCP / Snapshot         │ │ ◀── jsonb (poll  │  ├ Auth + MFA + RLS                 │
+ │ │ + sharp (合成)             │ │   500ms 間隔)    │  ├ Storage (grid JPEG / cam JPEG /  │
+ │ │ + ffmpeg (BCP/VOD のみ)   │ │                  │  │   BCP MP4 / report PDF)         │
+ │ │ + whip-proxy (TCP strip)  │ │                  │  └ Storage CDN (要 ?t= bypass)      │
+ │ └───────────────────────────┘ │                  │ LiveKit Cloud (Scale, VOD のみ)     │
+ └───────────────────────────────┘                  │  ├ Ingress: WHIP_INPUT (VOD)        │
+                                                    │  └ &lt;proj&gt;.whip.livekit.cloud/w/<key>│
+                                                    │ Cloudflare (CDN + WAF + DDoS)        │
+                                                    │  └ 地図タイル / 静的アセット           │
+                                                    └─────────────────────────────────────┘
+                                                                   ▲
+                                                       本部 / エリアマネージャ / 店舗管理者
+</div>
+
+<div class="note">
+  <b>v3.0 からの変更点:</b> Supabase Realtime（WSS）のコマンドチャネルは廃止し、
+  <code>edge_devices.pending_command</code>（jsonb）を edge が 500ms 周期でポーリングする方式に。
+  「Realtime broadcast の取りこぼし」問題を回避し、edge⇄cloud は完全に Outbound HTTPS で完結。
+  LiveKit Cloud は <b>VOD（録画再生）専用</b>に縮退、grid / live は LiveKit を使わない。
+</div>
+
+<h2>2.2 オンデマンド方式の動作モデル (v4.0)</h2>
+<table>
+  <tr><th>エッジの状態</th><th>動作内容</th><th>CPU 負荷</th><th>クラウド課金</th></tr>
+  <tr>
+    <td>Idle（待機）</td>
+    <td>pending_command を 500ms 間隔でポーリングし、60 秒ごとに heartbeat。ffmpeg 完全停止</td>
+    <td>≒ 0%</td>
+    <td>Postgres SELECT のみ（ほぼゼロ）</td>
+  </tr>
+  <tr class="highlight-row">
+    <td>Grid Mode（16分割監視中）</td>
+    <td><b>v4.0 改:</b> 16ch の <code>/api/&lt;cam&gt;/latest.jpg</code> を並列 fetch → sharp で 4×4 合成 → Storage に PUT（2 秒間隔）</td>
+    <td>3〜8%（ffmpeg 不要）</td>
+    <td>Storage I/O + Egress（極小）</td>
+  </tr>
+  <tr class="highlight-row">
+    <td>Live Mode（単一ライブ）</td>
+    <td><b>v4.0 改:</b> 該当 ch の latest.jpg を 1 秒間隔で fetch → Storage <code>cam/&lt;id&gt;/snapshot.jpg</code> へ PUT。ブラウザは <code>&lt;img&gt;</code> ポーリング</td>
+    <td>2〜5%（ffmpeg 不要）</td>
+    <td>Storage I/O のみ（LiveKit 不使用）</td>
+  </tr>
+  <tr class="highlight-row">
+    <td>VOD Mode（録画再生）</td>
+    <td>Frigate: HTTP clip.mp4 export / Uniview: replay RTSP → ffmpeg (<code>-re</code>) → whip-proxy → LiveKit Ingress → WebRTC</td>
+    <td>5〜10%</td>
+    <td>LiveKit 従量課金（VOD 視聴中のみ）</td>
+  </tr>
+  <tr class="highlight-row">
+    <td>BCP Mode（J-Alert クリップ録画）</td>
+    <td>事象発生 -3min〜+5min の MP4 を全 ch 並列で取得（uniview RTSP / Frigate clip.mp4）、Storage <code>bcp-clips</code> に PUT、サムネは Frigate API JPEG</td>
+    <td>10〜30%（一時的）</td>
+    <td>Storage PUT（一時バースト）</td>
+  </tr>
+  <tr>
+    <td>Snapshot Mode（SECURITY 巡回・一発撮り）</td>
+    <td><code>capture_snapshot</code> 受信 → 指定 ch の latest.jpg を取得 → cloud の <code>/api/security/patrol/ingest</code> へ multipart POST（Bearer device_token）</td>
+    <td>1〜2%（一瞬）</td>
+    <td>HTTP POST のみ</td>
+  </tr>
+</table>
+
+<p>
+v3.0 から v4.0 への JPEG ポーリング移行により、<b>grid / live モードでの LiveKit 課金が完全に消滅</b>。
+LiveKit 利用は VOD 視聴時のみとなり、月間ストリーム時間が 1/10 程度に圧縮される見込み。
+オンデマンド方式と組み合わせて、平均モニタリング時間 1 日 2 時間 × 30 オペレータの想定で、
+<b>クラウドコストを v3.0 比でさらに 30〜40% 圧縮</b>。
+</p>
+
+<h2>2.3 コンポーネント仕様</h2>
+
+<h3>2.3.1 エッジサーバ（現地）— v4.0</h3>
+<table>
+  <tr><th style="width:160px">項目</th><th>仕様</th></tr>
+  <tr><td>ハードウェア</td><td>ファンレス mini PC（Intel N100 / 8GB RAM / 128GB SSD）想定</td></tr>
+  <tr><td>OS</td><td>Ubuntu 24.04 LTS Server（カスタムイメージ）</td></tr>
+  <tr><td>実装言語</td><td>Node.js 22 (TypeScript), <code>tsx</code> で開発時 hot-reload</td></tr>
+  <tr><td>同梱ミドルウェア</td><td>ffmpeg 8.1+（VOD / BCP のみ）、sharp（grid 合成）、systemd、journald → クラウド転送</td></tr>
+  <tr><td>動作モード</td><td>Idle / Grid / Live / VOD / BCP（J-Alert クリップ録画） の状態機械（generation guard 付き）</td></tr>
+  <tr><td>コマンド経路</td><td><code>edge_devices.pending_command</code>（jsonb）を 500ms 間隔でポーリング、request_id でデデュープ、消費後 null クリア</td></tr>
+  <tr><td>外向き通信</td><td>HTTPS のみ（443 ポート固定、ポート開放不要）。WSS は不使用に変更（v4.0）</td></tr>
+  <tr><td>内部サーバ</td><td>localhost WHIP プロキシ（ffmpeg 8.1 の TCP ICE 候補拒否を回避）</td></tr>
+  <tr><td>OTA 更新</td><td>カナリア配信対応（バージョン文字列をクラウドで段階的に許可）</td></tr>
+  <tr><td>セルフ復旧</td><td>異常時 systemd 自動再起動、3 回連続失敗で安全モードへ</td></tr>
+</table>
+
+<h3>2.3.3 サーバサイドの新規 API ルート (v4.0)</h3>
+<table>
+  <tr><th>ルート</th><th>用途</th></tr>
+  <tr><td><code>POST /api/edges/[id]/commands</code></td><td>edge への命令書込（pending_command を上書き、auto-injected request_id）</td></tr>
+  <tr><td><code>GET /api/edges/[id]/grid</code></td><td>store の 16分割 JPEG を Supabase Storage から proxy（<code>?t=Date.now()</code> でキャッシュバスター付加）</td></tr>
+  <tr><td><code>GET /api/edges/[id]/cam/[cameraId]/snapshot</code></td><td>単一カメラの最新 JPEG を proxy（同上のキャッシュバスター）</td></tr>
+  <tr><td><code>POST /api/livekit/token</code></td><td>VOD viewer 用トークン発行（ttl_seconds パラメータ対応、上限 90 分）</td></tr>
+  <tr><td><code>POST /api/livekit/ingress</code></td><td>VOD 用 WHIP Ingress を作成、<code>{whip_url}</code> を返す。同 room の旧 ingress と他 room の INACTIVE を毎回 GC、429 は 1.5s backoff retry</td></tr>
+  <tr><td><code>POST /api/security/patrol/ingest</code></td><td>edge からの巡回スナップショット受信（multipart、Bearer device_token、run_id + camera_id + image）</td></tr>
+  <tr><td><code>POST /api/bcp/test</code></td><td>手動テスト発令（指定エリア内の店舗に <code>start_bcp_capture</code> をブロードキャスト）</td></tr>
+</table>
+
+<h3>2.3.2 クラウド・コントロールプレーン</h3>
+<table>
+  <tr><th>サービス</th><th>用途</th><th>スケール対応</th></tr>
+  <tr><td>Vercel Pro/Enterprise</td><td>Next.js UI + API Routes</td><td>サーバレスでオートスケール。Edge Functions で軽量化</td></tr>
+  <tr><td>Supabase Team/Enterprise</td><td>Postgres・Auth・Storage・Realtime</td><td>pgBouncer / Read Replica / 専用インスタンス</td></tr>
+  <tr><td>LiveKit Cloud Scale</td><td>WebRTC SFU・TURN・Ingress</td><td>マルチリージョン SFU で 100 同時セッション容易</td></tr>
+  <tr><td>Cloudflare</td><td>CDN・WAF・DDoS 防御</td><td>10,000 エッジからのアクセスを保護</td></tr>
+  <tr><td>Better Stack / Datadog</td><td>ログ集約・APM・アラート</td><td>エッジ + クラウドの統合観測</td></tr>
+</table>
+
+<h2>2.4 データモデル</h2>
+<pre><code>-- 店舗：地理座標とエリア
+ALTER TABLE stores
+  ADD COLUMN latitude    numeric(9,6),
+  ADD COLUMN longitude   numeric(9,6),
+  ADD COLUMN area_code   text,                       -- エリア管理用
+  ADD COLUMN geocoded_at timestamptz;
+CREATE INDEX idx_stores_geo  ON stores USING gist (ll_to_earth(latitude, longitude));
+CREATE INDEX idx_stores_area ON stores(area_code);
+
+-- 現地エッジサーバ
+CREATE TABLE edge_devices (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  store_id      uuid NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+  name          text NOT NULL,
+  device_token  text NOT NULL UNIQUE,
+  agent_version text,
+  status        text NOT NULL DEFAULT 'offline',    -- offline | idle | grid | live | vod | error
+  current_mode  text,                                -- 現在動作中のモード
+  last_seen_at  timestamptz,
+  created_at    timestamptz DEFAULT now()
+);
+CREATE INDEX idx_edges_status ON edge_devices(status);
+CREATE INDEX idx_edges_store  ON edge_devices(store_id);
+
+-- レコーダ（v4.0: frigate を vendor に追加）
+CREATE TABLE recorders (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  edge_id      uuid NOT NULL REFERENCES edge_devices(id) ON DELETE CASCADE,
+  vendor       text NOT NULL CHECK (vendor IN ('ipro','uniview','frigate')),  -- ★ frigate 追加
+  model        text,
+  host         text NOT NULL,
+  rtsp_port    int  NOT NULL DEFAULT 554,
+  onvif_port   int,
+  username     text NOT NULL,
+  password_enc text NOT NULL,                         -- Supabase Vault
+  created_at   timestamptz DEFAULT now()
+);
+
+-- カメラチャネル（v4.0: frigate_camera 列を追加）
+CREATE TABLE recorder_cameras (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  recorder_id     uuid NOT NULL REFERENCES recorders(id) ON DELETE CASCADE,
+  channel         int  NOT NULL,
+  name            text NOT NULL,
+  grid_pos        int  NOT NULL,
+  enabled         boolean NOT NULL DEFAULT true,
+  frigate_camera  text,                                  -- ★ frigate の camera_NN 上書き
+  UNIQUE(recorder_id, channel)
+);
+
+-- ────────────────────────────────────────────────────────────────────
+-- v4.0 で追加された 5 ファミリーのテーブル群（要点のみ）
+-- ────────────────────────────────────────────────────────────────────
+
+-- v4.0: INFRA 死活監視（5 テーブル）
+CREATE TABLE monitor_settings  (store_id uuid UNIQUE, enabled bool, edge_offline_threshold_min int, ...);
+CREATE TABLE monitor_checks    (store_id, target_type CHECK IN ('edge','recorder','camera'), check_type, interval_min, consec_fail int, ...);
+CREATE TABLE monitor_results   (check_id, status, latency_ms, measured_at) PARTITION BY RANGE (measured_at);
+CREATE TABLE monitor_incidents (target_type, kind, severity, status CHECK IN ('open','ack','resolved'), detail, opened_at, resolved_at);
+CREATE TABLE monitor_reports   (store_id, kind CHECK IN ('daily','weekly','monthly'), period_from, period_to, pdf_url);
+
+-- v4.0: BCP 事業継続（4 テーブル）
+CREATE TABLE bcp_events   (store_id, alert_source CHECK IN ('jalert','manual_test'),
+                           alert_type CHECK IN ('missile','earthquake','tsunami','test'),
+                           alert_issued_at, area_code, status, is_test);
+CREATE TABLE bcp_clips    (event_id, camera_id, clip_from, clip_to, clip_url, thumbnail_url, duration_sec, upload_status);
+CREATE TABLE bcp_reports  (event_id, pdf_url, generated_at, sent_to_emails text[]);
+CREATE TABLE bcp_settings (store_id UNIQUE, pre_minutes DEFAULT 3, post_minutes DEFAULT 5, notify_emails, enabled);
+
+-- v4.0: SECURITY 警備巡回（5 テーブル）
+CREATE TABLE security_settings      (store_id UNIQUE, patrol_interval_min, business_hours jsonb, ai_enabled, ai_daily_cap, ...);
+CREATE TABLE security_camera_config (camera_id UNIQUE, baseline_day_url, baseline_night_url, ai_prompt, sensitivity, patrol_enabled);
+CREATE TABLE patrol_runs            (store_id, trigger CHECK IN ('scheduled','manual','emergency'), status CHECK IN ('pending','capturing','analyzing','done','failed'), ...);
+CREATE TABLE patrol_findings        (run_id, camera_id, snapshot_url, diff_score, status CHECK IN ('pending','normal','anomaly','review','confirmed','false_positive'), ai_status, ai_verdict, ai_confidence);
+CREATE TABLE security_reports       (store_id, period_from, period_to, pdf_url, generated_at, sent_to_emails);
+
+-- v4.0: edge_devices に pending_command 列を追加（Realtime broadcast を置き換え）
+ALTER TABLE edge_devices
+  ADD COLUMN pending_command    jsonb,
+  ADD COLUMN pending_command_at timestamptz;
+
+-- v4.0: edge_devices.status の CHECK に 'bcp' を追加
+ALTER TABLE edge_devices DROP CONSTRAINT edge_devices_status_check;
+ALTER TABLE edge_devices ADD  CONSTRAINT edge_devices_status_check
+  CHECK (status IN ('offline','idle','grid','live','vod','error','bcp'));
+
+-- v4.0: pg_cron で動く 2 つの掃引関数
+--   monitor_sweep_edges()             - 5 分閾値で edge_offline incident、>=60% stale で network_outage
+--   monitor_sweep_unattended_streams() - status in (grid,live,vod,bcp) で last_seen 停滞 → status=offline
+--                                       status in (grid,live,vod) で pending_command_at が 90 分超 → stop_stream 自動発行
+
+-- 視聴セッション（操作ログ兼用、パーティショニング）
+CREATE TABLE live_sessions (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id      uuid NOT NULL,
+  store_id     uuid NOT NULL,
+  camera_id    uuid REFERENCES recorder_cameras(id),
+  mode         text NOT NULL,                         -- grid | live | vod
+  livekit_room text,
+  vod_from     timestamptz,
+  vod_to       timestamptz,
+  started_at   timestamptz NOT NULL DEFAULT now(),
+  ended_at     timestamptz,
+  duration_sec int
+) PARTITION BY RANGE (started_at);                    -- 月単位パーティション
+
+-- セッション上限制御（F-10）
+CREATE TABLE session_limits (
+  tenant_id     uuid PRIMARY KEY,
+  max_concurrent int   NOT NULL DEFAULT 5,
+  max_daily_min  int   NOT NULL DEFAULT 120,          -- 1 日 2 時間
+  idle_timeout_s int   NOT NULL DEFAULT 300
+);
+</code></pre>
+
+<h2>2.5 主要シーケンス（v4.0 / JPEG ポーリング ＋ VOD は WebRTC）</h2>
+<div class="ascii">
+[16分割監視を開始]                                          ※ v4.0: ffmpeg / WebRTC を使わない
+ブラウザ (workspace mount) ──POST commands {action:"start_grid"}──▶ Vercel
+                                                                    │
+                                          UPDATE edge_devices SET pending_command={...}
+                                                                    │
+                                                                    ▼
+                                    エッジ Agent (Idle → Grid)  ※ 500ms poll で受信
+                                                                    │
+                                    ├ Frigate /api/<cam01>/latest.jpg │ 並列 fetch
+                                    ├ Frigate /api/<cam02>/latest.jpg │
+                                    ├ ...                            │
+                                    ├ Frigate /api/<cam16>/latest.jpg │
+                                    └ sharp で 4×4 合成 → Storage PUT  edges/{id}/grid.jpg
+
+ブラウザ ──/api/edges/:id/grid?_=Date.now() を 5 秒ごとに GET──▶ &lt;img&gt; src 差替
+
+[画面離脱]
+ブラウザ unmount → 200ms 遅延の stop_grid（StrictMode 二重 mount を吸収）
+
+
+[単一カメラライブへ切替]                                  ※ v4.0: LiveKit 不使用
+ブラウザ ──POST commands {action:"start_live", camera_id}──▶ Vercel ▶ pending_command
+                                                                       │
+                                                                       ▼
+                                                      エッジ (Idle/Grid → Live)
+                                                                       │
+                                                    Frigate /api/<cam>/latest.jpg
+                                                                       │ 1秒間隔
+                                                            Storage PUT edges/{id}/cam/{camId}/snapshot.jpg
+
+ブラウザ ──/api/edges/:id/cam/:camId/snapshot を 1 秒ごとに GET──▶ &lt;img&gt; src 差替
+
+
+[VOD 再生]                                                ※ v4.0: ここだけ WebRTC を維持
+ブラウザ ──POST /api/livekit/ingress {room, identity}──▶ Vercel
+              └─ IngressClient.createIngress(WHIP_INPUT) → {url:&lt;proj&gt;.whip.../w/&lt;key&gt;}
+              └─ レスポンス: { whip_url: "https://&lt;proj&gt;.whip.livekit.cloud/w/&lt;key&gt;" }
+
+ブラウザ ──POST commands {action:"start_vod", camera_id, livekit_whip_url, from_iso, to_iso}──▶ Vercel
+                                                                          │
+                                                                          ▼
+                                                            エッジ (→ VOD)
+                                                                          │
+                                          Frigate: HTTP /api/<cam>/start/<u1>/end/<u2>/clip.mp4
+                                          Uniview: rtsp://.../c{CH}/b{u1}/e{u2}/replay
+                                                                          │  (-re で実時間ペーシング)
+                                            ffmpeg → localhost whip-proxy → LiveKit Cloud
+                                                                          │  (proxy が SDP answer の
+                                                                          │   TCP ICE 候補をストリップ)
+                                                                          ▼
+                                                       LiveKitRoom (ブラウザ) → 視聴 (WebRTC)
+
+
+[BCP（J-Alert）クリップ録画]
+J-Alert poller ──Supabase edge function──▶ POST commands {action:"start_bcp_capture", clips:[{clipId, cameraId},...]}
+                                                          │
+                                                          ▼
+                                              エッジ (→ BCP)
+                                                          │
+                                          各 camera に対し並列:
+                                            ├ Uniview replay RTSP / Frigate clip.mp4
+                                            ├ ffmpeg → MP4 ファイル
+                                            └ bcp-clips バケットに PUT
+                                          サムネは Frigate /api/<cam>/latest.jpg を直 fetch
+
+
+[SECURITY 巡回]
+pg_cron ──schedule──▶ /api/security/patrol/schedule → POST commands {action:"capture_snapshot", run_id, camera_ids[], ingest_url}
+                                                          │
+                                                          ▼
+                                              エッジ (現モードを中断せず単発処理)
+                                                          │
+                                          各 camera_id について:
+                                            ├ Frigate /api/<cam>/latest.jpg を fetch
+                                            └ ingest_url に multipart POST (Bearer device_token)
+                                                          │
+                                                          ▼
+                                          /api/security/patrol/ingest → patrol_findings 更新
+                                          → diff_score 判定 → status=normal|review|anomaly
+</div>
+
+<h2>2.6 セキュリティ・コンプライアンス設計</h2>
+<ul>
+  <li>レコーダ認証情報は <b>Supabase Vault</b> 暗号化保存、平文 API レスポンスなし</li>
+  <li>エッジ⇄クラウド: device_token (JWT, 30日ローテーション)、リクエスト署名</li>
+  <li>本部ユーザ: <b>MFA 必須</b>（TOTP）、SSO 可、RLS による行レベル制御</li>
+  <li>視聴トークン: LiveKit room ごとに 5 分有効の短期 JWT</li>
+  <li>セッション上限: テナント単位の同時接続数・日次合計時間で強制制限</li>
+  <li>監査ログ: <code>live_sessions</code> を 1 年保持、CSV エクスポート可</li>
+  <li>個人情報保護: 映像内容は録画せず、リアルタイム視聴のみ（クラウド側保存なし）</li>
+</ul>
+
+<!-- ===================== 3. 開発計画・工数 ===================== -->
+<h1 id="chap3">3. 開発計画・工数</h1>
+
+<h2>3.1 開発フェーズ</h2>
+<table>
+  <tr>
+    <th style="width:60px">Phase</th><th>内容</th><th>主成果物</th>
+    <th class="num" style="width:80px">工数(人日)</th>
+  </tr>
+  <tr><td class="center">0</td>
+      <td>プロジェクト立上げ / monorepo / CI/CD / 環境構築</td>
+      <td>Vercel・Supabase・LiveKit・Cloudflare の各プロビジョニング</td>
+      <td class="num">5</td></tr>
+  <tr><td class="center">1</td>
+      <td>DB マイグレーション・RLS・ジオコーディング・CSV 一括投入</td>
+      <td>6 テーブル、エリア管理、10,000 件投入バッチ</td>
+      <td class="num">6</td></tr>
+  <tr><td class="center">2</td>
+      <td>エッジ Agent 骨格（状態機械 Idle/Grid/Live/VOD）＋ RTSP 接続検証</td>
+      <td>16ch RTSP→ffmpeg xstack→JPEG 生成（実機テスト）</td>
+      <td class="num">10</td></tr>
+  <tr><td class="center">3</td>
+      <td>エッジ⇄クラウド常時接続（Realtime WSS）＋ コマンド受信機構 ＋ ハートビート</td>
+      <td>10,000 エッジ常時接続のスケーリング検証</td>
+      <td class="num">7</td></tr>
+  <tr><td class="center">4</td>
+      <td>本部 UI 新規アプリ（Next.js）＋ Leaflet+OSM 地図 ＋ 認証＋ MFA</td>
+      <td>ログイン、Map、10,000 マーカークラスタ、検索、テナント切替</td>
+      <td class="num">9</td></tr>
+  <tr><td class="center">5</td>
+      <td>16分割 JPEG 表示（オンデマンド起動）＋ 管理 UI（店舗・カメラ・エッジ）</td>
+      <td>店舗詳細画面、マスタ画面、CSV 一括投入 UI</td>
+      <td class="num">8</td></tr>
+  <tr><td class="center">6</td>
+      <td>LiveKit Cloud 連携（単一カメラライブ・WHIP Ingress・トークン発行）</td>
+      <td>タイルクリック→&lt;3 秒遅延ライブ</td>
+      <td class="num">11</td></tr>
+  <tr><td class="center">7</td>
+      <td>Uniview VOD（replay URL）＋ シークバー UI ＋ 時刻指定</td>
+      <td>NVR の日時指定再生</td>
+      <td class="num">7</td></tr>
+  <tr><td class="center">8</td>
+      <td>i-PRO VOD（ONVIF Profile-G）対応</td>
+      <td>i-PRO NVR の ReplayURI 再生</td>
+      <td class="num">10</td></tr>
+  <tr><td class="center">9</td>
+      <td>セッション制御（F-10）・操作ログ・レポート（F-11）</td>
+      <td>同時接続制御、日次2h制限、月次レポート</td>
+      <td class="num">6</td></tr>
+  <tr><td class="center">10</td>
+      <td>エッジ運用機能：カナリア OTA・ログ集約・遠隔操作</td>
+      <td>systemd ユニット、OTA、journald 転送、配布イメージ</td>
+      <td class="num">7</td></tr>
+  <tr><td class="center">11</td>
+      <td>負荷試験・10,000 エッジ模擬・スケーリング検証</td>
+      <td>10,000 ダミーエッジ・100 同時視聴の負荷試験</td>
+      <td class="num">7</td></tr>
+  <tr><td class="center">12</td>
+      <td>結合テスト・現地検証・ドキュメント・受入</td>
+      <td>テスト報告書、運用マニュアル、設置手順書、運用 SOP</td>
+      <td class="num">12</td></tr>
+  <tr><td class="center">-</td><td>バッファ（約 15%）</td><td>不確実性吸収</td><td class="num">15</td></tr>
+  <tr class="total-row">
+    <td class="center">合計</td><td colspan="2">概算</td><td class="num">120 人日</td>
+  </tr>
+</table>
+
+<h2>3.2 体制と期間</h2>
+<table>
+  <tr><th>体制</th><th>役割</th><th>稼働期間</th></tr>
+  <tr><td>テックリード × 1</td><td>アーキ設計・難所実装・コードレビュー</td><td>全期間</td></tr>
+  <tr><td>フロントエンドエンジニア × 1</td><td>Next.js UI / Leaflet / LiveKit クライアント</td><td>Phase 4〜9 中心</td></tr>
+  <tr><td>バックエンド・エッジエンジニア × 1</td><td>Node.js Agent / go2rtc / ONVIF / API</td><td>Phase 0〜10 中心</td></tr>
+  <tr><td>SRE / インフラ × 0.5</td><td>負荷試験・監視・運用設計</td><td>Phase 0, 10〜12</td></tr>
+  <tr><td>PM × 0.3</td><td>進捗・要件・現地調整</td><td>全期間</td></tr>
+</table>
+<p>
+2.8 名稼働 + PM 0.3 の体制で <b>約 4 か月（17 週）</b>。
+負荷試験フェーズ（Phase 11）と現地検証フェーズ（Phase 12）が品質の鍵。
+</p>
+
+<h2>3.3 マイルストーン</h2>
+<table>
+  <tr><th>週</th><th>マイルストーン</th></tr>
+  <tr><td>W2</td><td>クラウド基盤・DB・RLS 完了（Phase 0–1）</td></tr>
+  <tr><td>W6</td><td>エッジ実機から JPEG/コマンドが疎通（Phase 2–3）</td></tr>
+  <tr><td>W9</td><td>本部 UI で地図→16分割が見える（Phase 4–5）</td></tr>
+  <tr><td>W11</td><td>単一ライブ動作（Phase 6）</td></tr>
+  <tr><td>W13</td><td>Uniview / i-PRO 双方の VOD 動作（Phase 7–8）</td></tr>
+  <tr><td>W15</td><td>セッション制御・運用機能完成（Phase 9–10）</td></tr>
+  <tr><td>W16</td><td>10,000 エッジ模擬の負荷試験合格（Phase 11）</td></tr>
+  <tr><td>W17</td><td>現地検証・受入完了（Phase 12）</td></tr>
+</table>
+
+<!-- ===================== 4. ランニングコスト ===================== -->
+<h1 id="chap4">4. ランニングコスト</h1>
+
+<h2>4.1 試算前提</h2>
+<table>
+  <tr><th>項目</th><th>値</th><th>備考</th></tr>
+  <tr><td>店舗数</td><td>10,000</td><td>各店舗 16ch カメラ × 1 エッジ</td></tr>
+  <tr><td>同時オンライン本部ユーザ</td><td>30 名（ピーク 50 名）</td><td>オペレータ・マネージャ合算</td></tr>
+  <tr><td>1 ユーザ平均モニタ時間</td><td>2 時間 / 日</td><td>うち 16分割 50%、単一ライブ 40%、VOD 10%</td></tr>
+  <tr><td>営業日</td><td>22 日 / 月</td><td>営業時間ベース</td></tr>
+  <tr><td>システム全体 月間 LiveKit 分</td><td>約 95,000 分</td><td>30 ユーザ × 120 分 × 22 日 × 50%(LK利用率) × 2(参加者+publisher)</td></tr>
+  <tr><td>16分割 JPEG 合計トラフィック</td><td>約 200 GB / 月</td><td>30 ユーザ同時 grid × 30KB × 0.5fps × 1h × 22 日</td></tr>
+  <tr><td>常時待機エッジ Realtime 接続</td><td>10,000 同時 WSS</td><td>ハートビート 60s 周期</td></tr>
+  <tr><td>為替</td><td>1 USD = 155 JPY</td><td>税抜・概算</td></tr>
+</table>
+
+<h2>4.2 月額コスト試算（クラウド・10,000 店舗運用時）</h2>
+<table>
+  <tr>
+    <th>サービス</th><th>プラン</th><th>用途</th>
+    <th class="num">月額目安</th>
+  </tr>
+  <tr>
+    <td>Vercel</td>
+    <td>Enterprise（要見積）</td>
+    <td>Next.js ホスティング・API。本部用 5 シート + Bandwidth・SLA</td>
+    <td class="num">¥150,000</td>
+  </tr>
+  <tr>
+    <td>Supabase</td>
+    <td>Team Add-on + Compute Large + Read Replica</td>
+    <td>Team $599 + Compute $410 + Replica $410 + Realtime 拡張 + 10k WSS</td>
+    <td class="num">¥220,000</td>
+  </tr>
+  <tr>
+    <td>LiveKit Cloud</td>
+    <td>Scale プラン</td>
+    <td>$500/月 + 従量。95,000 分 × $0.0008(送信) + 同 × $0.0012(受信) = $190</td>
+    <td class="num">¥107,000</td>
+  </tr>
+  <tr>
+    <td>Cloudflare</td>
+    <td>Business + Argo</td>
+    <td>CDN・WAF・DDoS。OSM タイル代替キャッシュも兼ねる</td>
+    <td class="num">¥31,000</td>
+  </tr>
+  <tr>
+    <td>Better Stack（or Datadog）</td>
+    <td>Logs + APM</td>
+    <td>クラウド・エッジ統合観測。ログ 1TB/月</td>
+    <td class="num">¥40,000</td>
+  </tr>
+  <tr>
+    <td>Sentry</td>
+    <td>Business</td>
+    <td>エラー監視・リリース追跡</td>
+    <td class="num">¥12,000</td>
+  </tr>
+  <tr>
+    <td>Geocoding API</td>
+    <td>Google Maps</td>
+    <td>初期 10,000 件以降は変更分のみ</td>
+    <td class="num">¥3,000</td>
+  </tr>
+  <tr>
+    <td>ドメイン・SSL</td>
+    <td>独自ドメイン年額 ÷ 12</td>
+    <td>—</td>
+    <td class="num">¥500</td>
+  </tr>
+  <tr>
+    <td>バックアップ</td>
+    <td>PITR・S3 冗長</td>
+    <td>Supabase バックアップ拡張</td>
+    <td class="num">¥15,000</td>
+  </tr>
+  <tr class="total-row">
+    <td colspan="3">クラウド月額合計</td>
+    <td class="num">¥578,500</td>
+  </tr>
+</table>
+
+<div class="note">
+  <b>店舗 1 軒あたりの月額換算: 約 ¥58</b>（クラウド費を 10,000 店舗で按分した場合）。
+  オンデマンド方式により、店舗数が増えても LiveKit 課金はモニタリング時間にのみ連動。
+  「全店舗を 24h ライブ配信」構成と比べて <b>クラウドコストを 95% 以上削減</b>。
+</div>
+
+<h2>4.3 スケール別 月額比較</h2>
+<table>
+  <tr>
+    <th>項目</th>
+    <th class="num">小規模<br>(100 店舗)</th>
+    <th class="num">中規模<br>(1,000 店舗)</th>
+    <th class="num">大規模<br>(10,000 店舗)</th>
+  </tr>
+  <tr><td>Vercel</td><td class="num">¥9,300</td><td class="num">¥46,500</td><td class="num">¥150,000</td></tr>
+  <tr><td>Supabase</td><td class="num">¥3,875</td><td class="num">¥92,800</td><td class="num">¥220,000</td></tr>
+  <tr><td>LiveKit Cloud</td><td class="num">¥15,500</td><td class="num">¥46,500</td><td class="num">¥107,000</td></tr>
+  <tr><td>Cloudflare</td><td class="num">¥0</td><td class="num">¥3,100</td><td class="num">¥31,000</td></tr>
+  <tr><td>監視・ログ・他</td><td class="num">¥4,500</td><td class="num">¥20,000</td><td class="num">¥70,500</td></tr>
+  <tr class="total-row">
+    <td>合計</td>
+    <td class="num">¥33,175</td>
+    <td class="num">¥208,900</td>
+    <td class="num">¥578,500</td>
+  </tr>
+  <tr class="highlight-row">
+    <td>1 店舗あたり月額</td>
+    <td class="num">¥332</td>
+    <td class="num">¥209</td>
+    <td class="num">¥58</td>
+  </tr>
+</table>
+
+<h2>4.4 初期費用・物理機材（10,000 店舗想定）</h2>
+<table>
+  <tr><th>項目</th><th>仕様</th><th class="num">単価</th><th class="num">10,000 店舗合計</th></tr>
+  <tr>
+    <td>エッジサーバ本体</td>
+    <td>Intel N100 / 8GB / 128GB SSD / Linux プリイン</td>
+    <td class="num">¥45,000</td>
+    <td class="num">¥450,000,000</td>
+  </tr>
+  <tr>
+    <td>UPS（任意・推奨 30%）</td>
+    <td>500VA クラス</td>
+    <td class="num">¥12,000</td>
+    <td class="num">¥36,000,000</td>
+  </tr>
+  <tr>
+    <td>LTE バックアップ SIM 月額（任意・10%）</td>
+    <td>USB ドングル + データ SIM</td>
+    <td class="num">¥3,500/月</td>
+    <td class="num">¥3,500,000/月</td>
+  </tr>
+  <tr>
+    <td>現地設置作業</td>
+    <td>キッティング・配線・接続確認</td>
+    <td class="num">¥20,000</td>
+    <td class="num">¥200,000,000</td>
+  </tr>
+  <tr>
+    <td>キッティング自動化開発（一括）</td>
+    <td>SD イメージ・初期化スクリプト・ペアリング QR</td>
+    <td class="num">—</td>
+    <td class="num">¥3,000,000</td>
+  </tr>
+  <tr class="total-row">
+    <td colspan="3">初期費用合計</td>
+    <td class="num">¥689,000,000</td>
+  </tr>
+</table>
+
+<h2>4.5 5 年トータルコスト（10,000 店舗 TCO）</h2>
+<table>
+  <tr><th>区分</th><th class="num">初年度</th><th class="num">2〜5 年目（年額）</th><th class="num">5 年合計</th></tr>
+  <tr><td>初期費用（機材＋設置＋自動化）</td><td class="num">¥689,000,000</td><td class="num">—</td><td class="num">¥689,000,000</td></tr>
+  <tr><td>開発費（120 人日 × ¥80,000）</td><td class="num">¥9,600,000</td><td class="num">¥3,000,000<br>(運用改修)</td><td class="num">¥21,600,000</td></tr>
+  <tr><td>クラウド月額（¥578,500 × 12）</td><td class="num">¥6,942,000</td><td class="num">¥6,942,000</td><td class="num">¥34,710,000</td></tr>
+  <tr><td>LTE 月額（10%, ¥3.5M × 12）</td><td class="num">¥42,000,000</td><td class="num">¥42,000,000</td><td class="num">¥210,000,000</td></tr>
+  <tr><td>エッジ機材更新引当（5 年で 20% 交換）</td><td class="num">—</td><td class="num">¥21,600,000</td><td class="num">¥86,400,000</td></tr>
+  <tr class="total-row">
+    <td>5 年 TCO 合計</td>
+    <td class="num">¥747,542,000</td>
+    <td class="num">—</td>
+    <td class="num">¥1,041,710,000</td>
+  </tr>
+  <tr class="highlight-row">
+    <td>1 店舗 5 年 TCO 換算</td>
+    <td class="num">—</td>
+    <td class="num">—</td>
+    <td class="num">¥104,171 / 店舗</td>
+  </tr>
+</table>
+<div class="note">
+  TCO は概算。各単価は契約条件・量産値引きで <b>30〜40% 圧縮</b> 余地あり。
+  特にエッジ機材は 5,000 台超で OEM 化により 1 台あたり ¥30,000 台前半まで低減可能。
+</div>
+
+<!-- ===================== 5. リスク・前提 ===================== -->
+<h1 id="chap5">5. リスク・前提条件</h1>
+
+<h2>5.1 主要リスク</h2>
+<table>
+  <tr><th>リスク</th><th>影響</th><th>対策</th></tr>
+  <tr>
+    <td>10,000 エッジ常時 WSS 接続のスケール</td>
+    <td>Supabase Realtime 接続上限</td>
+    <td>Realtime シャーディング、または Cloudflare Durable Objects への置換も視野</td>
+  </tr>
+  <tr>
+    <td>i-PRO NVR の RTSP/ONVIF 仕様差異</td>
+    <td>VOD 実装難航</td>
+    <td>Phase 2 で実機検証、ベンダ問合せ。カメラ直結＋エッジ録画フォールバック</td>
+  </tr>
+  <tr>
+    <td>16ch 同時 RTSP の CPU 不足</td>
+    <td>エッジ動作不安定</td>
+    <td>サブストリーム(s1)利用、JPEG 解像度抑制、N100→N305 へ機材アップグレード</td>
+  </tr>
+  <tr>
+    <td>店舗 NW のアウトバウンド制限</td>
+    <td>エッジ接続不可</td>
+    <td>HTTPS 443 のみで設計、プロキシ対応実装、SoftBank/au LTE バックアップ</td>
+  </tr>
+  <tr>
+    <td>10,000 台エッジの障害対応負荷</td>
+    <td>運用工数の爆発</td>
+    <td>自動復旧（systemd）、カナリア OTA、自動アラート、サポート窓口の階層化</td>
+  </tr>
+  <tr>
+    <td>セッション上限を超えるアクセス集中</td>
+    <td>SFU 飽和・コスト膨張</td>
+    <td>F-10 セッション制御を厳格化、テナント単位上限、自動切断ポリシ</td>
+  </tr>
+  <tr>
+    <td>レコーダ認証情報の漏洩</td>
+    <td>セキュリティ事故</td>
+    <td>Vault 暗号化＋RLS＋監査ログ＋最小権限ユーザ＋脆弱性診断年 1 回</td>
+  </tr>
+</table>
+
+<h2>5.2 前提条件</h2>
+<ul>
+  <li>店舗 NW は <b>アウトバウンド HTTPS（443）/ WSS</b> が利用可能であること</li>
+  <li>レコーダ・カメラの <b>固定 IP 化</b> または店舗内 DNS による解決が可能であること</li>
+  <li>本部監視オペレータは <b>モダンブラウザ最新版</b> を利用すること</li>
+  <li>LiveKit Cloud Scale、Vercel Enterprise、Supabase Team 以上の契約が可能であること</li>
+  <li>機種は i-PRO（WJ-NX410/510、WJ-NU101 等）および Uniview NVR301/302/304 系を <b>標準対応</b>。その他は別途検証</li>
+  <li>10,000 店舗展開は段階的とし、<b>パイロット → 100 店舗 → 1,000 店舗 → 10,000 店舗</b> の 4 段階を踏むこと</li>
+</ul>
+
+<h2>5.3 段階展開ロードマップ（推奨）</h2>
+<table>
+  <tr><th>段階</th><th>規模</th><th>期間</th><th>目的</th></tr>
+  <tr><td>Phase A</td><td>パイロット 3 店舗</td><td>1 か月</td><td>実機疎通・UX 検証</td></tr>
+  <tr><td>Phase B</td><td>100 店舗</td><td>2 か月</td><td>運用課題の洗い出し</td></tr>
+  <tr><td>Phase C</td><td>1,000 店舗</td><td>4 か月</td><td>スケーリング検証・コスト実測</td></tr>
+  <tr><td>Phase D</td><td>10,000 店舗</td><td>12 か月</td><td>本展開</td></tr>
+</table>
+
+<!-- ===================== 6. スマートフォン対応設計 ===================== -->
+<h1 id="chap6">6. スマートフォン対応設計 <span class="badge info" style="font-size:13px;vertical-align:middle">v3.0 追加</span></h1>
+
+<h2>6.1 スマホ対応の方針</h2>
+<div class="key">
+  <b>採用方針：レスポンシブ PWA（Progressive Web App）方式</b>
+  <p style="margin:6px 0 0">
+    ネイティブアプリ（iOS / Android）の開発・ストア申請コストを避け、
+    既存の Next.js Web アプリを <b>レスポンシブ化 + PWA 化</b> する。
+    ブラウザが WebRTC・Push API に対応しているため、
+    インストール不要でライブ視聴・プッシュ通知が利用可能。
+    ストア審査不要で即日リリース・即日更新が可能な点も大規模運用に有利。
+  </p>
+</div>
+
+<table>
+  <tr><th>方式</th><th>概要</th><th>メリット</th><th>デメリット</th></tr>
+  <tr>
+    <td><b>A: レスポンシブ Web</b><br><span class="badge ok">採用</span></td>
+    <td>既存 Next.js UI を viewport 対応・タッチ対応に改修</td>
+    <td>コード共通化、即日対応、SEO 親和</td>
+    <td>デスクトップ優先 UI の再設計が必要</td>
+  </tr>
+  <tr>
+    <td><b>B: PWA 追加</b><br><span class="badge ok">採用</span></td>
+    <td>manifest.json + Service Worker + Web Push 通知</td>
+    <td>ホーム画面追加・オフライン対応・プッシュ通知</td>
+    <td>iOS Safari は Web Push が iOS 16.4〜限定</td>
+  </tr>
+  <tr>
+    <td><b>C: ネイティブアプリ</b><br><span class="badge warn">非採用（Phase 2 以降検討）</span></td>
+    <td>Capacitor / React Native でネイティブラップ</td>
+    <td>カメラ・NFC 等ネイティブ機能へのアクセス</td>
+    <td>ストア審査・二重コード・開発コスト大</td>
+  </tr>
+</table>
+
+<h2>6.2 スマホ向け UI 設計</h2>
+
+<h3>6.2.1 画面レイアウト方針</h3>
+<div class="grid-2">
+  <div class="card">
+    <b>デスクトップ（現行）</b>
+    <ul>
+      <li>3カラム（ストアツリー | グリッド | 詳細パネル）</li>
+      <li>16分割グリッド（4×4）</li>
+      <li>左サイドバーナビ</li>
+      <li>VOD タイムライン横表示</li>
+    </ul>
+  </div>
+  <div class="card">
+    <b>スマートフォン（新規）</b>
+    <ul>
+      <li>1カラム縦積み＋ボトムナビ（5タブ）</li>
+      <li><b>4分割グリッド（2×2）</b> ※ 16分割は全画面スクロール</li>
+      <li>ハンバーガー or ボトムシートでストアツリー</li>
+      <li>VOD タイムライン縦表示（全幅スライダー）</li>
+    </ul>
+  </div>
+</div>
+
+<h3>6.2.2 ボトムナビゲーション（スマホ専用）</h3>
+<table>
+  <tr><th>タブ</th><th>アイコン</th><th>遷移先</th><th>備考</th></tr>
+  <tr><td>地図</td><td>🗺</td><td>/map</td><td>全国店舗マーカー・クラスタ</td></tr>
+  <tr><td>店舗一覧</td><td>🏪</td><td>/stores</td><td>担当エリアのみ絞込み</td></tr>
+  <tr><td>監視</td><td>📹</td><td>/stores/:id</td><td>4分割 JPEG / ライブ切替</td></tr>
+  <tr><td>通知</td><td>🔔</td><td>/notifications</td><td>プッシュ通知受信履歴</td></tr>
+  <tr><td>設定</td><td>⚙️</td><td>/settings</td><td>プロフィール / MFA / お知らせ設定</td></tr>
+</table>
+
+<h3>6.2.3 16分割グリッドのスマホ対応</h3>
+<ul>
+  <li><b>デフォルト:</b> 2×2（4画面）表示。ピンチアウトで 1 画面拡大</li>
+  <li><b>全画面ボタン:</b> タップで 4×4 スクロールビューへ切替（横スクロール）</li>
+  <li><b>横向き（landscape）:</b> 4×2（8 画面）レイアウトに自動切替</li>
+  <li><b>タイル長押し:</b> コンテキストメニュー（ライブ視聴 / VOD / カメラ情報）</li>
+</ul>
+
+<h2>6.3 PWA 実装仕様</h2>
+
+<h3>6.3.1 Web App Manifest</h3>
+<pre><code>// public/manifest.json
+{
+  "name": "レコーダ統合監視システム",
+  "short_name": "監視システム",
+  "description": "i-PRO / Uniview レコーダ統合監視",
+  "start_url": "/map",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#1e3a8a",
+  "background_color": "#0f172a",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "screenshots": [
+    { "src": "/screenshots/map.png",  "sizes": "390x844",  "form_factor": "narrow" },
+    { "src": "/screenshots/grid.png", "sizes": "1280x800", "form_factor": "wide" }
+  ]
+}</code></pre>
+
+<h3>6.3.2 Service Worker（Next.js + next-pwa）</h3>
+<table>
+  <tr><th>機能</th><th>戦略</th><th>対象</th></tr>
+  <tr><td>静的アセットキャッシュ</td><td>Cache First</td><td>JS / CSS / アイコン / フォント</td></tr>
+  <tr><td>地図タイル（OSM）</td><td>StaleWhileRevalidate</td><td>/tile.openstreetmap.org/*</td></tr>
+  <tr><td>API レスポンス</td><td>Network First（5s timeout）</td><td>/api/* (店舗一覧・設定等)</td></tr>
+  <tr><td>16分割 JPEG</td><td>Network Only（キャッシュ不可）</td><td>Supabase Storage signed URL</td></tr>
+  <tr><td>オフラインフォールバック</td><td>キャッシュ済み /map を返す</td><td>ナビゲーション失敗時</td></tr>
+</table>
+
+<h3>6.3.3 Web Push 通知アーキテクチャ</h3>
+<div class="ascii">
+[通知トリガー発生]
+  エッジ Agent  ──heartbeat(status:"error")──▶  Supabase edge_devices 更新
+                                                       │
+                                            Supabase Database Webhook
+                                                       │
+                                                       ▼
+                                          Vercel API Route
+                                          /api/push/notify
+                                                       │
+                              ┌────────────────────────┤
+                              ▼                        ▼
+                    Web Push (VAPID)          (将来: FCM / APNs)
+                              │
+                              ▼
+                    ブラウザ Service Worker
+                    self.addEventListener('push', ...)
+                              │
+                              ▼
+                    通知表示「●● 店舗 オフライン」
+                    タップ → /stores/:id へ遷移
+</div>
+
+<table>
+  <tr><th>通知種別</th><th>トリガー</th><th>優先度</th></tr>
+  <tr><td>エッジオフライン</td><td><code>status = 'offline'</code>（5 分無応答）</td><td>高</td></tr>
+  <tr><td>エッジ復旧</td><td><code>status = 'idle'</code> へ変化</td><td>中</td></tr>
+  <tr><td>エッジエラー</td><td><code>status = 'error'</code></td><td>高</td></tr>
+  <tr><td>セッション上限近接</td><td>日次視聴残り 15 分</td><td>中</td></tr>
+  <tr><td>OTA 更新完了</td><td>agent_version 変更</td><td>低</td></tr>
+</table>
+
+<div class="note">
+  <b>iOS 対応注意:</b> Web Push は iOS 16.4 以降の Safari (PWA としてホーム画面追加必須) で動作。
+  iOS 16.3 以下は通知未対応のため、画面内 in-app トースト通知をフォールバックとして実装する。
+</div>
+
+<h2>6.4 スマホ向け機能マトリクス</h2>
+<table>
+  <tr>
+    <th>機能</th>
+    <th class="center">PC Web</th>
+    <th class="center">スマホ Web<br>(PWA)</th>
+    <th class="center">ネイティブ<br>(将来)</th>
+    <th>スマホ固有の制約・対応</th>
+  </tr>
+  <tr><td>地図検索（OSM）</td><td class="center">✅</td><td class="center">✅</td><td class="center">✅</td><td>タッチ操作・ピンチ拡縮対応済み（Leaflet 標準）</td></tr>
+  <tr><td>16分割 JPEG 表示</td><td class="center">✅ 4×4</td><td class="center">✅ 2×2</td><td class="center">✅ 2×2</td><td>スマホでは 2×2 デフォルト、4×4 スクロール対応</td></tr>
+  <tr><td>単一カメラライブ（WebRTC）</td><td class="center">✅</td><td class="center">✅</td><td class="center">✅</td><td>Chrome / Safari とも WebRTC 対応。全画面再生可</td></tr>
+  <tr><td>VOD 録画再生</td><td class="center">✅</td><td class="center">✅</td><td class="center">✅</td><td>タイムラインスライダーをフルワイドに変更</td></tr>
+  <tr><td>プッシュ通知</td><td class="center">✅</td><td class="center">✅</td><td class="center">✅</td><td>iOS 16.4+ のみ。旧 iOS はポーリング通知</td></tr>
+  <tr><td>オフライン動作</td><td class="center">❌</td><td class="center">✅ 部分</td><td class="center">✅</td><td>SW キャッシュで静的画面・店舗一覧キャッシュは閲覧可</td></tr>
+  <tr><td>ホーム画面追加（A2HS）</td><td class="center">—</td><td class="center">✅</td><td class="center">—</td><td>manifest.json 設定により Chrome / Safari とも対応</td></tr>
+  <tr><td>管理 UI（マスタ）</td><td class="center">✅</td><td class="center">⚠️ 参照のみ</td><td class="center">⚠️</td><td>スマホは閲覧・ステータス確認のみ。編集は PC 推奨</td></tr>
+</table>
+
+<h2>6.5 レスポンシブ CSS 設計</h2>
+<pre><code>/* ブレークポイント定義（Tailwind CSS 準拠） */
+/* sm: 640px / md: 768px / lg: 1024px / xl: 1280px */
+
+/* 3カラム → 1カラム（スマホ） */
+.app-shell {
+  display: grid;
+  grid-template-columns: 280px 1fr 360px; /* PC */
+}
+@media (max-width: 1024px) {
+  .app-shell {
+    grid-template-columns: 1fr;           /* スマホ・タブレット */
+    grid-template-rows: auto 1fr auto;
+  }
+  .store-tree   { display: none; }         /* ボトムシートに移動 */
+  .detail-panel { display: none; }         /* タブ切替に移動 */
+}
+
+/* 16分割グリッド → 4分割（スマホ） */
+.grid-16 { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 768px) {
+  .grid-16 { grid-template-columns: repeat(2, 1fr); }
+}
+@media (orientation: landscape) and (max-width: 1024px) {
+  .grid-16 { grid-template-columns: repeat(4, 1fr); }  /* 横向き: 4×2 */
+}</code></pre>
+
+<h2>6.6 スマホ対応 開発計画</h2>
+
+<h3>6.6.1 追加開発フェーズ</h3>
+<table>
+  <tr>
+    <th style="width:60px">Phase</th><th>内容</th><th>主成果物</th>
+    <th class="num" style="width:80px">工数(人日)</th>
+  </tr>
+  <tr><td class="center">M-1</td>
+      <td>レスポンシブ CSS 全面改修（Tailwind）</td>
+      <td>PC / タブレット / スマホの 3 デバイス対応、ボトムナビ、ボトムシート</td>
+      <td class="num">8</td></tr>
+  <tr><td class="center">M-2</td>
+      <td>グリッドスマホ最適化（2×2 / ピンチ / 全画面）</td>
+      <td>タッチジェスチャー対応 JPEG グリッド</td>
+      <td class="num">4</td></tr>
+  <tr><td class="center">M-3</td>
+      <td>PWA 化（manifest + next-pwa + SW）</td>
+      <td>ホーム画面追加、オフライン対応、スプラッシュ画面</td>
+      <td class="num">4</td></tr>
+  <tr><td class="center">M-4</td>
+      <td>Web Push 通知バックエンド（VAPID + Supabase Webhook）</td>
+      <td>/api/push/* エンドポイント、通知設定 UI</td>
+      <td class="num">6</td></tr>
+  <tr><td class="center">M-5</td>
+      <td>iOS / Android 実機テスト・UX 修正</td>
+      <td>動作確認報告書（iOS 17 / Android 14）</td>
+      <td class="num">4</td></tr>
+  <tr><td class="center">-</td><td>バッファ（15%）</td><td>—</td><td class="num">4</td></tr>
+  <tr class="total-row">
+    <td class="center">合計</td><td colspan="2">スマホ対応追加工数</td><td class="num">30 人日</td>
+  </tr>
+</table>
+
+<h3>6.6.2 PC 版と合わせた総工数</h3>
+<table>
+  <tr><th>区分</th><th class="num">工数 (人日)</th><th>備考</th></tr>
+  <tr><td>PC / 本部 Web（Phase 0〜12）</td><td class="num">120</td><td>v2.0 記載の既存計画</td></tr>
+  <tr><td>スマホ対応追加（Phase M-1〜M-5）</td><td class="num">30</td><td>v3.0 追加分</td></tr>
+  <tr class="total-row"><td>総合計</td><td class="num">150 人日</td><td>約 5 か月（3 名体制）</td></tr>
+</table>
+
+<h2>6.7 スマホ向けランニングコスト増分</h2>
+<table>
+  <tr><th>項目</th><th>理由</th><th class="num">月額追加</th></tr>
+  <tr><td>Web Push 配信</td><td>VAPID は自前運用でコスト無し（Vercel Functions で処理）</td><td class="num">¥0</td></tr>
+  <tr><td>Supabase DB Webhook</td><td>エッジステータス変化 → 通知トリガー</td><td class="num">¥0（含む）</td></tr>
+  <tr><td>Vercel Bandwidth 増分</td><td>スマホ経由の API コール増（推定 +20 GB/月）</td><td class="num">¥3,000</td></tr>
+  <tr><td>CDN キャッシュ最適化</td><td>スマホ向け画像リサイズ（Vercel Image Optimization）</td><td class="num">¥2,000</td></tr>
+  <tr class="total-row"><td colspan="2">スマホ対応 月額追加合計</td><td class="num">¥5,000</td></tr>
+</table>
+<p>
+スマホ対応は既存クラウドインフラを <b>ほぼそのまま利用</b> できるため、
+月額追加コストは僅かで、<b>10,000 店舗時の月額は ¥578,500 → ¥583,500（+0.9%）</b> 程度。
+</p>
+
+<h2>6.8 スマホ対応 リスク・制約事項</h2>
+<table>
+  <tr><th>項目</th><th>内容</th><th>対策</th></tr>
+  <tr>
+    <td>iOS Safari の Web Push 制限</td>
+    <td>iOS 16.3 以前は Web Push 非対応。PWA としてホーム画面追加が必須</td>
+    <td>in-app トースト通知を同時実装。iOS 16.3 以下サポートポリシーを明記</td>
+  </tr>
+  <tr>
+    <td>モバイル帯域・通信量</td>
+    <td>16分割 JPEG（30KB × 0.5fps）は LTE で約 900KB/分。長時間視聴で通信量大</td>
+    <td>スマホ向け JPEG 品質低下（画質モード選択）、Wi-Fi 推奨 UI バナー表示</td>
+  </tr>
+  <tr>
+    <td>WebRTC (LiveKit) のモバイル対応</td>
+    <td>LTE / Wi-Fi 切替時に接続断が発生しやすい</td>
+    <td>LiveKit SDK の reconnect 設定強化、接続断時の自動再接続 UI</td>
+  </tr>
+  <tr>
+    <td>バックグラウンド再生制限</td>
+    <td>iOS はバックグラウンドで JS 実行を制限（JPEG ポーリング停止）</td>
+    <td>バックグラウンド移行時に stop_grid を送信し、フォアグラウンド復帰で再開</td>
+  </tr>
+  <tr>
+    <td>スマホ縦画面での VOD UI</td>
+    <td>タイムラインが狭くシークしにくい</td>
+    <td>横向き強制モード（VOD 再生中は landscape ロック推奨 UI）</td>
+  </tr>
+  <tr>
+    <td>セキュリティ（盗難・紛失）</td>
+    <td>スマホ紛失時に視聴セッションが残存</td>
+    <td>アイドル 5 分で自動ログアウト、管理者による強制セッション無効化 API</td>
+  </tr>
+</table>
+
+<h2>6.9 スマホ対応 マイルストーン</h2>
+<table>
+  <tr><th>週（PC 版 W17 以降）</th><th>マイルストーン</th></tr>
+  <tr><td>W18–19</td><td>レスポンシブ CSS 全面改修・ボトムナビ実装（Phase M-1）</td></tr>
+  <tr><td>W19–20</td><td>グリッドタッチ対応・2×2 モード・PWA 化（Phase M-2, M-3）</td></tr>
+  <tr><td>W20–21</td><td>Web Push バックエンド・通知設定 UI（Phase M-4）</td></tr>
+  <tr><td>W22</td><td>iOS / Android 実機テスト・バグ修正・リリース（Phase M-5）</td></tr>
+</table>
+
+<!-- ===================== 7. 追加機能: BCP / SECURITY / INFRA監視 ===================== -->
+<h1 id="chap7">7. 追加機能: BCP / SECURITY / INFRA監視 <span class="badge info" style="font-size:13px;vertical-align:middle">v4.0 追加</span></h1>
+
+<h2>7.1 BCP（事業継続）— J-Alert 自動クリップ録画</h2>
+
+<h3>7.1.1 概要</h3>
+<p>
+J-Alert（ミサイル / 地震 / 津波）を Supabase Edge Function でポーリング受信し、
+該当エリア内の店舗の <b>全カメラ</b> に対して 事象発生 <b>-3 分〜+5 分</b> の MP4 クリップを
+録画して Storage にアップロード。完了後 PDF レポートを自動生成して登録メール宛先に送信
+（送信実装は別フェーズ）。
+</p>
+
+<h3>7.1.2 データ・UI</h3>
+<table>
+  <tr><th>UI</th><th>パス</th><th>機能</th></tr>
+  <tr><td>イベント一覧</td><td><code>/bcp</code></td><td>過去の J-Alert 発火イベント一覧（種別・発令時刻・状態・テスト発令フラグ）</td></tr>
+  <tr><td>イベント詳細</td><td><code>/bcp/[id]</code></td><td>イベント概要 + クリップ表（カメラ別 MP4 / サムネ / アップロード状態）+ レポート PDF</td></tr>
+  <tr><td>レポートタブ</td><td><code>/bcp?tab=reports</code></td><td>生成済みレポート一覧、PDF 直リンク</td></tr>
+  <tr><td>テスト発令</td><td><code>/bcp/test</code></td><td>郵便番号/座標+半径で範囲指定し、is_test=true で BCP フローを発火</td></tr>
+</table>
+
+<h3>7.1.3 エッジでの処理（modes/bcp.ts）</h3>
+<ul>
+  <li>各 clip について <code>clipTo</code> 到来まで wait → ffmpeg で MP4 record（duration + 60s 安全上限）</li>
+  <li>MP4 を Supabase Storage の <code>bcp-clips</code> バケットへ PUT</li>
+  <li>サムネは <b>Frigate <code>/api/&lt;cam&gt;/latest.jpg</code> を HTTP fetch</b>（v4.0 で ffmpeg 経由から切替）</li>
+  <li>uniview は ONVIF Profile-S スナップショット未実装のためサムネ skipped。クリップ MP4 は録画される</li>
+</ul>
+
+<h2>7.2 SECURITY — 警備巡回スナップショット ＋ AI 比較</h2>
+
+<h3>7.2.1 概要</h3>
+<p>
+店舗別の巡回間隔（5〜1440 分、デフォルト 30 分）と業務時間で pg_cron が patrol_run を発火。
+エッジが <code>capture_snapshot</code> を受けて該当カメラの JPEG を取得、
+cloud の <code>/api/security/patrol/ingest</code> に Bearer 認証 multipart POST。
+ingest 側で diff_score（ベースライン差分）と AI 判定を行い、status を
+<code>normal / review / anomaly / confirmed / false_positive</code> に振り分ける。
+</p>
+
+<h3>7.2.2 UI（SECURITY_NAV）</h3>
+<table>
+  <tr><th>UI</th><th>パス</th><th>機能</th></tr>
+  <tr><td>トリアージ</td><td><code>/security</code></td><td>横断異常キュー + 全拠点正常状態の俯瞰</td></tr>
+  <tr><td>巡回レポート</td><td><code>/security/reports</code></td><td>期間内の patrol_runs / findings を集計（巡回回数 / 異常 / 要確認）</td></tr>
+  <tr><td>巡回設定</td><td><code>/security/settings</code></td><td>店舗別の patrol_interval_min / business_hours / ai_enabled / notify_emails</td></tr>
+  <tr><td>カメラ設定</td><td><code>/security/cameras</code></td><td>baseline 画像（昼/夜）、AI プロンプト、sensitivity、patrol_enabled</td></tr>
+</table>
+
+<h3>7.2.3 AI 判定の安全策</h3>
+<ul>
+  <li><b>店舗毎日次上限</b>（<code>ai_daily_cap</code> デフォルト 200）— 暴走時のコスト爆発防止</li>
+  <li>AI 比較プロンプトはカメラ毎に設定（状態検出のみ、<b>顔識別は禁止</b>）</li>
+  <li>AI なし運用も可（<code>ai_enabled=false</code> → diff_score のみで判定）</li>
+</ul>
+
+<h2>7.3 INFRA 死活監視</h2>
+
+<h3>7.3.1 概要</h3>
+<p>
+edge_devices.last_seen_at から 5 分閾値で offline を検知して monitor_incidents に起票。
+テナント内の店舗の <b>≥60% が同時 stale</b> なら個別 edge_offline ではなく
+tenant 単位の <b>network_outage</b> として 1 件起票（一斉障害でアラートが溢れない設計）。
+</p>
+
+<h3>7.3.2 無人ストリーム watchdog</h3>
+<p>
+v4.0 で追加された <code>monitor_sweep_unattended_streams()</code> 関数（pg_cron 毎分）:
+</p>
+<ul>
+  <li><b>Case 1:</b> status ∈ (grid,live,vod,bcp) かつ heartbeat が 3 分以上停滞 → status を offline に補正</li>
+  <li><b>Case 2:</b> status ∈ (grid,live,vod) かつ pending_command_at が 90 分（= LiveKit token TTL 上限）超 → stop_stream を自動発行</li>
+  <li>Case 2 を発行した行は monitor_incidents に <code>stream_autostopped</code>（info, resolved）として監査記録（CTE で UPDATE と INSERT を 1:1 連結）</li>
+</ul>
+
+<h3>7.3.3 UI（INFRA_NAV）</h3>
+<table>
+  <tr><th>UI</th><th>パス</th></tr>
+  <tr><td>ダッシュボード</td><td><code>/infra</code> — 店舗ロールアップ ヘルス表 + 一斉障害バナー</td></tr>
+  <tr><td>インシデント</td><td><code>/infra/incidents</code> — 未対応 / 対応中 / 解決済みの 3 セクション</td></tr>
+  <tr><td>チェック設定</td><td><code>/infra/checks</code> — monitor_checks 一覧、連続失敗ハイライト</td></tr>
+  <tr><td>稼働率レポート</td><td><code>/infra/reports</code> — 日次/週次/月次レポート</td></tr>
+  <tr><td>監視設定</td><td><code>/infra/settings</code> — 店舗別の閾値・チェック間隔・メンテ窓・通知先</td></tr>
+  <tr><td>用語説明</td><td><code>/infra/glossary</code></td></tr>
+</table>
+
+<h2>7.4 レポート PDF 生成</h2>
+
+<h3>7.4.1 採用技術</h3>
+<table>
+  <tr><th>項目</th><th>選定</th></tr>
+  <tr><td>PDF ライブラリ</td><td>PDFKit（Pure JS, 軽量、ヘッドレスブラウザ不要）</td></tr>
+  <tr><td>日本語フォント</td><td>Noto Sans JP Regular（OFL ライセンス, OTF 4.5MB をリポジトリ同梱）</td></tr>
+  <tr><td>Storage</td><td>Supabase Storage public バケット <code>reports</code></td></tr>
+  <tr><td>キー命名</td><td><code>bcp/&lt;reportId&gt;.pdf</code>, <code>security/&lt;reportId&gt;.pdf</code></td></tr>
+  <tr><td>URL 公開形式</td><td><code>&lt;supabaseUrl&gt;/storage/v1/object/public/reports/&lt;key&gt;</code>（無認証で直開放可）</td></tr>
+</table>
+
+<h3>7.4.2 PDF 内容</h3>
+<table>
+  <tr><th>レポート種別</th><th>主要セクション</th></tr>
+  <tr><td>BCP イベントレポート</td><td>イベント概要（アラート種別/源/時刻/エリア/状態/テスト発令）、レポート情報（生成時刻/送信先）、クリップ表（カメラ/時間/長さ/状態）</td></tr>
+  <tr><td>SECURITY 巡回レポート</td><td>概要（店舗/期間/生成時刻/送信先）、巡回サマリ（実行回数/検出件数の内訳）、巡回履歴（最新 10 件: 開始時刻/トリガー/状態/検出件数）</td></tr>
+</table>
+
+<h3>7.4.3 生成スクリプト</h3>
+<p>
+リポジトリ内に <code>scripts/seed-bcp-demo.mjs</code>、<code>scripts/seed-security-demo.mjs</code>、
+<code>scripts/generate-report-pdfs.mjs</code> を同梱。
+最後のスクリプトは <code>pdf_url like 'https://example.com/%'</code> でフィルタするので
+何度実行しても placeholder の行だけ対象になり、本番 URL は上書きしない安全設計。
+</p>
+
+<h2>7.5 v4.0 機能ごとの追加工数（参考）</h2>
+<table>
+  <tr>
+    <th style="width:60px">タスク</th><th>内容</th><th>主成果物</th>
+    <th class="num" style="width:80px">工数(人日)</th>
+  </tr>
+  <tr><td class="center">V-1</td>
+      <td>grid / live を JPEG ポーリング化（snapshotUrl / sharp 合成 / 個別 cam upload）</td>
+      <td>edge-agent modes/grid.ts modes/live.ts 全面書換、cloud /api/edges/.../cam/.../snapshot route 新規</td>
+      <td class="num">5</td></tr>
+  <tr><td class="center">V-2</td>
+      <td>VOD WHIP 経路の安定化（ingress route / whip-proxy / -re / -rtsp_transport 条件付き）</td>
+      <td>/api/livekit/ingress、whip-proxy.ts、modes/vod.ts</td>
+      <td class="num">7</td></tr>
+  <tr><td class="center">V-3</td>
+      <td>INFRA 監視（pg_cron 死活掃引 + watchdog + 5 ページの UI）</td>
+      <td>migration 20260530_001/002, /infra/* (5 ページ)</td>
+      <td class="num">8</td></tr>
+  <tr><td class="center">V-4</td>
+      <td>BCP（J-Alert poller + bcp.ts + テスト発令 UI + イベント詳細 + レポート）</td>
+      <td>migration 20260528, edge-agent modes/bcp.ts, /bcp/* (4 ページ)</td>
+      <td class="num">10</td></tr>
+  <tr><td class="center">V-5</td>
+      <td>SECURITY（patrol スケジューラ + capture_snapshot + ingest + 4 ページ UI）</td>
+      <td>migration 20260529, edge-agent capture_snapshot ハンドラ, /security/* (4 ページ)</td>
+      <td class="num">10</td></tr>
+  <tr><td class="center">V-6</td>
+      <td>PDF レポート生成（PDFKit + Noto Sans JP）</td>
+      <td>scripts/generate-report-pdfs.mjs、reports バケット</td>
+      <td class="num">3</td></tr>
+  <tr><td class="center">V-7</td>
+      <td>各種 dev 環境ハマり対策（AirPlay/5000、Frigate auth、LiveKit Cloud quirks 等）</td>
+      <td>ドキュメント、トラブルシュート集、env.example 整備</td>
+      <td class="num">5</td></tr>
+  <tr class="total-row">
+    <td class="center">合計</td><td colspan="2">v4.0 で追加された工数</td><td class="num">48 人日</td>
+  </tr>
+</table>
+
+<p>
+v3.0 の総合計 150 人日 + v4.0 追加分 48 人日 = <b>198 人日（約 6 か月、3 名体制）</b>。
+ただし grid/live の JPEG 化により WebRTC 関連の運用負債が大幅に減るので、
+保守フェーズの実工数は v3.0 想定より下がる見込み。
+</p>
+
+<!-- ===================== 8. Tier 3 中央集約モード (v5.0 新規) ===================== -->
+<h1 id="chap8">8. Tier 3 中央集約モード <span class="badge info" style="font-size:13px;vertical-align:middle">v5.0 新規</span></h1>
+
+<h2>8.1 動機</h2>
+<p>
+v4.0 は「各店舗 Mini PC + Frigate」前提だった。これは 10,000 店舗で <b>1 店舗 ¥80,000 × 10,000 = ¥8 億円</b> の初期投資が必要。
+既に NVR が入っている店舗ではこのハードを <b>重複導入</b> することになる。
+</p>
+<p>
+v5.0 で <b>中央集約モード (Tier 3)</b> を追加し、既存店舗 NVR を直接 API で叩く構成を実装。
+店舗側ハードウェア追加 ¥0、中央サーバ Dell R660 × 2 で ¥240 万。<b>10,000 店舗で約 ¥8 億円のコスト削減</b>を実現可能。
+</p>
+
+<h2>8.2 アーキテクチャ</h2>
+<pre><code>┌─ 中央 DC (Tier 3 サーバ × 2 台 Active-Active) ──────┐
+│                                                       │
+│   edge-agent Node A                  edge-agent Node B│
+│   ├─ LeaseManager (HA リース 90s TTL)                 │
+│   ├─ ShardManager (担当店舗 5,000 まで自動 claim)     │
+│   ├─ TenantPool (30s ごと差分検知)                    │
+│   ├─ CommandDispatcher (pending_commands ポーリング)  │
+│   ├─ HeartbeatScheduler (6h jitter 死活)              │
+│   ├─ CircuitBreaker (NVR 障害店舗を即隔離)            │
+│   └─ /metrics (Prometheus エンドポイント)             │
+└──────────────────────────────────────────────────────┘
+            │
+            │ WAN (SD-WAN / MPLS / IPsec)
+            ▼
+[各店舗 NVR × 10,000] — 既存資産活用、ハードウェア追加なし</code></pre>
+
+<h2>8.3 2 モード共存</h2>
+<table>
+  <tr><th>項目</th><th>per_store_minipc (現行)</th><th>central_aggregator (Tier 3)</th></tr>
+  <tr><td>店舗側ハード</td><td>Mini PC + Frigate</td><td><b>不要 (既存 NVR を活用)</b></td></tr>
+  <tr><td>初期コスト/店舗</td><td>約 ¥80,000</td><td><b>¥0</b></td></tr>
+  <tr><td>HB 間隔</td><td>60 秒</td><td>6 時間</td></tr>
+  <tr><td>HA</td><td>Mini PC 単体 (HA なし)</td><td>中央 Active-Active 2 ノード</td></tr>
+  <tr><td>RTSP/Snapshot</td><td>Frigate 経由</td><td>NVR ベンダー API 直接</td></tr>
+  <tr><td>適用シナリオ</td><td>新規店舗 / NVR 設置なし</td><td>既存 NVR ある全店舗</td></tr>
+</table>
+<p>
+両モードを <b>同一 Supabase + 同一 monitor UI で混在運用可能</b>。<code>stores.deployment_mode</code> カラムで店舗ごとに選択。
+切替 CLI <code>migrate-to-central.mjs</code> で段階的に central へ移行できる (dry-run デフォルト)。
+</p>
+
+<h2>8.4 HA (Active-Active) シーケンス</h2>
+<pre><code>1. Node A 起動 → lease 90s TTL で central_nodes に書込
+2. Node A の ShardManager が capacity 5,000 まで未割当店舗を claim
+3. Node B 起動 → 同様に capacity 5,000 まで claim
+4. Node A 障害 (lease 失効) → Node B が他ノードの担当を最大 90 秒以内に検出
+5. Node B の ShardManager が Node A の担当店舗を引き取り (capacity 内で)
+6. 復旧後、Node A が再起動 → 未割当店舗を再 claim → 自然に rebalance</code></pre>
+
+<h2>8.5 Circuit Breaker</h2>
+<p>
+NVR 障害が広範囲化したとき、毎ポーリングで時間と帯域を浪費しないよう、店舗ごとの状態機械を持つ。
+</p>
+<table>
+  <tr><th>状態</th><th>意味</th><th>遷移条件</th></tr>
+  <tr><td>CLOSED</td><td>通常稼働</td><td>初期状態、または HALF_OPEN で 2 連続成功</td></tr>
+  <tr><td>OPEN</td><td>障害隔離中 (即拒否)</td><td>5 連続失敗</td></tr>
+  <tr><td>HALF_OPEN</td><td>復帰試行 (1 回だけ実行可)</td><td>OPEN から 60 秒 cooldown 経過</td></tr>
+</table>
+
+<h2>8.6 開発工数 (Tier 3 関連)</h2>
+<table>
+  <tr><th>工程</th><th>工数</th><th>備考</th></tr>
+  <tr><td>Phase 0: 基盤 (Adapter 層 + DB)</td><td class="num">8 人日</td><td>F46.6-21</td></tr>
+  <tr><td>Phase 1: 中央 runner + 6h HB</td><td class="num">7 人日</td><td>F48.A-F</td></tr>
+  <tr><td>Phase 2: HA + Circuit + UI</td><td class="num">9 人日</td><td>F49.A-K</td></tr>
+  <tr><td>Phase 3: 移行 CLI + メトリクス + SLO</td><td class="num">7 人日</td><td>F50.A-G</td></tr>
+  <tr><td>Phase 4: 監視スタック + ランブック</td><td class="num">4 人日</td><td>F51.B/F/X</td></tr>
+  <tr class="total-row"><td class="center">合計</td><td class="num">35 人日</td><td>機材なしで実装完了済</td></tr>
+</table>
+
+<!-- ===================== 9. NVR ベンダー対応 (v5.0 新規) ===================== -->
+<h1 id="chap9">9. NVR ベンダー対応設計 <span class="badge info" style="font-size:13px;vertical-align:middle">v5.0 新規</span></h1>
+
+<h2>9.1 NvrAdapter インターフェイス</h2>
+<p>
+全 NVR を <code>NvrAdapter</code> インターフェイスで抽象化。新ベンダー追加 = <b>ファイル 1 個追加 + Registry 1 行追加</b>。
+既存 commands/ modes/ scheduler/ webhook/ は<b>無修正</b>。
+</p>
+<pre><code>interface NvrAdapter {
+  vendor:        NvrVendor              // 'i-pro-nx' | 'hikvision' | ...
+  capabilities:  NvrCapabilities        // FW 世代から動的決定
+  firmware:      FirmwareInfo
+
+  testConnection(): Promise&lt;boolean&gt;
+  getChannelList(): Promise&lt;NvrChannel[]&gt;
+  getSnapshot(ch: number): Promise&lt;Buffer&gt;
+  getLiveRtspUri(ch: number, stream?: 'main'|'sub'): Promise&lt;string&gt;
+
+  // capability で宣言された機能のみ実装
+  getVodMp4?(ch, from, to): Promise&lt;ReadableStream&gt;
+  subscribeEvents?(callback): Promise&lt;Subscription&gt;
+  getTimelineSnapshots?(ch, ref, offsets): Promise&lt;Buffer[]&gt;
+}</code></pre>
+
+<h2>9.2 対応ベンダー一覧 (8 種)</h2>
+<table>
+  <tr>
+    <th>識別子</th><th>ベンダー</th><th>プロトコル</th>
+    <th class="center">Snapshot</th><th class="center">RTSP</th>
+    <th class="center">VOD MP4</th><th class="center">Event Push</th><th class="center">AI</th>
+  </tr>
+  <tr>
+    <td><code>i-pro-nx</code></td><td>i-PRO WJ-NX</td><td>CGI + ONVIF</td>
+    <td class="center">✅</td><td class="center">✅</td><td class="center">✅</td><td class="center">✅</td><td class="center">✅ (v2+)</td>
+  </tr>
+  <tr>
+    <td><code>i-pro-nu</code></td><td>i-PRO WJ-NU</td><td>CGI + ONVIF</td>
+    <td class="center">✅</td><td class="center">✅</td><td class="center">✅</td><td class="center">✅</td><td class="center">✅ (v2+)</td>
+  </tr>
+  <tr>
+    <td><code>i-pro-gxe500</code></td><td>i-PRO WJ-GXE500</td><td>CGI + RTSP</td>
+    <td class="center">✅</td><td class="center">✅</td><td class="center">❌</td><td class="center">❌</td><td class="center">❌</td>
+  </tr>
+  <tr>
+    <td><code>hikvision</code></td><td>Hikvision</td><td>ISAPI</td>
+    <td class="center">✅</td><td class="center">✅</td><td class="center">✅</td><td class="center">✅</td><td class="center">✅ (AcuSense)</td>
+  </tr>
+  <tr>
+    <td><code>hanwha-wisenet</code></td><td>Hanwha Wisenet</td><td>SUNAPI</td>
+    <td class="center">✅</td><td class="center">✅</td><td class="center">✅</td><td class="center">✅</td><td class="center">✅ (Wisenet AI)</td>
+  </tr>
+  <tr>
+    <td><code>synology-surveillance</code></td><td>Synology</td><td>DSM API</td>
+    <td class="center">✅</td><td class="center">✅</td><td class="center">⏸ Phase 7</td><td class="center">⏸ Phase 7</td><td class="center">✅ (DVA)</td>
+  </tr>
+  <tr>
+    <td><code>onvif-generic</code></td><td>ONVIF 汎用</td><td>SOAP</td>
+    <td class="center">✅</td><td class="center">✅</td><td class="center">❌</td><td class="center">✅ (PullPoint)</td><td class="center">❌</td>
+  </tr>
+  <tr>
+    <td><code>frigate</code></td><td>Frigate (Mini PC モード)</td><td>HTTP</td>
+    <td class="center">✅</td><td class="center">✅</td><td class="center">✅</td><td class="center">❌</td><td class="center">—</td>
+  </tr>
+</table>
+
+<h2>9.3 FW 世代別 capability (i-PRO 例)</h2>
+<table>
+  <tr><th>世代</th><th>発売年</th><th>追加機能</th></tr>
+  <tr><td>v1.x</td><td>2018-2019</td><td>ONVIF Profile S、基本 VOD (max 6h)、CGI Snapshot</td></tr>
+  <tr><td>v2.x</td><td>2020-2021</td><td>+ Profile T、AI metadata、4K、motion zone、max VOD 12h</td></tr>
+  <tr><td>v3.x</td><td>2022-2023</td><td>+ Active Guard、タイムラインスナップショット、ai_person/ai_vehicle、max VOD 24h</td></tr>
+  <tr><td>v4.x</td><td>2024+</td><td>+ AI on iPRO、rateLimitMs 100</td></tr>
+</table>
+<p>
+FW Version は起動時に <code>/cgi-bin/getsysteminfo</code> 経由で自動検出。
+capability は immutable な値オブジェクトとして adapter インスタンスに保持。
+</p>
+
+<h2>9.4 NVR ライフサイクル管理 (EOL/EOS)</h2>
+<table>
+  <tr><th>ステータス</th><th>条件</th><th>UI 表示</th></tr>
+  <tr><td>OK</td><td>EOS まで 24ヶ月超</td><td>緑「サポート期間中」</td></tr>
+  <tr><td>WARNING</td><td>EOS まで 12〜24ヶ月</td><td>黄「N ヶ月後 EOS」</td></tr>
+  <tr><td>REPLACE_PLANNED</td><td>EOS まで 6〜12ヶ月</td><td>橙「置換計画推奨」</td></tr>
+  <tr><td>URGENT</td><td>EOS まで 6ヶ月以内</td><td>赤「緊急: 置換必須」</td></tr>
+  <tr><td>EOS</td><td>EOS 経過</td><td>赤「EOS 超過 (N ヶ月)」</td></tr>
+  <tr><td>OVERAGE</td><td>導入から 7 年経過</td><td>赤「7年運用ルール超過」</td></tr>
+</table>
+<p>
+<code>nvr_models</code> マスタテーブルに 22 機種登録 (i-PRO 8 / Hikvision 4 / Hanwha 4 / Synology 4 / ONVIF 1 / Frigate 1)。
+店舗の <code>nvr_model</code> 変更時にトリガで <code>nvr_eol_date</code> / <code>nvr_eos_date</code> が自動同期される。
+</p>
+
+<!-- ===================== 10. 監視スタック (v5.0 新規) ===================== -->
+<h1 id="chap10">10. 監視スタック ＆ SLO 設計 <span class="badge info" style="font-size:13px;vertical-align:middle">v5.0 新規</span></h1>
+
+<h2>10.1 構成</h2>
+<pre><code>┌─ 中央 DC ─────────────────────────────────────────┐
+│  edge-agent (:9464 /metrics)                       │
+│        │                                            │
+│        ├──> Prometheus (:9090) ──┬──> Grafana       │
+│        │      ├─ scrape 15s      │     (:3000)      │
+│        │      ├─ alert-rules     ├──> Loki (:3100)  │
+│        │      └─ 30d retention   │                  │
+│        │                          └──> Alertmanager │
+│        └──> pino logs ──> Loki        (:9093)        │
+│                                       │              │
+│                                       ▼              │
+│                                Slack / PagerDuty /  │
+│                                メール                │
+└────────────────────────────────────────────────────┘</code></pre>
+
+<h2>10.2 主要メトリクス</h2>
+<table>
+  <tr><th>メトリクス</th><th>型</th><th>ラベル</th><th>用途</th></tr>
+  <tr><td><code>edge_commands_total</code></td><td>Counter</td><td>command, result, vendor</td><td>コマンド処理量・成功率</td></tr>
+  <tr><td><code>edge_command_duration_seconds</code></td><td>Histogram</td><td>command, vendor</td><td>p50 / p95 / p99 レイテンシ</td></tr>
+  <tr><td><code>edge_heartbeat_total</code></td><td>Counter</td><td>result, vendor</td><td>死活成功率</td></tr>
+  <tr><td><code>edge_tenants_assigned</code></td><td>Gauge</td><td>—</td><td>担当店舗数 (capacity 監視)</td></tr>
+  <tr><td><code>edge_circuit_breaker_open_total</code></td><td>Gauge</td><td>—</td><td>OPEN 状態の店舗数</td></tr>
+  <tr><td><code>edge_adapter_cache_size</code></td><td>Gauge</td><td>—</td><td>adapter インスタンスキャッシュサイズ</td></tr>
+</table>
+
+<h2>10.3 SLO ターゲット</h2>
+<table>
+  <tr><th>SLO</th><th>目標</th><th>エラーバジェット (月間)</th><th>違反時の通知</th></tr>
+  <tr><td>死活監視成功率</td><td>99%</td><td>7.2 時間 / 月</td><td>Slack 警告 (24h 平均)</td></tr>
+  <tr><td>コマンド成功率</td><td>99.5%</td><td>3.6 時間 / 月</td><td>Slack 緊急 (1h 平均)</td></tr>
+  <tr><td>ノード稼働率</td><td>99.9%</td><td>43 分 / 月</td><td>PagerDuty (全ノードダウン時)</td></tr>
+  <tr><td>p95 latency</td><td>≤ 2.0s</td><td>—</td><td>Slack 警告 (5m 平均で 5s 超)</td></tr>
+</table>
+
+<h2>10.4 アラートルール (抜粋)</h2>
+<pre><code>- alert: HeartbeatSuccessRateLow
+  expr: |
+    sum(rate(edge_heartbeat_total{result="ok"}[24h])) /
+    sum(rate(edge_heartbeat_total[24h])) &lt; 0.95
+  for: 5m
+  labels: { severity: critical, slo: heartbeat }
+
+- alert: AllNodesDown
+  expr: sum(up{job="intereco-edge-central"}) == 0
+  for: 1m
+  labels: { severity: critical, page: "true" }
+
+- alert: ManyCircuitsOpen
+  expr: edge_circuit_breaker_open_total &gt; 100
+  for: 5m
+  labels: { severity: warning }</code></pre>
+
+<!-- ===================== 11. 運用ランブック (v5.0 新規) ===================== -->
+<h1 id="chap11">11. 運用ランブック <span class="badge info" style="font-size:13px;vertical-align:middle">v5.0 新規</span></h1>
+
+<h2>11.1 障害対応シナリオ</h2>
+<table>
+  <tr><th>シナリオ</th><th>検知</th><th>対応</th><th>SLA</th></tr>
+  <tr>
+    <td><b>AllNodesDown</b><br>全ノード障害</td>
+    <td>PagerDuty 1 分以内</td>
+    <td>1. 物理電源確認<br>2. systemctl restart<br>3. /infra/nodes で active 確認</td>
+    <td>復旧 30 分以内</td>
+  </tr>
+  <tr>
+    <td><b>HalfNodesDown</b><br>片系障害</td>
+    <td>Slack 5 分以内</td>
+    <td>残ノードが自動 takeover (30〜90 秒)、失効ノードを後続復旧</td>
+    <td>無中断</td>
+  </tr>
+  <tr>
+    <td><b>HeartbeatLow</b><br>死活成功率低下</td>
+    <td>Slack (24h 平均 < 95%)</td>
+    <td>area_code / vendor で偏在確認 → WAN or ベンダー要因切り分け</td>
+    <td>分析 4 時間以内</td>
+  </tr>
+  <tr>
+    <td><b>CircuitOpen 大量発生</b></td>
+    <td>Slack (100 店舗超)</td>
+    <td>ベンダー側の FW バグ可能性。i-PRO サポートに問合せ</td>
+    <td>調査 1 時間以内</td>
+  </tr>
+  <tr>
+    <td><b>WAN 切断</b></td>
+    <td>HB 全滅</td>
+    <td>各店 NVR は録画継続。ライブ視聴のみ停止。SD-WAN 経路復旧</td>
+    <td>録画は失われない</td>
+  </tr>
+</table>
+
+<h2>11.2 計画作業</h2>
+<table>
+  <tr><th>作業</th><th>手順</th></tr>
+  <tr><td>新規店舗追加</td><td>UI で店舗追加 → NVR タブで設定 → 接続テスト → ShardManager が自動 claim</td></tr>
+  <tr><td>NVR 機種追加</td><td><code>/admin/nvr-models</code> から登録 → adapter 既存なら即運用可能</td></tr>
+  <tr><td>新規ベンダー追加</td><td>adapter 1 ファイル + registry 1 行追加 (既存無修正)</td></tr>
+  <tr><td>中央ノード追加</td><td>UUID 発行 → systemd 起動 → 自動 active 登録 → rebalance で店舗流入</td></tr>
+  <tr><td>ノード メンテ</td><td>systemctl reload (drain) → stop → メンテ → start で自動 claim</td></tr>
+  <tr><td>モード切替</td><td><code>migrate-to-central.mjs</code> CLI (dry-run デフォルト、area/vendor/limit でフィルタ)</td></tr>
+  <tr><td>HB 段階展開</td><td><code>heartbeat-rollout.mjs</code> CLI (60s → 6h を N 店舗ずつ)</td></tr>
+</table>
+
+<h2>11.3 リリース手順 (Blue/Green)</h2>
+<pre><code># Node B を drain
+ssh edge-central-02 'sudo systemctl reload intereco-edge-agent'
+
+# Node A が全店舗引き取るのを Grafana で確認 (1〜2 分)
+
+# Node B 停止 → デプロイ → 起動
+ssh edge-central-02 &lt;&lt; 'EOF'
+sudo systemctl stop intereco-edge-agent
+cd /opt/intereco-edge-agent
+git pull && bun install --frozen-lockfile && bun run build
+sudo systemctl start intereco-edge-agent
+EOF
+
+# Node B 動作確認後、Node A 同様にローリング更新</code></pre>
+
+<div class="footer">
+  &copy; 2026 — レコーダ統合監視システム 仕様書・基本設計・開発計画 / 運用設計 v5.0<br>
+  Tier 3 中央集約 + 8 NVR ベンダー対応 + HA Active-Active + Circuit Breaker + Prometheus 監視
+</div>
+
+</div>
+</body>
+</html>
