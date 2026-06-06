@@ -1,0 +1,45 @@
+# OS-level noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Editor / IDE
+.idea/
+.vscode/
+*.iml
+
+# Node / Bun
+node_modules/
+*.log
+.npm
+.bun
+
+# Build artefacts
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+
+# Test / coverage
+coverage/
+.nyc_output/
+
+# Secrets — explicit safety net even though sub-projects already ignore them
+.env
+.env.local
+.env.*.local
+
+# gstack workspace state (not part of the codebase)
+.gstack/
+
+# Sub-project artefacts under claude/
+claude/**/.next/
+claude/**/dist/
+claude/**/node_modules/
+claude/**/.DS_Store
+claude/**/*.tsbuildinfo
+
+# Local-only scripts dump (keep checked-in scripts/ tree itself)
+/tmp/
