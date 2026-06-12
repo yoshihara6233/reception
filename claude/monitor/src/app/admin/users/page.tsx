@@ -3,17 +3,21 @@
  *
  * admin_users を一覧表示。ロール・名前・メールで絞り込み可能。
  * auth_user_id が紐付いていれば「認証済み」として表示する。
+ *
+ * 新規作成 / 編集 / 削除 アクション付き (super_admin / tenant_admin のみ)。
  */
+import Link from 'next/link'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { getT } from '@/lib/i18n/server'
 import type { Msg } from '@/lib/i18n/messages'
+import { UserDeleteButton } from './user-actions'
 
 interface Row {
   id: string
   email: string
-  name: string
+  display_name: string | null
   role: string
   store_ids: string[]
   auth_user_id: string | null
@@ -48,17 +52,29 @@ export default async function UsersAdmin({
   const t = await getT()
   const tu = t.adminUsers
 
+  // 現在のユーザの role を取得して、CRUD ボタンを出すか判定
+  const { data: { user } } = await supa.auth.getUser()
+  let canEdit = false
+  if (user) {
+    const { data: me } = await supa
+      .from('admin_users')
+      .select('role')
+      .eq('auth_user_id', user.id)
+      .single()
+    canEdit = me?.role === 'super_admin' || me?.role === 'tenant_admin'
+  }
+
   let query = supa
     .from('admin_users')
     .select(`
-      id, email, name, role, store_ids, auth_user_id, created_at,
+      id, email, display_name, role, store_ids, auth_user_id, created_at,
       tenants ( id, name )
     `)
-    .order('name')
+    .order('display_name')
     .limit(500)
 
   if (q) {
-    query = query.or(`name.ilike.%${q}%,email.ilike.%${q}%`)
+    query = query.or(`display_name.ilike.%${q}%,email.ilike.%${q}%`)
   }
   if (role && ['super_admin', 'tenant_admin', 'store_manager', 'viewer'].includes(role)) {
     query = query.eq('role', role)
@@ -72,6 +88,16 @@ export default async function UsersAdmin({
       <PageHeader
         title={tu.title}
         crumb={[{ href: '/admin', label: t.breadcrumb.admin }, { href: '/admin/users', label: t.adminNav.users }]}
+        actions={
+          canEdit ? (
+            <Link
+              href="/admin/users/new"
+              className="rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+            >
+              ＋ 新規作成
+            </Link>
+          ) : null
+        }
       />
 
       {/* Search / filter bar */}
@@ -113,12 +139,13 @@ export default async function UsersAdmin({
                 <th className="px-3 py-2 text-left">{tu.colStoreCount}</th>
                 <th className="px-3 py-2 text-left">{tu.colAuth}</th>
                 <th className="px-3 py-2 text-left">{tu.colCreated}</th>
+                {canEdit && <th className="px-3 py-2 text-right">操作</th>}
               </tr>
             </thead>
             <tbody>
               {rows.map((u) => (
                 <tr key={u.id} className="border-t border-slate-100 hover:bg-slate-50">
-                  <td className="px-3 py-2 font-medium text-slate-900">{u.name}</td>
+                  <td className="px-3 py-2 font-medium text-slate-900">{u.display_name ?? '—'}</td>
                   <td className="px-3 py-2 text-slate-600">{u.email}</td>
                   <td className="px-3 py-2">
                     <span
@@ -157,11 +184,24 @@ export default async function UsersAdmin({
                       day: '2-digit',
                     })}
                   </td>
+                  {canEdit && (
+                    <td className="px-3 py-2">
+                      <div className="flex justify-end gap-1">
+                        <Link
+                          href={`/admin/users/${u.id}`}
+                          className="rounded border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-50"
+                        >
+                          編集
+                        </Link>
+                        <UserDeleteButton id={u.id} name={u.display_name ?? u.email} />
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center text-slate-400">
+                  <td colSpan={canEdit ? 8 : 7} className="px-3 py-8 text-center text-slate-400">
                     {tu.empty}
                   </td>
                 </tr>

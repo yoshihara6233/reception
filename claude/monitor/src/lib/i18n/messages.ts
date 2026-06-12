@@ -27,6 +27,7 @@ export interface Msg {
     infra:    string
     bcp:      string
     security: string
+    factory:  string
     // F24: header right-side icon labels (tooltips + aria-labels)
     logout:   string
   }
@@ -68,6 +69,14 @@ export interface Msg {
     secsAgo:      (n: number) => string
     minsAgo:      (n: number) => string
     hoursAgo:     (n: number) => string
+    // F108: per-alert 種別ラベル
+    kind: {
+      edge_offline: string
+      edge_error:   string
+      bcp:          string
+      incident:     string
+      patrol:       string
+    }
   }
   workspace: {
     split16:           string
@@ -435,7 +444,8 @@ const ja: Msg = {
     settings: '設定',
     infra:    '死活監視',
     bcp:      'BCP',
-    security: 'SECURITY',
+    security: '警備OP',
+    factory:  '製造業OP',
     logout:   'ログアウト',
   },
   kpi: {
@@ -474,6 +484,13 @@ const ja: Msg = {
     secsAgo:      (n) => `${n}秒前`,
     minsAgo:      (n) => `${n}分前`,
     hoursAgo:     (n) => `${n}時間前`,
+    kind: {
+      edge_offline: 'エッジオフライン',
+      edge_error:   'エッジエラー',
+      bcp:          'BCP発令',
+      incident:     '監視インシデント',
+      patrol:       '巡回異常',
+    },
   },
   workspace: {
     split16:           '16分割',
@@ -541,7 +558,7 @@ const ja: Msg = {
     crumb: '用語説明',
   },
   infraNav: { dashboard: 'ダッシュボード', incidents: 'インシデント', checks: 'チェック設定', reports: '稼働率レポート', settings: '監視設定', glossary: '用語説明' },
-  navTitle: { admin: '設定', security: 'セキュリティ', bcp: 'BCP', infra: '死活監視' },
+  navTitle: { admin: '設定', security: '警備OP', bcp: 'BCP', infra: '死活監視' },
   common: { open: '開く', notGenerated: '未生成', dash: '—' },
   infraIncidents: {
     title: 'インシデント',
@@ -577,7 +594,7 @@ const ja: Msg = {
     colStore: '店舗', colPeriod: '対象期間', colGenerated: '生成時刻', colRuns: '巡回', colDone: '完了', colAnomalies: '異常', colReviews: '要確認', colPdf: 'PDF', colEmails: '送信先',
   },
   breadcrumb: {
-    admin: '設定', security: 'セキュリティ', bcp: 'BCP', infra: '死活監視',
+    admin: '設定', security: '警備OP', bcp: 'BCP', infra: '死活監視',
     infraIncidents: 'インシデント', infraChecks: 'チェック設定', infraReports: '稼働率レポート',
     securityReports: '巡回レポート',
   },
@@ -826,6 +843,7 @@ const en: Msg = {
     infra:    'Health',
     bcp:      'BCP',
     security: 'Security',
+    factory:  'Factory OP',
     logout:   'Log out',
   },
   kpi: {
@@ -864,6 +882,13 @@ const en: Msg = {
     secsAgo:      (n) => `${n}s ago`,
     minsAgo:      (n) => `${n}m ago`,
     hoursAgo:     (n) => `${n}h ago`,
+    kind: {
+      edge_offline: 'Edge Offline',
+      edge_error:   'Edge Error',
+      bcp:          'BCP Alert',
+      incident:     'Monitor Incident',
+      patrol:       'Patrol Anomaly',
+    },
   },
   workspace: {
     split16:           '16-Split',
@@ -1216,6 +1241,7 @@ const zh: Msg = {
     infra:    '健康监控',
     bcp:      'BCP',
     security: '安全',
+    factory:  '制造OP',
     logout:   '退出',
   },
   kpi: {
@@ -1254,6 +1280,13 @@ const zh: Msg = {
     secsAgo:      (n) => `${n}秒前`,
     minsAgo:      (n) => `${n}分钟前`,
     hoursAgo:     (n) => `${n}小时前`,
+    kind: {
+      edge_offline: '边缘设备离线',
+      edge_error:   '边缘设备故障',
+      bcp:          'BCP警报',
+      incident:     '监控事件',
+      patrol:       '巡逻异常',
+    },
   },
   workspace: {
     split16:           '16分割',
@@ -1606,6 +1639,7 @@ const ko: Msg = {
     infra:    '헬스 모니터링',
     bcp:      'BCP',
     security: '보안',
+    factory:  '제조OP',
     logout:   '로그아웃',
   },
   kpi: {
@@ -1644,6 +1678,13 @@ const ko: Msg = {
     secsAgo:      (n) => `${n}초 전`,
     minsAgo:      (n) => `${n}분 전`,
     hoursAgo:     (n) => `${n}시간 전`,
+    kind: {
+      edge_offline: '엣지 오프라인',
+      edge_error:   '엣지 오류',
+      bcp:          'BCP 경보',
+      incident:     '모니터링 인시던트',
+      patrol:       '순찰 이상',
+    },
   },
   workspace: {
     split16:           '16분할',
