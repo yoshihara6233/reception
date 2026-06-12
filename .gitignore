@@ -43,3 +43,8 @@ claude/**/*.tsbuildinfo
 
 # Local-only scripts dump (keep checked-in scripts/ tree itself)
 /tmp/
+
+# F-ship: 秘密情報を含む .env バックアップを除外
+*.env.local.save
+.env*.save
+claude/monitor/.env.local.save
