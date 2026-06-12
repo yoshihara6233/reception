@@ -10,6 +10,7 @@
  */
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useLang } from '@/lib/i18n/context'
 import type { Msg } from '@/lib/i18n/messages'
 
@@ -305,11 +306,21 @@ function FragmentRows({
           {pdfCount > 0 ? `${pdfCount}/${g.stores.length}` : '—'}
         </td>
         <td className="px-3 py-2">
-          {g.is_test && (
-            <span className="inline-block rounded bg-purple-100 px-2 py-0.5 text-[11px] font-semibold text-purple-700">
-              {tBcp.testBadge}
-            </span>
-          )}
+          <div className="flex items-center justify-end gap-2">
+            {g.is_test && (
+              <span className="inline-block rounded bg-purple-100 px-2 py-0.5 text-[11px] font-semibold text-purple-700">
+                {tBcp.testBadge}
+              </span>
+            )}
+            {/* F111: テスト発令のみ削除可。親行=1発令なので配下の全 event を削除。 */}
+            {g.is_test && (
+              <TestDeleteButton
+                eventIds={g.stores.map((s) => s.id)}
+                label={alertTypeLabel(g.alert_type, tBcp)}
+                issuedAt={fmtJST(g.alert_issued_at)}
+              />
+            )}
+          </div>
         </td>
       </tr>
 
@@ -363,5 +374,61 @@ function FragmentRows({
         )
       })}
     </>
+  )
+}
+
+// F111: テスト発令削除ボタン。is_test=true のアラート (= 1 親行) 配下の全
+// bcp_event を確認ダイアログ付きで削除する。本番アラートには表示されない。
+function TestDeleteButton({
+  eventIds,
+  label,
+  issuedAt,
+}: {
+  eventIds: string[]
+  label:    string
+  issuedAt: string
+}) {
+  const router = useRouter()
+  const [busy, setBusy] = useState(false)
+
+  async function onDelete(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (!confirm(`テスト発令「${label} / ${issuedAt}」を削除します。\n配下の ${eventIds.length} 件のイベント・スナップショット・PDF も完全に消えます。元に戻せません。よろしいですか？`)) {
+      return
+    }
+    setBusy(true)
+    const res = await fetch('/api/bcp/events', {
+      method:  'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ eventIds }),
+    })
+    setBusy(false)
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}))
+      alert(`削除失敗: ${j.error ?? res.status}${j.message ? `\n${j.message}` : ''}`)
+      return
+    }
+    router.refresh()
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onDelete}
+      disabled={busy}
+      title="このテスト発令を削除"
+      className="flex h-6 w-6 items-center justify-center rounded border border-red-200 bg-white text-red-500 hover:bg-red-50 disabled:opacity-50"
+    >
+      {busy ? (
+        <span className="text-[10px]">…</span>
+      ) : (
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 6h18" />
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+          <line x1="10" y1="11" x2="10" y2="17" />
+          <line x1="14" y1="11" x2="14" y2="17" />
+        </svg>
+      )}
+    </button>
   )
 }
