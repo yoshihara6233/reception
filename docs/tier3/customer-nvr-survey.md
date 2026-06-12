@@ -35,7 +35,7 @@
 | Axis Communications |  |  |
 | Synology (NAS + Surveillance Station) |  |  |
 | Dahua |  |  |
-| Bosch |  |  |
+| Uniview |  |  |
 | AVer |  |  |
 | その他 (ベンダー名: __________) |  |  |
 | **不明 / 混在** |  |  |

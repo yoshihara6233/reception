@@ -21,9 +21,7 @@
 | **Axis VAPIX** | `axis-vapix` | **Phase 7** | ✅ 単体カメラ + M30/M70 統合機 | Q3/P3/M3/M70 全シリーズ |
 | **Dahua DH-NVR / IPC** | `dahua` | **Phase 7** | ✅ AcuPick AI 含む | DH-NVR4216-4KS2, DH-IPC シリーズ |
 | **Frigate (OSS-VMS)** | `frigate` | Phase 0 | ✅ Mini PC モード互換 | 各種 IP カメラ |
-| Bosch DIVAR | — | Phase 8+ | ⏸ 未着手 | DIVAR IP シリーズ |
-| Avigilon | — | Phase 8+ | ⏸ 未着手 | Avigilon Control Center |
-| Uniview | — | Phase 8+ | ⏸ 未着手 | NVR301/501 シリーズ |
+| **Uniview** | — | Phase 8 | 🔴 必須 (未実装) | NVR301/501 シリーズ |
 
 ## 機能対応比較表
 
@@ -45,6 +43,18 @@
 |---|---|---|---|---|---|---|---|---|---|---|
 | **VOD MP4 エクスポート** | ✅ | ✅ | ❌ | ✅ (Phase 7 ffmpeg) | ✅ | ❌ | ✅ (Phase 7) | ⏸ | ⏸ | ✅ |
 | **タイムラインスナップショット (BCP)** | ✅ (v3+) | ✅ (v3+) | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
+
+#### F106: BCP 8 枚タイムライン 実装状況 (i-PRO / Uniview)
+
+| ベンダー | ① 最新スナップショット | ② 過去フレーム (T-5) | ③ テスト |
+|---|---|---|---|
+| **i-PRO (CGI Digest)** | ✅ `/cgi-bin/snapshot.cgi?ch=N` | ✅ `&time=<unix_ts>` (FW v3+) / v1/v2 は latest にフォールバック | ✅ `bcp-fetchers/__tests__/ipro.test.ts` |
+| **Uniview (LAPI Digest)** | ✅ `/LAPI/V1.0/Channels/<N>/Media/Video/Snapshot` | ⚠️ LAPI に時刻指定エンドポイント無し → latest にフォールバック (ONVIF Profile-G 実装は別タスク) | ✅ `bcp-fetchers/__tests__/uniview.test.ts` |
+| **Frigate** | ✅ `/api/<cam>/latest.jpg` | ✅ `/api/<cam>/start/<ts>/end/<ts+1>/clip.mp4` + ffmpeg | ✅ 既存 |
+
+実装: `claude/edge-agent/src/bcp-fetchers/` (i-PRO + Uniview の dispatcher) +
+`claude/edge-agent/src/util/digest-auth.ts` (Digest auth ヘルパ, MD5)。
+`bcp_clips.source` カラムで `ipro-historical` / `ipro-latest` / `uniview-latest` / `frigate-recording` / `latest` を区別。
 
 ### イベント・AI
 
@@ -103,8 +113,9 @@
 3. **Hanwha Wisenet** — 旧サムスン由来、SUNAPI 安定
 4. **Axis** — 高品質単体カメラ、Object Analytics
 5. **Dahua** — コスト重視、ハイブリッド (アナログ+IP) 対応
-6. **Synology** — NAS ベース小規模拠点向け
-7. **ONVIF 汎用** — 上記以外の機種を最低限カバー
+6. **Uniview** 🔴 — コストパフォーマンス、国内代理店多数 (Phase 8 実装必須)
+7. **Synology** — NAS ベース小規模拠点向け
+8. **ONVIF 汎用** — 上記以外の機種を最低限カバー
 
 ### 機能で選ぶ
 

@@ -100,9 +100,9 @@ const GROUPS: Group[] = [
         desc: 'PoC では state=`bcp` 中の新規アラートを丸ごとスキップしていた。F83 で per-event worker パターンに置換: 最大 4 件まで BCP イベントを並列実行する。各 worker は独立した Promise で動き、エラーは互いに分離される。state は最初の BCP 起動で `bcp` に切替わり、すべての worker 完了で `idle` に戻る。MAX_BCP=4 を超える同時イベントは拒否ログを残してスキップ (BCP は時限処理のためキューイングは行わない)。',
       },
       {
-        term: '過去フレーム取得未対応',
-        read: 'T-5 など過去オフセット — 解消済 (F70 / Phase 8)',
-        desc: 'F70 で対応済。過去オフセット時は Frigate の clip.mp4 (`/api/<cam>/start/<ts>/end/<ts+1>/clip.mp4`) を取得し、ffmpeg `-frames:v 1 -f image2 -c:v mjpeg pipe:1` で 1 フレーム抽出して使用する。クリップが無い (Frigate retention 期間外) 等で失敗した場合は latest.jpg にフォールバック (現フレーム代替)。bcp_clips.source カラムで `frigate-recording` か `latest` か追跡可能。',
+        term: '過去フレーム取得 / 他ベンダー対応',
+        read: 'T-5 など過去オフセット — Frigate (F70) + i-PRO/Uniview (F106) 対応済',
+        desc: 'F70 (Frigate) + F106 (i-PRO/Uniview) で対応済。Frigate は clip.mp4 (`/api/<cam>/start/<ts>/end/<ts+1>/clip.mp4`) + ffmpeg `-frames:v 1` で 1 フレーム抽出。i-PRO は `/cgi-bin/snapshot.cgi?ch=N&time=<unix_ts>` で FW v3+ がネイティブ過去フレームを返す (v1/v2 は latest にフォールバック)。Uniview は LAPI に時刻指定エンドポイントが無いため過去オフセット要求でも latest を返す (ONVIF Profile-G 実装は需要次第)。bcp_clips.source カラムで `frigate-recording` / `ipro-historical` / `ipro-latest` / `uniview-latest` / `latest` を区別可能。',
       },
       {
         term: 'BCP クリップ Storage 公開設定',
