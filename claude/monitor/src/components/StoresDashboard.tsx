@@ -42,6 +42,23 @@ export type StoreDashRow = {
   edge_devices: EdgeDevice[]
 }
 
+// F108: per-alert レコード。1 アラート = 1 件。種別 (kind) を保持して
+// bottom-sheet が種別ごとに正しいラベル・色・遷移先を出せるようにする。
+export type AlertKind =
+  | 'edge_offline'   // エッジ端末オフライン
+  | 'edge_error'     // エッジ端末エラー
+  | 'bcp'            // J-Alert / BCP 発令
+  | 'incident'       // インフラ監視インシデント
+  | 'patrol'         // AI 巡回異常
+
+export type AlertRecord = {
+  storeId:    string
+  storeName:  string
+  kind:       AlertKind
+  occurredAt: string | null
+  href:       string
+}
+
 // ─── Status badge styles ──────────────────────────────────────────────────────
 
 const STATUS_BADGE: Record<EdgeStatus, string> = {
@@ -62,6 +79,15 @@ const STATUS_DOT: Record<EdgeStatus, string> = {
   error:   'bg-red-500',
 }
 
+// F108: アラート種別ごとの見た目 (emoji / 背景 / ラベル色)
+const ALERT_KIND_META: Record<AlertKind, { emoji: string; bg: string; labelCls: string }> = {
+  edge_error:   { emoji: '🛑', bg: 'bg-red-100',    labelCls: 'text-red-600 font-medium' },
+  edge_offline: { emoji: '📡', bg: 'bg-slate-100',  labelCls: 'text-slate-500' },
+  bcp:          { emoji: '🚨', bg: 'bg-orange-100', labelCls: 'text-orange-600 font-medium' },
+  incident:     { emoji: '⚠️', bg: 'bg-amber-100',  labelCls: 'text-amber-600 font-medium' },
+  patrol:       { emoji: '👁', bg: 'bg-violet-100', labelCls: 'text-violet-600 font-medium' },
+}
+
 // ─── Relative time (uses translation strings) ─────────────────────────────────
 
 function useRelativeTime() {
@@ -79,35 +105,58 @@ function useRelativeTime() {
 
 export function StoresDashboard({
   stores,
+  alerts,
   alertStoreIds,
 }: {
   stores: StoreDashRow[]
   /**
-   * F27: server-side で集約した「直近アラート対象店舗」の ID 配列。
-   * monitor_incidents / bcp_events / patrol_findings / edge offline-error
-   * の union。未指定なら edge offline/error のみで判定する後方互換動作。
+   * F108: server-side で組み立てた per-alert レコード配列。1 アラート = 1 件。
+   * これが指定されると bottom-sheet は種別ごとに行を分けて表示する。
+   */
+  alerts?: AlertRecord[]
+  /**
+   * F27 (legacy): 「直近アラート対象店舗」の ID 配列。`alerts` が未指定の
+   * 場合のみ後方互換として使う (種別不明・edge 扱い)。
    */
   alertStoreIds?: string[]
 }) {
   const { t }   = useLang()
   const [tab, setTab] = useState<'list' | 'map'>('list')
 
-  const alertIdSet = useMemo(
-    () => new Set(alertStoreIds ?? []),
-    [alertStoreIds],
-  )
-  const hasAlertSignal = alertStoreIds !== undefined
+  // F108: `alerts` を最優先。無ければ legacy alertStoreIds → 最後に edge-only。
+  const alertList: AlertRecord[] = useMemo(() => {
+    if (alerts) return alerts
+    if (alertStoreIds) {
+      const byId = new Map(stores.map((s) => [s.id, s]))
+      return alertStoreIds.map((id) => ({
+        storeId: id, storeName: byId.get(id)?.name ?? '—',
+        kind: 'edge_offline' as AlertKind,
+        occurredAt: byId.get(id)?.edge_devices?.[0]?.last_seen_at ?? null,
+        href: `/stores/${id}`,
+      }))
+    }
+    // 完全な後方互換: edge offline/error のみ
+    return stores
+      .filter((s) => {
+        const st = s.edge_devices?.[0]?.status
+        return st === 'offline' || st === 'error'
+      })
+      .map((s) => ({
+        storeId: s.id, storeName: s.name,
+        kind: (s.edge_devices?.[0]?.status === 'error' ? 'edge_error' : 'edge_offline') as AlertKind,
+        occurredAt: s.edge_devices?.[0]?.last_seen_at ?? null,
+        href: `/stores/${s.id}`,
+      }))
+  }, [alerts, alertStoreIds, stores])
 
+  // 地図ハイライト用: アラートを持つ店舗の一意集合
+  const alertStoreIdSet = useMemo(
+    () => new Set(alertList.map((a) => a.storeId)),
+    [alertList],
+  )
   const alertStores = useMemo(
-    () => stores.filter((s) =>
-      hasAlertSignal
-        ? alertIdSet.has(s.id)
-        : (() => {
-            const st = s.edge_devices?.[0]?.status
-            return st === 'offline' || st === 'error'
-          })(),
-    ),
-    [stores, alertIdSet, hasAlertSignal],
+    () => stores.filter((s) => alertStoreIdSet.has(s.id)),
+    [stores, alertStoreIdSet],
   )
 
   const kpis = useMemo(() => {
@@ -117,8 +166,9 @@ export function StoresDashboard({
       if (st === 'grid')                       monitoring++
       else if (st === 'live')                  live++
     })
-    return { total: stores.length, monitoring, live, alerts: alertStores.length }
-  }, [stores, alertStores.length])
+    // KPI の「アラート」は件数 (per-alert) を表示
+    return { total: stores.length, monitoring, live, alerts: alertList.length }
+  }, [stores, alertList.length])
 
   const groups = useMemo(() => {
     const map = new Map<string, StoreDashRow[]>()
@@ -141,8 +191,11 @@ export function StoresDashboard({
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-[#F7F5F1]">
-      {/* ── Tab switcher ─────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-1.5 border-b border-stone-200 bg-white px-3 py-2">
+      {/* ── Tab switcher ─────────────────────────────────────────────────────
+          F109: モバイル専用 (md:hidden)。デスクトップは左の StoreTree が店舗
+          リストの役割を果たすので「店舗ビュー」タブは重複。デスクトップでは
+          地図+アラートを常時表示する。 */}
+      <div className="flex items-center gap-1.5 border-b border-stone-200 bg-white px-3 py-2 md:hidden">
         <TabBtn active={tab === 'list'} onClick={() => setTab('list')}>
           {t.dashboard.storeView}
         </TabBtn>
@@ -156,12 +209,23 @@ export function StoresDashboard({
         </TabBtn>
       </div>
 
-      {/* ── Content ──────────────────────────────────────────────────────── */}
-      {tab === 'list' ? (
+      {/* ── Content (CSS レスポンシブ) ───────────────────────────────────────
+          地図は 1 回だけマウントし、表示/非表示は CSS で切替える。StoreMap は
+          ResizeObserver + invalidateSize (F26.3) で hidden→visible に追随する
+          ので、モバイルのタブ切替でもタイルが正しく再描画される。 */}
+
+      {/* 店舗リスト: モバイルで tab=list の時のみ。デスクトップは常に非表示。 */}
+      <div className={`${tab === 'list' ? 'flex' : 'hidden'} min-h-0 flex-1 flex-col md:hidden`}>
         <ListView kpis={kpis} groups={groups} />
-      ) : (
-        <MapAlertView mapStores={mapStores} alertStores={alertStores} />
-      )}
+      </div>
+
+      {/* 地図+アラート: デスクトップは常時表示 / モバイルは tab=map の時。
+          F109: KPI 帯を地図上部に常時表示 (デスクトップで店舗ビュータブを
+          消した分、件数サマリをここで担保する)。 */}
+      <div className={`${tab === 'map' ? 'flex' : 'hidden'} min-h-0 flex-1 flex-col md:flex`}>
+        <KpiStrip kpis={kpis} />
+        <MapAlertView mapStores={mapStores} alertStores={alertStores} alertList={alertList} />
+      </div>
     </div>
   )
 }
@@ -205,24 +269,7 @@ function ListView({
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      {/* KPI strip */}
-      <div className="grid grid-cols-4 divide-x divide-stone-200 border-b border-stone-200 bg-white">
-        {[
-          { label: t.kpi.total,      value: kpis.total,      cls: 'text-slate-800' },
-          { label: t.kpi.monitoring, value: kpis.monitoring, cls: 'text-blue-600' },
-          { label: t.kpi.live,       value: kpis.live,        cls: 'text-purple-600' },
-          {
-            label: t.kpi.alerts,
-            value: kpis.alerts,
-            cls: kpis.alerts > 0 ? 'text-red-500' : 'text-slate-400',
-          },
-        ].map((k) => (
-          <div key={k.label} className="flex flex-col items-center py-2.5">
-            <span className={`text-xl font-bold leading-none ${k.cls}`}>{k.value}</span>
-            <span className="mt-0.5 text-[10px] text-slate-400">{k.label}</span>
-          </div>
-        ))}
-      </div>
+      <KpiStrip kpis={kpis} />
 
       {/* Area-grouped store list */}
       <div className="flex-1 overflow-y-auto pb-14 md:pb-0">
@@ -277,9 +324,11 @@ function ListView({
 function MapAlertView({
   mapStores,
   alertStores,
+  alertList,
 }: {
   mapStores: (StoreDashRow & { latitude: number; longitude: number })[]
   alertStores: StoreDashRow[]
+  alertList: AlertRecord[]
 }) {
   const { t }              = useLang()
   const relativeTime       = useRelativeTime()
@@ -343,12 +392,14 @@ function MapAlertView({
         </div>
       )}
 
-      {/* Alert bottom sheet — sits above BottomNav on mobile */}
+      {/* Alert bottom sheet — F110: モバイル専用 (md:hidden)。デスクトップは
+          左 StoreTree の「直近アラート対象店舗」フィルタチップ + 地図ピンが
+          アラートを担うので、下部シートは重複。モバイルはツリーが無いため維持。 */}
       <div
         className={[
           // z-[1000] same reason as the alert-zoom button (Leaflet panes).
           'absolute bottom-14 left-0 right-0 z-[1000] rounded-t-2xl bg-white shadow-2xl transition-transform duration-300',
-          'md:bottom-0',
+          'md:hidden',
           sheetOpen ? 'translate-y-0' : 'translate-y-[calc(100%-52px)]',
         ].join(' ')}
       >
@@ -361,12 +412,12 @@ function MapAlertView({
             <span
               className={[
                 'h-2 w-2 rounded-full',
-                alertStores.length > 0 ? 'animate-pulse bg-red-500' : 'bg-emerald-400',
+                alertList.length > 0 ? 'animate-pulse bg-red-500' : 'bg-emerald-400',
               ].join(' ')}
             />
             <span className="text-sm font-semibold text-slate-800">
-              {alertStores.length > 0
-                ? t.dashboard.alertsN(alertStores.length)
+              {alertList.length > 0
+                ? t.dashboard.alertsN(alertList.length)
                 : t.dashboard.noAlerts}
             </span>
           </div>
@@ -379,53 +430,38 @@ function MapAlertView({
           </svg>
         </button>
 
-        {/* Alert list */}
+        {/* F108: Alert list — per-alert rows (1 アラート = 1 行). 種別 (kind) ごとに
+            アイコン色・ラベル・遷移先を出し分ける。同一店舗が複数アラートを持つ
+            場合は店舗名が複数行に登場する。 */}
         <div className="max-h-52 overflow-y-auto border-t border-stone-100">
-          {alertStores.length === 0 ? (
+          {alertList.length === 0 ? (
             <div className="px-4 py-5 text-center text-sm text-slate-400">
               {t.dashboard.allGood}
             </div>
           ) : (
-            alertStores.map((s) => {
-              const dev    = s.edge_devices?.[0]
-              const isErr  = dev?.status === 'error'
+            alertList.map((a, i) => {
+              const meta = ALERT_KIND_META[a.kind]
               return (
                 <Link
-                  key={s.id}
-                  href={`/stores/${s.id}`}
+                  key={`${a.storeId}-${a.kind}-${i}`}
+                  href={a.href}
                   className="flex items-center gap-3 border-b border-stone-100 px-4 py-3 hover:bg-stone-50 active:bg-stone-100"
                 >
                   <div
                     className={[
-                      'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full',
-                      isErr ? 'bg-red-100' : 'bg-slate-100',
+                      'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-base',
+                      meta.bg,
                     ].join(' ')}
                   >
-                    {isErr ? (
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="12" cy="12" r="10"/>
-                        <line x1="12" y1="8" x2="12" y2="12"/>
-                        <line x1="12" y1="16" x2="12.01" y2="16"/>
-                      </svg>
-                    ) : (
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="1" y1="1" x2="23" y2="23"/>
-                        <path d="M16.72 11.06A10.94 10.94 0 0119 12.55"/>
-                        <path d="M5 12.55a10.94 10.94 0 015.17-2.39"/>
-                        <path d="M10.71 5.05A16 16 0 0122.56 9"/>
-                        <path d="M1.42 9a15.91 15.91 0 014.7-2.88"/>
-                        <path d="M8.53 16.11a6 6 0 016.95 0"/>
-                        <line x1="12" y1="20" x2="12.01" y2="20"/>
-                      </svg>
-                    )}
+                    {meta.emoji}
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-slate-800">{s.name}</p>
+                    <p className="truncate text-sm font-medium text-slate-800">{a.storeName}</p>
                     <p className="text-[11px] text-slate-400">
-                      {isErr ? t.alert.edgeError : t.alert.edgeOffline}
-                      {dev?.last_seen_at && (
-                        <> · {relativeTime(dev.last_seen_at)}</>
+                      <span className={meta.labelCls}>{t.alert.kind[a.kind]}</span>
+                      {a.occurredAt && (
+                        <> · {relativeTime(a.occurredAt)}</>
                       )}
                     </p>
                   </div>
@@ -442,6 +478,35 @@ function MapAlertView({
 }
 
 // ─── Shared ───────────────────────────────────────────────────────────────────
+
+// F109: KPI 帯 (全店舗 / 監視中 / LIVE / アラート)。店舗ビューと地図ビューの
+// 両方で使い回す。
+function KpiStrip({
+  kpis,
+}: {
+  kpis: { total: number; monitoring: number; live: number; alerts: number }
+}) {
+  const { t } = useLang()
+  return (
+    <div className="grid flex-shrink-0 grid-cols-4 divide-x divide-stone-200 border-b border-stone-200 bg-white">
+      {[
+        { label: t.kpi.total,      value: kpis.total,      cls: 'text-slate-800' },
+        { label: t.kpi.monitoring, value: kpis.monitoring, cls: 'text-blue-600' },
+        { label: t.kpi.live,       value: kpis.live,        cls: 'text-purple-600' },
+        {
+          label: t.kpi.alerts,
+          value: kpis.alerts,
+          cls: kpis.alerts > 0 ? 'text-red-500' : 'text-slate-400',
+        },
+      ].map((k) => (
+        <div key={k.label} className="flex flex-col items-center py-2.5">
+          <span className={`text-xl font-bold leading-none ${k.cls}`}>{k.value}</span>
+          <span className="mt-0.5 text-[10px] text-slate-400">{k.label}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 function ChevronRight() {
   return (
