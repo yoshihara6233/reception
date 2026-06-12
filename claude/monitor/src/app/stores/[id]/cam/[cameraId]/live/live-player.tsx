@@ -36,8 +36,13 @@ const STOP_DELAY_MS = 300
 
 type Mode = 'iframe' | 'jpeg'
 
+// F80.1: key bumped to v2. The v1 auto-fallback persisted 'jpeg' on a
+// transient iframe timeout (see onError below), which permanently stuck
+// cameras on the lightweight mode even after Frigate recovered. Bumping the
+// key discards all polluted v1 prefs so every camera re-defaults to iframe
+// (high-quality) when supported. Only explicit user button clicks persist now.
 function modePrefKey(cameraId: string): string {
-  return `intereco:live-mode:${cameraId}`
+  return `intereco:live-mode-v2:${cameraId}`
 }
 
 function loadMode(cameraId: string, defaultMode: Mode): Mode {
@@ -96,9 +101,12 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl }:
           <IframeMode
             url={liveIframeUrl}
             onError={() => {
+              // F80.1: auto-fallback is SESSION-ONLY. Do NOT persist 'jpeg'
+              // here — a transient timeout (slow LAN, Frigate restart) must
+              // not permanently downgrade the camera. The user's explicit
+              // choice (switchMode → saveMode) is the only thing that sticks.
               setIframeFailed(true)
               setMode('jpeg')
-              saveMode(cameraId, 'jpeg')
             }}
           />
         ) : (
