@@ -37,7 +37,34 @@ npm install
 npm run dev          # tsx でホットリロード
 ```
 
-## 本番デプロイ（mini PC, Ubuntu 24.04）
+## 現在の PoC デプロイ（Beelink Mini-S, Ubuntu）— 実機の実態
+
+> ⚠️ **実機のサービス名は `intereco-edge`** です（下の本番テンプレート `edge-agent`
+> とは別名）。`systemctl status edge-agent` は "Unit not found" になるので注意。
+
+| 項目 | 実機の値 |
+|---|---|
+| サービス名 | `intereco-edge.service` |
+| unit ファイル | `/etc/systemd/system/intereco-edge.service` |
+| 実行ユーザ | `intereco`（home: `/home/intereco`） |
+| 実行方式 | `bun run src/index.ts`（Bun 直実行、`node dist/` ではない） |
+| Bun パス | `/home/intereco/.bun/bin/bun` |
+
+```bash
+# 実機の運用コマンド（Beelink に SSH 後）
+sudo systemctl status  intereco-edge      # 状態確認
+sudo systemctl restart intereco-edge      # 再起動（必要時のみ）
+sudo journalctl -u     intereco-edge -f          # ログ追尾（q で抜ける）
+sudo journalctl -u     intereco-edge -f -o cat   # JSON ログを全幅表示
+```
+
+Frigate は同じ Beelink 上の Docker で常駐（`docker ps | grep frigate` /
+`docker restart frigate` / `docker logs -f frigate`）。
+
+## 本番デプロイ（mini PC, Ubuntu 24.04）— 標準テンプレート
+
+> 下記は配布用テンプレート。サービス名 `edge-agent`・ユーザ `edge`・
+> `node dist/` 実行を前提とする。現行 PoC 機（上記）とは構成が異なる。
 
 ```bash
 # 1. ffmpeg, node を導入

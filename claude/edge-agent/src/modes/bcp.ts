@@ -30,6 +30,7 @@ import { config } from '../config.js'
 import { logger } from '../logger.js'
 import { snapshotUrl } from '../rtsp/url.js'
 import { Semaphore } from '../util/semaphore.js'
+import { fetchBcpSnapshot } from '../bcp-fetchers/index.js'
 import type { CameraDescriptor } from '../types.js'
 
 const BCP_BUCKET    = 'bcp-clips'
@@ -193,6 +194,7 @@ async function captureOneSnapshot(
 ): Promise<{ ok: true; storage_path: string; public_url: string; source: string } | { ok: false; error: string }> {
   let buf: Buffer | null = null
   let source = 'latest'
+  const isPast = targetMs < Date.now() - 5_000
 
   // F70: For Frigate, if the target moment is in the past, try to pull the
   // historical frame from Frigate's recordings first. This makes T-5/T+0/etc.
@@ -201,7 +203,7 @@ async function captureOneSnapshot(
   if (
     camera.recorder.vendor === 'frigate' &&
     camera.frigate_camera &&
-    targetMs < Date.now() - 5_000   // only try if at least 5s in the past
+    isPast
   ) {
     const historical = await fetchFrigateHistoricalFrame(
       camera.recorder.host,
@@ -215,8 +217,31 @@ async function captureOneSnapshot(
     }
   }
 
-  // Fallback / non-Frigate / future offsets: use the standard "latest snapshot"
-  // path. This is also what we use for live mode and grid mode.
+  // F106: i-PRO / Uniview dispatch via BCP fetchers. i-PRO v3+ supports
+  // ?time=<ts> for the actual past instant; v1/v2 silently degrade to latest.
+  // Uniview LAPI always returns latest (no time-indexed endpoint yet).
+  if (
+    !buf &&
+    (camera.recorder.vendor === 'ipro' || camera.recorder.vendor === 'uniview')
+  ) {
+    try {
+      const r = await fetchBcpSnapshot(camera, isPast ? new Date(targetMs) : null)
+      if (r) {
+        buf    = r.body
+        source = r.source === 'historical' ? `${camera.recorder.vendor}-historical` : `${camera.recorder.vendor}-latest`
+      }
+    } catch (e) {
+      logger.debug(
+        { err: (e as Error).message, vendor: camera.recorder.vendor, channel: camera.channel },
+        'bcp: vendor snapshot fetch failed, falling back to legacy URL path',
+      )
+    }
+  }
+
+  // Fallback / non-supported vendor / future offsets: use the legacy
+  // snapshotUrl() builder. For non-Frigate vendors this currently returns
+  // null (snapshotUrl is Frigate-only after F106 — i-PRO/Uniview moved to
+  // the bcp-fetchers dispatcher above).
   if (!buf) {
     const src = snapshotUrl({
       vendor:         camera.recorder.vendor,
