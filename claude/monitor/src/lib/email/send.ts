@@ -36,17 +36,18 @@ export async function sendEmail(
   subject: string,
   html: string,
   attachments?: Array<{ filename: string; content: Buffer }>,
-): Promise<void> {
+  from?: string,
+): Promise<{ ok: boolean }> {
   const apiKey = process.env.RESEND_API_KEY
   if (!apiKey) {
     console.error('[email] RESEND_API_KEY is not set — skipping email send')
-    return
+    return { ok: false }
   }
 
   const toAddresses = Array.isArray(to) ? to : [to]
 
   const payload: ResendEmailPayload = {
-    from: FROM_ADDRESS,
+    from: from ?? FROM_ADDRESS,
     to: toAddresses,
     subject,
     html,
@@ -72,10 +73,60 @@ export async function sendEmail(
     if (!res.ok) {
       const body = await res.text().catch(() => '(no body)')
       console.error(`[email] Resend API error ${res.status}: ${body}`)
+      return { ok: false }
     }
+    return { ok: true }
   } catch (err) {
     console.error('[email] Failed to send email:', err)
+    return { ok: false }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Password reset
+// ---------------------------------------------------------------------------
+
+/** Sender for account/security mail (verified Resend domain). */
+export const SECURITY_FROM_ADDRESS = 'Intereco Monitor <no-reply@noreply.intareco.jp>'
+
+/**
+ * Password reset email. The reset link carries a one-time recovery token that
+ * is ONLY delivered here (never returned to the browser), so possession of the
+ * email proves identity.
+ */
+export function passwordResetEmail(resetUrl: string): { subject: string; html: string } {
+  const subject = '[Intereco Monitor] パスワード再設定のご案内'
+  const html = `
+<!DOCTYPE html>
+<html lang="ja">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="font-family:sans-serif;color:#333;max-width:600px;margin:0 auto;padding:20px">
+  <h2 style="color:#1e293b">🔑 パスワード再設定</h2>
+  <p>Intereco Monitor のパスワード再設定がリクエストされました。<br>
+  下のボタンから新しいパスワードを設定してください。</p>
+
+  <p style="margin:24px 0">
+    <a href="${escapeHtml(resetUrl)}"
+       style="display:inline-block;background:#0f172a;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold">
+      パスワードを再設定する
+    </a>
+  </p>
+
+  <p style="font-size:12px;color:#666">ボタンが開けない場合は、次のURLをブラウザに貼り付けてください：<br>
+    <span style="word-break:break-all;color:#2563eb">${escapeHtml(resetUrl)}</span></p>
+
+  <p style="font-size:12px;color:#666">このリンクは <b>1時間</b> で失効します。一度のみ有効です。</p>
+
+  <hr style="margin:24px 0;border:none;border-top:1px solid #eee">
+  <p style="font-size:12px;color:#999">
+    このメールはIntarecoモニタリングシステムから自動送信されています。<br>
+    パスワード再設定に心当たりがない場合は、このメールを破棄してください。<br>
+    お客様のパスワードは変更されません。
+  </p>
+</body>
+</html>
+`.trim()
+  return { subject, html }
 }
 
 // ---------------------------------------------------------------------------
