@@ -71,9 +71,14 @@ interface Props {
   storeId:       string
   room:          string  // unused; kept for caller compatibility
   liveIframeUrl: string | null
+  // True when liveIframeUrl is an MJPEG stream (remote/tunnel case) rather than
+  // Frigate's embeddable WebRTC UI. MJPEG must render in an <img>, not an
+  // <iframe> (a multipart/x-mixed-replace response never fires the iframe load
+  // event, which would trip the 8s fallback watchdog).
+  liveIsImageStream?: boolean
 }
 
-export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl }: Props) {
+export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, liveIsImageStream }: Props) {
   // Default mode: iframe when supported, jpeg otherwise. User pref overrides.
   const defaultMode: Mode = liveIframeUrl ? 'iframe' : 'jpeg'
   const [mode, setMode]   = useState<Mode>(defaultMode)
@@ -105,6 +110,7 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl }:
         {mode === 'iframe' && liveIframeUrl ? (
           <IframeMode
             url={liveIframeUrl}
+            isImageStream={!!liveIsImageStream}
             onError={() => {
               // F80.1: auto-fallback is SESSION-ONLY. Do NOT persist 'jpeg'
               // here — a transient timeout (slow LAN, Frigate restart) must
@@ -177,7 +183,7 @@ function ModeToolbar({
 
 // ─── iframe mode ────────────────────────────────────────────────────────────
 
-function IframeMode({ url, onError }: { url: string; onError: () => void }) {
+function IframeMode({ url, onError, isImageStream }: { url: string; onError: () => void; isImageStream: boolean }) {
   // iframe's onError doesn't fire on most browsers for cross-origin embeds,
   // so we use a timeout + content-load probe. After 8 s of no load event we
   // assume the embed is dead and fall back. This is rough; we improve it in
@@ -189,6 +195,23 @@ function IframeMode({ url, onError }: { url: string; onError: () => void }) {
     }, 8_000)
     return () => clearTimeout(t)
   }, [loaded, onError])
+
+  // MJPEG (remote/tunnel) streams render natively in an <img>; the first frame
+  // fires onLoad (clearing the watchdog) and the multipart response keeps the
+  // image updating. An <iframe> never fires load for such a response, so it
+  // would always fall back to jpeg after 8 s.
+  if (isImageStream) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={url}
+        className="h-full w-full bg-black object-contain"
+        onLoad={() => setLoaded(true)}
+        onError={onError}
+        alt="NVR live"
+      />
+    )
+  }
 
   return (
     <iframe

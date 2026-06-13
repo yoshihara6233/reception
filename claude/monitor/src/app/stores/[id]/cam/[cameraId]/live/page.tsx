@@ -82,6 +82,7 @@ export default async function LivePage(
             storeId={storeId}
             room={room}
             liveIframeUrl={liveIframeUrl}
+            liveIsImageStream={isRemoteHost}
           />
         </div>
       </main>
