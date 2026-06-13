@@ -1,7 +1,14 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+
+// Persist the tree scroll position across navigations. The tree is re-mounted
+// on every /stores/[id] change (it lives in each page's AppShell, not a shared
+// layout), which otherwise snaps it back to the top — making it impossible to
+// pick a store near the one you just opened. Saving scrollTop to sessionStorage
+// and restoring it on mount keeps the position.
+const SCROLL_KEY = 'storeTree:scrollTop'
 
 const STATUS_COLOR: Record<string, string> = {
   online:  '#22c55e',
@@ -37,6 +44,15 @@ export function TreeClient({
   const [query, setQuery] = useState('')
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [alertFilter, setAlertFilter] = useState(false)
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  // Restore saved scroll position on mount.
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const saved = sessionStorage.getItem(SCROLL_KEY)
+    if (saved !== null) el.scrollTop = Number(saved)
+  }, [])
 
   const alertSet = useMemo(() => new Set(alertStoreIds), [alertStoreIds])
 
@@ -98,7 +114,11 @@ export function TreeClient({
           className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-xs outline-none focus:border-blue-400"
         />
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto pb-3 text-xs">
+      <div
+        ref={scrollRef}
+        onScroll={(e) => sessionStorage.setItem(SCROLL_KEY, String(e.currentTarget.scrollTop))}
+        className="min-h-0 flex-1 overflow-y-auto pb-3 text-xs"
+      >
         {filtered.map((g) => {
           const isOpen = !collapsed[g.area]
           return (

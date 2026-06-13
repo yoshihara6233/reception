@@ -23,7 +23,8 @@ export function getAdminNav(t: Msg): NavItem[] {
     { href: '/admin',            label: t.adminNav.dashboard, icon: '▣', exact: true },
     { href: '/admin/stores',     label: t.adminNav.stores,    icon: '⛬' },
     { href: '/admin/edges',      label: t.adminNav.edges,     icon: '⌬' },
-    { href: '/admin/recorders',  label: t.adminNav.recorders, icon: '📹' },
+    // レコーダはエッジ配下（/admin/edges/[id]）で管理。専用ページは未実装のため
+    // デッドリンク（/admin/recorders）はナビから除外。
     // F49.J: NVR 機種マスタ (EOL/EOS 管理)
     { href: '/admin/nvr-models', label: 'NVR 機種',           icon: '🛰' },
     { href: '/admin/users',      label: t.adminNav.users,     icon: '⚇' },
@@ -75,7 +76,6 @@ export const ADMIN_NAV: NavItem[] = [
   { href: '/admin',            label: 'ダッシュボード', icon: '▣', exact: true },
   { href: '/admin/stores',     label: '店舗',           icon: '⛬' },
   { href: '/admin/edges',      label: 'エッジサーバ',   icon: '⌬' },
-  { href: '/admin/recorders',  label: 'レコーダ',       icon: '📹' },
   { href: '/admin/users',      label: 'ユーザ',         icon: '⚇' },
   { href: '/admin/import',     label: 'CSV 一括投入',   icon: '⇪' },
   { href: '/admin/audit',      label: '監査ログ',       icon: '☰' },

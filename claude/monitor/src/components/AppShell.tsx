@@ -12,6 +12,7 @@ import { StoreDetail } from './StoreDetail'
 import { StatusBar } from './StatusBar'
 import { BottomNav } from './BottomNav'
 import { AppShellClient } from './AppShellClient'
+import { ShellBody } from './ShellBody'
 
 export async function AppShell({
   selectedStoreId,
@@ -62,11 +63,6 @@ export async function AppShell({
     ),
   ]
 
-  // Desktop: 3-col grid
-  const cols = showDetail && selectedStoreId
-    ? 'md:grid-cols-[280px_1fr_360px]'
-    : 'md:grid-cols-[280px_1fr]'
-
   return (
     // AppShellClient manages the drawer open/close state
     <AppShellClient
@@ -74,25 +70,12 @@ export async function AppShell({
       groups={groups}
       selectedStoreId={selectedStoreId}
     >
-      {/* Desktop 3-col layout */}
-      <div className={`grid flex-1 overflow-hidden grid-cols-1 ${cols}`}>
-        {/* StoreTree: hidden on mobile, visible on desktop */}
-        <div className="hidden md:flex md:flex-col md:min-h-0">
-          <StoreTree selectedId={selectedStoreId} groups={groups} alertStoreIds={alertStoreIds} />
-        </div>
-
-        {/* Main content */}
-        <div className="flex min-h-0 flex-col overflow-hidden">
-          {children}
-        </div>
-
-        {/* Detail panel: hidden on mobile */}
-        {showDetail && selectedStoreId && (
-          <div className="hidden md:flex md:flex-col md:min-h-0">
-            <StoreDetail storeId={selectedStoreId} />
-          </div>
-        )}
-      </div>
+      {/* Desktop 3-col layout with a collapsible detail panel (ShellBody) */}
+      <ShellBody
+        tree={<StoreTree selectedId={selectedStoreId} groups={groups} alertStoreIds={alertStoreIds} />}
+        content={children}
+        detail={showDetail && selectedStoreId ? <StoreDetail storeId={selectedStoreId} /> : null}
+      />
 
       {/* Status bar: desktop only (too small for mobile) */}
       <div className="hidden md:block">

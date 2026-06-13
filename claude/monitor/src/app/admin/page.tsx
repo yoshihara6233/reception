@@ -20,8 +20,8 @@ export default async function AdminHome() {
   const stats = [
     { label: ta.statStores,    val: stores.count    ?? 0, href: '/admin/stores'   },
     { label: ta.statEdges,     val: edges.count     ?? 0, href: '/admin/edges'    },
-    { label: ta.statRecorders, val: recorders.count ?? 0, href: '/admin/recorders' },
-    { label: ta.statCameras,   val: cameras.count   ?? 0, href: '/admin/recorders' },
+    { label: ta.statRecorders, val: recorders.count ?? 0, href: '/admin/edges' },
+    { label: ta.statCameras,   val: cameras.count   ?? 0, href: '/admin/edges' },
     { label: ta.statOnline,    val: online.count    ?? 0, href: '/admin/edges?status=online'  },
     { label: ta.statOffline,   val: offline.count   ?? 0, href: '/admin/edges?status=offline', warn: true },
   ]
