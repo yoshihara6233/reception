@@ -108,18 +108,25 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
       />
       <div className="relative flex-1">
         {mode === 'iframe' && liveIframeUrl ? (
-          <IframeMode
-            url={liveIframeUrl}
-            isImageStream={!!liveIsImageStream}
-            onError={() => {
-              // F80.1: auto-fallback is SESSION-ONLY. Do NOT persist 'jpeg'
-              // here — a transient timeout (slow LAN, Frigate restart) must
-              // not permanently downgrade the camera. The user's explicit
-              // choice (switchMode → saveMode) is the only thing that sticks.
-              setIframeFailed(true)
-              setMode('jpeg')
-            }}
-          />
+          liveIsImageStream ? (
+            // Remote MJPEG stream (via Cloudflare Tunnel). Render in <img> with
+            // an Access-aware error overlay instead of auto-falling back to
+            // jpeg: a failed load is usually "not yet authenticated to the
+            // camera domain", so we offer a one-click login + retry.
+            <ImageStreamMode url={liveIframeUrl} />
+          ) : (
+            <IframeMode
+              url={liveIframeUrl}
+              onError={() => {
+                // F80.1: auto-fallback is SESSION-ONLY. Do NOT persist 'jpeg'
+                // here — a transient timeout (slow LAN, Frigate restart) must
+                // not permanently downgrade the camera. The user's explicit
+                // choice (switchMode → saveMode) is the only thing that sticks.
+                setIframeFailed(true)
+                setMode('jpeg')
+              }}
+            />
+          )
         ) : (
           <JpegMode edgeId={edgeId} cameraId={cameraId} storeId={storeId} />
         )}
@@ -183,7 +190,7 @@ function ModeToolbar({
 
 // ─── iframe mode ────────────────────────────────────────────────────────────
 
-function IframeMode({ url, onError, isImageStream }: { url: string; onError: () => void; isImageStream: boolean }) {
+function IframeMode({ url, onError }: { url: string; onError: () => void }) {
   // iframe's onError doesn't fire on most browsers for cross-origin embeds,
   // so we use a timeout + content-load probe. After 8 s of no load event we
   // assume the embed is dead and fall back. This is rough; we improve it in
@@ -195,23 +202,6 @@ function IframeMode({ url, onError, isImageStream }: { url: string; onError: () 
     }, 8_000)
     return () => clearTimeout(t)
   }, [loaded, onError])
-
-  // MJPEG (remote/tunnel) streams render natively in an <img>; the first frame
-  // fires onLoad (clearing the watchdog) and the multipart response keeps the
-  // image updating. An <iframe> never fires load for such a response, so it
-  // would always fall back to jpeg after 8 s.
-  if (isImageStream) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={url}
-        className="h-full w-full bg-black object-contain"
-        onLoad={() => setLoaded(true)}
-        onError={onError}
-        alt="NVR live"
-      />
-    )
-  }
 
   return (
     <iframe
@@ -225,6 +215,67 @@ function IframeMode({ url, onError, isImageStream }: { url: string; onError: () 
       onError={onError}
       title="NVR live"
     />
+  )
+}
+
+// ─── remote MJPEG image stream (Cloudflare Tunnel) ───────────────────────────
+
+function ImageStreamMode({ url }: { url: string }) {
+  // Remote high-quality is a Frigate MJPEG stream behind Cloudflare Access.
+  // When the operator hasn't yet authenticated to the camera domain, the
+  // <img> request is 302'd to the Access login and the load fails. Rather than
+  // silently dropping to jpeg, surface a one-click "log in to the camera"
+  // action: the operator authenticates once (SameSite=None CF_Authorization
+  // cookie), then Retry re-requests the stream — now the cookie is present.
+  const [errored, setErrored] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
+
+  let loginOrigin: string | null = null
+  try { loginOrigin = new URL(url).origin } catch { loginOrigin = null }
+  const src = `${url}${url.includes('?') ? '&' : '?'}_r=${reloadKey}`
+
+  return (
+    <div className="relative h-full w-full bg-black">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        key={reloadKey}
+        src={src}
+        className="h-full w-full bg-black object-contain"
+        onLoad={() => setErrored(false)}
+        onError={() => setErrored(true)}
+        alt="NVR live"
+      />
+      {errored && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/75 px-6 text-center text-sm text-slate-200">
+          <div>
+            高画質映像を表示できません。
+            <br />
+            カメラ側の認証が必要な場合があります。
+          </div>
+          <div className="flex gap-2">
+            {loginOrigin && (
+              <button
+                type="button"
+                onClick={() => window.open(loginOrigin!, '_blank', 'noopener,noreferrer')}
+                className="rounded bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-500"
+              >
+                📹 カメラにログイン
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => { setErrored(false); setReloadKey((k) => k + 1) }}
+              className="rounded bg-slate-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-600"
+            >
+              🔄 再試行
+            </button>
+          </div>
+          <div className="text-[11px] text-slate-400">
+            別タブでログイン後、「再試行」を押してください
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
