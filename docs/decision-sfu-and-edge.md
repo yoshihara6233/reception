@@ -2,6 +2,12 @@
 
 作成: 2026-06-13 / 前提: [scale-plan-quantified.md](./scale-plan-quantified.md)（1→5000店、同時最大300、上り10Mbps、Uniview/i-PRO/Frigate、保持31日）
 
+## 決定ログ
+| 日付 | 決定 | 状態 |
+|---|---|---|
+| 2026-06-13 | **高画質配信のSFUは LiveKit Cloud（マネージド）で開始**。量が出れば自前 LiveKit OSS へ低摩擦移行（同一API）。移行トリガーは §決定1。 | ✅ **承認** |
+| — | エッジ HW/OS/OTA 標準化 | 保留（要入力：1店あたりカメラ数・Frigate検知範囲。§決定2） |
+
 ---
 
 # 決定1：高画質配信のSFU方式
