@@ -41,12 +41,22 @@ export default async function LivePage(
   // LAN-only) OR a full origin with scheme (e.g. https://store.example.com via
   // a Cloudflare Tunnel — works remotely and satisfies the https monitor's
   // mixed-content rule). Honour an explicit scheme when present.
+  const isRemoteHost = !!liveHost && /^https?:\/\//.test(liveHost)
   const liveOrigin = liveHost
-    ? (/^https?:\/\//.test(liveHost) ? liveHost : `http://${liveHost}`)
+    ? (isRemoteHost ? liveHost : `http://${liveHost}`)
     : null
+  // Transport choice:
+  //  - LAN (bare host): embed Frigate's camera UI, which uses WebRTC (25fps,
+  //    ~1-2s) — but WebRTC needs UDP and only works on the local network.
+  //  - Remote (scheme present, i.e. via an HTTP tunnel): WebRTC can't traverse
+  //    the tunnel, so use Frigate's MJPEG stream (/api/<cam>) instead. It's
+  //    plain HTTP multipart/x-mixed-replace, so it streams (and moves) through
+  //    any HTTPS tunnel. Heavier than h264 but rock-solid for a single camera.
   const liveIframeUrl =
     liveOrigin && vendor === 'frigate' && c.frigate_camera
-      ? `${liveOrigin}/cameras/${c.frigate_camera}`
+      ? (isRemoteHost
+          ? `${liveOrigin}/api/${c.frigate_camera}?fps=5&height=720`
+          : `${liveOrigin}/cameras/${c.frigate_camera}`)
       : null
   const room   = `live-${cameraId}`
 
