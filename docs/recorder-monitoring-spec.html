@@ -118,9 +118,9 @@
     <span>📱 PWA</span>
   </div>
   <div class="meta">
-    <div><b>文書種別</b>仕様書 兼 基本設計書 兼 運用設計</div>
-    <div><b>版数</b>v5.0</div>
-    <div><b>作成日</b>2026-06-04</div>
+    <div><b>文書種別</b>仕様書 兼 基本設計書 兼 開発計画 兼 運用設計</div>
+    <div><b>版数</b>v6.0（2026-06-13 更新）</div>
+    <div><b>作成日</b>2026-06-04 / 更新 2026-06-13</div>
     <div><b>対象規模</b>〜10,000 店舗 / 〜160,000 カメラ</div>
   </div>
 </header>
@@ -130,7 +130,8 @@
 <div class="toc">
   <b>目次</b>
   <ol>
-    <li><a href="#changelog-v5">v5.0 変更サマリ <span class="badge info">v5.0 新規</span></a></li>
+    <li><a href="#changelog-v6">v6.0 変更サマリ（本番公開 + 構成3種 + 課金）<span class="badge info">v6.0 新規</span></a></li>
+    <li><a href="#changelog-v5">v5.0 変更サマリ <span class="badge info">v5.0</span></a></li>
     <li><a href="#changelog">v4.0 変更サマリ</a></li>
     <li><a href="#chap1">システム仕様書</a></li>
     <li><a href="#chap2">基本設計（JPEG ポーリング ＋ VOD のみ WebRTC）</a></li>
@@ -145,6 +146,127 @@
     <li><a href="#chap11">運用ランブック <span class="badge info">v5.0 新規</span></a></li>
   </ol>
 </div>
+
+<!-- ===================== v6.0 変更サマリ ===================== -->
+<h1 id="changelog-v6">v6.0 変更サマリ <span class="badge info" style="font-size:13px;vertical-align:middle">本番公開 + 構成3種 + 課金</span></h1>
+
+<div class="key">
+  <b>v6.0 で起きたこと（一言）</b>
+  <p style="margin:6px 0 0">
+    <b>本番公開を完了</b>（<code>intereco-monitor.vercel.app</code>）。実機PoC（Beelink + Frigate / Uniview・i-PRO想定）で
+    <b>ローカル/リモート両対応・認証付き・再起動耐性あり</b>で稼働。あわせて
+    <b>拠点構成を3種に整理</b>、<b>高画質配信を SFU（LiveKit Cloud）に決定</b>、
+    <b>マルチグリッド 16/32/48 ＋ ユニット別ティア課金</b>、<b>中継ユニット量産HW（1SKU）＋代理店購入・設定</b>、
+    <b>スケール工程（2026/11 1店 → 2027/06 5,000店）</b> を計画確定した。
+  </p>
+</div>
+
+<div class="note">
+  本章は <b>2026-06-13 の計画検討の要約</b>。詳細は <code>docs/</code> 配下の計画書に記載：
+  <code>wbs-dev-test-plan.md</code>（WBS/テスト計画）、<code>scale-plan-quantified.md</code>（実数スケール）、
+  <code>decision-sfu-and-edge.md</code>（SFU/エッジ意思決定）、<code>edge-configs-and-relay-hardware.md</code>（構成3種・中継HW）、
+  <code>wbs-config2-features.md</code>（ベンダ統合/マルチグリッド/ティア課金 WBS）。
+</div>
+
+<h2>① 拠点構成 3 種（基本形）</h2>
+<table>
+  <tr><th>構成</th><th>拠点ハード</th><th>録画</th><th>中継処理の場所</th><th>位置づけ</th></tr>
+  <tr>
+    <td><b>① 既存NVR + 中継なし</b>（本部直結）</td>
+    <td>なし（NVRのみ）</td><td>既存NVR</td>
+    <td>本部サーバが <b>VPN経由で直接</b>取得</td>
+    <td>少カメラ/機器レス希望。<span class="badge warn">帯域・接続に制約</span></td>
+  </tr>
+  <tr class="highlight-row">
+    <td><b>② 既存NVR + 中継ユニット</b></td>
+    <td>中継ユニット（N100級・軽）</td><td>既存NVR</td>
+    <td>拠点の中継ユニット</td>
+    <td><b>メイン構成</b> <span class="badge ok">本命</span></td>
+  </tr>
+  <tr>
+    <td><b>③ Frigate（録画+中継）</b></td>
+    <td>録画ユニット（多TB・重）</td><td>ユニット(Frigate)</td>
+    <td>拠点ユニット</td>
+    <td>レコーダ無し顧客向け <span class="badge info">稀</span></td>
+  </tr>
+</table>
+<div class="note">
+  <b>①の現実解（VPN前提）</b>：全カメラ常時ストリーミングをやめ、本部が各カメラの <b>VGA JPEGを10秒毎</b> に取得して16分割表示。
+  <b>16カメラでも約0.5Mbps</b>（店舗上り10Mbpsに余裕）。詳細はタップで <b>その1台だけ</b> ライブ取得（~1Mbps）。
+</div>
+<ul>
+  <li><b>②は録画も検知も既存NVRに任せる</b>ため中継ユニットは「RTSP/スナップ取得→グリッド合成/VOD→クラウド配信」だけ。<b>録画ストレージ不要・検知不要＝軽量安価・アウトバウンドのみで安全</b>。</li>
+  <li><b>グリッド16分割</b>は RTSP デコードではなく <b>HTTPでJPEGスナップ取得→sharp合成→1枚アップ</b>（合成1枚が個別16枚より帯域/コスト有利）。RTSPは高画質ライブ/VODのみ。</li>
+</ul>
+
+<h2>② 高画質配信：SFU = LiveKit Cloud（決定 2026-06-13）</h2>
+<div class="key">
+  <b>決定</b>：高画質（低遅延）配信は <b>LiveKit Cloud（マネージド）で開始</b>。量が出れば自前 LiveKit OSS へ <b>同一APIで低摩擦移行</b>。
+  店舗ごとトンネルは <b>1店PoC限り</b>、100店以降は <b>SFUへ集約</b>（店舗inbound開放ゼロ・NAT越えはクラウド・オンデマンド配信）。
+</div>
+<ul>
+  <li><b>ルーティン監視（16/4分割・軽量ライブ）</b>は既に Supabase Storage 経由で集中化済み＝5,000店までスケール可（オンデマンドupload）。課題は高画質のみ。</li>
+  <li><b>リモート高画質の現PoC</b>：Cloudflare Tunnel（固定URL <code>poc-beelink.genesis-edge.com</code>）+ <b>MJPEG</b>（WebRTCはUDPでトンネル不可）+ <b>Cloudflare Access 認証</b>。systemd常駐で再起動自動復帰。</li>
+  <li><b>移行トリガー</b>（→自前OSS）：6月規模で egress月額が自前TCO（VM+egress+運用）を上回り、SRE運用余力がある時。</li>
+</ul>
+
+<h2>③ マルチグリッド 16 / 32 / 48 ＋ ユニット別ティア課金</h2>
+<ul>
+  <li><b>マルチグリッド</b>：16のページ（グループ）を複数持つ。32=2／48=3ページ（各4×4）。<code>grid_pos</code> を 0〜47 に拡張。</li>
+  <li><b>負荷有界（重要）</b>：<b>表示中の16グループだけオンデマンド合成</b>すれば、中継ユニットの瞬間負荷は店舗サイズに関わらず <b>≒16ch に有界</b>（48ch店でも同じ）。上り帯域もアクティブ1グループ ~0.3Mbps。</li>
+  <li><b>ティア課金</b>：<b>1ハードをソフト設定（<code>edge_devices.camera_tier</code> ∈ 16/32/48）で区別</b>し月額課金を分ける。ユニット別にアップ/ダウン切替可、変更は監査ログ＋月次のテナント×ティア集計レポートで請求根拠化（決済連携は将来別途）。</li>
+</ul>
+
+<h2>④ 中継ユニット（構成②）量産ハードと代理店展開</h2>
+<div class="grid-2">
+  <div class="card">
+    <h3 style="margin-top:0">推奨ハード（1 SKU）</h3>
+    <ul style="margin:0">
+      <li>CPU：<b>Intel N100/N97/N305</b>（QuickSync iGPUで多chHWデコード）</li>
+      <li>RAM：8〜16GB ／ ストレージ：64〜128GB（録画しない）</li>
+      <li>NIC：2×GbE（カメラLAN/WAN分離） ／ <b>ファンレス</b>（24/7）</li>
+      <li>単価：<b>¥1.5〜3万</b>（民生）/ ¥4万〜（産業ファンレス）</li>
+      <li><b>負荷有界のため 1SKU で 16〜48ch を全カバー</b>（要48ch実機検証）。ARMは多ch要件で非推奨。</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">代理店の購入＋設定（ゼロタッチ志向）</h3>
+    <ul style="margin:0">
+      <li><b>承認機種を代理店調達</b> もしくは <b>当社が事前イメージ品を供給</b>。</li>
+      <li><b>初回ブート登録ウィザード</b>：店舗コード/QRでクラウドが鍵・設定を払い出し（<b>鍵ローテも同経路</b>）。</li>
+      <li><b>ONVIF自動探索</b>でカメラ列挙→割当→接続テスト。技術が深くなくても完了。</li>
+      <li>遠隔保守はトンネル、更新は段階的OTA（pull型→量産時にフリート基盤検討）。</li>
+    </ul>
+  </div>
+</div>
+
+<h2>⑤ スケール工程（マイルストーン）</h2>
+<table>
+  <tr><th>時期</th><th class="center">店舗</th><th class="center">同時視聴(最大)</th><th>主眼</th></tr>
+  <tr><td>2026/11</td><td class="center">1</td><td class="center">3</td><td>本番品質＋基盤（CI/監視/環境分離）＋i-PROライブ</td></tr>
+  <tr><td>2026/12</td><td class="center">100</td><td class="center">10</td><td>エッジ量産・オンボード自動化＋<b>SFUベータ</b>＋<b>i-PRO ONVIF録画</b>＋31日保持</td></tr>
+  <tr><td>2027/02</td><td class="center">1,000</td><td class="center">100</td><td><b>SFU本番</b>＋運用自動化＋負荷試験/脆弱性診断</td></tr>
+  <tr><td>2027/06</td><td class="center">5,000</td><td class="center">300</td><td>大規模・最適化（SFU水平分散・グリッドCDN）</td></tr>
+</table>
+<div class="note"><b>設計の鍵</b>：同時視聴が店舗数の数%と低く、クラウド負荷/コストは「<b>同時最大300</b>」で決まる（店舗数ではない）。店舗上り10Mbps。保持31日。</div>
+
+<h2>⑥ NVR ベンダ対応の現状（正直な棚卸し）</h2>
+<table>
+  <tr><th>機能</th><th class="center">Frigate</th><th class="center">i-PRO</th><th class="center">Uniview</th></tr>
+  <tr><td>ライブ RTSP URL</td><td class="center"><span class="badge ok">✓</span></td><td class="center"><span class="badge ok">✓</span></td><td class="center"><span class="badge ok">✓</span></td></tr>
+  <tr><td>グリッドスナップ（snapshotUrl）</td><td class="center"><span class="badge ok">✓</span></td><td class="center"><span class="badge danger">未統合</span></td><td class="center"><span class="badge danger">未統合</span></td></tr>
+  <tr><td>VOD 録画再生</td><td class="center"><span class="badge ok">✓</span></td><td class="center"><span class="badge danger">統合待ち</span></td><td class="center"><span class="badge danger">統合待ち</span></td></tr>
+  <tr><td>BCP スナップ</td><td class="center"><span class="badge ok">✓</span></td><td class="center"><span class="badge ok">✓</span></td><td class="center"><span class="badge warn">最新のみ</span></td></tr>
+  <tr><td>アダプタ枠</td><td class="center"><span class="badge ok">✓</span></td><td class="center"><span class="badge ok">◎</span></td><td class="center"><span class="badge danger">無(legacy)</span></td></tr>
+</table>
+<div class="note">アダプタ層は広範（i-PRO手厚い）だが、<b>config②の核であるグリッド/VODが Uniview・i-PRO で未統合</b>。M-Dec(100店)前に <b>グリッド非Frigate対応・VODアダプタ統合(i-PRO ONVIF Profile-G含む)・Univiewアダプタ・3社実機検証</b> が必須（WBS約60人日）。</div>
+
+<h2>⑦ 本番公開状況（2026-06-13）</h2>
+<ul>
+  <li><b>本番URL</b>：<code>https://intereco-monitor.vercel.app</code>（Vercel独立プロジェクト・GitHub自動デプロイ）。</li>
+  <li><b>稼働機能</b>：ログイン / 地図 / 店舗 / 16分割グリッド / 軽量ライブ / リモート高画質(Tunnel+MJPEG+Access) / BCP / 警備 / infra / レポート / 管理。</li>
+  <li><b>実機</b>：Beelink Mini-S（systemd常駐 <code>intereco-edge</code> + <code>cloudflared-intereco</code> + Frigate）。サーバ再起動で全自動復帰を確認。</li>
+</ul>
 
 <!-- ===================== v5.0 変更サマリ ===================== -->
 <h1 id="changelog-v5">v5.0 変更サマリ <span class="badge info" style="font-size:13px;vertical-align:middle">Tier 3 + マルチベンダー</span></h1>
