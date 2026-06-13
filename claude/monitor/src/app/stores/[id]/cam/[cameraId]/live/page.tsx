@@ -36,9 +36,17 @@ export default async function LivePage(
   // F80: Build iframe URL pattern per vendor. Only Frigate is wired up today;
   // other vendors fall back to JPEG (the user can also toggle to JPEG manually
   // for BCP / congested-network scenarios).
+  //
+  // live_host may be either a bare host[:port] (local IP — defaults to http://,
+  // LAN-only) OR a full origin with scheme (e.g. https://store.example.com via
+  // a Cloudflare Tunnel — works remotely and satisfies the https monitor's
+  // mixed-content rule). Honour an explicit scheme when present.
+  const liveOrigin = liveHost
+    ? (/^https?:\/\//.test(liveHost) ? liveHost : `http://${liveHost}`)
+    : null
   const liveIframeUrl =
-    liveHost && vendor === 'frigate' && c.frigate_camera
-      ? `http://${liveHost}/cameras/${c.frigate_camera}`
+    liveOrigin && vendor === 'frigate' && c.frigate_camera
+      ? `${liveOrigin}/cameras/${c.frigate_camera}`
       : null
   const room   = `live-${cameraId}`
 
