@@ -1,7 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
-import { createSupabaseServer } from '@/lib/supabase/server'
+import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { UserForm, type Role, type TenantOpt, type StoreOpt } from '../user-form'
 
 export default async function EditUserPage(
@@ -22,8 +22,10 @@ export default async function EditUserPage(
     notFound()
   }
 
-  // Load target
-  const { data: target } = await supa
+  // Load target with the service client: the self-only RLS SELECT policy
+  // (auth_user_id = auth.uid()) would hide any user other than the caller.
+  // Authorization is enforced by the role check above + the tenant scope below.
+  const { data: target } = await createSupabaseService()
     .from('admin_users')
     .select('id, email, display_name, role, tenant_id, store_ids')
     .eq('id', id)

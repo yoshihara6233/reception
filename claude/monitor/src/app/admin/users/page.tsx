@@ -7,9 +7,11 @@
  * 新規作成 / 編集 / 削除 アクション付き (super_admin / tenant_admin のみ)。
  */
 import Link from 'next/link'
+import { notFound } from 'next/navigation'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
-import { createSupabaseServer } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/admin/guard'
+import { createSupabaseService } from '@/lib/supabase/server'
 import { getT } from '@/lib/i18n/server'
 import type { Msg } from '@/lib/i18n/messages'
 import { UserDeleteButton } from './user-actions'
@@ -48,23 +50,23 @@ export default async function UsersAdmin({
   searchParams: Promise<{ q?: string; role?: string }>
 }) {
   const { q, role } = await searchParams
-  const supa = await createSupabaseServer()
   const t = await getT()
   const tu = t.adminUsers
 
-  // 現在のユーザの role を取得して、CRUD ボタンを出すか判定
-  const { data: { user } } = await supa.auth.getUser()
-  let canEdit = false
-  if (user) {
-    const { data: me } = await supa
-      .from('admin_users')
-      .select('role')
-      .eq('auth_user_id', user.id)
-      .single()
-    canEdit = me?.role === 'super_admin' || me?.role === 'tenant_admin'
+  // The ONLY RLS SELECT policy on admin_users is self-only
+  // (auth_user_id = auth.uid()), so the session client returns just the current
+  // user — never other rows, including newly created ones. Authorize by role
+  // here, then read the master list with the service client (RLS bypass).
+  // super_admin sees everyone; tenant_admin is scoped to their own tenant.
+  const guard = await requireAdmin()
+  if (!guard.ok || !['super_admin', 'tenant_admin'].includes(guard.profile.role)) {
+    notFound()
   }
+  const canEdit = true
+  const isSuper = guard.profile.role === 'super_admin'
 
-  let query = supa
+  const svc = createSupabaseService()
+  let query = svc
     .from('admin_users')
     .select(`
       id, email, display_name, role, store_ids, auth_user_id, created_at,
@@ -73,6 +75,9 @@ export default async function UsersAdmin({
     .order('display_name')
     .limit(500)
 
+  if (!isSuper) {
+    query = query.eq('tenant_id', guard.profile.tenant_id)
+  }
   if (q) {
     query = query.or(`display_name.ilike.%${q}%,email.ilike.%${q}%`)
   }
