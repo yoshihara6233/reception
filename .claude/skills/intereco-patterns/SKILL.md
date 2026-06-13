@@ -62,7 +62,37 @@ description: >-
 - ビルド検証は worktree `monitor-recover` で `bun install`(root) → `cd claude/monitor && bun run build`。
   `.next` のtmp ENOENTが出たら `rm -rf .next` で再ビルド。
 
-## 6. その他
+## 6. admin_users の RLS は self-only → admin系の読みは service client で
+
+`admin_users` に効いている **唯一の RLS SELECT ポリシーは `admin_users_self_select`
+（`auth_user_id = auth.uid()`）の自己参照のみ**（reception由来の `tenant_id = get_tenant_id()` は
+撤去済み。INSERT/UPDATE/DELETE ポリシーも無い）。確認は SQL:
+`select policyname, cmd, qual from pg_policies where tablename='admin_users';`
+
+- **RLS配下のセッションクライアント（`createSupabaseServer`）で `admin_users` を一覧/他人読みすると、
+  ログイン中の自分の行しか返らない**。service client(RLSバイパス)で作成した他ユーザは必ず除外される
+  → 「ユーザ追加できるのに一覧に出ない（自分だけ出る）」の典型症状（2026-06-13 修正）。
+- **admin系の読みは `requireAdmin()`(ロール認可) → `createSupabaseService()`(RLSバイパス) → コードで
+  role別フィルタ**（super_admin=全件 / tenant_admin=自テナント）。書き込み(POST/PUT/DELETE)は元々
+  service client なので self-only RLS は INSERT/UPDATE 保護として温存できる。
+  該当: `monitor/src/app/admin/users/page.tsx`, `.../users/[id]/page.tsx`。
+- `get_tenant_id()` は JWT `app_metadata.tenant_id` を見るが、monitor は `createUser` 時にこれを
+  セットしないため多くのアカウントで NULL。**テナント分離をJWTに依存しない**こと。
+- 別件未調査: `new`/`edit` のテナント・店舗ピッカーも RLS セッション読み → 空表示の可能性あり。
+
+## 7. パスワードリセット（メールベース・allowlist回避）
+
+ログイン画面 → `/forgot-password` → `POST /api/auth/reset-link` →
+`supabase.auth.admin.generateLink({ type:'recovery' })` で生成したリンクを **Resend で本人にメール送信**
+→ `/reset-password` で `verifyOtp({type:'recovery'})` → `updateUser({password})`。
+
+- **OTP/action_link はブラウザに返さず、メールでのみ配送**（メール所持＝本人確認）。
+  reception 版は OTP を直接URLに載せて遷移しており、メアドを知れば誰でも他人のPWを変更できる穴があった→踏襲しない。
+- `admin.generateLink` を使うと **Supabase の Site URL / redirect allowlist を経由しない**（自前 `/reset-password` に飛ばせる）。
+- 列挙対策で `/api/auth/reset-link` は送信可否を問わず汎用 `{ok:true}` を返す。
+- 送信元は `no-reply@noreply.intareco.jp`（BCPと同じ検証済みドメイン `noreply.intareco.jp`）。`RESEND_API_KEY` 必須。
+
+## 8. その他
 - 作業worktree: `/Users/junji.y/claude/Intereco/monitor-recover`（ブランチ `monitor-prod`）。
 - スマホ16分割は「合成画像の2×2象限ズーム＋透明タップ格子」で4分割＆単一ライブ遷移を実現（`MonitorWorkspace.tsx`）。
 - 計画書一式は `docs/*.md`（WBS/スケール/意思決定/構成/config②機能）と spec `docs/recorder-monitoring-spec.html`(v6.0)。
