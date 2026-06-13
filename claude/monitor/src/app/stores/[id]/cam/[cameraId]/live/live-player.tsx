@@ -30,7 +30,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { cancelPendingStop, scheduleStop } from '@/lib/edge-stop-registry'
 
-const POLL_MS = 1_000
+// Floor between snapshot frames. Polling is onLoad-driven (the next fetch
+// starts only after the current frame settles), so this is just a small gap
+// to avoid hammering — NOT a fixed interval. A fixed 1s interval cancelled
+// every in-flight request because the snapshot route round-trips to Supabase
+// (getUser + Storage) and routinely takes >1s.
+const FRAME_GAP_MS = 400
 const ERROR_THRESHOLD = 5
 const STOP_DELAY_MS = 300
 
@@ -213,9 +218,24 @@ function JpegMode({
   const [loaded, setLoaded]     = useState(0)
   const [failStreak, setFails]  = useState(0)
   const sessionId               = useRef<string | null>(null)
+  const cancelledRef            = useRef(false)
+  const pollTimer               = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Advance to the next frame after the current <img> settles (load or error).
+  // onLoad-driven instead of a fixed interval so a slow snapshot route never
+  // gets its request cancelled by the next tick.
+  function scheduleNextFrame() {
+    if (cancelledRef.current) return
+    if (pollTimer.current) clearTimeout(pollTimer.current)
+    pollTimer.current = setTimeout(() => {
+      if (cancelledRef.current) return
+      setTick((t) => t + 1)
+    }, FRAME_GAP_MS)
+  }
 
   useEffect(() => {
     let cancelled = false
+    cancelledRef.current = false
     cancelPendingStop(edgeId)
     fetch(`/api/edges/${edgeId}/commands`, {
       method: 'POST',
@@ -232,16 +252,16 @@ function JpegMode({
       .then((j) => { if (!cancelled && j?.id) sessionId.current = j.id })
       .catch(() => {})
 
-    const id = setInterval(() => {
-      if (cancelled) return
-      setTick((t) => t + 1)
-    }, POLL_MS)
+    // Kick off the first fetch; subsequent frames are driven by the <img>
+    // onLoad/onError handlers via scheduleNextFrame().
+    setTick((t) => t + 1)
 
     const cleanupEdgeId = edgeId
 
     return () => {
       cancelled = true
-      clearInterval(id)
+      cancelledRef.current = true
+      if (pollTimer.current) { clearTimeout(pollTimer.current); pollTimer.current = null }
       scheduleStop(cleanupEdgeId, () => {
         fetch(`/api/edges/${cleanupEdgeId}/commands`, {
           method: 'POST',
@@ -272,8 +292,8 @@ function JpegMode({
         src={`/api/edges/${edgeId}/cam/${cameraId}/snapshot?_=${tick}`}
         alt="live"
         className="h-full w-full object-contain"
-        onLoad={() => { setLoaded((n) => n + 1); setFails(0) }}
-        onError={() => { setFails((n) => n + 1) }}
+        onLoad={() => { setLoaded((n) => n + 1); setFails(0); scheduleNextFrame() }}
+        onError={() => { setFails((n) => n + 1); scheduleNextFrame() }}
       />
 
       {showWaiting && (
