@@ -30,6 +30,10 @@ export async function GET(
 
   const res = await fetch(storageUrl, {
     headers: {
+      // New-format Supabase secret keys (sb_secret_…) need the `apikey` header,
+      // not just Bearer — the Storage gateway rejects Bearer-only. Same fix as
+      // the grid route.
+      'apikey':        serviceKey,
       'Authorization': `Bearer ${serviceKey}`,
       'Cache-Control': 'no-cache',
       'Pragma':        'no-cache',

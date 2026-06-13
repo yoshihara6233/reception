@@ -32,6 +32,11 @@ export async function GET(
 
   const res = await fetch(storageUrl, {
     headers: {
+      // New-format Supabase secret keys (sb_secret_…) are rejected by the
+      // Storage gateway when sent only as a Bearer token; the `apikey` header
+      // is required (the JS SDK sends both). Legacy JWT service_role keys
+      // worked with Bearer alone, hence this was missing originally.
+      'apikey':        serviceKey,
       'Authorization': `Bearer ${serviceKey}`,
       'Cache-Control': 'no-cache',
       'Pragma':        'no-cache',
