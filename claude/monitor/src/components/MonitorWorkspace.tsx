@@ -126,8 +126,20 @@ export function MonitorWorkspace({
     cameras.find((c) => c.grid_pos === i) ?? null,
   )
 
-  // Mobile: 4 pages × 4 cameras
-  const mobilePage = cells.slice(page * 4, page * 4 + 4)
+  // Mobile 4-split: each "page" is a 2×2 quadrant of the 4×4 composite, so the
+  // phone shows 4 cameras large (and tappable) instead of the unreadable 16.
+  // Cameras of quadrant p (row-major top-left → bottom-right):
+  const quadCellsOf = (p: number): (Cam | null)[] => {
+    const c = (p % 2) * 2
+    const r = Math.floor(p / 2) * 2
+    return [cells[r * 4 + c], cells[r * 4 + c + 1], cells[(r + 1) * 4 + c], cells[(r + 1) * 4 + c + 1]]
+  }
+  // Only offer quadrant pages that actually hold a camera (avoids empty pages
+  // for stores with few cameras).
+  const camPages = [0, 1, 2, 3].filter((p) => quadCellsOf(p).some(Boolean))
+  const mobilePages = camPages.length > 0 ? camPages : [0]
+  const mobilePage = mobilePages.includes(page) ? page : mobilePages[0]
+  const quadCells = quadCellsOf(mobilePage)
 
   async function sendCommand(action: 'start_grid' | 'stop_grid') {
     if (!edgeId) return
@@ -311,20 +323,20 @@ export function MonitorWorkspace({
           )}
         </div>
 
-        {/* Mobile: 2×2 paged grid */}
+        {/* Mobile: 4-split — a zoomed 2×2 quadrant of the composite + tappable cells */}
         <div className="md:hidden">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-[11px] font-semibold text-slate-500">
-              {t.workspace.camRange(page * 4 + 1, Math.min(page * 4 + 4, 16))}
+              4分割 {mobilePages.indexOf(mobilePage) + 1}/{mobilePages.length}
             </span>
             <div className="flex gap-1">
-              {[0, 1, 2, 3].map((p) => (
+              {mobilePages.map((p) => (
                 <button
                   key={p}
                   onClick={() => setPage(p)}
                   className={
                     'h-6 w-6 rounded text-[11px] font-mono ' +
-                    (p === page
+                    (p === mobilePage
                       ? 'bg-blue-600 text-white'
                       : 'bg-white text-slate-500 border border-slate-200')
                   }
@@ -335,18 +347,43 @@ export function MonitorWorkspace({
             </div>
           </div>
 
-          <div className="relative grid grid-cols-2 gap-px overflow-hidden rounded bg-slate-950">
+          <div className="relative aspect-video overflow-hidden rounded bg-slate-950">
             {imgUrl ? (
-              <div className="col-span-2">
+              <>
+                {/* Composite zoomed 2× so this page's 4 cameras fill the screen */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={imgUrl} alt={t.workspace.split16} className="w-full object-contain" />
-              </div>
+                <img
+                  src={imgUrl}
+                  alt={t.workspace.split16}
+                  className="absolute left-0 top-0 h-[200%] w-[200%] max-w-none object-cover"
+                  style={{ transform: `translate(${-(mobilePage % 2) * 50}%, ${-Math.floor(mobilePage / 2) * 50}%)` }}
+                />
+                {/* Transparent tappable cells → single-camera live (mirrors desktop) */}
+                {edgeId && (
+                  <div className="absolute inset-0 grid grid-cols-2 grid-rows-2 gap-px">
+                    {quadCells.map((cam, i) => (
+                      <Link
+                        key={i}
+                        href={cam ? `/stores/${storeId}/cam/${cam.id}/live` : '#'}
+                        className={cam ? 'relative active:bg-blue-500/20' : 'pointer-events-none'}
+                        title={cam?.name}
+                      >
+                        {cam && (
+                          <span className="absolute bottom-0.5 left-0.5 rounded bg-black/60 px-1 py-px text-[9px] text-white">
+                            ch{String(cam.channel).padStart(2, '0')}
+                          </span>
+                        )}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </>
             ) : (
-              mobilePage.map((cam, i) => (
-                <div key={i} className="aspect-video">
-                  <GridCell cam={cam} storeId={storeId} edgeId={edgeId} />
-                </div>
-              ))
+              <div className="grid h-full w-full grid-cols-2 grid-rows-2 gap-px">
+                {quadCells.map((cam, i) => (
+                  <GridCell key={i} cam={cam} storeId={storeId} edgeId={edgeId} />
+                ))}
+              </div>
             )}
             <StatusOverlay edgeId={edgeId} active={active} />
           </div>
