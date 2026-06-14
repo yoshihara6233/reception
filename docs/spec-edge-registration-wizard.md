@@ -3,6 +3,25 @@
 作成: 2026-06-14 / 対象: `claude/monitor` `/admin/edges` 登録フロー + DB / リポジトリ: yoshihara6233/reception (monitor-prod)
 関連計画: [release-plan-v1-ga.md](./release-plan-v1-ga.md)（C2 QR初回登録 / DR2 エンロールトークン / レコーダ管理UI / マルチグリッドティア）
 
+## ⚠️ スコープ改訂（eng-review + Outside Voice 反映・2026-06-14）
+
+eng-review で「本番DB移行2本(deployment_mode 3値移行・NVR一本化)をGA直前に差し込むのはリスク/リターンが逆」と判明。**GAスコープを②relay登録ウィザードに限定**し、重い移行はGA後の別issueへ分離。
+
+**GAに残す（追加のみ・既存破壊なし）**
+- `enrollment_tokens` テーブル + `POST /api/edge/enroll`（②relay自己登録）
+- ②relay登録ウィザードUI（構成選択は②のみ・ONVIF探索→grid割当→接続テスト）
+- `edge_devices.camera_tier`(16/32/48) 列追加 / `recorder_cameras.grid_pos` 0–47 へ制約緩和（前方互換）
+- `device_token` は **NOT NULL 維持**（行は登録完了時に作成。nullable化しない）
+- enroll硬化（TC4）: ①`used_at` は **enroll成功時のみ**セット（途中失敗で焼かない）/ ②原子UPDATEの WHERE で `token_hash AND tenant_id=$ AND store_id=$ AND used_at IS NULL AND expires_at>now()`（競合＋store_id詐称を同時に封じる）/ ③本部が**期限延長・再発行できるUI**を最低1つ
+
+**GA後へ分離（別issue）**
+- `stores.deployment_mode` の3値移行(relay/hq_direct/frigate_unit)＝A1(vendor分離・店別intent)/A2(heartbeatビュー同時更新) … **GAでは既存 `per_store_minipc` のまま②を構築**
+- NVR真実源の recorders 一本化(D2)＝A3(消費面 /admin/stores/[id]/nvr・infra/nodes 棚卸し・段階廃止)
+- ①hq_direct / ③frigate_unit の enum/列/土台（YAGNI・enum拡張は後付け可能）
+- `grid_pos × camera_tier` 整合制約（マルチグリッド32/48 UIと同時。GAは16=0–15のみ）
+
+> 以降の本文（DB一式・D1/D2・①③）は**GA後分離分を含む完全版**。GA実装は上記「GAに残す」のみ。
+
 ## Context
 
 拠点構成は3種ある（①本部直結 / ②中継ユニット＝本命 / ③Frigate録画）。しかし現状の登録は「物理エッジ箱を作り `device_token` を現地 `agent.env` に手貼り」という**単一モデル**で、3構成を表現できていない。3構成の情報が `stores` / `edge_devices` / `recorders` に**分散・重複**し、NVR情報は2系統で二重管理。①は `recorders.edge_id NOT NULL` のため箱前提モデルに乗らない。計画で決めた **QR自己登録(C2)・エンロールトークン(DR2)・マルチグリッドティア** も未反映。
