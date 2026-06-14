@@ -126,9 +126,9 @@ export default async function UsersAdmin({
         </select>
         <button className="rounded bg-slate-700 px-3 py-1 text-white">{tu.filterBtn}</button>
         {(q || role) && (
-          <a href="/admin/users" className="rounded border border-slate-200 bg-white px-3 py-1 text-slate-500 hover:bg-slate-100">
+          <Link href="/admin/users" className="rounded border border-slate-200 bg-white px-3 py-1 text-slate-500 hover:bg-slate-100">
             {tu.clearBtn}
-          </a>
+          </Link>
         )}
       </form>
 

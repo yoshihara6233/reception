@@ -42,13 +42,11 @@ export default async function StoresIndex() {
     try {
       const { data, error } = await p
       if (error) {
-        // eslint-disable-next-line no-console
         console.warn(`[stores page] ${label} failed:`, error.message)
         return []
       }
       return data ?? []
     } catch (e: unknown) {
-      // eslint-disable-next-line no-console
       console.warn(`[stores page] ${label} threw:`, (e as Error).message)
       return []
     }

@@ -96,8 +96,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: placeholder
       - name: Lint monitor
         working-directory: claude/monitor
-        run: bun run lint
-        continue-on-error: true  # TODO(phase-a): Next16 flat eslint 設定が未確立。確立後に必須化（lint gate）
+        run: bun run lint  # lint gate: eslint.config.mjs (Next16 flat) 確立済み・errorで失敗
 
   # ── edge-agent (Bun) ────────────────────────────────────────────────────
   edge-agent:

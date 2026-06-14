@@ -439,6 +439,8 @@ export function BcpReport({ event, store, clips, generatedAt }: BcpReportProps) 
                     {offsetLabel(clip.offsetMin)}
                   </Text>
                   {clip.clipUrl && clip.uploadStatus === 'completed' ? (
+                    // @react-pdf/renderer Image is a PDF primitive, not a DOM <img> — alt does not apply.
+                    // eslint-disable-next-line jsx-a11y/alt-text
                     <Image src={clip.clipUrl} style={styles.imageBox} />
                   ) : (
                     <View style={styles.imageEmpty}>
