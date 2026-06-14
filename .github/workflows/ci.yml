@@ -10,9 +10,9 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, monitor-prod]
   pull_request:
-    branches: [main, develop]
+    branches: [main, develop, monitor-prod]
 
 # 同じ branch の古い run はキャンセル (PR への連打対応)
 concurrency:
@@ -37,17 +37,17 @@ jobs:
             shared:
               - 'packages/shared/**'
               - 'package.json'
-              - 'bun.lockb'
+              - 'bun.lock'
             monitor:
               - 'claude/monitor/**'
               - 'packages/shared/**'
               - 'package.json'
-              - 'bun.lockb'
+              - 'bun.lock'
             edge-agent:
               - 'claude/edge-agent/**'
               - 'packages/shared/**'
               - 'package.json'
-              - 'bun.lockb'
+              - 'bun.lock'
             docs:
               - 'docs/**'
               - '**/*.md'
@@ -83,10 +83,21 @@ jobs:
       - name: Typecheck monitor
         working-directory: claude/monitor
         run: ./node_modules/.bin/tsc --noEmit
+      - name: Unit tests (vitest)
+        working-directory: claude/monitor
+        run: ./node_modules/.bin/vitest run
+      - name: Build monitor (next build)
+        working-directory: claude/monitor
+        run: bun run build
+        env:
+          # build-only placeholders; real values live in Vercel project settings.
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder
+          SUPABASE_SERVICE_ROLE_KEY: placeholder
       - name: Lint monitor
         working-directory: claude/monitor
         run: bun run lint
-        continue-on-error: true  # Phase 0 では lint エラーで CI 落とさない
+        continue-on-error: true  # TODO(phase-a): Next16 flat eslint 設定が未確立。確立後に必須化（lint gate）
 
   # ── edge-agent (Bun) ────────────────────────────────────────────────────
   edge-agent:
