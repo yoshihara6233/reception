@@ -228,7 +228,6 @@ export default function VodPlayer({
 
       <div className="relative flex-1 overflow-hidden">
         {status === 'ready' && clipId ? (
-          /* eslint-disable jsx-a11y/media-has-caption */
           <video
             key={clipId}
             src={`/api/vod/${clipId}`}

@@ -11,7 +11,7 @@ import type { FirmwareInfo } from '../../_base'
 import { deriveCapabilities } from './capability-matrix'
 
 function fw(modelFamily: string, modelNumber: string, fwVersion: string): FirmwareInfo {
-  const m = fwVersion.match(/^(\d+)\.(\d+)(?:[\.\-](\d+))?/)
+  const m = fwVersion.match(/^(\d+)\.(\d+)(?:[.-](\d+))?/)
   return {
     vendor:      'i-pro',
     modelFamily,

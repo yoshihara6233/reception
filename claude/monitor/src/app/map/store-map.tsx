@@ -187,7 +187,6 @@ export default function StoreMap({
     // Fit the viewport to highlighted stores (if any).
     if (highlight) {
       const targets = stores.filter((s) => highlight.has(s.id))
-      // eslint-disable-next-line no-console
       console.log(
         '[StoreMap] alert-zoom: highlightIds=', highlightIds,
         'targets=', targets.length,

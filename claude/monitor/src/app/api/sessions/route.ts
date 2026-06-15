@@ -65,7 +65,6 @@ export async function POST(req: Request) {
       .select('id')
       .single()
     if (error) {
-      // eslint-disable-next-line no-console
       console.error('[sessions/start] insert failed:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
@@ -96,7 +95,6 @@ export async function POST(req: Request) {
       })
       .eq('id', body.id)
     if (error) {
-      // eslint-disable-next-line no-console
       console.error('[sessions/end] update failed:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
