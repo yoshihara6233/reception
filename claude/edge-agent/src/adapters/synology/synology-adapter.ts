@@ -295,7 +295,7 @@ export async function createSynologyAdapter(
 }
 
 function parseSemver(s: string): { major: number; minor: number; patch: number } {
-  const m = s.match(/(\d+)(?:\.(\d+))?(?:[\.\-](\d+))?/)
+  const m = s.match(/(\d+)(?:\.(\d+))?(?:[.-](\d+))?/)
   if (!m) return { major: 0, minor: 0, patch: 0 }
   return {
     major: parseInt(m[1], 10),

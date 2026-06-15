@@ -1,10 +1,10 @@
 # F46.5: モノレポ CI (Bun workspaces 対応)
 #
-# - 各 app (monitor / edge-agent / shared) を並列に typecheck + test
+# - 各 app (monitor / edge-agent / shared) を並列に typecheck / test / build / lint
 # - paths フィルタで「変更があった app だけ」走らせる構成
 # - bun install を 1 回だけ実行 (workspace で全 app の deps が一括で揃う)
 #
-# Phase 0 で本ファイルを追加。Phase 1〜2 でリント・ビルド・E2E を追加予定。
+# Phase 0 で本ファイルを追加。Phase A で全 app に lint / build を拡張。E2E は今後。
 
 name: CI
 
@@ -116,6 +116,12 @@ jobs:
       - name: Unit tests (vitest)
         working-directory: claude/edge-agent
         run: bunx vitest run
+      - name: Build edge-agent (tsc)
+        working-directory: claude/edge-agent
+        run: bun run build
+      - name: Lint edge-agent
+        working-directory: claude/edge-agent
+        run: bun run lint  # lint gate: eslint.config.mjs (typescript-eslint flat)・errorで失敗
 
   # ── 全 job 完了確認 (PR マージ要件用) ──────────────────────────────────
   ci-passed:

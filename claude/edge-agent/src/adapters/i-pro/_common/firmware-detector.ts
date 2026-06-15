@@ -151,7 +151,7 @@ export function parseCgiSysInfo(body: string): Omit<FirmwareInfo, 'detectedAt' |
  */
 export function parseSemver(s: string): { major: number; minor: number; patch: number } {
   const cleaned = s.replace(/^[Vv]/, '')
-  const m = cleaned.match(/^(\d+)(?:\.(\d+))?(?:[\.\-](\d+))?/)
+  const m = cleaned.match(/^(\d+)(?:\.(\d+))?(?:[.-](\d+))?/)
   if (!m) return { major: 0, minor: 0, patch: 0 }
   return {
     major: parseInt(m[1], 10),
