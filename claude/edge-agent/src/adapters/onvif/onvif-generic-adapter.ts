@@ -20,7 +20,7 @@ import type {
   NvrChannel, NvrEventCallback, NvrEventSubscription,
 } from '@intereco/shared'
 import { CONSERVATIVE_CAPABILITIES, NvrAdapterError, AuthError } from '@intereco/shared'
-import { OnvifSoapClient } from './onvif-soap-client'
+import { OnvifSoapClient, parseDigestChallenge, buildHttpDigest } from './onvif-soap-client'
 import { createPullPointSubscription } from './onvif-pull-point'
 
 export class OnvifGenericAdapter implements NvrAdapter {
@@ -74,33 +74,47 @@ export class OnvifGenericAdapter implements NvrAdapter {
     if (!profile) throw this.channelError(channel)
 
     const uri = await this.client.getSnapshotUri(profile.token)
-
-    // Basic auth で snapshot を取得 (ONVIF の snapshot URI は通常 HTTP/HTTPS)
-    const auth = 'Basic ' + Buffer.from(
-      `${this.config.credentials.username}:${this.config.credentials.password}`,
-    ).toString('base64')
-    const ctl = new AbortController()
-    const timer = setTimeout(() => ctl.abort(), this.config.timeoutMs ?? 10_000)
-    try {
-      const res = await fetch(uri, {
-        headers: { authorization: auth },
-        signal:  ctl.signal,
-      })
-      if (res.status === 401 || res.status === 403) {
-        throw new AuthError(this.vendor, `snapshot fetch ${res.status}`)
-      }
-      if (!res.ok) {
-        throw new NvrAdapterError(this.vendor, 'transient', `snapshot HTTP ${res.status}`)
-      }
-      const buf = Buffer.from(await res.arrayBuffer())
-      if (buf.length < 2 || buf[0] !== 0xff || buf[1] !== 0xd8) {
-        throw new NvrAdapterError(this.vendor, 'protocol_error',
-          `ONVIF snapshot is not a JPEG (${buf.length} bytes)`)
-      }
-      return buf
-    } finally {
-      clearTimeout(timer)
+    const buf = await this.fetchSnapshot(uri)
+    if (buf.length < 2 || buf[0] !== 0xff || buf[1] !== 0xd8) {
+      throw new NvrAdapterError(this.vendor, 'protocol_error',
+        `ONVIF snapshot is not a JPEG (${buf.length} bytes)`)
     }
+    return buf
+  }
+
+  /**
+   * snapshot URI を HTTP GET。Basic で試し、401 + Digest チャレンジなら
+   * Digest で再試行する (i-PRO カメラは Digest を要求することがある)。
+   */
+  private async fetchSnapshot(uri: string): Promise<Buffer> {
+    const { username, password } = this.config.credentials
+    const basic = 'Basic ' + Buffer.from(`${username}:${password}`).toString('base64')
+
+    const doFetch = async (authHeader: string): Promise<Response> => {
+      const ctl = new AbortController()
+      const timer = setTimeout(() => ctl.abort(), this.config.timeoutMs ?? 10_000)
+      try {
+        return await fetch(uri, { headers: { authorization: authHeader }, signal: ctl.signal })
+      } finally {
+        clearTimeout(timer)
+      }
+    }
+
+    let res = await doFetch(basic)
+    if (res.status === 401) {
+      const challenge = res.headers.get('www-authenticate') ?? ''
+      if (/digest/i.test(challenge)) {
+        const digest = buildHttpDigest('GET', uri, username, password, parseDigestChallenge(challenge))
+        res = await doFetch(digest)
+      }
+    }
+    if (res.status === 401 || res.status === 403) {
+      throw new AuthError(this.vendor, `snapshot fetch ${res.status}`)
+    }
+    if (!res.ok) {
+      throw new NvrAdapterError(this.vendor, 'transient', `snapshot HTTP ${res.status}`)
+    }
+    return Buffer.from(await res.arrayBuffer())
   }
 
   async getLiveRtspUri(channel: number, _stream?: 'main' | 'sub'): Promise<string> {
