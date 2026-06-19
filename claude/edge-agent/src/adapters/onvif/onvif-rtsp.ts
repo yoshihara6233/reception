@@ -16,8 +16,13 @@ export interface OnvifRtspOptions {
 }
 
 /**
- * channel (1-based) に対応する RTSP URL を返す。資格情報は含まない
+ * grid (静止画合成) 用の RTSP URL を返す。資格情報は含まない
  * (ffmpeg 用には injectRtspCreds で付与する)。
+ *
+ * プロファイル選択方針 (2026-06-19 実機 102 の知見):
+ *   メインの H264/H265 ストリームは NVR が掴んでいて SETUP=503 になりがち。
+ *   一方 **JPEG/MJPEG プロファイルは別枠で空いている**ことが多く、grid の静止画には最適。
+ *   → JPEG/MJPEG プロファイルがあれば最優先。無ければ channel 対応 (なければ先頭)。
  */
 export async function resolveOnvifRtspUrl(
   opts:    OnvifRtspOptions,
@@ -26,9 +31,10 @@ export async function resolveOnvifRtspUrl(
 ): Promise<string> {
   const c = client ?? new OnvifSoapClient(opts)
   const profiles = await c.getProfiles()
-  const profile = profiles[channel - 1] ?? profiles[0]
-  if (!profile) {
+  if (profiles.length === 0) {
     throw new Error(`ONVIF: no media profiles at ${opts.endpoint}`)
   }
+  const jpeg = profiles.find((p) => /jpe?g|mjpeg/i.test(p.encoding ?? ''))
+  const profile = jpeg ?? profiles[channel - 1] ?? profiles[0]
   return c.getStreamUri(profile.token, 'RTSP')
 }

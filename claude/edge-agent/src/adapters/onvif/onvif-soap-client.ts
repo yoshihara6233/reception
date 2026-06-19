@@ -94,17 +94,19 @@ export class OnvifSoapClient {
     return new Date(Date.UTC(year, g('Month') - 1, g('Day'), g('Hour'), g('Minute'), g('Second')))
   }
 
-  /** Media1 経由のプロファイル一覧取得 (channel 列挙の素材) */
-  async getProfiles(): Promise<Array<{ token: string; name: string }>> {
+  /** Media1 経由のプロファイル一覧取得 (channel 列挙の素材)。encoding は H264/H265/JPEG 等 */
+  async getProfiles(): Promise<Array<{ token: string; name: string; encoding?: string }>> {
     const xml = await this.callMedia(`<trt:GetProfiles/>`)
-    const profiles: Array<{ token: string; name: string }> = []
+    const profiles: Array<{ token: string; name: string; encoding?: string }> = []
     const re = /<(?:trt:)?Profiles\s+[^>]*token="([^"]+)"[^>]*>([\s\S]*?)<\/(?:trt:)?Profiles>/g
     let m: RegExpExecArray | null
     while ((m = re.exec(xml))) {
       const token = m[1]
       const inner = m[2]
       const name = (inner.match(/<(?:tt:)?Name>([^<]+)<\/(?:tt:)?Name>/) ?? [])[1] ?? token
-      profiles.push({ token, name })
+      // VideoEncoderConfiguration の Encoding (H264 / H265 / JPEG)。grid は JPEG を優先したい
+      const encoding = (inner.match(/<(?:tt:)?Encoding>([^<]+)<\/(?:tt:)?Encoding>/) ?? [])[1]
+      profiles.push({ token, name, encoding })
     }
     return profiles
   }
