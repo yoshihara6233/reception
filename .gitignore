@@ -48,3 +48,6 @@ claude/**/*.tsbuildinfo
 *.env.local.save
 .env*.save
 claude/monitor/.env.local.save
+
+# ベンダ仕様書PDF(大容量・著作物)はリポジトリに含めない。要点は docs/vendor/ipro-cgi-notes.md
+docs/vendor/*.pdf
