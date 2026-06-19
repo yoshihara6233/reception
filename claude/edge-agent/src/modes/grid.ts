@@ -38,18 +38,27 @@ interface Slot {
   capture: () => Promise<Buffer>
 }
 
+/**
+ * ONVIF RTSP URL の解決結果をプロセス全体でキャッシュ。profile token は不変なので
+ * grid 再起動 (start_grid 再送) のたびに GetProfiles/GetStreamUri をやり直さない。
+ * key = `${host}:${channel}`、value = creds 入り RTSP URL。
+ */
+const ONVIF_RTSP_CACHE = new Map<string, string>()
+
 /** onvif-generic 用のセル取得を構築 (ONVIF で RTSP URL を解決→ffmpeg で 1 フレーム) */
 function buildOnvifCapture(cam: CameraDescriptor): () => Promise<Buffer> {
   const r = cam.recorder
   const endpoint = `http://${r.host}:${r.onvif_port ?? 80}`
-  let rtspUrl: string | null = null   // 解決後キャッシュ (profile token は不変)
+  const key = `${r.host}:${cam.channel}`
   return async () => {
+    let rtspUrl = ONVIF_RTSP_CACHE.get(key)
     if (!rtspUrl) {
       const base = await resolveOnvifRtspUrl(
         { endpoint, username: r.username, password: r.password, timeoutMs: 8000 },
         cam.channel,
       )
       rtspUrl = injectRtspCreds(base, r.username, r.password)
+      ONVIF_RTSP_CACHE.set(key, rtspUrl)
     }
     return captureRtspKeyframe(rtspUrl, config.FFMPEG_BIN)
   }
@@ -105,6 +114,10 @@ export async function startGrid(cameras: CameraDescriptor[]): Promise<GridHandle
   const fullW = cellW * GRID_COLS
   const fullH = cellH * GRID_ROWS
 
+  // 直近に取得できたセル原画 (pos→JPEG)。一時的な取得失敗 (ffmpeg timeout 等) で
+  // セルが暗転しないよう、最後の良いフレームを保持する。
+  const lastBuf = new Map<number, Buffer>()
+
   // One iteration: fetch all snapshots in parallel, resize each to a cell,
   // composite onto a dark base, encode as JPEG, upload.
   async function iterate(): Promise<void> {
@@ -115,15 +128,22 @@ export async function startGrid(cameras: CameraDescriptor[]): Promise<GridHandle
       }),
     )
 
-    const layers: sharp.OverlayOptions[] = []
+    let ok = 0
     for (const f of fetches) {
-      if (f.status !== 'fulfilled') {
-        logger.debug({ reason: String(f.reason) }, 'grid: cell fetch failed')
-        continue
+      if (f.status === 'fulfilled') {
+        lastBuf.set(f.value.pos, f.value.buf)
+        ok++
+      } else {
+        logger.debug({ reason: String(f.reason) }, 'grid: cell capture failed')
       }
-      const { pos, buf } = f.value
-      const col = pos % GRID_COLS
-      const row = Math.floor(pos / GRID_COLS)
+    }
+
+    const layers: sharp.OverlayOptions[] = []
+    for (const s of slots) {
+      const buf = lastBuf.get(s.pos)  // 今回失敗でも直近の良いフレームを使う
+      if (!buf) continue
+      const col = s.pos % GRID_COLS
+      const row = Math.floor(s.pos / GRID_COLS)
       try {
         const cell = await sharp(buf)
           .resize(cellW, cellH, { fit: 'cover' })
@@ -131,7 +151,7 @@ export async function startGrid(cameras: CameraDescriptor[]): Promise<GridHandle
           .toBuffer()
         layers.push({ input: cell, left: col * cellW, top: row * cellH })
       } catch (e) {
-        logger.debug({ err: String(e), pos }, 'grid: cell resize failed')
+        logger.debug({ err: String(e), pos: s.pos }, 'grid: cell resize failed')
       }
     }
 
@@ -149,19 +169,25 @@ export async function startGrid(cameras: CameraDescriptor[]): Promise<GridHandle
       .toBuffer()
 
     await uploadGridJpeg(composed)
+    logger.debug({ ok, total: slots.length }, 'grid: frame uploaded')
   }
 
   logger.info({ slots: slots.length, cellW, cellH }, 'grid: starting snapshot loop')
 
   let stopped = false
+  let busy    = false   // 多重起動ガード: 前回 iterate 完了前に次を走らせない
   const intervalMs = Math.max(1_000, Math.round(1_000 / config.GRID_FPS))
+  function runIterate(): void {
+    if (stopped || busy) return   // ONVIF+ffmpeg は数秒かかるので重複起動を防ぐ
+    busy = true
+    iterate()
+      .catch((e) => logger.error({ err: String(e) }, 'grid: iterate failed'))
+      .finally(() => { busy = false })
+  }
   // Kick the first iteration immediately so the first frame appears within
-  // one HTTP round-trip instead of after `intervalMs`.
-  void iterate().catch((e) => logger.error({ err: String(e) }, 'grid: iterate failed'))
-  const timer = setInterval(() => {
-    if (stopped) return
-    void iterate().catch((e) => logger.error({ err: String(e) }, 'grid: iterate failed'))
-  }, intervalMs)
+  // one round-trip instead of after `intervalMs`.
+  runIterate()
+  const timer = setInterval(runIterate, intervalMs)
 
   return {
     async stop() {
