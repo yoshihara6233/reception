@@ -15,7 +15,7 @@ export type RecorderVendor = 'ipro' | 'uniview' | 'frigate' | 'onvif-generic'
  * - onvif-generic : ライブ/スナップのみ (カメラ直 ONVIF/RTSP)。VOD 非対応
  *   (2026-06-19 実機: NVR が ONVIF Profile-G を提供しない。docs/spike-ipro-nu-result.md)。
  */
-export const VOD_VENDORS = ['uniview', 'frigate'] as const
+export const VOD_VENDORS = ['uniview', 'frigate', 'onvif-generic'] as const
 export type VodVendor = (typeof VOD_VENDORS)[number]
 export function isVodVendor(v: RecorderVendor): v is VodVendor {
   return (VOD_VENDORS as readonly RecorderVendor[]).includes(v)
@@ -30,6 +30,8 @@ export function isVodVendor(v: RecorderVendor): v is VodVendor {
 export const VOD_RANGE_MAX_MIN_BY_VENDOR: Record<VodVendor, number> = {
   uniview: 60,
   frigate: 5,
+  // i-PRO NVR httpdl は 1リクエスト ≤ 1時間。実用上は短めに。
+  'onvif-generic': 60,
 }
 
 export interface Store {
