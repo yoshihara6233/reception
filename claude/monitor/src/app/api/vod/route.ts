@@ -64,8 +64,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const edgeId = c.recorders.edge_id
   const vendor = c.recorders.vendor
 
-  // VOD 対応: Frigate (clip.mp4) と onvif-generic+NVR (i-PRO httpdl)。
-  const vodOk = vendor === 'frigate' || (vendor === 'onvif-generic' && !!c.recorders.vod_host)
+  // VOD 対応: Frigate / onvif-generic+NVR / i-pro-nvr(レコーダ経由)。
+  const vodOk = vendor === 'frigate'
+    || vendor === 'i-pro-nvr'
+    || (vendor === 'onvif-generic' && !!c.recorders.vod_host)
   if (!vodOk) {
     return NextResponse.json(
       {
