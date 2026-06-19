@@ -12,8 +12,10 @@
 | 項目 | 確定結果 |
 |---|---|
 | **カメラ101 ライブ** | ✅ ONVIF GetStreamUri → **RTSP DESCRIBE 200・コーデック H.265(HEVC)**。URI `rtsp://192.168.0.101/ONVIF/MediaInput?profile=def_profile1` |
-| **i-PRO RTSP URI 形式** | `rtsp://<ip>/ONVIF/MediaInput?profile=<profileToken>`（ONVIF Media GetStreamUri から取得） |
-| カメラ102 | ⚠️ ONVIF生存だが **GetProfiles token NG / RTSP 401** ＝ 資格情報違いの疑い（102用の user/pass で再確認） |
+| **カメラ102 ライブ** | ✅ **RTSP 200・コーデック H.264**。URI `rtsp://192.168.0.102/ONVIF/MediaInput?profile=2_def_profile6`（102用の別資格情報で確定） |
+| **i-PRO RTSP URI 形式** | `rtsp://<ip>/ONVIF/MediaInput?profile=<profileToken>`（ONVIF Media GetStreamUri から取得・token はカメラごとに異なる） |
+| **コーデック混在** | 101=H.265 / 102=H.264 → ライブ経路は両対応必須 |
+| **カメラ別 credentials** | 101 と 102 で user/pass が別（実証）→ カメラ単位で creds 保持する設計 |
 | **NVR ONVIF** | ❌ `/onvif/device_service` 404 ＝ **Profile-G(VOD) 非提供を確定**（Mac/Linux 一致） |
 | NVR CGI | dlogin.cgi 200・他全404（WJ-NX CGI 非互換を再確認） |
 

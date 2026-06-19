@@ -98,13 +98,31 @@ describe('OnvifGenericAdapter', () => {
     await expect(a.getSnapshot(1)).rejects.toThrow(/snapshot fetch 401/)
   })
 
+  it('getSnapshot: 401(Digest) → Digest で再試行して JPEG', async () => {
+    const mockClient = {
+      getProfiles:    vi.fn().mockResolvedValue([{ token: 'pX', name: 'X' }]),
+      getSnapshotUri: vi.fn().mockResolvedValue('http://10.0.1.20/snap.jpg'),
+    } as unknown as OnvifSoapClient
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('', {
+        status: 401,
+        headers: { 'www-authenticate': 'Digest realm="cam", nonce="abc123", qop="auth"' },
+      }))
+      .mockResolvedValueOnce(new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xe0]), { status: 200 }))
+    const a = new OnvifGenericAdapter(makeConfig(), FW, CAPS, mockClient)
+    const buf = await a.getSnapshot(1)
+    expect(buf[0]).toBe(0xff)
+    expect((globalThis.fetch as ReturnType<typeof vi.fn>)).toHaveBeenCalledTimes(2)
+  })
+
   it('getSnapshot: 範囲外 channel', async () => {
     const a = new OnvifGenericAdapter(makeConfig(), FW, { ...CAPS, maxChannels: 4 })
     await expect(a.getSnapshot(99)).rejects.toThrow(/channel 99 out of range/)
   })
 
   it('createOnvifGenericAdapter: FW 検出失敗で unknown family', async () => {
-    vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new Error('ECONNREFUSED'))
+    // 時刻同期(GetSystemDateAndTime) + GetDeviceInformation の両方が失敗する想定
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('ECONNREFUSED'))
     const a = await createOnvifGenericAdapter(makeConfig())
     expect(a.firmware.modelFamily).toBe('unknown')
   })
