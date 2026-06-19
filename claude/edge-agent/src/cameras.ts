@@ -22,6 +22,7 @@ interface Row {
     vendor: 'ipro' | 'uniview' | 'frigate' | 'onvif-generic'
     host: string
     rtsp_port: number
+    onvif_port: number | null
     username: string
     password_enc: string
   } | null
@@ -40,7 +41,7 @@ export async function loadCameras(): Promise<CameraDescriptor[]> {
     .from('recorder_cameras')
     .select(`
       id, channel, name, grid_pos, enabled, frigate_camera,
-      recorders!inner ( vendor, host, rtsp_port, username, password_enc, edge_id )
+      recorders!inner ( vendor, host, rtsp_port, onvif_port, username, password_enc, edge_id )
     `)
     .eq('enabled', true)
     .eq('recorders.edge_id', config.EDGE_ID)
@@ -55,11 +56,12 @@ export async function loadCameras(): Promise<CameraDescriptor[]> {
       grid_pos: r.grid_pos,
       frigate_camera: r.frigate_camera,
       recorder: {
-        vendor:    r.recorders!.vendor,
-        host:      r.recorders!.host,
-        rtsp_port: r.recorders!.rtsp_port,
-        username:  r.recorders!.username,
-        password:  decodePassword(r.recorders!.password_enc),
+        vendor:     r.recorders!.vendor,
+        host:       r.recorders!.host,
+        rtsp_port:  r.recorders!.rtsp_port,
+        onvif_port: r.recorders!.onvif_port,
+        username:   r.recorders!.username,
+        password:   decodePassword(r.recorders!.password_enc),
       },
     }))
 }

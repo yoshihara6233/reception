@@ -37,6 +37,7 @@ export interface CameraDescriptor {
     vendor: Vendor
     host: string
     rtsp_port: number
+    onvif_port: number | null  // ONVIF (device/media service) の HTTP ポート。null=80
     username: string
     password: string  // plaintext at runtime; never logged
   }
