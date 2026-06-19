@@ -28,6 +28,7 @@ import { join } from 'node:path'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '../logger.js'
 import { config } from '../config.js'
+import { downloadIproNvrMp4 } from '../adapters/i-pro/nvr-vod.js'
 import type { CameraDescriptor } from '../types.js'
 
 // Local Supabase client — mirrors the lazy-init pattern in modes/bcp.ts.
@@ -136,21 +137,24 @@ export interface StartVodInput {
 }
 
 export async function startVod(i: StartVodInput): Promise<VodHandle> {
-  if (i.camera.recorder.vendor !== 'frigate') {
+  const rec = i.camera.recorder
+  const isIproNvr = rec.vendor === 'onvif-generic' && !!rec.vod_host
+  if (rec.vendor !== 'frigate' && !isIproNvr) {
     throw new Error(
-      `Phase 8.4-B VOD is Frigate-only; vendor=${i.camera.recorder.vendor} pending Phase 8.5 adapter integration`,
+      `VOD unsupported: vendor=${rec.vendor} (frigate / onvif-generic+NVR のみ対応)`,
     )
   }
 
-  // Frigate generates clip.mp4 on demand for any [start, end] window.
-  //   GET http://<frigate>:5000/api/<camera>/start/<unix_s>/end/<unix_s>/clip.mp4
-  const frigateCam = i.camera.frigate_camera
-  if (!frigateCam) {
-    throw new Error(`camera ${i.camera.id} has no frigate_camera mapping`)
-  }
   const startSec = Math.floor(Date.parse(i.fromIso) / 1000)
   const endSec   = Math.floor(Date.parse(i.toIso)   / 1000)
-  const src = `http://${i.camera.recorder.host}:${config.FRIGATE_API_PORT}/api/${frigateCam}/start/${startSec}/end/${endSec}/clip.mp4`
+
+  // Frigate のみ事前にソースURLを確定 (i-PRO NVR は httpdl で都度取得)
+  let frigateSrc = ''
+  if (rec.vendor === 'frigate') {
+    const frigateCam = i.camera.frigate_camera
+    if (!frigateCam) throw new Error(`camera ${i.camera.id} has no frigate_camera mapping`)
+    frigateSrc = `http://${rec.host}:${config.FRIGATE_API_PORT}/api/${frigateCam}/start/${startSec}/end/${endSec}/clip.mp4`
+  }
 
   // We treat this whole upload as one VodHandle. stop() aborts the fetch
   // mid-upload and marks the row failed.
@@ -173,36 +177,44 @@ export async function startVod(i: StartVodInput): Promise<VodHandle> {
         .update({ status: 'uploading', uploading_at: new Date().toISOString() })
         .eq('id', i.clipId)
 
-      // 2. Fetch the Frigate MP4. Frigate may take 5-30s to assemble; allow it.
-      logger.info({ clipId: i.clipId, src, from: i.fromIso, to: i.toIso }, 'vod: fetching frigate clip')
-      const r = await fetch(src, { signal: ctrl.signal })
-      if (!r.ok) {
-        const text = await r.text().catch(() => '')
-        throw new Error(`frigate ${r.status}: ${text.slice(0, 200)}`)
+      // 2. ソースMP4を取得（vendor別）。
+      let buf: Buffer
+      if (isIproNvr) {
+        // i-PRO NVR: httpdl.cgi で録画MP4を取得（標準MP4・remux不要）。
+        logger.info({ clipId: i.clipId, vodHost: rec.vod_host, ch: rec.vod_channel ?? i.camera.channel, from: i.fromIso, to: i.toIso }, 'vod: fetching i-PRO NVR clip')
+        buf = await downloadIproNvrMp4(
+          {
+            endpoint: rec.vod_host!,
+            username: rec.vod_username ?? rec.username,
+            password: rec.vod_password ?? rec.password,
+            timeoutMs: 120_000,
+          },
+          rec.vod_channel ?? i.camera.channel,
+          new Date(i.fromIso),
+          new Date(i.toIso),
+        )
+        if (stopped) return
+      } else {
+        // Frigate: clip.mp4 を取得 → fragmented MP4 を faststart に remux。
+        logger.info({ clipId: i.clipId, src: frigateSrc, from: i.fromIso, to: i.toIso }, 'vod: fetching frigate clip')
+        const r = await fetch(frigateSrc, { signal: ctrl.signal })
+        if (!r.ok) {
+          const text = await r.text().catch(() => '')
+          throw new Error(`frigate ${r.status}: ${text.slice(0, 200)}`)
+        }
+        const rawBuf = Buffer.from(await r.arrayBuffer())
+        if (rawBuf.length < 1024) {
+          throw new Error(`empty_clip (bytes=${rawBuf.length})`)
+        }
+        if (stopped) return
+        const remuxStart = Date.now()
+        buf = await remuxFaststart(rawBuf, i.clipId)
+        logger.info(
+          { clipId: i.clipId, rawBytes: rawBuf.length, remuxedBytes: buf.length, remuxMs: Date.now() - remuxStart },
+          'vod: remuxed to faststart MP4',
+        )
+        if (stopped) return
       }
-      const rawBuf = Buffer.from(await r.arrayBuffer())
-      if (rawBuf.length < 1024) {
-        // Frigate returns a tiny MP4 box (~100 bytes) when no recording exists
-        // for the window. Catch this so the user sees "録画なし" not "失敗".
-        throw new Error(`empty_clip (bytes=${rawBuf.length})`)
-      }
-
-      if (stopped) return  // aborted between fetch and upload — bail
-
-      // 2.5. F79 — Remux Frigate's fragmented MP4 (moov + 31×moof/mdat) into
-      //      a standard MP4 (moov + 1×mdat). Without this, HTML5 <video>
-      //      shows a static first frame because the browser can't follow the
-      //      moof fragments served from a Range request. ffmpeg -c copy is
-      //      near-free (~50 ms for a 60 s clip on a Beelink N150).
-      const remuxStart = Date.now()
-      const buf = await remuxFaststart(rawBuf, i.clipId)
-      const remuxMs = Date.now() - remuxStart
-      logger.info(
-        { clipId: i.clipId, rawBytes: rawBuf.length, remuxedBytes: buf.length, remuxMs },
-        'vod: remuxed to faststart MP4',
-      )
-
-      if (stopped) return  // re-check after remux
 
       // 3. Upload to Storage.
       const { error: upErr } = await getSupa().storage

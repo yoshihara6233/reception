@@ -25,6 +25,10 @@ interface Row {
     onvif_port: number | null
     username: string
     password_enc: string
+    vod_host: string | null
+    vod_username: string | null
+    vod_password_enc: string | null
+    vod_channel: number | null
   } | null
 }
 
@@ -41,7 +45,8 @@ export async function loadCameras(): Promise<CameraDescriptor[]> {
     .from('recorder_cameras')
     .select(`
       id, channel, name, grid_pos, enabled, frigate_camera,
-      recorders!inner ( vendor, host, rtsp_port, onvif_port, username, password_enc, edge_id )
+      recorders!inner ( vendor, host, rtsp_port, onvif_port, username, password_enc, edge_id,
+                        vod_host, vod_username, vod_password_enc, vod_channel )
     `)
     .eq('enabled', true)
     .eq('recorders.edge_id', config.EDGE_ID)
@@ -56,12 +61,16 @@ export async function loadCameras(): Promise<CameraDescriptor[]> {
       grid_pos: r.grid_pos,
       frigate_camera: r.frigate_camera,
       recorder: {
-        vendor:     r.recorders!.vendor,
-        host:       r.recorders!.host,
-        rtsp_port:  r.recorders!.rtsp_port,
-        onvif_port: r.recorders!.onvif_port,
-        username:   r.recorders!.username,
-        password:   decodePassword(r.recorders!.password_enc),
+        vendor:       r.recorders!.vendor,
+        host:         r.recorders!.host,
+        rtsp_port:    r.recorders!.rtsp_port,
+        onvif_port:   r.recorders!.onvif_port,
+        username:     r.recorders!.username,
+        password:     decodePassword(r.recorders!.password_enc),
+        vod_host:     r.recorders!.vod_host,
+        vod_username: r.recorders!.vod_username,
+        vod_password: r.recorders!.vod_password_enc ? decodePassword(r.recorders!.vod_password_enc) : null,
+        vod_channel:  r.recorders!.vod_channel,
       },
     }))
 }

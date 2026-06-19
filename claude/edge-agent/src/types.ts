@@ -40,5 +40,10 @@ export interface CameraDescriptor {
     onvif_port: number | null  // ONVIF (device/media service) の HTTP ポート。null=80
     username: string
     password: string  // plaintext at runtime; never logged
+    // VOD ソース (i-PRO NVR httpdl)。null=このカメラはVOD非対応。
+    vod_host: string | null
+    vod_username: string | null
+    vod_password: string | null   // plaintext at runtime
+    vod_channel: number | null    // NVR のカメラ番号 (CAM=)
   }
 }
