@@ -16,7 +16,7 @@ interface Camera {
 }
 interface Recorder {
   id: string
-  vendor: 'ipro' | 'uniview' | 'frigate' | 'onvif-generic'
+  vendor: 'ipro' | 'uniview' | 'frigate' | 'onvif-generic' | 'i-pro-nvr'
   model: string | null
   host: string
   rtsp_port: number
@@ -116,7 +116,7 @@ function RecorderList({ edgeId, recorders }: { edgeId: string; recorders: Record
 }
 
 type NewRecorder = {
-  vendor: 'ipro' | 'uniview' | 'frigate' | 'onvif-generic'
+  vendor: 'ipro' | 'uniview' | 'frigate' | 'onvif-generic' | 'i-pro-nvr'
   model: string
   host: string
   rtsp_port: number
@@ -132,12 +132,15 @@ const VENDOR_DEFAULTS: Record<NewRecorder['vendor'], Partial<NewRecorder>> = {
   frigate:          { rtsp_port: 8554, username: '',      password: '' },
   // カメラ直 ONVIF: ONVIF は通常 80、RTSP は 554。1行=1カメラ。
   'onvif-generic':  { rtsp_port: 554,  onvif_port: 80, username: 'admin', password: '' },
+  // i-PRO NVR 経由: host=NVRのIP。ライブ=push.cgi / VOD=httpdl.cgi。
+  'i-pro-nvr':      { rtsp_port: 554,  onvif_port: 443, username: 'admin', password: '' },
 }
 
 function vendorLabel(v: NewRecorder['vendor']) {
   if (v === 'ipro')           return 'i-PRO'
   if (v === 'frigate')        return 'Frigate (OSS-VMS)'
   if (v === 'onvif-generic')  return 'ONVIFカメラ直'
+  if (v === 'i-pro-nvr')      return 'i-PRO NVR(レコーダ経由)'
   return 'Uniview'
 }
 
@@ -170,6 +173,7 @@ function NewRecorderForm({
             <option value="uniview">Uniview</option>
             <option value="ipro">i-PRO</option>
             <option value="onvif-generic">ONVIFカメラ直</option>
+            <option value="i-pro-nvr">i-PRO NVR(レコーダ経由)</option>
             <option value="frigate">Frigate (OSS-VMS)</option>
           </select>
         </Field>

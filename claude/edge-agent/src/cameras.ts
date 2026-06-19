@@ -19,7 +19,7 @@ interface Row {
   enabled: boolean
   frigate_camera: string | null
   recorders: {
-    vendor: 'ipro' | 'uniview' | 'frigate' | 'onvif-generic'
+    vendor: 'ipro' | 'uniview' | 'frigate' | 'onvif-generic' | 'i-pro-nvr'
     host: string
     rtsp_port: number
     onvif_port: number | null

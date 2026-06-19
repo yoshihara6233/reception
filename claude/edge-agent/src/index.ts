@@ -56,8 +56,9 @@ async function main() {
           const cam = cams.find((c) => c.id === cmd.camera_id)
           if (!cam) return logger.warn({ camera_id: cmd.camera_id }, 'unknown camera')
 
-          // VOD 対応: Frigate (clip.mp4) と onvif-generic+NVR (i-PRO httpdl)。
+          // VOD 対応: Frigate / onvif-generic+NVR / i-pro-nvr(レコーダ経由)。
           const vodOk = cam.recorder.vendor === 'frigate'
+            || cam.recorder.vendor === 'i-pro-nvr'
             || (cam.recorder.vendor === 'onvif-generic' && !!cam.recorder.vod_host)
           if (!vodOk) {
             logger.warn(

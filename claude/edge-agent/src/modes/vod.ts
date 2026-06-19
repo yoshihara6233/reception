@@ -138,10 +138,15 @@ export interface StartVodInput {
 
 export async function startVod(i: StartVodInput): Promise<VodHandle> {
   const rec = i.camera.recorder
-  const isIproNvr = rec.vendor === 'onvif-generic' && !!rec.vod_host
-  if (rec.vendor !== 'frigate' && !isIproNvr) {
+  // i-PRO NVR から VOD を取れるケース:
+  //  - onvif-generic カメラに vod_host(NVR) が設定されている (カメラ直+NVR VOD)
+  //  - vendor='i-pro-nvr' (レコーダ経由。host が NVR そのもの)
+  const isOnvifNvrVod = rec.vendor === 'onvif-generic' && !!rec.vod_host
+  const isNvrVod = rec.vendor === 'i-pro-nvr'
+  const useIproNvr = isOnvifNvrVod || isNvrVod
+  if (rec.vendor !== 'frigate' && !useIproNvr) {
     throw new Error(
-      `VOD unsupported: vendor=${rec.vendor} (frigate / onvif-generic+NVR のみ対応)`,
+      `VOD unsupported: vendor=${rec.vendor} (frigate / onvif-generic+NVR / i-pro-nvr のみ対応)`,
     )
   }
 
@@ -179,17 +184,20 @@ export async function startVod(i: StartVodInput): Promise<VodHandle> {
 
       // 2. ソースMP4を取得（vendor別）。
       let buf: Buffer
-      if (isIproNvr) {
+      if (useIproNvr) {
         // i-PRO NVR: httpdl.cgi で録画MP4を取得（標準MP4・remux不要）。
-        logger.info({ clipId: i.clipId, vodHost: rec.vod_host, ch: rec.vod_channel ?? i.camera.channel, from: i.fromIso, to: i.toIso }, 'vod: fetching i-PRO NVR clip')
+        //  - onvif-generic+vod_host: NVR は vod_host、CH は vod_channel
+        //  - i-pro-nvr:             NVR は recorder.host、CH は camera.channel
+        const nvrEndpoint = isNvrVod
+          ? (rec.host.startsWith('http') ? rec.host : `https://${rec.host}`)
+          : rec.vod_host!
+        const nvrUser = isNvrVod ? rec.username : (rec.vod_username ?? rec.username)
+        const nvrPass = isNvrVod ? rec.password : (rec.vod_password ?? rec.password)
+        const nvrChannel = isNvrVod ? i.camera.channel : (rec.vod_channel ?? i.camera.channel)
+        logger.info({ clipId: i.clipId, nvrEndpoint, ch: nvrChannel, from: i.fromIso, to: i.toIso }, 'vod: fetching i-PRO NVR clip')
         buf = await downloadIproNvrMp4(
-          {
-            endpoint: rec.vod_host!,
-            username: rec.vod_username ?? rec.username,
-            password: rec.vod_password ?? rec.password,
-            timeoutMs: 120_000,
-          },
-          rec.vod_channel ?? i.camera.channel,
+          { endpoint: nvrEndpoint, username: nvrUser, password: nvrPass, timeoutMs: 120_000 },
+          nvrChannel,
           new Date(i.fromIso),
           new Date(i.toIso),
         )

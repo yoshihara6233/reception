@@ -4,7 +4,7 @@ import { requireAdmin } from '@/lib/admin/guard'
 
 const Body = z.object({
   edge_id:     z.string().uuid(),
-  vendor:      z.enum(['ipro', 'uniview', 'frigate', 'onvif-generic']),
+  vendor:      z.enum(['ipro', 'uniview', 'frigate', 'onvif-generic', 'i-pro-nvr']),
   model:       z.string().nullable().optional(),
   host:        z.string().min(1),
   rtsp_port:   z.coerce.number().int().min(1).max(65535).default(554),

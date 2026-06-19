@@ -23,6 +23,7 @@ import { snapshotUrl } from '../rtsp/url.js'
 import { captureRtspKeyframe, injectRtspCreds } from '../rtsp/keyframe.js'
 import { resolveOnvifRtspUrl } from '../adapters/onvif/onvif-rtsp.js'
 import { getOnvifSnapshotUrl, fetchOnvifJpeg } from '../adapters/onvif/onvif-snapshot.js'
+import { captureIproNvrJpeg } from '../adapters/i-pro/nvr-live.js'
 import { uploadGridJpeg } from '../upload/storage.js'
 import type { CameraDescriptor } from '../types.js'
 
@@ -88,6 +89,20 @@ export async function startGrid(cameras: CameraDescriptor[]): Promise<GridHandle
     // ONVIF カメラ直: RTSP→ffmpeg keyframe (H.264/H.265 両対応)
     if (cam.recorder.vendor === 'onvif-generic') {
       slots.push({ pos: cam.grid_pos, camId: cam.id, capture: buildOnvifCapture(cam) })
+      continue
+    }
+
+    // i-PRO NVR 経由: push.cgi の MJPEG から1フレーム (config②)
+    if (cam.recorder.vendor === 'i-pro-nvr') {
+      const r = cam.recorder
+      const endpoint = r.host.startsWith('http') ? r.host : `https://${r.host}`
+      slots.push({
+        pos: cam.grid_pos, camId: cam.id,
+        capture: () => captureIproNvrJpeg(
+          { endpoint, username: r.username, password: r.password, timeoutMs: 10_000 },
+          cam.channel,
+        ),
+      })
       continue
     }
 
