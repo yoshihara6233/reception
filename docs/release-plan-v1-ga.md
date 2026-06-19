@@ -96,6 +96,12 @@ CEOレビューで動いた新コードパスを再審査。技術的な実装�
 - **i-PRO ONVIF VOD統合**（クリティカルパス）・i-PROグリッドスナップ（Frigate無しでload-bearing）
 - セッション上限強制・レコーダ管理UI・MJPEG帯域自動劣化
 
+> ⚠️ **2026-06-19 スパイク結果で前提更新**（[spike-ipro-nu-result.md](spike-ipro-nu-result.md) / [onvif-adapter-design.md](onvif-adapter-design.md)）:
+> WJ-NU101K 実機で **WJ-NX CGI が全404＝非互換**。**ライブ/スナップは「カメラ直 ONVIF/RTSP」**で成立（実機生存確認）。
+> **NVR は ONVIF サーバ非提供**のため VOD(Profile-G) は標準では不可 → VOD は (a) NVRマニュアルに外部口があれば有効化 /
+> (b) i-PRO API(要仕様書) / (c) **NVR純正UIへ誘導**。VOD は元々 approach B で GA後ファストフォローのため **GA日程は不変**。
+> 実機の最終確定（RTSP URI・ONVIF認証・VOD口の有無）は **Linux 機(192.168.0.100)** で `spike:ipro-discover` を実行。
+
 **Phase C セキュリティ硬化＋運用（Bと並行）**
 - ✅済: service_role鍵・ログインPW ローテ（宿題クローズ）
 - Vault化（カメラ認証平文撤廃）・公開面防御の継続検証・**脆弱性診断（6月に発注・往復2-3週・G3に再診断完了）**
