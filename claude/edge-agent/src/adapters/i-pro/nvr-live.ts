@@ -146,24 +146,34 @@ async function runStreamLoop(opts: IproNvrLiveOptions, channel: number, s: Strea
       const res = await digestGetStream(url, opts.username, opts.password, ctrl.signal)
       if (res.status === 401) { invalidateUid(opts.endpoint); throw new Error('push.cgi 401 (UID失効)') }
       if (!res.ok || !res.body) throw new Error(`push.cgi HTTP ${res.status}`)
+      logger.info({ key, status: res.status, ct: res.headers.get('content-type') }, 'i-pro-nvr: push connected')
 
       const reader = res.body.getReader()
       let acc: Buffer = Buffer.alloc(0)
+      let bytes = 0          // この接続で受信した総バイト
+      let frameCount = 0     // この接続で取り出した総フレーム
       for (;;) {
         if (s.stopped || STREAMERS.get(key) !== s || Date.now() - s.lastReqAt > IDLE_MS) { ctrl.abort(); break }
         const { done, value } = await reader.read()
         if (done) break
-        if (value) acc = Buffer.concat([acc, Buffer.from(new Uint8Array(value))])
+        if (value) {
+          if (bytes === 0) logger.info({ key, chunk: value.byteLength }, 'i-pro-nvr: first bytes received')
+          bytes += value.byteLength
+          acc = Buffer.concat([acc, Buffer.from(new Uint8Array(value))])
+        }
         const { frames, rest } = extractJpegFrames(acc)
         if (frames.length) {
           const f = frames[frames.length - 1]
           const out = Buffer.alloc(f.length)   // Buffer<ArrayBuffer> を確保
           f.copy(out)
+          if (frameCount === 0) logger.info({ key, jpegBytes: out.length }, 'i-pro-nvr: first frame decoded')
+          frameCount += frames.length
           s.latest = out
           s.lastFrameAt = Date.now()
         }
         acc = rest.length > 4_000_000 ? Buffer.alloc(0) : rest   // 壊れ対策
       }
+      logger.info({ key, bytes, frameCount }, 'i-pro-nvr: push loop ended')
       // 正常に抜けた場合は push STOP だけ送る (UIDは共有なのでログアウトしない)
       const cur = UID_STATE.get(opts.endpoint)?.uid
       if (cur) digestGet(`${opts.endpoint}/cgi-bin/push.cgi?UID=${cur}&CAM=${channel}&CMD=STOP&COMP=JPEG`, opts.username, opts.password, 5_000).catch(() => undefined)
@@ -206,5 +216,6 @@ export async function captureIproNvrJpeg(opts: IproNvrLiveOptions, channel: numb
     await sleep(200)
     if (s.latest) return s.latest
   }
+  logger.warn({ ch: channel, key: keyOf(opts.endpoint, channel), waitedMs: FIRST_FRAME_WAIT_MS }, 'i-pro-nvr: no frame yet')
   throw new Error(`i-pro-nvr: no frame yet (ch=${channel})`)
 }
