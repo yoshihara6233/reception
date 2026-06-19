@@ -7,6 +7,20 @@
 > 一行結論: **現アダプタの WJ-NX CGI 前提はこの実機では成立しない。統合は ONVIF 寄せに再設計する。
 > ライブ/スナップ＝カメラ直 ONVIF/RTSP で成立。VOD は NVR の標準外部口が無く、i-PRO API か NVR純正UIへ（GA後ファストフォローのまま）。**
 
+## 0.5 Linux 実機で確定（2026-06-19・192.168.0.100 で `spike:ipro-discover` 相当を実行）
+
+| 項目 | 確定結果 |
+|---|---|
+| **カメラ101 ライブ** | ✅ ONVIF GetStreamUri → **RTSP DESCRIBE 200・コーデック H.265(HEVC)**。URI `rtsp://192.168.0.101/ONVIF/MediaInput?profile=def_profile1` |
+| **i-PRO RTSP URI 形式** | `rtsp://<ip>/ONVIF/MediaInput?profile=<profileToken>`（ONVIF Media GetStreamUri から取得） |
+| カメラ102 | ⚠️ ONVIF生存だが **GetProfiles token NG / RTSP 401** ＝ 資格情報違いの疑い（102用の user/pass で再確認） |
+| **NVR ONVIF** | ❌ `/onvif/device_service` 404 ＝ **Profile-G(VOD) 非提供を確定**（Mac/Linux 一致） |
+| NVR CGI | dlogin.cgi 200・他全404（WJ-NX CGI 非互換を再確認） |
+
+**設計に効く新事実:**
+- **コーデックが H.265**。ブラウザの H.265 対応は限定的 → **リモートのブラウザ視聴は (a) エッジで H.264 トランスコード or (b) サブストリームを H.264 設定** が要る。`onvif-adapter-design.md` の live 経路に反映。
+- カメラ102 の認証は別資格情報の可能性。マルチカメラでは **カメラごとに credentials を持てる**設計にする。
+
 ## 1. 実測サマリ（証拠）
 
 | 対象 | 観点 | 実機の結果 | アダプタの前提 | 判定 |
