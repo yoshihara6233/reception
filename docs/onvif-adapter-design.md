@@ -74,9 +74,19 @@ GA は approach B（VOD=ファストフォロー）なので **(3) を GA 既定
 3. **実機 UAT**: カメラ 101/102 で live(RTSP)/snapshot 成立、monitor グリッド表示、リモート（named tunnel + Access）まで。
 4. CI ゲート（typecheck/lint/build/test）緑必須。
 
-## 6. 未決事項（Linux 実機で詰める）
+## 6. 未決事項（Linux 実機 2026-06-19 で一部解決）
 
-- ONVIF 認証: WS-UsernameToken の clock skew 補正で通るか／HTTP digest 併用要否。
-- カメラの正確な RTSP URI / コーデック（h264/h265）と sub-stream 有無。
-- NVR の外部 VOD 口の最終有無（マニュアル確認 + i-PRO 問い合わせ）。
-- スナップ取得: ONVIF `GetSnapshotUri` 対応か、RTSP キーフレーム抽出が要るか。
+**✅ 解決:**
+- ONVIF 認証: **WS-UsernameToken (PasswordDigest, Created を -30s) で カメラ101 が通過**（GetProfiles/GetStreamUri 成功）。clock skew 補正の方向で正しい。
+- カメラ RTSP URI / コーデック: **`rtsp://<ip>/ONVIF/MediaInput?profile=<token>` / H.265(HEVC)** を実機確認。
+- NVR の外部 VOD 口: **ONVIF Profile-G 非提供を確定**（device_service 404）。→ VOD は i-PRO API or NVR純正UI誘導（GA後）。
+
+**⚠️ 新たに確定した設計要件:**
+- **H.265 のブラウザ視聴対策**（最重要・追加）: リモートのブラウザは H.265 を再生できないことが多い。
+  → live 経路に **(a) エッジで H.264 トランスコード（ffmpeg/QuickSync）** または **(b) サブストリームを H.264 設定**を組み込む。GAコアの「本部集中ライブ監視」の成否に直結。
+- **カメラごとの credentials**: 102 は token NG/401（資格情報違いの疑い）。recorder/camera 設定は**カメラ単位で user/pass を保持**できる形にする。
+
+**残（次サイクル）:**
+- カメラ102 の正しい資格情報で再検証。
+- スナップ取得: ONVIF `GetSnapshotUri` 対応可否（未検証）。不可なら RTSP キーフレーム抽出。
+- サブストリーム(H.264/低解像)の有無と URI（グリッド/軽量ライブ用）。
