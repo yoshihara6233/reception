@@ -1,26 +1,36 @@
 /**
- * i-PRO NVR ライブ JPEG 取得（push.cgi の multipart MJPEG から1フレーム）。
+ * i-PRO NVR ライブ JPEG（push.cgi の multipart MJPEG）。**永続ストリーム方式**。
  *
- * 2026-06-19 実機(NU101)で形式確認:
- *   dlogin→UID → hdrctl.cgi(SCREEN=1X) → push.cgi?CAM&CMD=START&COMP=JPEG
- *   → multipart(--myboundary, Content-type: image/jpeg)ストリーム。各フレームは ffd8…ffd9。
- *
- * grid/live は「カメラ直が届かない店舗(config②)」向けに NVR 経由でJPEGを得る。
- * ストリームを開いて先頭の完全な1フレームを取り出したら閉じる(snapshot的)。
- * UID は endpoint 単位でキャッシュ（頻繁なpollで90秒寿命内に維持される）。
+ * 2026-06-19 実機(NU100)知見:
+ *   - push.cgi は「開きっぱなしのストリーム」。毎フレーム START/STOP すると
+ *     セッションが飽和し START が 204(空) になる(churn)。
+ *   → カメラ(endpoint+channel)ごとに push.cgi を **1本だけ開いて常時受信**し、
+ *     最新フレームをメモリにキャッシュ。grid/live はそのキャッシュを即返す。
+ *   - UID は接続ごとに取得し status.cgi でキープアライブ。一定時間 grid から
+ *     要求が無ければ自動停止して NVR セッションを解放。
+ *   - ライブJPEGは低解像・低fps(監視用)。高画質は将来 H.264/H.265+HLS で別実装。
  */
+import { logger } from '../../logger.js'
 import { parseDigestChallenge, buildHttpDigest } from '../onvif/onvif-soap-client'
 import { iproNvrLogin, type IproNvrVodOptions } from './nvr-vod'
 
 export type IproNvrLiveOptions = IproNvrVodOptions
 
-const UID_CACHE = new Map<string, string>()
+const IDLE_MS      = 30_000   // この時間 grid 要求が無ければストリーム停止
+const KEEPALIVE_MS = 60_000   // status.cgi keepalive 間隔(<90秒)
+const FIRST_FRAME_WAIT_MS = 9_000
+
+const SOI = Buffer.from([0xff, 0xd8])
+const EOI = Buffer.from([0xff, 0xd9])
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms))
+}
 
 function insecureFetch(url: string, init: RequestInit, signal: AbortSignal): Promise<Response> {
   return fetch(url, { ...init, signal, tls: { rejectUnauthorized: false } } as unknown as RequestInit)
 }
 
-/** Digest GET（非ストリーミング・短命）。401→Digest再試行。 */
 async function digestGet(url: string, user: string, pass: string, timeoutMs: number): Promise<Response> {
   const r1 = await insecureFetch(url, { method: 'GET' }, AbortSignal.timeout(timeoutMs))
   if (r1.status !== 401) return r1
@@ -28,7 +38,7 @@ async function digestGet(url: string, user: string, pass: string, timeoutMs: num
   return insecureFetch(url, { method: 'GET', headers: { Authorization: buildHttpDigest('GET', url, user, pass, ch) } }, AbortSignal.timeout(timeoutMs))
 }
 
-/** Digest GET（ストリーミング・本体は呼び出し側で読む）。abort は外部 signal で。 */
+/** Digest GET（ストリーミング・本体は呼び出し側で読む）。abort は外部 signal。 */
 async function digestGetStream(url: string, user: string, pass: string, signal: AbortSignal): Promise<Response> {
   const r1 = await insecureFetch(url, { method: 'GET' }, AbortSignal.timeout(10_000))
   if (r1.status !== 401) return r1
@@ -36,75 +46,113 @@ async function digestGetStream(url: string, user: string, pass: string, signal: 
   return insecureFetch(url, { method: 'GET', headers: { Authorization: buildHttpDigest('GET', url, user, pass, ch) } }, signal)
 }
 
-async function getUid(opts: IproNvrLiveOptions): Promise<string> {
-  const cached = UID_CACHE.get(opts.endpoint)
-  if (cached) return cached
-  const uid = await iproNvrLogin(opts)
-  UID_CACHE.set(opts.endpoint, uid)
-  return uid
+/**
+ * バッファから完全な JPEG(ffd8…ffd9)を全て取り出し、残り(末尾の未完部)を返す。純粋関数。
+ */
+export function extractJpegFrames(buf: Buffer): { frames: Buffer[]; rest: Buffer } {
+  const frames: Buffer[] = []
+  let cursor = 0
+  for (;;) {
+    const soi = buf.indexOf(SOI, cursor)
+    if (soi < 0) { cursor = buf.length; break }
+    const eoi = buf.indexOf(EOI, soi + 2)
+    if (eoi < 0) { cursor = soi; break }      // SOI はあるが EOI 未着 → ここから残す
+    frames.push(buf.subarray(soi, eoi + 2))
+    cursor = eoi + 2
+  }
+  return { frames, rest: buf.subarray(cursor) }
 }
 
-const SOI = Buffer.from([0xff, 0xd8])
-const EOI = Buffer.from([0xff, 0xd9])
+interface Streamer {
+  latest:      Buffer | null
+  lastFrameAt: number
+  lastReqAt:   number
+  stopped:     boolean
+}
+const STREAMERS = new Map<string, Streamer>()
 
-/** ストリームから最初の完全な JPEG(ffd8…ffd9)を取り出す。 */
-export async function readFirstJpeg(
-  body: ReadableStream<Uint8Array>,
-  abort: () => void,
-): Promise<Buffer> {
-  const reader = body.getReader()
-  let buf = Buffer.alloc(0)
-  try {
-    for (;;) {
-      const { done, value } = await reader.read()
-      if (done) break
-      if (value) buf = Buffer.concat([buf, Buffer.from(value)])
-      const soi = buf.indexOf(SOI)
-      if (soi >= 0) {
-        const eoi = buf.indexOf(EOI, soi + 2)
-        if (eoi >= 0) return buf.subarray(soi, eoi + 2)
+function keyOf(endpoint: string, channel: number): string {
+  return `${endpoint}|${channel}`
+}
+
+/** push.cgi を常時受信し、最新フレームを s.latest に反映し続ける（自己再接続）。 */
+async function runStreamLoop(opts: IproNvrLiveOptions, channel: number, s: Streamer, key: string): Promise<void> {
+  let backoff = 1_000
+  while (!s.stopped && STREAMERS.get(key) === s) {
+    if (Date.now() - s.lastReqAt > IDLE_MS) break   // アイドル停止
+    let uid: string | null = null
+    const ctrl = new AbortController()
+    let ka: ReturnType<typeof setInterval> | null = null
+    try {
+      uid = await iproNvrLogin(opts)
+      await digestGet(`${opts.endpoint}/cgi-bin/hdrctl.cgi?UID=${uid}&SCREEN=1X&PC=AS60`, opts.username, opts.password, 8_000).catch(() => undefined)
+      const theUid = uid
+      ka = setInterval(() => {
+        digestGet(`${opts.endpoint}/cgi-bin/status.cgi?UID=${theUid}&PC=AS60`, opts.username, opts.password, 8_000).catch(() => undefined)
+      }, KEEPALIVE_MS)
+
+      const url = `${opts.endpoint}/cgi-bin/push.cgi?UID=${uid}&CAM=${channel}&CMD=START&COMP=JPEG&INTERNETMODE=ON`
+      const res = await digestGetStream(url, opts.username, opts.password, ctrl.signal)
+      if (!res.ok || !res.body) throw new Error(`push.cgi HTTP ${res.status}`)
+
+      const reader = res.body.getReader()
+      let acc: Buffer = Buffer.alloc(0)
+      for (;;) {
+        if (s.stopped || STREAMERS.get(key) !== s || Date.now() - s.lastReqAt > IDLE_MS) { ctrl.abort(); break }
+        const { done, value } = await reader.read()
+        if (done) break
+        if (value) acc = Buffer.concat([acc, Buffer.from(new Uint8Array(value))])
+        const { frames, rest } = extractJpegFrames(acc)
+        if (frames.length) {
+          const f = frames[frames.length - 1]
+          const out = Buffer.alloc(f.length)   // Buffer<ArrayBuffer> を確保
+          f.copy(out)
+          s.latest = out
+          s.lastFrameAt = Date.now()
+        }
+        // 残りが過大ならリセット(壊れ対策)
+        acc = rest.length > 4_000_000 ? Buffer.alloc(0) : rest
       }
-      if (buf.length > 8_000_000) throw new Error('push.cgi: JPEG not found within 8MB')
+      backoff = 1_000
+    } catch (e) {
+      logger.warn({ key, err: String(e) }, 'i-pro-nvr: stream error; will reconnect')
+      await sleep(backoff)
+      backoff = Math.min(backoff * 2, 15_000)
+    } finally {
+      if (ka) clearInterval(ka)
+      ctrl.abort()
+      if (uid) {
+        digestGet(`${opts.endpoint}/cgi-bin/push.cgi?UID=${uid}&CAM=${channel}&CMD=STOP&COMP=JPEG`, opts.username, opts.password, 5_000).catch(() => undefined)
+        digestGet(`${opts.endpoint}/cgi-bin/logout.cgi?UID=${uid}`, opts.username, opts.password, 5_000).catch(() => undefined)
+      }
     }
-  } finally {
-    abort()
-    try { await reader.cancel() } catch { /* noop */ }
   }
-  throw new Error('push.cgi: stream ended before a complete JPEG')
+  STREAMERS.delete(key)
+  logger.info({ key }, 'i-pro-nvr: stream stopped')
+}
+
+function ensureStreamer(opts: IproNvrLiveOptions, channel: number): Streamer {
+  const key = keyOf(opts.endpoint, channel)
+  let s = STREAMERS.get(key)
+  if (s) { s.lastReqAt = Date.now(); return s }
+  s = { latest: null, lastFrameAt: 0, lastReqAt: Date.now(), stopped: false }
+  STREAMERS.set(key, s)
+  void runStreamLoop(opts, channel, s, key)
+  logger.info({ key }, 'i-pro-nvr: stream started')
+  return s
 }
 
 /**
- * NVR から指定チャンネルのライブ JPEG を1枚取得。
- * @param channel NVR のカメラ番号 (CAM=)
+ * NVR から指定チャンネルのライブ JPEG を1枚返す（永続ストリームの最新フレーム）。
+ * 初回はフレーム到着まで最大 FIRST_FRAME_WAIT_MS 待つ。
  */
-export async function captureIproNvrJpeg(
-  opts:    IproNvrLiveOptions,
-  channel: number,
-  timeoutMs = 10_000,
-): Promise<Buffer> {
-  try {
-    const uid = await getUid(opts)
-    // 再生/ライブのコンテキスト設定（best-effort）
-    await digestGet(`${opts.endpoint}/cgi-bin/hdrctl.cgi?UID=${uid}&SCREEN=1X&PC=AS60`, opts.username, opts.password, 8_000)
-      .catch(() => undefined)
-
-    const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(), timeoutMs)
-    const startUrl = `${opts.endpoint}/cgi-bin/push.cgi?UID=${uid}&CAM=${channel}&CMD=START&COMP=JPEG&INTERNETMODE=ON`
-    try {
-      const res = await digestGetStream(startUrl, opts.username, opts.password, ctrl.signal)
-      if (!res.ok || !res.body) throw new Error(`push.cgi HTTP ${res.status}`)
-      return await readFirstJpeg(res.body, () => ctrl.abort())
-    } finally {
-      clearTimeout(timer)
-      ctrl.abort()
-      // ストリーム停止（best-effort）
-      digestGet(`${opts.endpoint}/cgi-bin/push.cgi?UID=${uid}&CAM=${channel}&CMD=STOP&COMP=JPEG`, opts.username, opts.password, 5_000)
-        .catch(() => undefined)
-    }
-  } catch (e) {
-    // UID 失効等で失敗したらキャッシュを捨てて次回ログインし直す
-    UID_CACHE.delete(opts.endpoint)
-    throw e
+export async function captureIproNvrJpeg(opts: IproNvrLiveOptions, channel: number): Promise<Buffer> {
+  const s = ensureStreamer(opts, channel)
+  if (s.latest) return s.latest
+  const deadline = Date.now() + FIRST_FRAME_WAIT_MS
+  while (Date.now() < deadline) {
+    await sleep(200)
+    if (s.latest) return s.latest
   }
+  throw new Error(`i-pro-nvr: no frame yet (ch=${channel})`)
 }
