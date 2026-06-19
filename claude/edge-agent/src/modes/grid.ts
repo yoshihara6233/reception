@@ -22,6 +22,7 @@ import { logger } from '../logger.js'
 import { snapshotUrl } from '../rtsp/url.js'
 import { captureRtspKeyframe, injectRtspCreds } from '../rtsp/keyframe.js'
 import { resolveOnvifRtspUrl } from '../adapters/onvif/onvif-rtsp.js'
+import { getOnvifSnapshotUrl, fetchOnvifJpeg } from '../adapters/onvif/onvif-snapshot.js'
 import { uploadGridJpeg } from '../upload/storage.js'
 import type { CameraDescriptor } from '../types.js'
 
@@ -45,18 +46,33 @@ interface Slot {
  */
 const ONVIF_RTSP_CACHE = new Map<string, string>()
 
-/** onvif-generic 用のセル取得を構築 (ONVIF で RTSP URL を解決→ffmpeg で 1 フレーム) */
+/**
+ * 直近に取得できたセル原画 (camId → JPEG)。**grid 再起動 (start_grid 再送) を跨いで保持**。
+ * 一時的な取得失敗や、1回の iterate で全カメラが揃う前の再起動でセルが暗転/点滅
+ * しないよう、最後の良いフレームを使い続ける。
+ */
+const LAST_FRAME = new Map<string, Buffer>()
+
+/**
+ * onvif-generic 用のセル取得を構築。
+ *  1. **HTTP JPEG スナップ (ONVIF GetSnapshotUri)** を最優先 — RTSP セッションを
+ *     消費せず、メインH264が NVR 占有で 503 でも取得できる (実機 102 で確認)。
+ *  2. GetSnapshotUri 非対応機のみ **RTSP→ffmpeg keyframe** にフォールバック。
+ */
 function buildOnvifCapture(cam: CameraDescriptor): () => Promise<Buffer> {
   const r = cam.recorder
   const endpoint = `http://${r.host}:${r.onvif_port ?? 80}`
+  const opts = { endpoint, username: r.username, password: r.password, timeoutMs: 8000 }
   const key = `${r.host}:${cam.channel}`
   return async () => {
+    // (1) HTTP JPEG スナップ
+    const snapUrl = await getOnvifSnapshotUrl(opts, r.host, cam.channel)
+    if (snapUrl) return fetchOnvifJpeg(snapUrl, r.username, r.password, 8000)
+
+    // (2) フォールバック: RTSP→ffmpeg keyframe
     let rtspUrl = ONVIF_RTSP_CACHE.get(key)
     if (!rtspUrl) {
-      const base = await resolveOnvifRtspUrl(
-        { endpoint, username: r.username, password: r.password, timeoutMs: 8000 },
-        cam.channel,
-      )
+      const base = await resolveOnvifRtspUrl(opts, cam.channel)
       rtspUrl = injectRtspCreds(base, r.username, r.password)
       ONVIF_RTSP_CACHE.set(key, rtspUrl)
     }
@@ -114,33 +130,27 @@ export async function startGrid(cameras: CameraDescriptor[]): Promise<GridHandle
   const fullW = cellW * GRID_COLS
   const fullH = cellH * GRID_ROWS
 
-  // 直近に取得できたセル原画 (pos→JPEG)。一時的な取得失敗 (ffmpeg timeout 等) で
-  // セルが暗転しないよう、最後の良いフレームを保持する。
-  const lastBuf = new Map<number, Buffer>()
-
   // One iteration: fetch all snapshots in parallel, resize each to a cell,
   // composite onto a dark base, encode as JPEG, upload.
   async function iterate(): Promise<void> {
     const fetches = await Promise.allSettled(
-      slots.map(async (s) => {
-        const buf = await s.capture()
-        return { pos: s.pos, buf }
-      }),
+      slots.map((s) => s.capture()),
     )
 
     let ok = 0
-    for (const f of fetches) {
+    fetches.forEach((f, i) => {
+      const s = slots[i]
       if (f.status === 'fulfilled') {
-        lastBuf.set(f.value.pos, f.value.buf)
+        LAST_FRAME.set(s.camId, f.value)  // 再起動を跨いで保持 (camId 別)
         ok++
       } else {
-        logger.debug({ reason: String(f.reason) }, 'grid: cell capture failed')
+        logger.debug({ pos: s.pos, camera_id: s.camId, reason: String(f.reason) }, 'grid: cell capture failed')
       }
-    }
+    })
 
     const layers: sharp.OverlayOptions[] = []
     for (const s of slots) {
-      const buf = lastBuf.get(s.pos)  // 今回失敗でも直近の良いフレームを使う
+      const buf = LAST_FRAME.get(s.camId)  // 今回失敗/再起動でも直近の良いフレームを使う
       if (!buf) continue
       const col = s.pos % GRID_COLS
       const row = Math.floor(s.pos / GRID_COLS)

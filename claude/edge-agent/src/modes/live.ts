@@ -16,6 +16,9 @@
 import { config } from '../config.js'
 import { logger } from '../logger.js'
 import { snapshotUrl } from '../rtsp/url.js'
+import { captureRtspKeyframe, injectRtspCreds } from '../rtsp/keyframe.js'
+import { resolveOnvifRtspUrl } from '../adapters/onvif/onvif-rtsp.js'
+import { getOnvifSnapshotUrl, fetchOnvifJpeg } from '../adapters/onvif/onvif-snapshot.js'
 import { uploadCameraSnapshot } from '../upload/storage.js'
 import type { CameraDescriptor } from '../types.js'
 
@@ -28,29 +31,54 @@ export interface StartLiveInput {
 /** How often the edge fetches+uploads a single-camera snapshot. */
 const LIVE_INTERVAL_MS = 1_000
 
-export async function startLive(i: StartLiveInput): Promise<LiveHandle> {
+/**
+ * 1 フレーム JPEG を取得する関数を vendor 別に組む。
+ * onvif-generic は grid と同じく HTTP JPEG スナップ優先・RTSP keyframe フォールバック。
+ */
+function buildCapture(cam: CameraDescriptor): () => Promise<Buffer> {
+  const r = cam.recorder
+  if (r.vendor === 'onvif-generic') {
+    const endpoint = `http://${r.host}:${r.onvif_port ?? 80}`
+    const opts = { endpoint, username: r.username, password: r.password, timeoutMs: 8000 }
+    let rtspUrl: string | null = null
+    return async () => {
+      const snapUrl = await getOnvifSnapshotUrl(opts, r.host, cam.channel)
+      if (snapUrl) return fetchOnvifJpeg(snapUrl, r.username, r.password, 8000)
+      if (!rtspUrl) {
+        rtspUrl = injectRtspCreds(await resolveOnvifRtspUrl(opts, cam.channel), r.username, r.password)
+      }
+      return captureRtspKeyframe(rtspUrl, config.FFMPEG_BIN)
+    }
+  }
+
+  // 既存: HTTP snapshot URL (Frigate 等)
   const url = snapshotUrl({
-    vendor:         i.camera.recorder.vendor,
-    host:           i.camera.recorder.host,
-    port:           i.camera.recorder.rtsp_port,
-    username:       i.camera.recorder.username,
-    password:       i.camera.recorder.password,
-    channel:        i.camera.channel,
-    frigateCamera:  i.camera.frigate_camera ?? undefined,
+    vendor:         r.vendor,
+    host:           r.host,
+    port:           r.rtsp_port,
+    username:       r.username,
+    password:       r.password,
+    channel:        cam.channel,
+    frigateCamera:  cam.frigate_camera ?? undefined,
     frigateApiPort: config.FRIGATE_API_PORT,
   })
   if (!url) {
-    throw new Error(
-      `live: vendor "${i.camera.recorder.vendor}" has no HTTP snapshot URL (ONVIF support is a TODO)`,
-    )
+    throw new Error(`live: vendor "${r.vendor}" has no snapshot source`)
   }
+  return async () => {
+    const resp = await fetch(url)
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    return Buffer.from(await resp.arrayBuffer())
+  }
+}
+
+export async function startLive(i: StartLiveInput): Promise<LiveHandle> {
+  const capture = buildCapture(i.camera)
 
   logger.info({ camera_id: i.camera.id, intervalMs: LIVE_INTERVAL_MS }, 'live: starting snapshot loop')
 
   async function iterate(): Promise<void> {
-    const r = await fetch(url!)
-    if (!r.ok) throw new Error(`HTTP ${r.status}`)
-    const buf = Buffer.from(await r.arrayBuffer())
+    const buf = await capture()
     await uploadCameraSnapshot(i.camera.id, buf)
   }
 
