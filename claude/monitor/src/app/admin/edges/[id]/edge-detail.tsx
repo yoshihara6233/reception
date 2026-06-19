@@ -16,7 +16,7 @@ interface Camera {
 }
 interface Recorder {
   id: string
-  vendor: 'ipro' | 'uniview' | 'frigate'
+  vendor: 'ipro' | 'uniview' | 'frigate' | 'onvif-generic'
   model: string | null
   host: string
   rtsp_port: number
@@ -116,7 +116,7 @@ function RecorderList({ edgeId, recorders }: { edgeId: string; recorders: Record
 }
 
 type NewRecorder = {
-  vendor: 'ipro' | 'uniview' | 'frigate'
+  vendor: 'ipro' | 'uniview' | 'frigate' | 'onvif-generic'
   model: string
   host: string
   rtsp_port: number
@@ -127,14 +127,17 @@ type NewRecorder = {
 }
 
 const VENDOR_DEFAULTS: Record<NewRecorder['vendor'], Partial<NewRecorder>> = {
-  uniview: { rtsp_port: 554,  username: 'admin', password: '' },
-  ipro:    { rtsp_port: 554,  username: 'admin', password: '' },
-  frigate: { rtsp_port: 8554, username: '',      password: '' },
+  uniview:          { rtsp_port: 554,  username: 'admin', password: '' },
+  ipro:             { rtsp_port: 554,  username: 'admin', password: '' },
+  frigate:          { rtsp_port: 8554, username: '',      password: '' },
+  // カメラ直 ONVIF: ONVIF は通常 80、RTSP は 554。1行=1カメラ。
+  'onvif-generic':  { rtsp_port: 554,  onvif_port: 80, username: 'admin', password: '' },
 }
 
 function vendorLabel(v: NewRecorder['vendor']) {
-  if (v === 'ipro')    return 'i-PRO'
-  if (v === 'frigate') return 'Frigate (OSS-VMS)'
+  if (v === 'ipro')           return 'i-PRO'
+  if (v === 'frigate')        return 'Frigate (OSS-VMS)'
+  if (v === 'onvif-generic')  return 'ONVIFカメラ直'
   return 'Uniview'
 }
 
@@ -166,6 +169,7 @@ function NewRecorderForm({
                   className="w-full rounded border border-slate-300 px-2 py-1">
             <option value="uniview">Uniview</option>
             <option value="ipro">i-PRO</option>
+            <option value="onvif-generic">ONVIFカメラ直</option>
             <option value="frigate">Frigate (OSS-VMS)</option>
           </select>
         </Field>

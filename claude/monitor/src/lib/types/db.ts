@@ -3,7 +3,7 @@
 
 export type EdgeStatus = 'offline' | 'idle' | 'grid' | 'live' | 'vod' | 'error'
 export type EdgeMode   = 'grid' | 'live' | 'vod'
-export type RecorderVendor = 'ipro' | 'uniview' | 'frigate'
+export type RecorderVendor = 'ipro' | 'uniview' | 'frigate' | 'onvif-generic'
 
 /**
  * Vendors whose recorders support VOD playback today.
@@ -12,6 +12,8 @@ export type RecorderVendor = 'ipro' | 'uniview' | 'frigate'
  *   is generated before the first frame, so we cap the requested window
  *   tighter for frigate (see VOD_RANGE_MAX_MIN_BY_VENDOR).
  * - ipro    : not supported; needs ONVIF Profile-G (Phase 2 work).
+ * - onvif-generic : ライブ/スナップのみ (カメラ直 ONVIF/RTSP)。VOD 非対応
+ *   (2026-06-19 実機: NVR が ONVIF Profile-G を提供しない。docs/spike-ipro-nu-result.md)。
  */
 export const VOD_VENDORS = ['uniview', 'frigate'] as const
 export type VodVendor = (typeof VOD_VENDORS)[number]
