@@ -22,6 +22,7 @@ import { logger } from '../logger.js'
 import { snapshotUrl } from '../rtsp/url.js'
 import { captureRtspKeyframe, injectRtspCreds } from '../rtsp/keyframe.js'
 import { resolveOnvifRtspUrl } from '../adapters/onvif/onvif-rtsp.js'
+import { getOnvifSnapshotUrl, fetchOnvifJpeg } from '../adapters/onvif/onvif-snapshot.js'
 import { uploadGridJpeg } from '../upload/storage.js'
 import type { CameraDescriptor } from '../types.js'
 
@@ -52,18 +53,26 @@ const ONVIF_RTSP_CACHE = new Map<string, string>()
  */
 const LAST_FRAME = new Map<string, Buffer>()
 
-/** onvif-generic 用のセル取得を構築 (ONVIF で RTSP URL を解決→ffmpeg で 1 フレーム) */
+/**
+ * onvif-generic 用のセル取得を構築。
+ *  1. **HTTP JPEG スナップ (ONVIF GetSnapshotUri)** を最優先 — RTSP セッションを
+ *     消費せず、メインH264が NVR 占有で 503 でも取得できる (実機 102 で確認)。
+ *  2. GetSnapshotUri 非対応機のみ **RTSP→ffmpeg keyframe** にフォールバック。
+ */
 function buildOnvifCapture(cam: CameraDescriptor): () => Promise<Buffer> {
   const r = cam.recorder
   const endpoint = `http://${r.host}:${r.onvif_port ?? 80}`
+  const opts = { endpoint, username: r.username, password: r.password, timeoutMs: 8000 }
   const key = `${r.host}:${cam.channel}`
   return async () => {
+    // (1) HTTP JPEG スナップ
+    const snapUrl = await getOnvifSnapshotUrl(opts, r.host, cam.channel)
+    if (snapUrl) return fetchOnvifJpeg(snapUrl, r.username, r.password, 8000)
+
+    // (2) フォールバック: RTSP→ffmpeg keyframe
     let rtspUrl = ONVIF_RTSP_CACHE.get(key)
     if (!rtspUrl) {
-      const base = await resolveOnvifRtspUrl(
-        { endpoint, username: r.username, password: r.password, timeoutMs: 8000 },
-        cam.channel,
-      )
+      const base = await resolveOnvifRtspUrl(opts, cam.channel)
       rtspUrl = injectRtspCreds(base, r.username, r.password)
       ONVIF_RTSP_CACHE.set(key, rtspUrl)
     }
