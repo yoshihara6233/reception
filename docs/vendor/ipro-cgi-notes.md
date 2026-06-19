@@ -44,6 +44,16 @@ GET /cgi-bin/httpdl.cgi?UID=<uid>&STARTTIME=yymmddhhmmss&ENDTIME=yymmddhhmmss
   - ファイル分割あり（サイズ大 or 録画内容変化）→ 複数パートを順に保存。
 - 録画が H.264/H.265 なら MP4 で取得可（実機カメラは該当）。JPEG録画はMP4不可(status=2)。
 
+> ✅ **2026-06-19 実機検証で取得成功**（NU101・CAM=1 H.265・5分で約50MB・`X-RecData-Satus:0`・`ftypmp42`）。
+> ⚠️ **最重要の落とし穴：STARTTIME/ENDTIME は UTC で送る**（JST−9h）。
+>    `recordedtime.cgi` の録画期間表示は **ローカル(JST)** なのに、`httpdl.cgi` の入力は **UTC** という混在仕様。
+>    JST のつもりで送ると +9h ずれて「録画なし(Satus:1)」になる（応答ファイル名 `001_<UTC入力をローカル変換した時刻>_...` で気づける）。
+>    実装では `STARTTIME = (要求JST時刻 − 9h) を yymmddhhmmss(UTC)` に変換。
+> - 応答は `multipart/form-data; boundary=--myboundary`。各パート: `Content-Type: application/octet-stream` +
+>   `X-Temp-FileName`(進行中) / `X-Prev-Filename`(完了mp4名) / `X-RecData-Satus`。**boundary とパートヘッダを剥がして
+>   octet-stream 本体を連結すると再生可能な MP4**（先頭に `ftypmp42`）。サイズ大/録画変化でファイル分割あり（複数パート連結）。
+> - 録画期間の確認は `recordedtime.cgi`(UID不要・ローカル時刻)、カメラCH確認は `as_getinfo.cgi?FILE=2`(`CAM_CONNECT_xxCH=1`)。
+
 ### ③ 再生ストリーミング（§3・スクラブ再生）
 `再生映像要求`＋`レコーダー制御(再生開始/逆再生/コマ送り/日時指定/高速/停止)`を UID 上で。
 データは H.264/H.265/JPEG。日時指定再生 §3.2.8。MP4一括DL(②)より複雑なので、
