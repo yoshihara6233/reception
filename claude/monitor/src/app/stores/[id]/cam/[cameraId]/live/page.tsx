@@ -13,7 +13,7 @@ export default async function LivePage(
   const { data: cam } = await supa
     .from('recorder_cameras')
     .select(`
-      id, name, channel, frigate_camera,
+      id, name, channel, frigate_camera, hls_url,
       recorders ( id, edge_id, vendor, live_host, stores: edge_devices ( store_id ) )
     `)
     .eq('id', cameraId)
@@ -24,6 +24,7 @@ export default async function LivePage(
     name:           string
     channel:        number
     frigate_camera: string | null
+    hls_url:        string | null
     recorders: {
       edge_id:    string
       vendor:     string
@@ -83,6 +84,7 @@ export default async function LivePage(
             room={room}
             liveIframeUrl={liveIframeUrl}
             liveIsImageStream={isRemoteHost}
+            hqUrl={c.hls_url}
           />
         </div>
       </main>
