@@ -75,24 +75,76 @@ function keyOf(endpoint: string, channel: number): string {
   return `${endpoint}|${channel}`
 }
 
-/** push.cgi を常時受信し、最新フレームを s.latest に反映し続ける（自己再接続）。 */
+// ── 共有UID管理 (NVR 1台 = 1 UID を全カメラで共有。UID上限16/503対策) ──
+interface UidState {
+  uid:     string | null
+  pending: Promise<string> | null
+  ka:      ReturnType<typeof setInterval> | null
+  refs:    number
+}
+const UID_STATE = new Map<string, UidState>()
+
+/** 参照を1つ確保 (ストリーマ開始時に1回)。 */
+function retainNvr(opts: IproNvrLiveOptions): void {
+  let st = UID_STATE.get(opts.endpoint)
+  if (!st) { st = { uid: null, pending: null, ka: null, refs: 0 }; UID_STATE.set(opts.endpoint, st) }
+  st.refs++
+}
+
+/** 共有UIDを取得 (無ければ1回だけログイン。並行呼び出しは同じログインを待つ)。ref は変えない。 */
+async function getNvrUid(opts: IproNvrLiveOptions): Promise<string> {
+  const st = UID_STATE.get(opts.endpoint)
+  if (!st) throw new Error('i-pro-nvr: uid state missing (retain not called)')
+  if (st.uid) return st.uid
+  if (!st.pending) {
+    st.pending = (async () => {
+      const uid = await iproNvrLogin(opts)
+      st.uid = uid
+      if (!st.ka) {
+        st.ka = setInterval(() => {
+          if (st.uid) digestGet(`${opts.endpoint}/cgi-bin/status.cgi?UID=${st.uid}&PC=AS60`, opts.username, opts.password, 8_000).catch(() => undefined)
+        }, KEEPALIVE_MS)
+      }
+      return uid
+    })()
+    st.pending.finally(() => { st.pending = null }).catch(() => undefined)
+  }
+  return st.pending
+}
+
+/** UID が失効(401/503等)した時に破棄。次の getNvrUid で再ログイン。 */
+function invalidateUid(endpoint: string): void {
+  const st = UID_STATE.get(endpoint)
+  if (st) st.uid = null
+}
+
+/** 参照を1つ手放す。0になったら keepalive 停止＋logout。 */
+function releaseNvr(opts: IproNvrLiveOptions): void {
+  const st = UID_STATE.get(opts.endpoint)
+  if (!st) return
+  st.refs = Math.max(0, st.refs - 1)
+  if (st.refs === 0) {
+    if (st.ka) clearInterval(st.ka)
+    const uid = st.uid
+    UID_STATE.delete(opts.endpoint)
+    if (uid) digestGet(`${opts.endpoint}/cgi-bin/logout.cgi?UID=${uid}`, opts.username, opts.password, 5_000).catch(() => undefined)
+  }
+}
+
+/** push.cgi を常時受信し、最新フレームを s.latest に反映し続ける（共有UID・自己再接続）。 */
 async function runStreamLoop(opts: IproNvrLiveOptions, channel: number, s: Streamer, key: string): Promise<void> {
-  let backoff = 1_000
+  let backoff = 2_000
+  retainNvr(opts)   // 共有UIDの参照を1つ確保 (このストリーマの生存中)
   while (!s.stopped && STREAMERS.get(key) === s) {
     if (Date.now() - s.lastReqAt > IDLE_MS) break   // アイドル停止
-    let uid: string | null = null
     const ctrl = new AbortController()
-    let ka: ReturnType<typeof setInterval> | null = null
     try {
-      uid = await iproNvrLogin(opts)
+      const uid = await getNvrUid(opts)   // NVR共有UID (両カメラで1つ)
       await digestGet(`${opts.endpoint}/cgi-bin/hdrctl.cgi?UID=${uid}&SCREEN=1X&PC=AS60`, opts.username, opts.password, 8_000).catch(() => undefined)
-      const theUid = uid
-      ka = setInterval(() => {
-        digestGet(`${opts.endpoint}/cgi-bin/status.cgi?UID=${theUid}&PC=AS60`, opts.username, opts.password, 8_000).catch(() => undefined)
-      }, KEEPALIVE_MS)
 
       const url = `${opts.endpoint}/cgi-bin/push.cgi?UID=${uid}&CAM=${channel}&CMD=START&COMP=JPEG&INTERNETMODE=ON`
       const res = await digestGetStream(url, opts.username, opts.password, ctrl.signal)
+      if (res.status === 401) { invalidateUid(opts.endpoint); throw new Error('push.cgi 401 (UID失効)') }
       if (!res.ok || !res.body) throw new Error(`push.cgi HTTP ${res.status}`)
 
       const reader = res.body.getReader()
@@ -110,24 +162,24 @@ async function runStreamLoop(opts: IproNvrLiveOptions, channel: number, s: Strea
           s.latest = out
           s.lastFrameAt = Date.now()
         }
-        // 残りが過大ならリセット(壊れ対策)
-        acc = rest.length > 4_000_000 ? Buffer.alloc(0) : rest
+        acc = rest.length > 4_000_000 ? Buffer.alloc(0) : rest   // 壊れ対策
       }
-      backoff = 1_000
+      // 正常に抜けた場合は push STOP だけ送る (UIDは共有なのでログアウトしない)
+      const cur = UID_STATE.get(opts.endpoint)?.uid
+      if (cur) digestGet(`${opts.endpoint}/cgi-bin/push.cgi?UID=${cur}&CAM=${channel}&CMD=STOP&COMP=JPEG`, opts.username, opts.password, 5_000).catch(() => undefined)
+      backoff = 2_000
     } catch (e) {
-      logger.warn({ key, err: String(e) }, 'i-pro-nvr: stream error; will reconnect')
+      const msg = String(e)
+      if (/HTTP 503/.test(msg)) invalidateUid(opts.endpoint)   // UID上限等 → 取り直し
+      logger.warn({ key, err: msg }, 'i-pro-nvr: stream error; will reconnect')
       await sleep(backoff)
-      backoff = Math.min(backoff * 2, 15_000)
+      backoff = Math.min(backoff * 2, 20_000)
     } finally {
-      if (ka) clearInterval(ka)
       ctrl.abort()
-      if (uid) {
-        digestGet(`${opts.endpoint}/cgi-bin/push.cgi?UID=${uid}&CAM=${channel}&CMD=STOP&COMP=JPEG`, opts.username, opts.password, 5_000).catch(() => undefined)
-        digestGet(`${opts.endpoint}/cgi-bin/logout.cgi?UID=${uid}`, opts.username, opts.password, 5_000).catch(() => undefined)
-      }
     }
   }
   STREAMERS.delete(key)
+  releaseNvr(opts)   // 参照を返す (0なら logout)
   logger.info({ key }, 'i-pro-nvr: stream stopped')
 }
 
