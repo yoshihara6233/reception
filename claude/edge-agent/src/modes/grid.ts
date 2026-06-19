@@ -129,14 +129,19 @@ export async function startGrid(cameras: CameraDescriptor[]): Promise<GridHandle
     )
 
     let ok = 0
-    for (const f of fetches) {
+    fetches.forEach((f, i) => {
       if (f.status === 'fulfilled') {
         lastBuf.set(f.value.pos, f.value.buf)
         ok++
       } else {
-        logger.debug({ reason: String(f.reason) }, 'grid: cell capture failed')
+        // 取得失敗は調査のため warn で可視化 (pos/camId/理由)。
+        const s = slots[i]
+        logger.warn(
+          { pos: s?.pos, camera_id: s?.camId, reason: String(f.reason) },
+          'grid: cell capture failed',
+        )
       }
-    }
+    })
 
     const layers: sharp.OverlayOptions[] = []
     for (const s of slots) {
@@ -169,7 +174,7 @@ export async function startGrid(cameras: CameraDescriptor[]): Promise<GridHandle
       .toBuffer()
 
     await uploadGridJpeg(composed)
-    logger.debug({ ok, total: slots.length }, 'grid: frame uploaded')
+    logger.info({ ok, total: slots.length }, 'grid: frame uploaded')
   }
 
   logger.info({ slots: slots.length, cellW, cellH }, 'grid: starting snapshot loop')
