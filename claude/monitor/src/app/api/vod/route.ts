@@ -54,24 +54,23 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const { data: cam, error: camErr } = await authSupa
     .from('recorder_cameras')
-    .select('id, recorders ( id, edge_id, vendor )')
+    .select('id, recorders ( id, edge_id, vendor, vod_host )')
     .eq('id', camera_id)
     .single()
   if (camErr || !cam) {
     return NextResponse.json({ error: 'camera_not_found' }, { status: 404 })
   }
-  const c = cam as unknown as { recorders: { edge_id: string; vendor: string } }
+  const c = cam as unknown as { recorders: { edge_id: string; vendor: string; vod_host: string | null } }
   const edgeId = c.recorders.edge_id
   const vendor = c.recorders.vendor
 
-  // Phase 8.4-B initial scope: Frigate only. Other vendors (Hikvision /
-  // Hanwha) have VOD adapters but plug into a different pipeline that
-  // Phase 8.5 will unify with this one.
-  if (vendor !== 'frigate') {
+  // VOD 対応: Frigate (clip.mp4) と onvif-generic+NVR (i-PRO httpdl)。
+  const vodOk = vendor === 'frigate' || (vendor === 'onvif-generic' && !!c.recorders.vod_host)
+  if (!vodOk) {
     return NextResponse.json(
       {
         error: 'vendor_unsupported',
-        message: `Phase 8.4-B Storage Direct VOD は当面 Frigate のみ対応です (vendor=${vendor})`,
+        message: `VOD 非対応: vendor=${vendor}${vendor === 'onvif-generic' ? '（このカメラに VODソース(NVR) が未設定）' : ''}`,
       },
       { status: 422 },
     )
