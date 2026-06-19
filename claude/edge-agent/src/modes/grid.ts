@@ -20,6 +20,8 @@ import sharp from 'sharp'
 import { config } from '../config.js'
 import { logger } from '../logger.js'
 import { snapshotUrl } from '../rtsp/url.js'
+import { captureRtspKeyframe, injectRtspCreds } from '../rtsp/keyframe.js'
+import { resolveOnvifRtspUrl } from '../adapters/onvif/onvif-rtsp.js'
 import { uploadGridJpeg } from '../upload/storage.js'
 import type { CameraDescriptor } from '../types.js'
 
@@ -30,15 +32,41 @@ const SLOTS     = GRID_COLS * GRID_ROWS
 type GridHandle = { stop: () => Promise<void> }
 
 interface Slot {
-  pos:   number
-  url:   string
-  camId: string
+  pos:     number
+  camId:   string
+  /** 1 セル分の JPEG を取得する。vendor ごとに HTTP snapshot か ffmpeg keyframe。 */
+  capture: () => Promise<Buffer>
+}
+
+/** onvif-generic 用のセル取得を構築 (ONVIF で RTSP URL を解決→ffmpeg で 1 フレーム) */
+function buildOnvifCapture(cam: CameraDescriptor): () => Promise<Buffer> {
+  const r = cam.recorder
+  const endpoint = `http://${r.host}:${r.onvif_port ?? 80}`
+  let rtspUrl: string | null = null   // 解決後キャッシュ (profile token は不変)
+  return async () => {
+    if (!rtspUrl) {
+      const base = await resolveOnvifRtspUrl(
+        { endpoint, username: r.username, password: r.password, timeoutMs: 8000 },
+        cam.channel,
+      )
+      rtspUrl = injectRtspCreds(base, r.username, r.password)
+    }
+    return captureRtspKeyframe(rtspUrl, config.FFMPEG_BIN)
+  }
 }
 
 export async function startGrid(cameras: CameraDescriptor[]): Promise<GridHandle> {
   const slots: Slot[] = []
   for (const cam of cameras) {
     if (cam.grid_pos < 0 || cam.grid_pos >= SLOTS) continue
+
+    // ONVIF カメラ直: RTSP→ffmpeg keyframe (H.264/H.265 両対応)
+    if (cam.recorder.vendor === 'onvif-generic') {
+      slots.push({ pos: cam.grid_pos, camId: cam.id, capture: buildOnvifCapture(cam) })
+      continue
+    }
+
+    // 既存: HTTP snapshot URL (Frigate 等)
     const url = snapshotUrl({
       vendor:        cam.recorder.vendor,
       host:          cam.recorder.host,
@@ -56,11 +84,19 @@ export async function startGrid(cameras: CameraDescriptor[]): Promise<GridHandle
       )
       continue
     }
-    slots.push({ pos: cam.grid_pos, url, camId: cam.id })
+    slots.push({
+      pos:   cam.grid_pos,
+      camId: cam.id,
+      capture: async () => {
+        const resp = await fetch(url)
+        if (!resp.ok) throw new Error(`HTTP ${resp.status} from ${url}`)
+        return Buffer.from(await resp.arrayBuffer())
+      },
+    })
   }
 
   if (slots.length === 0) {
-    throw new Error('grid: no cameras with a snapshot URL configured')
+    throw new Error('grid: no cameras with a snapshot source configured')
   }
 
   // Pre-compute cell geometry once.
@@ -74,9 +110,7 @@ export async function startGrid(cameras: CameraDescriptor[]): Promise<GridHandle
   async function iterate(): Promise<void> {
     const fetches = await Promise.allSettled(
       slots.map(async (s) => {
-        const r = await fetch(s.url)
-        if (!r.ok) throw new Error(`HTTP ${r.status} from ${s.url}`)
-        const buf = Buffer.from(await r.arrayBuffer())
+        const buf = await s.capture()
         return { pos: s.pos, buf }
       }),
     )
