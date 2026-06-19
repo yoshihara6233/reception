@@ -19,6 +19,20 @@ describe('resolveOnvifRtspUrl', () => {
     expect((client.getStreamUri as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith('def_profile2', 'RTSP')
   })
 
+  it('JPEG/MJPEG プロファイルがあれば channel より優先する (NVRがH264を占有=503回避)', async () => {
+    const client = {
+      getProfiles: vi.fn().mockResolvedValue([
+        { token: 'h264_main', name: 'Main', encoding: 'H264' },
+        { token: 'h264_sub',  name: 'Sub',  encoding: 'H264' },
+        { token: 'jpeg_1',    name: 'JPEG', encoding: 'JPEG' },
+      ]),
+      getStreamUri: vi.fn().mockResolvedValue('rtsp://x/jpeg'),
+    } as unknown as OnvifSoapClient
+    await resolveOnvifRtspUrl(opts, 1, client)
+    // channel 1 は h264_main だが JPEG を優先
+    expect((client.getStreamUri as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith('jpeg_1', 'RTSP')
+  })
+
   it('範囲外 channel は先頭 profile にフォールバック', async () => {
     const client = {
       getProfiles: vi.fn().mockResolvedValue([{ token: 'p1', name: 'Main' }]),
