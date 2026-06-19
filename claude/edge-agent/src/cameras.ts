@@ -19,12 +19,20 @@ interface Row {
   enabled: boolean
   frigate_camera: string | null
   recorders: {
-    vendor: 'ipro' | 'uniview' | 'frigate'
+    vendor: 'ipro' | 'uniview' | 'frigate' | 'onvif-generic'
     host: string
     rtsp_port: number
     username: string
     password_enc: string
   } | null
+}
+
+/**
+ * password_enc は当面平文運用。管理API(/api/admin/recorders)が `plain:` 接頭辞を
+ * 付けて保存するため、ここで剥がす（Vault 化は後フェーズ）。
+ */
+function decodePassword(stored: string): string {
+  return stored.startsWith('plain:') ? stored.slice('plain:'.length) : stored
 }
 
 export async function loadCameras(): Promise<CameraDescriptor[]> {
@@ -51,7 +59,7 @@ export async function loadCameras(): Promise<CameraDescriptor[]> {
         host:      r.recorders!.host,
         rtsp_port: r.recorders!.rtsp_port,
         username:  r.recorders!.username,
-        password:  r.recorders!.password_enc,
+        password:  decodePassword(r.recorders!.password_enc),
       },
     }))
 }

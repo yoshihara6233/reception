@@ -14,7 +14,7 @@ interface EdgePayload {
   stores: { name: string; area_code: string | null }
   recorders: {
     id: string
-    vendor: 'ipro' | 'uniview' | 'frigate'
+    vendor: 'ipro' | 'uniview' | 'frigate' | 'onvif-generic'
     model: string | null
     host: string
     rtsp_port: number
