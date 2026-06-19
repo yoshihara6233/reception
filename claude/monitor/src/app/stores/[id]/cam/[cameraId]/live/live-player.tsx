@@ -39,7 +39,8 @@ const FRAME_GAP_MS = 400
 const ERROR_THRESHOLD = 5
 const STOP_DELAY_MS = 300
 
-type Mode = 'iframe' | 'jpeg'
+// 'hq' = go2rtc 高画質(H.265→H.264 変換ライブ・Cloudflare Tunnel経由 stream.html iframe)
+type Mode = 'hq' | 'iframe' | 'jpeg'
 
 // F80.1: key bumped to v2. The v1 auto-fallback persisted 'jpeg' on a
 // transient iframe timeout (see onError below), which permanently stuck
@@ -54,7 +55,7 @@ function loadMode(cameraId: string, defaultMode: Mode): Mode {
   if (typeof window === 'undefined') return defaultMode
   try {
     const v = window.localStorage.getItem(modePrefKey(cameraId))
-    return v === 'iframe' || v === 'jpeg' ? v : defaultMode
+    return v === 'hq' || v === 'iframe' || v === 'jpeg' ? v : defaultMode
   } catch {
     return defaultMode
   }
@@ -76,11 +77,25 @@ interface Props {
   // <iframe> (a multipart/x-mixed-replace response never fires the iframe load
   // event, which would trip the 8s fallback watchdog).
   liveIsImageStream?: boolean
+  // go2rtc high-quality URL (stream.html, via Cloudflare Tunnel). When set, the
+  // camera gets a 高画質(go2rtc) mode that embeds go2rtc's own player. This is
+  // how onvif-generic / i-PRO H.265 cameras get high-quality live (edge go2rtc
+  // transcodes H.265→H.264). Independent of liveIframeUrl (Frigate).
+  hqUrl?: string | null
 }
 
-export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, liveIsImageStream }: Props) {
-  // Default mode: iframe when supported, jpeg otherwise. User pref overrides.
-  const defaultMode: Mode = liveIframeUrl ? 'iframe' : 'jpeg'
+// 利用可能なモードから、保存済み設定を尊重しつつ有効なモードを選ぶ。
+function resolveMode(prefer: Mode, hasHq: boolean, hasIframe: boolean): Mode {
+  if (prefer === 'hq' && hasHq) return 'hq'
+  if (prefer === 'iframe' && hasIframe) return 'iframe'
+  if (prefer === 'jpeg') return 'jpeg'
+  // 設定が今のカメラで使えない → 高画質を優先(go2rtc > Frigate)、無ければ軽量。
+  return hasHq ? 'hq' : hasIframe ? 'iframe' : 'jpeg'
+}
+
+export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, liveIsImageStream, hqUrl }: Props) {
+  // Default mode: go2rtc高画質 > Frigate iframe > jpeg. User pref overrides.
+  const defaultMode: Mode = hqUrl ? 'hq' : liveIframeUrl ? 'iframe' : 'jpeg'
   const [mode, setMode]   = useState<Mode>(defaultMode)
   // Auto-fallback banner when iframe fails to load.
   const [iframeFailed, setIframeFailed] = useState(false)
@@ -88,9 +103,8 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
   // Hydrate pref from localStorage on mount (avoids SSR mismatch).
   useEffect(() => {
     const prefer = loadMode(cameraId, defaultMode)
-    // If user prefers iframe but the camera doesn't support it, fall back.
-    setMode(prefer === 'iframe' && !liveIframeUrl ? 'jpeg' : prefer)
-  }, [cameraId, defaultMode, liveIframeUrl])
+    setMode(resolveMode(prefer, !!hqUrl, !!liveIframeUrl))
+  }, [cameraId, defaultMode, liveIframeUrl, hqUrl])
 
   function switchMode(next: Mode): void {
     setIframeFailed(false)
@@ -102,12 +116,15 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
     <div className="relative flex h-[calc(100vh-44px)] flex-col bg-black">
       <ModeToolbar
         mode={mode}
+        hqSupported={!!hqUrl}
         iframeSupported={!!liveIframeUrl}
         iframeFailed={iframeFailed}
         onSwitch={switchMode}
       />
       <div className="relative flex-1">
-        {mode === 'iframe' && liveIframeUrl ? (
+        {mode === 'hq' && hqUrl ? (
+          <Go2rtcMode url={hqUrl} />
+        ) : mode === 'iframe' && liveIframeUrl ? (
           liveIsImageStream ? (
             // Remote MJPEG stream (via Cloudflare Tunnel). Render in <img> with
             // an Access-aware error overlay instead of auto-falling back to
@@ -138,32 +155,51 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
 // ─── Mode toolbar ───────────────────────────────────────────────────────────
 
 function ModeToolbar({
-  mode, iframeSupported, iframeFailed, onSwitch,
+  mode, hqSupported, iframeSupported, iframeFailed, onSwitch,
 }: {
   mode:            Mode
+  hqSupported:     boolean
   iframeSupported: boolean
   iframeFailed:    boolean
   onSwitch:        (m: Mode) => void
 }) {
+  const label =
+    mode === 'hq'     ? '高画質ライブ (go2rtc H.264変換)'
+    : mode === 'iframe' ? '高画質ライブ (NVR直接)'
+    : '軽量モード (1秒スナップ)'
   return (
     <div className="flex items-center justify-between gap-2 border-b border-slate-800 bg-slate-900 px-3 py-1.5 text-[11px]">
       <div className="flex items-center gap-1.5">
-        <button
-          type="button"
-          disabled={!iframeSupported}
-          onClick={() => onSwitch('iframe')}
-          className={
-            'rounded px-2 py-0.5 ' +
-            (mode === 'iframe'
-              ? 'bg-blue-600 text-white'
-              : iframeSupported
-                ? 'bg-slate-700 text-slate-200 hover:bg-slate-600'
-                : 'cursor-not-allowed bg-slate-800 text-slate-500')
-          }
-          title={iframeSupported ? '高画質 (25fps, ~1-2s 遅延)' : 'このレコーダではiframeモード非対応'}
-        >
-          🎥 高画質
-        </button>
+        {hqSupported && (
+          <button
+            type="button"
+            onClick={() => onSwitch('hq')}
+            className={
+              'rounded px-2 py-0.5 ' +
+              (mode === 'hq'
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-700 text-slate-200 hover:bg-slate-600')
+            }
+            title="高画質 (go2rtcでH.265→H.264変換, ~1-3s 遅延)"
+          >
+            🎬 高画質
+          </button>
+        )}
+        {iframeSupported && (
+          <button
+            type="button"
+            onClick={() => onSwitch('iframe')}
+            className={
+              'rounded px-2 py-0.5 ' +
+              (mode === 'iframe'
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-700 text-slate-200 hover:bg-slate-600')
+            }
+            title="高画質 (Frigate, 25fps, ~1-2s 遅延)"
+          >
+            🎥 高画質{hqSupported ? '(Frigate)' : ''}
+          </button>
+        )}
         <button
           type="button"
           onClick={() => onSwitch('jpeg')}
@@ -179,7 +215,7 @@ function ModeToolbar({
         </button>
       </div>
       <div className="text-[10px] text-slate-400">
-        {mode === 'iframe' ? '高画質ライブ (NVR直接)' : '軽量モード (1秒スナップ)'}
+        {label}
         {iframeFailed && (
           <span className="ml-2 text-amber-400">⚠ 高画質モード接続失敗 — 軽量モードへ自動切替</span>
         )}
@@ -215,6 +251,85 @@ function IframeMode({ url, onError }: { url: string; onError: () => void }) {
       onError={onError}
       title="NVR live"
     />
+  )
+}
+
+// ─── go2rtc high-quality mode (H.265→H.264 transcode via Cloudflare Tunnel) ──
+
+function Go2rtcMode({ url }: { url: string }) {
+  // Embeds go2rtc's own stream.html (MSE/WebRTC/HLS auto-select). We iframe it
+  // rather than running hls.js ourselves because go2rtc doesn't send CORS
+  // headers, so a cross-origin fetch from the monitor origin would be blocked —
+  // but a same-origin iframe to go2rtc has no CORS problem.
+  //
+  // Behind Cloudflare Access: if the operator hasn't authenticated to the go2rtc
+  // domain, the iframe is 302'd to the Access login, which sets X-Frame-Options
+  // and renders blank (no load event). An 8s watchdog then shows a one-click
+  // "log in to camera" + retry overlay (same pattern as ImageStreamMode).
+  const [reloadKey, setReloadKey] = useState(0)
+  const [loaded, setLoaded]       = useState(false)
+  const [failed, setFailed]       = useState(false)
+
+  let loginOrigin: string | null = null
+  try { loginOrigin = new URL(url).origin } catch { loginOrigin = null }
+  const src = `${url}${url.includes('?') ? '&' : '?'}_r=${reloadKey}`
+
+  // Watchdog: if the iframe hasn't loaded 8s after (re)load, assume the Access
+  // login blocked it (X-Frame-Options) and surface the login overlay. `loaded`
+  // and `reloadKey` are deps so a successful load (or a retry) re-arms cleanly.
+  useEffect(() => {
+    const t = setTimeout(() => { if (!loaded) setFailed(true) }, 8_000)
+    return () => clearTimeout(t)
+  }, [loaded, reloadKey])
+
+  function retry(): void {
+    setLoaded(false)
+    setFailed(false)
+    setReloadKey((k) => k + 1)
+  }
+
+  return (
+    <div className="relative h-full w-full bg-black">
+      <iframe
+        key={reloadKey}
+        src={src}
+        className="h-full w-full border-0"
+        allow="autoplay; fullscreen"
+        sandbox="allow-scripts allow-same-origin"
+        onLoad={() => { setLoaded(true); setFailed(false) }}
+        title="go2rtc live"
+      />
+      {failed && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/75 px-6 text-center text-sm text-slate-200">
+          <div>
+            高画質映像を表示できません。
+            <br />
+            カメラ(go2rtc)側の認証が必要な場合があります。
+          </div>
+          <div className="flex gap-2">
+            {loginOrigin && (
+              <button
+                type="button"
+                onClick={() => window.open(loginOrigin!, '_blank', 'noopener,noreferrer')}
+                className="rounded bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-500"
+              >
+                📹 カメラにログイン
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={retry}
+              className="rounded bg-slate-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-600"
+            >
+              🔄 再試行
+            </button>
+          </div>
+          <div className="text-[11px] text-slate-400">
+            別タブでログイン後、「再試行」を押してください
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
