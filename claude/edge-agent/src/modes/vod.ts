@@ -120,6 +120,87 @@ async function remuxFaststart(input: Buffer, clipId: string): Promise<Buffer> {
   }
 }
 
+/**
+ * VODの動画コーデックを判定（ffprobe）。判定不能時は null。
+ * 'hevc' なら Chrome/Firefox が再生不可なので H.264 へ変換する必要がある。
+ */
+async function probeVideoCodec(path: string): Promise<string | null> {
+  try {
+    return await new Promise<string | null>((resolve) => {
+      const proc = spawn(config.FFPROBE_BIN, [
+        '-v', 'error',
+        '-select_streams', 'v:0',
+        '-show_entries', 'stream=codec_name',
+        '-of', 'default=nw=1:nk=1',
+        path,
+      ], { stdio: ['ignore', 'pipe', 'pipe'] })
+      let out = ''
+      proc.stdout?.on('data', (b: Buffer) => { out += b.toString() })
+      proc.on('error', () => resolve(null))
+      proc.on('exit', () => resolve(out.trim().split(/\s+/)[0] || null))
+    })
+  } catch {
+    return null
+  }
+}
+
+/**
+ * H.265(HEVC) の録画MP4は Chrome/Firefox が再生できない（OS/ブラウザ依存）。
+ * その場合のみ H.264(libx264) へ変換して全ブラウザ再生可能にする。
+ * H.264 等はそのまま返す（再エンコードの世代劣化を避ける）。
+ *
+ * バッチ処理（非リアルタイム）なので reliability 重視で libx264 を使用。
+ * ※ライブの低遅延変換は別途 go2rtc(QSV) で行う方針（docs/live-h264-go2rtc-plan.md）。
+ */
+async function transcodeHevcToH264IfNeeded(input: Buffer, clipId: string): Promise<Buffer> {
+  const dir = join(tmpdir(), 'intereco-edge-vod')
+  await mkdir(dir, { recursive: true })
+  const inPath  = join(dir, `${clipId}.src.mp4`)
+  const outPath = join(dir, `${clipId}.h264.mp4`)
+  try {
+    await writeFile(inPath, input)
+    const codec = await probeVideoCodec(inPath)
+    if (codec !== 'hevc' && codec !== 'h265') {
+      // H.264 等はそのまま（codec=null=判定不能時も、動いている既存ケースを壊さないため素通し）
+      logger.info({ clipId, codec }, 'vod: no transcode (already browser-playable)')
+      return input
+    }
+    logger.info({ clipId, codec }, 'vod: HEVC detected → transcoding to H.264')
+    const startedAt = Date.now()
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn(config.FFMPEG_BIN, [
+        '-hide_banner', '-loglevel', 'warning',
+        '-i', inPath,
+        '-c:v', 'libx264',
+        '-preset', 'veryfast',
+        '-crf', '23',
+        '-profile:v', 'main',
+        '-pix_fmt', 'yuv420p',
+        // 音声は AAC へ（無音声ストリームなら無害にスキップ）。
+        '-c:a', 'aac', '-b:a', '96k',
+        '-movflags', '+faststart',
+        '-f', 'mp4', '-y', outPath,
+      ], { stdio: ['ignore', 'pipe', 'pipe'] })
+      let stderr = ''
+      proc.stderr?.on('data', (b: Buffer) => { stderr += b.toString() })
+      proc.on('error', reject)
+      proc.on('exit', (code) => {
+        if (code === 0) resolve()
+        else reject(new Error(`ffmpeg hevc→h264 exit ${code}: ${stderr.slice(0, 300)}`))
+      })
+    })
+    const out = await readFile(outPath)
+    logger.info(
+      { clipId, srcBytes: input.length, h264Bytes: out.length, transcodeMs: Date.now() - startedAt },
+      'vod: transcoded HEVC→H.264',
+    )
+    return out
+  } finally {
+    await unlink(inPath).catch(() => {})
+    await unlink(outPath).catch(() => {})
+  }
+}
+
 const BUCKET = 'vod-clips'
 
 type VodHandle = { stop: () => Promise<void> }
@@ -201,6 +282,9 @@ export async function startVod(i: StartVodInput): Promise<VodHandle> {
           new Date(i.fromIso),
           new Date(i.toIso),
         )
+        if (stopped) return
+        // H.265カメラ(例: 101)の録画は HEVC → Chrome 再生不可。HEVC のみ H.264 へ変換。
+        buf = await transcodeHevcToH264IfNeeded(buf, i.clipId)
         if (stopped) return
       } else {
         // Frigate: clip.mp4 を取得 → fragmented MP4 を faststart に remux。

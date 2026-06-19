@@ -15,6 +15,7 @@ const Env = z.object({
   LIVEKIT_URL:               z.string().url().optional(),
 
   FFMPEG_BIN:             z.string().default('/usr/bin/ffmpeg'),
+  FFPROBE_BIN:            z.string().default('/usr/bin/ffprobe'),
   GO2RTC_BIN:             z.string().default('/usr/local/bin/go2rtc'),
   TMP_DIR:                z.string().default('/var/tmp/edge-agent'),
 
