@@ -56,12 +56,13 @@ async function main() {
           const cam = cams.find((c) => c.id === cmd.camera_id)
           if (!cam) return logger.warn({ camera_id: cmd.camera_id }, 'unknown camera')
 
-          if (cam.recorder.vendor !== 'frigate') {
-            // Phase 8.5 will route through NvrAdapter.exportVodMp4 to cover
-            // Uniview / Hikvision / Hanwha / etc. — same upload pipeline.
+          // VOD 対応: Frigate (clip.mp4) と onvif-generic+NVR (i-PRO httpdl)。
+          const vodOk = cam.recorder.vendor === 'frigate'
+            || (cam.recorder.vendor === 'onvif-generic' && !!cam.recorder.vod_host)
+          if (!vodOk) {
             logger.warn(
               { camera_id: cmd.camera_id, vendor: cam.recorder.vendor },
-              'start_vod: only Frigate is supported in Phase 8.4-B — skipping',
+              'start_vod: VOD unsupported for this camera (frigate / onvif-generic+NVR only) — skipping',
             )
             return
           }
