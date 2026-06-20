@@ -59,6 +59,21 @@ export default async function LivePage(
           ? `${liveOrigin}/api/${c.frigate_camera}?fps=5&height=720`
           : `${liveOrigin}/cameras/${c.frigate_camera}`)
       : null
+  // go2rtc 高画質: hls_url(stream.html?src=NAME) から src を取り出し、monitor の
+  // 認証付きプロキシ越しの HLS プレイリスト URL を組む。プロキシが Cloudflare
+  // Access の Service Token をサーバ側で付けるので、エンドユーザは Cloudflare
+  // ログイン不要(monitorログインのみ)。&mp4 で fMP4(H.264)を要求。
+  let hqUrl: string | null = null
+  if (c.hls_url) {
+    try {
+      const src = new URL(c.hls_url).searchParams.get('src')
+      if (src) {
+        hqUrl = `/api/live-proxy/${cameraId}/api/stream.m3u8?src=${encodeURIComponent(src)}&mp4`
+      }
+    } catch {
+      hqUrl = null
+    }
+  }
   const room   = `live-${cameraId}`
 
   return (
@@ -84,7 +99,7 @@ export default async function LivePage(
             room={room}
             liveIframeUrl={liveIframeUrl}
             liveIsImageStream={isRemoteHost}
-            hqUrl={c.hls_url}
+            hqUrl={hqUrl}
           />
         </div>
       </main>

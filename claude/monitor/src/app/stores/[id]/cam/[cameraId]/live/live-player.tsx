@@ -28,6 +28,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
+import Hls from 'hls.js'
 import { cancelPendingStop, scheduleStop } from '@/lib/edge-stop-registry'
 
 // Floor between snapshot frames. Polling is onLoad-driven (the next fetch
@@ -254,79 +255,65 @@ function IframeMode({ url, onError }: { url: string; onError: () => void }) {
   )
 }
 
-// ─── go2rtc high-quality mode (H.265→H.264 transcode via Cloudflare Tunnel) ──
+// ─── go2rtc high-quality mode (H.265→H.264, via monitor's authenticated proxy) ─
 
 function Go2rtcMode({ url }: { url: string }) {
-  // Embeds go2rtc's own stream.html (MSE/WebRTC/HLS auto-select). We iframe it
-  // rather than running hls.js ourselves because go2rtc doesn't send CORS
-  // headers, so a cross-origin fetch from the monitor origin would be blocked —
-  // but a same-origin iframe to go2rtc has no CORS problem.
-  //
-  // Behind Cloudflare Access: if the operator hasn't authenticated to the go2rtc
-  // domain, the iframe is 302'd to the Access login, which sets X-Frame-Options
-  // and renders blank (no load event). An 8s watchdog then shows a one-click
-  // "log in to camera" + retry overlay (same pattern as ImageStreamMode).
+  // `url` is the monitor's OWN proxy HLS playlist (/api/live-proxy/<cam>/...),
+  // not go2rtc directly. The proxy attaches the Cloudflare Access service token
+  // server-side, so playback needs only the monitor (Supabase) session — no
+  // second Cloudflare login. Same-origin, so hls.js (no CORS issue) works.
+  const videoRef                  = useRef<HTMLVideoElement>(null)
   const [reloadKey, setReloadKey] = useState(0)
-  const [loaded, setLoaded]       = useState(false)
   const [failed, setFailed]       = useState(false)
 
-  let loginOrigin: string | null = null
-  try { loginOrigin = new URL(url).origin } catch { loginOrigin = null }
-  const src = `${url}${url.includes('?') ? '&' : '?'}_r=${reloadKey}`
-
-  // Watchdog: if the iframe hasn't loaded 8s after (re)load, assume the Access
-  // login blocked it (X-Frame-Options) and surface the login overlay. `loaded`
-  // and `reloadKey` are deps so a successful load (or a retry) re-arms cleanly.
   useEffect(() => {
-    const t = setTimeout(() => { if (!loaded) setFailed(true) }, 8_000)
-    return () => clearTimeout(t)
-  }, [loaded, reloadKey])
-
-  function retry(): void {
-    setLoaded(false)
+    const video = videoRef.current
+    if (!video) return
     setFailed(false)
-    setReloadKey((k) => k + 1)
-  }
+
+    // Safari plays HLS natively; everyone else uses hls.js.
+    if (!Hls.isSupported()) {
+      if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = url
+        video.play().catch(() => {})
+        return
+      }
+      setFailed(true)
+      return
+    }
+
+    const hls = new Hls({ liveSyncDurationCount: 3, manifestLoadingMaxRetry: 2 })
+    hls.loadSource(url)
+    hls.attachMedia(video)
+    hls.on(Hls.Events.MANIFEST_PARSED, () => { video.play().catch(() => {}) })
+    hls.on(Hls.Events.ERROR, (_evt, data) => {
+      // Fatal errors (network/media) → show retry. Non-fatal are auto-recovered.
+      if (data.fatal) setFailed(true)
+    })
+    return () => { hls.destroy() }
+  }, [url, reloadKey])
 
   return (
     <div className="relative h-full w-full bg-black">
-      <iframe
-        key={reloadKey}
-        src={src}
-        className="h-full w-full border-0"
-        allow="autoplay; fullscreen"
-        sandbox="allow-scripts allow-same-origin"
-        onLoad={() => { setLoaded(true); setFailed(false) }}
-        title="go2rtc live"
+      {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+      <video
+        ref={videoRef}
+        autoPlay
+        muted
+        playsInline
+        controls
+        className="h-full w-full bg-black object-contain"
       />
       {failed && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/75 px-6 text-center text-sm text-slate-200">
-          <div>
-            高画質映像を表示できません。
-            <br />
-            カメラ(go2rtc)側の認証が必要な場合があります。
-          </div>
-          <div className="flex gap-2">
-            {loginOrigin && (
-              <button
-                type="button"
-                onClick={() => window.open(loginOrigin!, '_blank', 'noopener,noreferrer')}
-                className="rounded bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-500"
-              >
-                📹 カメラにログイン
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={retry}
-              className="rounded bg-slate-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-600"
-            >
-              🔄 再試行
-            </button>
-          </div>
-          <div className="text-[11px] text-slate-400">
-            別タブでログイン後、「再試行」を押してください
-          </div>
+          <div>高画質映像を表示できません（go2rtc / 回線）。</div>
+          <button
+            type="button"
+            onClick={() => { setFailed(false); setReloadKey((k) => k + 1) }}
+            className="rounded bg-slate-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-600"
+          >
+            🔄 再試行
+          </button>
         </div>
       )}
     </div>
