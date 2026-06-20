@@ -18,6 +18,7 @@
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.103.2",
     "@types/pdfkit": "^0.17.6",
+    "hls.js": "^1.6.16",
     "jszip": "^3.10.1",
     "leaflet": "^1.9.4",
     "leaflet.markercluster": "^1.5.3",
