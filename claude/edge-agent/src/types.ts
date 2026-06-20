@@ -33,6 +33,8 @@ export interface CameraDescriptor {
   grid_pos: number
   /** Frigate のみ: re-stream カメラ名 (例: "camera_01"). null の場合 channel 番号から自動生成 */
   frigate_camera: string | null
+  /** go2rtc 高画質ライブ用 RTSP ソース(完全URL or パスのみ)。null=go2rtc対象外。 */
+  live_rtsp: string | null
   recorder: {
     vendor: Vendor
     host: string

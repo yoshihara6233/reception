@@ -18,6 +18,7 @@ interface Row {
   grid_pos: number
   enabled: boolean
   frigate_camera: string | null
+  live_rtsp: string | null
   recorders: {
     vendor: 'ipro' | 'uniview' | 'frigate' | 'onvif-generic' | 'i-pro-nvr'
     host: string
@@ -44,7 +45,7 @@ export async function loadCameras(): Promise<CameraDescriptor[]> {
   const { data, error } = await supa
     .from('recorder_cameras')
     .select(`
-      id, channel, name, grid_pos, enabled, frigate_camera,
+      id, channel, name, grid_pos, enabled, frigate_camera, live_rtsp,
       recorders!inner ( vendor, host, rtsp_port, onvif_port, username, password_enc, edge_id,
                         vod_host, vod_username, vod_password_enc, vod_channel )
     `)
@@ -60,6 +61,7 @@ export async function loadCameras(): Promise<CameraDescriptor[]> {
       name: r.name,
       grid_pos: r.grid_pos,
       frigate_camera: r.frigate_camera,
+      live_rtsp: r.live_rtsp,
       recorder: {
         vendor:       r.recorders!.vendor,
         host:         r.recorders!.host,

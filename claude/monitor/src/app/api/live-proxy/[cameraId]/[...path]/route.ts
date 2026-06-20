@@ -29,6 +29,14 @@ export async function GET(
 ) {
   const { cameraId, path } = await ctx.params
 
+  // 0. Path allowlist — only HLS playback paths. Prevents reaching go2rtc's
+  //    control API (/api/streams, /api/config) through this proxy, which would
+  //    leak other streams' RTSP credentials. hls.js needs only stream.m3u8 +
+  //    the hls/ segment & media-playlist paths.
+  const subPathRaw = (path ?? []).join('/')
+  const allowed = subPathRaw === 'api/stream.m3u8' || subPathRaw.startsWith('api/hls/')
+  if (!allowed) return new NextResponse('Forbidden path', { status: 403 })
+
   // 1. Auth — must be a logged-in monitor user.
   const supa = await createSupabaseServer()
   const { data: { user } } = await supa.auth.getUser()
@@ -54,8 +62,7 @@ export async function GET(
   }
 
   // 3. Forward GET <origin>/<path><search> with the CF Access service token.
-  const subPath = (path ?? []).join('/')
-  const target  = `${origin}/${subPath}${req.nextUrl.search}`
+  const target = `${origin}/${subPathRaw}${req.nextUrl.search}`
 
   let upstream: Response
   try {

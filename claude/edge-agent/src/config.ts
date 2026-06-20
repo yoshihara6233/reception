@@ -17,6 +17,12 @@ const Env = z.object({
   FFMPEG_BIN:             z.string().default('/usr/bin/ffmpeg'),
   FFPROBE_BIN:            z.string().default('/usr/bin/ffprobe'),
   GO2RTC_BIN:             z.string().default('/usr/local/bin/go2rtc'),
+  // go2rtc REST API (ローカル). エッジがここに streams を登録する。
+  GO2RTC_API:             z.string().default('http://localhost:1984'),
+  // H.265→H.264 変換に使う VAAPI デバイス。空文字ならソフト変換にフォールバック。
+  GO2RTC_VAAPI_DEVICE:    z.string().default('/dev/dri/renderD128'),
+  // go2rtc 自動同期の周期(ms)。go2rtc 再起動でも streams を取り戻すため定期再登録。
+  GO2RTC_SYNC_INTERVAL_MS: z.coerce.number().default(300_000),
   TMP_DIR:                z.string().default('/var/tmp/edge-agent'),
 
   GRID_FPS:               z.coerce.number().default(0.5),
