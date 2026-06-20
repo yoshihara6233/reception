@@ -333,6 +333,59 @@ export function bcpFailedEmail(
 }
 
 // ---------------------------------------------------------------------------
+// Edge liveness (死活監視) alerts
+// ---------------------------------------------------------------------------
+
+export interface EdgeHealthParams {
+  edgeName:    string
+  storeName:   string
+  lastSeenAt:  string   // human-readable JST
+  staleMin:    number   // 何分無応答か
+  monitorUrl:  string
+}
+
+/** エッジが last_seen_at 無応答（停止/回線断/クラッシュ）になった時の通知。 */
+export function edgeOfflineAlertEmail(p: EdgeHealthParams): { subject: string; html: string } {
+  const subject = `[Intereco 死活監視] エッジ無応答 - ${p.storeName} / ${p.edgeName}`
+  const html = `
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="UTF-8"></head>
+<body style="font-family:sans-serif;color:#333;max-width:600px;margin:0 auto;padding:20px">
+  <h2 style="color:#c0392b">🔴 エッジ無応答</h2>
+  <p>エッジからの heartbeat が <b>${p.staleMin}分以上</b>途絶えています。監視/録画が停止している可能性があります。</p>
+  <table style="width:100%;border-collapse:collapse;margin:16px 0">
+    <tr><td style="padding:8px;background:#f5f5f5;font-weight:bold;width:140px;border:1px solid #ddd">店舗</td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(p.storeName)}</td></tr>
+    <tr><td style="padding:8px;background:#f5f5f5;font-weight:bold;border:1px solid #ddd">エッジ</td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(p.edgeName)}</td></tr>
+    <tr><td style="padding:8px;background:#f5f5f5;font-weight:bold;border:1px solid #ddd">最終応答</td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(p.lastSeenAt)}</td></tr>
+  </table>
+  <p>確認事項: エッジ電源/ネットワーク、cloudflared トンネル、edge-agent サービス。</p>
+  <p><a href="${escapeHtml(p.monitorUrl)}" style="display:inline-block;background:#0f172a;color:#fff;padding:10px 20px;border-radius:4px;text-decoration:none;font-weight:bold">監視画面を開く</a></p>
+  <hr style="margin:24px 0;border:none;border-top:1px solid #eee">
+  <p style="font-size:12px;color:#999">Intereco モニタリングシステム 自動送信（死活監視）。</p>
+</body></html>`.trim()
+  return { subject, html }
+}
+
+/** 無応答だったエッジが復旧した時の通知。 */
+export function edgeRecoveredEmail(p: EdgeHealthParams): { subject: string; html: string } {
+  const subject = `[Intereco 死活監視] 復旧 - ${p.storeName} / ${p.edgeName}`
+  const html = `
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="UTF-8"></head>
+<body style="font-family:sans-serif;color:#333;max-width:600px;margin:0 auto;padding:20px">
+  <h2 style="color:#16a34a">🟢 エッジ復旧</h2>
+  <p>無応答だったエッジが heartbeat を再開しました。</p>
+  <table style="width:100%;border-collapse:collapse;margin:16px 0">
+    <tr><td style="padding:8px;background:#f5f5f5;font-weight:bold;width:140px;border:1px solid #ddd">店舗</td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(p.storeName)}</td></tr>
+    <tr><td style="padding:8px;background:#f5f5f5;font-weight:bold;border:1px solid #ddd">エッジ</td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(p.edgeName)}</td></tr>
+  </table>
+  <hr style="margin:24px 0;border:none;border-top:1px solid #eee">
+  <p style="font-size:12px;color:#999">Intereco モニタリングシステム 自動送信（死活監視）。</p>
+</body></html>`.trim()
+  return { subject, html }
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
