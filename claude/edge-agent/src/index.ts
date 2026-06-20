@@ -10,6 +10,7 @@
 import { config } from './config.js'
 import { logger } from './logger.js'
 import { loadCameras } from './cameras.js'
+import { startGo2rtcSync } from './go2rtc/sync.js'
 import { subscribeCommands } from './realtime.js'
 import { StateMachine } from './state-machine.js'
 import { heartbeat } from './upload/storage.js'
@@ -25,6 +26,10 @@ async function main() {
   // candidate) can complete the handshake on the UDP candidates that follow.
   const whipProxy = await startWhipProxy()
   await fsm.toIdle()
+
+  // go2rtc 高画質ライブ: 担当カメラの stream を go2rtc に自動登録（起動時+定期）。
+  // 視聴は monitor のHLS認証プロキシ経由。手動 go2rtc.yaml 編集は不要。
+  startGo2rtcSync(loadCameras)
 
   const rt = subscribeCommands(async (cmd) => {
     try {

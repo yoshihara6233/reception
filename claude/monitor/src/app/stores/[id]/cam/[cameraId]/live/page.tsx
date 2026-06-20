@@ -59,21 +59,14 @@ export default async function LivePage(
           ? `${liveOrigin}/api/${c.frigate_camera}?fps=5&height=720`
           : `${liveOrigin}/cameras/${c.frigate_camera}`)
       : null
-  // go2rtc 高画質: hls_url(stream.html?src=NAME) から src を取り出し、monitor の
-  // 認証付きプロキシ越しの HLS プレイリスト URL を組む。プロキシが Cloudflare
-  // Access の Service Token をサーバ側で付けるので、エンドユーザは Cloudflare
-  // ログイン不要(monitorログインのみ)。&mp4 で fMP4(H.264)を要求。
-  let hqUrl: string | null = null
-  if (c.hls_url) {
-    try {
-      const src = new URL(c.hls_url).searchParams.get('src')
-      if (src) {
-        hqUrl = `/api/live-proxy/${cameraId}/api/stream.m3u8?src=${encodeURIComponent(src)}&mp4`
-      }
-    } catch {
-      hqUrl = null
-    }
-  }
+  // go2rtc 高画質: hls_url が設定されていれば go2rtc 配信あり。ストリーム名は
+  // エッジ登録と同じ規則 `cam_<cameraId>`（手動命名不要）。monitor の認証付き
+  // プロキシ越しの HLS を再生し、プロキシが Cloudflare Access の Service Token を
+  // サーバ側で付けるのでエンドユーザは monitorログインのみ。&mp4 で fMP4(H.264)。
+  // (hls_url は go2rtc origin のキャリアとしてプロキシが利用する。)
+  const hqUrl: string | null = c.hls_url
+    ? `/api/live-proxy/${cameraId}/api/stream.m3u8?src=${encodeURIComponent(`cam_${cameraId}`)}&mp4`
+    : null
   const room   = `live-${cameraId}`
 
   return (
