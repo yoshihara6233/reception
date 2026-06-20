@@ -42,18 +42,23 @@ export async function GET(
   const { data: { user } } = await supa.auth.getUser()
   if (!user) return new NextResponse('Unauthorized', { status: 401 })
 
-  // 2. Resolve the go2rtc origin from the camera's hls_url. The lookup is
-  //    RLS-scoped to the user, so an out-of-tenant camera returns null → 404.
+  // 2. Resolve the go2rtc origin. Prefer the edge-level go2rtc_host (set once per
+  //    edge); fall back to a per-camera hls_url override. The lookup is RLS-scoped
+  //    to the user, so an out-of-tenant camera returns null → 404.
   const { data: cam } = await supa
     .from('recorder_cameras')
-    .select('hls_url')
+    .select('hls_url, recorders ( edge_devices ( go2rtc_host ) )')
     .eq('id', cameraId)
     .single()
-  const hlsUrl = (cam as { hls_url: string | null } | null)?.hls_url
-  if (!hlsUrl) return new NextResponse('Live not configured for this camera', { status: 404 })
+  const row = cam as {
+    hls_url: string | null
+    recorders: { edge_devices: { go2rtc_host: string | null } | null } | null
+  } | null
+  const originSrc = row?.hls_url ?? row?.recorders?.edge_devices?.go2rtc_host
+  if (!originSrc) return new NextResponse('Live not configured for this camera', { status: 404 })
 
   let origin: string
-  try { origin = new URL(hlsUrl).origin } catch { return new NextResponse('Invalid hls_url', { status: 500 }) }
+  try { origin = new URL(originSrc).origin } catch { return new NextResponse('Invalid go2rtc host', { status: 500 }) }
 
   const clientId     = process.env.GO2RTC_CF_ACCESS_CLIENT_ID
   const clientSecret = process.env.GO2RTC_CF_ACCESS_CLIENT_SECRET

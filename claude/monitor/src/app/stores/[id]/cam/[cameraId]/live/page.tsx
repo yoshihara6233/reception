@@ -14,7 +14,7 @@ export default async function LivePage(
     .from('recorder_cameras')
     .select(`
       id, name, channel, frigate_camera, hls_url,
-      recorders ( id, edge_id, vendor, live_host, stores: edge_devices ( store_id ) )
+      recorders ( id, edge_id, vendor, live_host, stores: edge_devices ( store_id, go2rtc_host ) )
     `)
     .eq('id', cameraId)
     .single()
@@ -29,6 +29,7 @@ export default async function LivePage(
       edge_id:    string
       vendor:     string
       live_host:  string | null
+      stores:     { go2rtc_host: string | null } | null
     }
   }
   const edgeId   = c.recorders.edge_id
@@ -59,12 +60,13 @@ export default async function LivePage(
           ? `${liveOrigin}/api/${c.frigate_camera}?fps=5&height=720`
           : `${liveOrigin}/cameras/${c.frigate_camera}`)
       : null
-  // go2rtc 高画質: hls_url が設定されていれば go2rtc 配信あり。ストリーム名は
-  // エッジ登録と同じ規則 `cam_<cameraId>`（手動命名不要）。monitor の認証付き
-  // プロキシ越しの HLS を再生し、プロキシが Cloudflare Access の Service Token を
-  // サーバ側で付けるのでエンドユーザは monitorログインのみ。&mp4 で fMP4(H.264)。
-  // (hls_url は go2rtc origin のキャリアとしてプロキシが利用する。)
-  const hqUrl: string | null = c.hls_url
+  // go2rtc 高画質: エッジに go2rtc_host が設定済み（または カメラ単位の hls_url
+  // 上書きあり）なら配信対象。ストリーム名はエッジ登録と同じ規則 `cam_<cameraId>`
+  // （手動命名不要）。monitor の認証付きプロキシ越しに HLS を再生し、プロキシが
+  // Cloudflare Access の Service Token をサーバ側で付けるのでエンドユーザは
+  // monitorログインのみ。&mp4 で fMP4(H.264)。これでカメラ追加はエッジ設定ゼロ。
+  const hasGo2rtc = !!c.recorders.stores?.go2rtc_host || !!c.hls_url
+  const hqUrl: string | null = hasGo2rtc
     ? `/api/live-proxy/${cameraId}/api/stream.m3u8?src=${encodeURIComponent(`cam_${cameraId}`)}&mp4`
     : null
   const room   = `live-${cameraId}`
