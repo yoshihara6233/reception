@@ -27,6 +27,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { config } from '../config.js'
 import { logger } from '../logger.js'
 import { injectRtspCreds } from '../rtsp/keyframe.js'
+import { OnvifSoapClient } from '../adapters/onvif/onvif-soap-client.js'
 import type { CameraDescriptor } from '../types.js'
 
 /** go2rtc ストリーム名（monitor 側 `src=cam_<id>` と一致させる）。 */
@@ -65,6 +66,47 @@ async function probeCodec(rtsp: string): Promise<string | null> {
   return codec
 }
 
+/**
+ * カメラの go2rtc ソース（RTSP + codec）を解決する。
+ *   1. live_rtsp が明示されていればそれを使う（override）。
+ *   2. onvif-generic は ONVIF GetProfiles→GetStreamUri で自動解決（完全ゼロ設定）。
+ *      NVR が片方の主ストリームを掴んで 503 になることがあるため、映像プロファイルを
+ *      順に ffprobe し、最初に流れるものを採用。成功はキャッシュ（失敗は再試行）。
+ */
+const resolvedCache = new Map<string, { rtsp: string; codec: string | null }>()
+async function resolveCameraSource(cam: CameraDescriptor): Promise<{ rtsp: string; codec: string | null } | null> {
+  if (cam.live_rtsp) {
+    const rtsp = buildRtspUrl(cam)
+    return { rtsp, codec: await probeCodec(rtsp) }
+  }
+  if (cam.recorder.vendor !== 'onvif-generic') return null
+  const cached = resolvedCache.get(cam.id)
+  if (cached) return cached
+  const r = cam.recorder
+  const endpoint = `http://${r.host}:${r.onvif_port ?? 80}`
+  try {
+    const client = new OnvifSoapClient({ endpoint, username: r.username, password: r.password, timeoutMs: 8_000 })
+    const profiles = await client.getProfiles()
+    const video = profiles.filter((p) => /h\.?26[45]|hevc/i.test(p.encoding ?? ''))
+    for (const p of (video.length ? video : profiles)) {
+      const uri  = await client.getStreamUri(p.token)
+      const rtsp = injectRtspCreds(uri, r.username, r.password)
+      const codec = await probeCodec(rtsp)
+      if (codec) {
+        const resolved = { rtsp, codec }
+        resolvedCache.set(cam.id, resolved)
+        logger.info({ camera_id: cam.id, profile: p.name, codec }, 'go2rtc: ONVIF auto-resolved live RTSP')
+        return resolved
+      }
+    }
+    logger.warn({ camera_id: cam.id }, 'go2rtc: ONVIF found no streamable video profile')
+    return null
+  } catch (e) {
+    logger.warn({ camera_id: cam.id, err: String(e) }, 'go2rtc: ONVIF resolve failed')
+    return null
+  }
+}
+
 /** go2rtc の source 文字列を決める（H.265→H.264変換 or 素通し）。 */
 function buildSource(rtsp: string, codec: string | null): string {
   const isHevc = codec === 'hevc' || codec === 'h265'
@@ -84,8 +126,12 @@ function yamlQuote(s: string): string {
   return `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
 }
 
-/** 担当カメラから go2rtc.yaml の内容を生成する。 */
-async function buildYaml(cameras: CameraDescriptor[]): Promise<string> {
+/**
+ * 担当カメラから go2rtc.yaml の内容を生成する。毎回フル生成するため、DB から
+ * 消えた/解決できないカメラは自動的に設定から落ちる（= stale stream 掃除）。
+ * 返り値 count は実際に書けたストリーム数（0 なら呼び出し側で書き込みを抑止）。
+ */
+async function buildYaml(cameras: CameraDescriptor[]): Promise<{ yaml: string; count: number }> {
   const lines = [
     'log:',
     '  level: info',
@@ -95,14 +141,16 @@ async function buildYaml(cameras: CameraDescriptor[]): Promise<string> {
     `  bin: ${config.FFMPEG_BIN}`,
     'streams:',
   ]
+  let count = 0
   for (const cam of cameras) {
-    const rtsp  = buildRtspUrl(cam)
-    const codec = await probeCodec(rtsp)
-    const src   = buildSource(rtsp, codec)
+    const resolved = await resolveCameraSource(cam)
+    if (!resolved) continue   // 解決できないカメラは設定に含めない
+    const src = buildSource(resolved.rtsp, resolved.codec)
     lines.push(`  ${go2rtcStreamName(cam.id)}: ${yamlQuote(src)}`)
-    logger.info({ name: go2rtcStreamName(cam.id), codec, hw: src.startsWith('exec:') }, 'go2rtc: stream planned')
+    count++
+    logger.info({ name: go2rtcStreamName(cam.id), codec: resolved.codec, hw: src.startsWith('exec:') }, 'go2rtc: stream planned')
   }
-  return lines.join('\n') + '\n'
+  return { yaml: lines.join('\n') + '\n', count }
 }
 
 /** go2rtc サービスを再起動（NOPASSWD sudoers 前提）。 */
@@ -121,17 +169,19 @@ async function restartGo2rtc(): Promise<void> {
 }
 
 /**
- * 担当カメラ（live_rtsp 設定済み）から go2rtc.yaml を生成し、変更時のみ反映。
- * targets が 0 の時は何もしない（DB一時障害で設定を消さないため）。
+ * go2rtc 対象カメラ（onvif-generic=ONVIF自動解決 / または live_rtsp 明示）から
+ * go2rtc.yaml を生成し、変更時のみ反映。解決0件の時は書き換えない
+ * （DB一時障害や全カメラONVIF不通で設定を消さないため）。
  */
 export async function syncGo2rtcStreams(cameras: CameraDescriptor[]): Promise<void> {
-  const targets = cameras.filter((c) => !!c.live_rtsp)
+  const targets = cameras.filter((c) => c.recorder.vendor === 'onvif-generic' || !!c.live_rtsp)
   if (targets.length === 0) return
-  const yaml = await buildYaml(targets)
+  const { yaml, count } = await buildYaml(targets)
+  if (count === 0) { logger.warn('go2rtc: no streamable cameras resolved; keeping current config'); return }
   const current = await readFile(config.GO2RTC_CONFIG, 'utf8').catch(() => '')
-  if (yaml === current) { logger.info({ streams: targets.length }, 'go2rtc: config unchanged'); return }
+  if (yaml === current) { logger.info({ streams: count }, 'go2rtc: config unchanged'); return }
   await writeFile(config.GO2RTC_CONFIG, yaml, 'utf8')
-  logger.info({ streams: targets.length, path: config.GO2RTC_CONFIG }, 'go2rtc: config written')
+  logger.info({ streams: count, path: config.GO2RTC_CONFIG }, 'go2rtc: config written')
   await restartGo2rtc()
 }
 
