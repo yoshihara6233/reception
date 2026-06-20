@@ -17,11 +17,17 @@ const Env = z.object({
   FFMPEG_BIN:             z.string().default('/usr/bin/ffmpeg'),
   FFPROBE_BIN:            z.string().default('/usr/bin/ffprobe'),
   GO2RTC_BIN:             z.string().default('/usr/local/bin/go2rtc'),
-  // go2rtc REST API (ローカル). エッジがここに streams を登録する。
+  // go2rtc REST API (ローカル・診断用)。
   GO2RTC_API:             z.string().default('http://localhost:1984'),
+  // エッジが生成・書き出す go2rtc 設定ファイル。
+  GO2RTC_CONFIG:          z.string().default('/home/intereco/go2rtc.yaml'),
+  // 設定変更時に再起動する systemd サービス名（NOPASSWD sudoers 前提）。
+  GO2RTC_SERVICE:         z.string().default('intereco-go2rtc'),
+  // go2rtc 内部 RTSP の listen（Frigate の 8554/8555 と衝突回避）。
+  GO2RTC_RTSP_LISTEN:     z.string().default(':18554'),
   // H.265→H.264 変換に使う VAAPI デバイス。空文字ならソフト変換にフォールバック。
   GO2RTC_VAAPI_DEVICE:    z.string().default('/dev/dri/renderD128'),
-  // go2rtc 自動同期の周期(ms)。go2rtc 再起動でも streams を取り戻すため定期再登録。
+  // go2rtc 自動同期の周期(ms)。DB変更/サービス状態に追従するため定期再同期。
   GO2RTC_SYNC_INTERVAL_MS: z.coerce.number().default(300_000),
   TMP_DIR:                z.string().default('/var/tmp/edge-agent'),
 
