@@ -75,6 +75,16 @@ beforeAll(async () => {
 
 afterAll(async () => { await pool.end() })
 
+describe('diagnostics', () => {
+  it('dump tenant_admin A の中間状態', async () => {
+    console.log('uid', await asUser(U_TADMINA, 'select auth.uid() as uid'))
+    console.log('own admin_users', await asUser(U_TADMINA, 'select role, tenant_id from admin_users'))
+    console.log('visible stores', await asUser(U_TADMINA, 'select id, tenant_id from stores order by id'))
+    console.log('IN-subquery', await asUser(U_TADMINA, 'select tenant_id from admin_users where auth_user_id = auth.uid()'))
+    console.log('edges', await asUser(U_TADMINA, 'select id, store_id from edge_devices order by id'))
+  })
+})
+
 describe('edge_devices RLS（テナント×ロール越権防止）', () => {
   it('super_admin は全エッジを見える', async () => {
     expect(ids(await asUser(U_SUPER, 'select id from edge_devices'))).toEqual([E_A1, E_A2, E_B1].sort())
