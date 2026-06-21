@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
+import { recordAudit, storeIdForEdge } from '@/lib/admin/audit'
 
 const PatchBody = z.object({
   name:          z.string().min(1).max(120).optional(),
@@ -26,6 +27,14 @@ export async function PUT(
 
   const { error } = await guard.supa.from('edge_devices').update(patch).eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  await recordAudit(guard.supa, {
+    actorUserId: guard.user.id,
+    action: 'edge.update',
+    targetType: 'edge',
+    targetId: id,
+    storeId: await storeIdForEdge(guard.supa, id),
+    changes: parsed.data,
+  })
   return NextResponse.json({ ok: true })
 }
 

@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
+import { recordAudit, storeIdForRecorder } from '@/lib/admin/audit'
 
 const Camera = z.object({
   id:             z.string().uuid().optional(),
@@ -65,5 +66,16 @@ export async function PUT(
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
+  await recordAudit(guard.supa, {
+    actorUserId: guard.user.id,
+    action: 'recorder.cameras',
+    targetType: 'recorder_cameras',
+    targetId: recorderId,
+    storeId: await storeIdForRecorder(guard.supa, recorderId),
+    changes: {
+      upserted: upsert.map((c) => ({ channel: c.channel, name: c.name, grid_pos: c.grid_pos, enabled: c.enabled, hls_url: c.hls_url ?? null, live_rtsp: c.live_rtsp ?? null })),
+      deleted: toDelete,
+    },
+  })
   return NextResponse.json({ ok: true, upserted: upsert.length, deleted: toDelete.length })
 }

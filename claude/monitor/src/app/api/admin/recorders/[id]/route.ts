@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
+import { recordAudit, storeIdForRecorder } from '@/lib/admin/audit'
 
 const PatchBody = z.object({
   model:      z.string().nullable().optional(),
@@ -48,6 +49,19 @@ export async function PUT(
 
   const { error } = await guard.supa.from('recorders').update(patch).eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // 監査ログ（秘密はマスク。変更されたキーのみ記録）。
+  const changes: Record<string, unknown> = { ...parsed.data }
+  if ('password' in changes) changes.password = '***'
+  if ('vod_password' in changes) changes.vod_password = changes.vod_password ? '***' : '(unchanged)'
+  await recordAudit(guard.supa, {
+    actorUserId: guard.user.id,
+    action: 'recorder.update',
+    targetType: 'recorder',
+    targetId: id,
+    storeId: await storeIdForRecorder(guard.supa, id),
+    changes,
+  })
   return NextResponse.json({ ok: true })
 }
 
@@ -59,7 +73,15 @@ export async function DELETE(
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status })
 
   const { id } = await ctx.params
+  const storeId = await storeIdForRecorder(guard.supa, id)   // 削除前に解決
   const { error } = await guard.supa.from('recorders').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  await recordAudit(guard.supa, {
+    actorUserId: guard.user.id,
+    action: 'recorder.delete',
+    targetType: 'recorder',
+    targetId: id,
+    storeId,
+  })
   return NextResponse.json({ ok: true })
 }
