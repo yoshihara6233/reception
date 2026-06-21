@@ -123,9 +123,40 @@ jobs:
         working-directory: claude/edge-agent
         run: bun run lint  # lint gate: eslint.config.mjs (typescript-eslint flat)・errorで失敗
 
+  # ── authz 契約テスト (Phase A/G1: RLS テナント×ロール越権防止・不可侵) ──────
+  authz:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.monitor == 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.12
+      - name: Install dependencies (workspace)
+        run: bun install --frozen-lockfile
+      - name: authz contract tests (Postgres RLS, tenant×role)
+        working-directory: claude/monitor
+        run: ./node_modules/.bin/vitest run --config vitest.authz.config.ts
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+
   # ── 全 job 完了確認 (PR マージ要件用) ──────────────────────────────────
   ci-passed:
-    needs: [shared, monitor, edge-agent]
+    needs: [shared, monitor, edge-agent, authz]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -135,13 +166,15 @@ jobs:
           # 'failure' / 'cancelled' のみを失敗とみなす
           if [[ "${{ needs.shared.result }}" == "failure" ]] || \
              [[ "${{ needs.monitor.result }}" == "failure" ]] || \
-             [[ "${{ needs.edge-agent.result }}" == "failure" ]]; then
+             [[ "${{ needs.edge-agent.result }}" == "failure" ]] || \
+             [[ "${{ needs.authz.result }}" == "failure" ]]; then
             echo "::error::One or more CI jobs failed"
             exit 1
           fi
           if [[ "${{ needs.shared.result }}" == "cancelled" ]] || \
              [[ "${{ needs.monitor.result }}" == "cancelled" ]] || \
-             [[ "${{ needs.edge-agent.result }}" == "cancelled" ]]; then
+             [[ "${{ needs.edge-agent.result }}" == "cancelled" ]] || \
+             [[ "${{ needs.authz.result }}" == "cancelled" ]]; then
             echo "::warning::One or more CI jobs were cancelled"
             exit 1
           fi
