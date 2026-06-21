@@ -25,22 +25,16 @@ import { spawn } from 'node:child_process'
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { type SupabaseClient } from '@supabase/supabase-js'
+import { getSupabase } from '../supabase.js'
 import { logger } from '../logger.js'
 import { config } from '../config.js'
 import { downloadIproNvrMp4 } from '../adapters/i-pro/nvr-vod.js'
 import type { CameraDescriptor } from '../types.js'
 
-// Local Supabase client — mirrors the lazy-init pattern in modes/bcp.ts.
-// Service-role for Storage uploads + vod_clips state updates.
-let _supa: SupabaseClient | null = null
+// 中央クライアント（鍵ローテ同期対応）に委譲。
 function getSupa(): SupabaseClient {
-  if (!_supa) {
-    _supa = createClient(config.SUPABASE_URL, config.SUPABASE_SERVICE_ROLE_KEY, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    })
-  }
-  return _supa
+  return getSupabase()
 }
 
 /**

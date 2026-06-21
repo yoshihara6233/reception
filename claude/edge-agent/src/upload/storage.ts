@@ -1,11 +1,6 @@
-import { createClient } from '@supabase/supabase-js'
 import { config } from '../config.js'
 import { logger } from '../logger.js'
-
-// service_role で RLS をバイパス（エッジサーバは信頼済みの内部プロセス）
-const supa = createClient(config.SUPABASE_URL, config.SUPABASE_SERVICE_ROLE_KEY, {
-  auth: { persistSession: false, autoRefreshToken: false },
-})
+import { getSupabase, refreshSupabaseKey } from '../supabase.js'
 
 const BUCKET = 'edge-grids'
 const KEY    = `edges/${config.EDGE_ID}/grid.jpg`
@@ -15,7 +10,7 @@ const KEY    = `edges/${config.EDGE_ID}/grid.jpg`
  * The bucket should be private; viewers fetch via signed URLs from /api.
  */
 export async function uploadGridJpeg(buf: Buffer): Promise<void> {
-  const { error } = await supa.storage.from(BUCKET).upload(KEY, buf, {
+  const { error } = await getSupabase().storage.from(BUCKET).upload(KEY, buf, {
     contentType: 'image/jpeg',
     upsert: true,
     cacheControl: 'no-store, no-cache, must-revalidate, max-age=0',
@@ -34,7 +29,7 @@ export async function uploadGridJpeg(buf: Buffer): Promise<void> {
  */
 export async function uploadCameraSnapshot(cameraId: string, buf: Buffer): Promise<void> {
   const key = `edges/${config.EDGE_ID}/cam/${cameraId}/snapshot.jpg`
-  const { error } = await supa.storage.from(BUCKET).upload(key, buf, {
+  const { error } = await getSupabase().storage.from(BUCKET).upload(key, buf, {
     contentType: 'image/jpeg',
     upsert: true,
     cacheControl: 'no-store, no-cache, must-revalidate, max-age=0',
@@ -48,9 +43,18 @@ export async function uploadCameraSnapshot(cameraId: string, buf: Buffer): Promi
 
 /** Update the edge_devices row with a fresh heartbeat. */
 export async function heartbeat(state: string): Promise<void> {
-  const { error } = await supa
+  const { error } = await getSupabase()
     .from('edge_devices')
     .update({ status: state, last_seen_at: new Date().toISOString() })
     .eq('id', config.EDGE_ID)
-  if (error) logger.warn({ err: error.message }, 'heartbeat: update failed')
+  if (!error) return
+  logger.warn({ err: error.message }, 'heartbeat: update failed')
+  // 鍵失効(ローテ)の可能性 → monitor から鍵を取り直して1回だけ再試行（無停止追従）。
+  await refreshSupabaseKey()
+  const retry = await getSupabase()
+    .from('edge_devices')
+    .update({ status: state, last_seen_at: new Date().toISOString() })
+    .eq('id', config.EDGE_ID)
+  if (retry.error) logger.warn({ err: retry.error.message }, 'heartbeat: retry after key refresh failed')
+  else logger.info('heartbeat: recovered after key refresh')
 }

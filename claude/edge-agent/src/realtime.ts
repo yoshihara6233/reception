@@ -5,9 +5,9 @@
  * Monitor writes { action, ...params, request_id } to pending_command.
  * Agent detects a new request_id, processes the command, then clears it.
  */
-import { createClient } from '@supabase/supabase-js'
 import { config } from './config.js'
 import { logger } from './logger.js'
+import { getSupabase } from './supabase.js'
 import type { EdgeCommand } from './types.js'
 
 // Command pickup latency dominates the user-perceived live/VOD startup
@@ -19,16 +19,12 @@ const POLL_MS = 500
 export function subscribeCommands(onCommand: (cmd: EdgeCommand) => void): {
   close: () => Promise<void>
 } {
-  const supa = createClient(config.SUPABASE_URL, config.SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  })
-
   let lastRequestId: string | null = null
   let stopped = false
 
   async function poll() {
     try {
-      const { data, error } = await supa
+      const { data, error } = await getSupabase()
         .from('edge_devices')
         .select('pending_command')
         .eq('id', config.EDGE_ID)
@@ -43,7 +39,7 @@ export function subscribeCommands(onCommand: (cmd: EdgeCommand) => void): {
       logger.info({ action: cmd.action }, 'poll: command')
 
       // Clear the command so it's not re-processed on next poll
-      await supa
+      await getSupabase()
         .from('edge_devices')
         .update({ pending_command: null })
         .eq('id', config.EDGE_ID)

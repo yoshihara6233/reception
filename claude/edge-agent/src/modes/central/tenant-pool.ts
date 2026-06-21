@@ -9,7 +9,8 @@
  * Phase 1 後半でシャード再分散 (consistent hash) と組み合わせる予定。
  * 現状はスタブ実装で「担当店舗一覧の取得」のみ。
  */
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { type SupabaseClient } from '@supabase/supabase-js'
+import { getSupabase } from '../../supabase.js'
 import { m_tenants_assigned } from '../../util/metrics'
 import type { TenantStore } from './types'
 
@@ -18,14 +19,7 @@ const REFRESH_INTERVAL_MS = 30_000
 let _supa: SupabaseClient | null = null
 export function _setSupa(client: SupabaseClient): void { _supa = client }
 function getSupa(): SupabaseClient {
-  if (!_supa) {
-    _supa = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { persistSession: false, autoRefreshToken: false } },
-    )
-  }
-  return _supa
+  return _supa ?? getSupabase()   // テスト override 優先・通常は中央クライアント(鍵同期)
 }
 
 export class TenantPool {
