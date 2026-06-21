@@ -76,12 +76,20 @@ beforeAll(async () => {
 afterAll(async () => { await pool.end() })
 
 describe('diagnostics', () => {
-  it('dump tenant_admin A の中間状態', async () => {
-    console.log('uid', await asUser(U_TADMINA, 'select auth.uid() as uid'))
-    console.log('own admin_users', await asUser(U_TADMINA, 'select role, tenant_id from admin_users'))
-    console.log('visible stores', await asUser(U_TADMINA, 'select id, tenant_id from stores order by id'))
-    console.log('IN-subquery', await asUser(U_TADMINA, 'select tenant_id from admin_users where auth_user_id = auth.uid()'))
-    console.log('edges', await asUser(U_TADMINA, 'select id, store_id from edge_devices order by id'))
+  it('probe edges_select for E_B1 as tenant_admin A', async () => {
+    const probe = `
+      select
+        (select exists(select 1 from stores s where s.id = '${S_B1}')) as sb1_visible_in_subq,
+        ('${S_B1}'::uuid = any((select store_ids from admin_users where auth_user_id = auth.uid()))) as group2,
+        (select exists(
+           select 1 from stores s
+           where s.id = '${S_B1}'
+             and ('tenant_admin' = 'tenant_admin' and s.tenant_id in (select tenant_id from admin_users where auth_user_id = auth.uid()))
+         )) as group1
+    `
+    console.log('PROBE', await asUser(U_TADMINA, probe))
+    // E_B1 そのものの可視性（policy 経由）
+    console.log('EB1 via policy', await asUser(U_TADMINA, `select id from edge_devices where id = '${E_B1}'`))
   })
 })
 
