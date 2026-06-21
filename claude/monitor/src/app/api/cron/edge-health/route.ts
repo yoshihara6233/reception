@@ -18,10 +18,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { sendEmail, edgeOfflineAlertEmail, edgeRecoveredEmail, SECURITY_FROM_ADDRESS } from '@/lib/email/send'
+import { recordMetric } from '@/lib/metrics'
 
 interface EdgeRow {
   id: string
   name: string | null
+  store_id: string | null
   last_seen_at: string | null
   alerted_at: string | null
   stores: { name: string | null } | null
@@ -51,7 +53,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const supa = createSupabaseService()
   const { data, error } = await supa
     .from('edge_devices')
-    .select('id, name, last_seen_at, alerted_at, stores ( name )')
+    .select('id, name, store_id, last_seen_at, alerted_at, stores ( name )')
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   const edges = (data ?? []) as unknown as EdgeRow[]
@@ -65,6 +67,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     if (isStale && !e.alerted_at) {
       // 新規ダウン → 通知 + alerted_at セット
       await supa.from('edge_devices').update({ alerted_at: new Date().toISOString() }).eq('id', e.id)
+      await recordMetric({ kind: 'edge_uptime', value: 0, edgeId: e.id, storeId: e.store_id })
       wentDown++
       if (recipients.length) {
         const mail = edgeOfflineAlertEmail({
@@ -79,6 +82,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     } else if (!isStale && e.alerted_at) {
       // 復旧 → alerted_at クリア + 復旧通知
       await supa.from('edge_devices').update({ alerted_at: null }).eq('id', e.id)
+      await recordMetric({ kind: 'edge_uptime', value: 1, edgeId: e.id, storeId: e.store_id })
       recovered++
       if (recipients.length) {
         const mail = edgeRecoveredEmail({
@@ -93,9 +97,18 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
   }
 
+  // metric_events 保持90日プルーン（毎時1回だけ実行＝2分cronでも無駄打ち回避）。
+  let pruned = false
+  if (new Date().getUTCMinutes() < 2) {
+    const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+    await supa.from('metric_events').delete().lt('ts', cutoff)
+    pruned = true
+  }
+
   return NextResponse.json({
     ok: true,
     checked: edges.length,
+    pruned,
     wentDown,
     recovered,
     staleSec,
