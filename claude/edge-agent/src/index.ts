@@ -11,6 +11,7 @@ import { config } from './config.js'
 import { logger } from './logger.js'
 import { loadCameras } from './cameras.js'
 import { startGo2rtcSync } from './go2rtc/sync.js'
+import { refreshSupabaseKey, startKeySync } from './supabase.js'
 import { subscribeCommands } from './realtime.js'
 import { StateMachine } from './state-machine.js'
 import { heartbeat } from './upload/storage.js'
@@ -21,6 +22,10 @@ const fsm = new StateMachine()
 
 async function main() {
   logger.info({ edge_id: config.EDGE_ID }, 'edge agent starting')
+  // 鍵ローテ無停止同期: 起動時に monitor から現行 service key を取得し、以後も定期同期。
+  // MONITOR_URL 未設定なら no-op（.env キー運用）。
+  await refreshSupabaseKey()
+  startKeySync()
   // F3+: localhost WHIP proxy. Strips TCP ICE candidates from LiveKit Cloud's
   // SDP answer so ffmpeg 8.1's WHIP muxer (which errors on the first TCP
   // candidate) can complete the handshake on the UDP candidates that follow.

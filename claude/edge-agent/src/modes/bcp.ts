@@ -25,7 +25,8 @@
  *   20260531_001. clip_url and thumbnail_url both point at the same JPEG.
  */
 import { spawn } from 'child_process'
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { type SupabaseClient } from '@supabase/supabase-js'
+import { getSupabase } from '../supabase.js'
 import { config } from '../config.js'
 import { logger } from '../logger.js'
 import { snapshotUrl } from '../rtsp/url.js'
@@ -63,12 +64,7 @@ export interface BcpResult {
 let _supa: SupabaseClient | null = null
 export function _setSupaClient(client: SupabaseClient): void { _supa = client }
 function getSupa(): SupabaseClient {
-  if (!_supa) {
-    _supa = createClient(config.SUPABASE_URL, config.SUPABASE_SERVICE_ROLE_KEY, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    })
-  }
-  return _supa
+  return _supa ?? getSupabase()   // テスト override 優先・通常は中央クライアント(鍵同期)
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

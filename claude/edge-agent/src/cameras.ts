@@ -3,13 +3,9 @@
  * For Phase 2 the password is read in clear text from `recorders.password_enc`;
  * Vault decryption is wired up in Phase 9 once the rotation flow is in place.
  */
-import { createClient } from '@supabase/supabase-js'
 import { config } from './config.js'
+import { getSupabase } from './supabase.js'
 import type { CameraDescriptor } from './types.js'
-
-const supa = createClient(config.SUPABASE_URL, config.SUPABASE_SERVICE_ROLE_KEY, {
-  auth: { persistSession: false, autoRefreshToken: false },
-})
 
 interface Row {
   id: string
@@ -42,7 +38,7 @@ function decodePassword(stored: string): string {
 }
 
 export async function loadCameras(): Promise<CameraDescriptor[]> {
-  const { data, error } = await supa
+  const { data, error } = await getSupabase()
     .from('recorder_cameras')
     .select(`
       id, channel, name, grid_pos, enabled, frigate_camera, live_rtsp,

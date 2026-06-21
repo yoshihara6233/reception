@@ -8,6 +8,12 @@ const Env = z.object({
   EDGE_ID:                   z.string().uuid(),
   EDGE_DEVICE_TOKEN:         z.string().min(8),
 
+  // 鍵ローテ無停止同期(pull型): 設定すると edge が device_token 認証で monitor から
+  // 現行 service key を取得し、メモリ上の鍵を差し替える(.env手動編集が不要に)。
+  // 未設定なら従来通り SUPABASE_SERVICE_ROLE_KEY(.env)をそのまま使う。
+  MONITOR_URL:               z.string().url().optional(),
+  BOOTSTRAP_INTERVAL_MS:     z.coerce.number().default(300_000),
+
   // LiveKit endpoint URL — informational/diagnostic only since the F3 Ingress
   // migration. The edge no longer constructs WHIP URLs from this; the cloud
   // mints a per-session Ingress URL and passes it in livekit_whip_url. Kept
