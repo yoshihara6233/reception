@@ -14,6 +14,9 @@ const Camera = z.object({
   grid_pos:       z.coerce.number().int().min(0).max(15),
   enabled:        z.boolean().default(true),
   frigate_camera: z.string().nullable().optional(),
+  // go2rtc 高画質ライブ系（従来は SQL Editor 直編集）。空文字は NULL 化。
+  hls_url:        z.string().nullable().optional(),   // go2rtc stream URL 上書き
+  live_rtsp:      z.string().nullable().optional(),   // go2rtc 自動登録用 RTSP ソース
 })
 
 const Body = z.object({
@@ -53,6 +56,8 @@ export async function PUT(
       grid_pos:       c.grid_pos,
       enabled:        c.enabled,
       frigate_camera: c.frigate_camera ?? null,
+      hls_url:        c.hls_url?.trim() || null,
+      live_rtsp:      c.live_rtsp?.trim() || null,
     }))
     const { error } = await guard.supa
       .from('recorder_cameras')
