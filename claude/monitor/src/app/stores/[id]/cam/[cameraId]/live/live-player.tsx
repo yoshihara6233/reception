@@ -124,7 +124,7 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
       />
       <div className="relative flex-1">
         {mode === 'hq' && hqUrl ? (
-          <Go2rtcMode url={hqUrl} />
+          <Go2rtcMode url={hqUrl} storeId={storeId} cameraId={cameraId} />
         ) : mode === 'iframe' && liveIframeUrl ? (
           liveIsImageStream ? (
             // Remote MJPEG stream (via Cloudflare Tunnel). Render in <img> with
@@ -257,7 +257,7 @@ function IframeMode({ url, onError }: { url: string; onError: () => void }) {
 
 // ─── go2rtc high-quality mode (H.265→H.264, via monitor's authenticated proxy) ─
 
-function Go2rtcMode({ url }: { url: string }) {
+function Go2rtcMode({ url, storeId, cameraId }: { url: string; storeId?: string; cameraId?: string }) {
   // `url` is the monitor's OWN proxy HLS playlist (/api/live-proxy/<cam>/...),
   // not go2rtc directly. The proxy attaches the Cloudflare Access service token
   // server-side, so playback needs only the monitor (Supabase) session — no
@@ -271,15 +271,31 @@ function Go2rtcMode({ url }: { url: string }) {
     if (!video) return
     setFailed(false)
 
+    // C3 計測: 初フレーム表示までの時間(ttff_ms)を1回だけ ingest（best-effort）。
+    const startTs = Date.now()
+    let reported = false
+    const onPlaying = () => {
+      if (reported) return
+      reported = true
+      const ttff = Date.now() - startTs
+      void fetch('/api/metrics', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'ttff_ms', storeId, cameraId, value: ttff }),
+        keepalive: true,
+      }).catch(() => {})
+    }
+    video.addEventListener('playing', onPlaying)
+
     // Safari plays HLS natively; everyone else uses hls.js.
     if (!Hls.isSupported()) {
       if (video.canPlayType('application/vnd.apple.mpegurl')) {
         video.src = url
         video.play().catch(() => {})
-        return
+        return () => video.removeEventListener('playing', onPlaying)
       }
       setFailed(true)
-      return
+      return () => video.removeEventListener('playing', onPlaying)
     }
 
     const hls = new Hls({ liveSyncDurationCount: 3, manifestLoadingMaxRetry: 2 })
@@ -290,8 +306,8 @@ function Go2rtcMode({ url }: { url: string }) {
       // Fatal errors (network/media) → show retry. Non-fatal are auto-recovered.
       if (data.fatal) setFailed(true)
     })
-    return () => { hls.destroy() }
-  }, [url, reloadKey])
+    return () => { video.removeEventListener('playing', onPlaying); hls.destroy() }
+  }, [url, reloadKey, storeId, cameraId])
 
   return (
     <div className="relative h-full w-full bg-black">
