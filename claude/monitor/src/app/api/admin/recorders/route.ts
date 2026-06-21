@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
+import { recordAudit, storeIdForEdge } from '@/lib/admin/audit'
 
 const Body = z.object({
   edge_id:     z.string().uuid(),
@@ -32,5 +33,14 @@ export async function POST(req: NextRequest) {
     .select('id')
     .single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  await recordAudit(guard.supa, {
+    actorUserId: guard.user.id,
+    action: 'recorder.create',
+    targetType: 'recorder',
+    targetId: data.id,
+    storeId: await storeIdForEdge(guard.supa, rest.edge_id),
+    changes: { vendor: rest.vendor, model: rest.model ?? null, host: rest.host, rtsp_port: rest.rtsp_port },
+  })
   return NextResponse.json({ id: data.id })
 }

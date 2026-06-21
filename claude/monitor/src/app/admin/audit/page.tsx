@@ -10,6 +10,7 @@
  * は全件閲覧可）。
  */
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
@@ -128,12 +129,17 @@ export default async function AuditPage({
 
       <div className="px-5 py-4 space-y-4">
 
-        {/* Summary */}
-        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-xs text-slate-600">
-          {ta.totalSessions(count ?? 0)}
-          {mode && (
-            <span className="ml-1 text-slate-500">（{ta.filterPrefix} {modeLabel(mode, ta)}）</span>
-          )}
+        {/* Summary + 設定変更ログへの導線 */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-xs text-slate-600">
+            {ta.totalSessions(count ?? 0)}
+            {mode && (
+              <span className="ml-1 text-slate-500">（{ta.filterPrefix} {modeLabel(mode, ta)}）</span>
+            )}
+          </div>
+          <Link href="/admin/audit/changes" className="shrink-0 rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100">
+            設定変更ログ →
+          </Link>
         </div>
 
         {/* Mode filter */}

@@ -10,6 +10,8 @@ interface Camera {
   grid_pos: number
   enabled: boolean
   frigate_camera: string | null
+  hls_url: string | null      // go2rtc stream URL 上書き
+  live_rtsp: string | null    // go2rtc 自動登録 RTSP ソース
   _new?: boolean              // local-only marker
   _del?: boolean
   _dirty?: boolean
@@ -23,23 +25,45 @@ interface Recorder {
   onvif_port: number | null
   username: string
   notes: string | null
+  live_host: string | null
+  vod_host: string | null
+  vod_username: string | null
+  vod_channel: number | null
+  vod_has_password: boolean
   recorder_cameras: Camera[]
 }
 interface EdgePayload {
   id: string; name: string; status: string; agent_version: string | null; last_seen_at: string | null;
   store_id: string
+  go2rtc_host: string | null
   stores: { name: string; area_code: string | null }
   recorders: Recorder[]
 }
 
 export function EdgeDetail({ edge }: { edge: EdgePayload }) {
   const router = useRouter()
+  const [go2rtcHost, setGo2rtcHost] = useState(edge.go2rtc_host ?? '')
+  const [hostBusy, setHostBusy]     = useState(false)
+  const [hostMsg, setHostMsg]       = useState<string | null>(null)
+  const hostDirty = go2rtcHost !== (edge.go2rtc_host ?? '')
 
   async function deleteEdge() {
     if (!confirm(`エッジ "${edge.name}" を削除しますか？\n関連レコーダ・カメラ・セッションも削除されます。`)) return
     const res = await fetch(`/api/admin/edges/${edge.id}`, { method: 'DELETE' })
     if (res.ok) router.push('/admin/edges')
     else alert(`削除失敗: ${res.status}`)
+  }
+
+  async function saveGo2rtcHost() {
+    setHostBusy(true); setHostMsg(null)
+    const res = await fetch(`/api/admin/edges/${edge.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ go2rtc_host: go2rtcHost }),
+    })
+    setHostBusy(false)
+    if (!res.ok) { const j = await res.json().catch(() => ({})); setHostMsg(j.error ?? `保存失敗: ${res.status}`); return }
+    setHostMsg('保存しました'); router.refresh()
   }
 
   return (
@@ -58,6 +82,31 @@ export function EdgeDetail({ edge }: { edge: EdgePayload }) {
           <Row k="バージョン"  v={edge.agent_version ?? '—'} />
           <Row k="最終接続"    v={edge.last_seen_at ? new Date(edge.last_seen_at).toLocaleString('ja-JP') : '—'} />
         </dl>
+
+        {/* go2rtc 公開オリジン（高画質ライブ・従来はSQL直編集） */}
+        <div className="mt-4 border-t border-slate-100 pt-3">
+          <Field label="go2rtc 公開オリジン (Cloudflare Tunnel)">
+            <div className="flex items-center gap-2">
+              <input
+                value={go2rtcHost}
+                onChange={(e) => setGo2rtcHost(e.target.value)}
+                className="w-full max-w-md rounded border border-slate-300 px-2 py-1 font-mono text-xs"
+                placeholder="https://go2rtc-poc.genesis-edge.com"
+              />
+              <button
+                onClick={saveGo2rtcHost}
+                disabled={hostBusy || !hostDirty}
+                className="shrink-0 rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white disabled:opacity-50"
+              >
+                {hostBusy ? '保存中…' : '保存'}
+              </button>
+              {hostMsg && <span className="shrink-0 text-xs text-emerald-700">{hostMsg}</span>}
+            </div>
+            <p className="mt-1 text-[10px] text-slate-400">
+              配下の ONVIFカメラ直 が高画質ライブで継承（カメラ個別の「HLS URL」で上書き可）。
+            </p>
+          </Field>
+        </div>
       </section>
 
       {/* Recorders */}
@@ -254,6 +303,39 @@ function RecorderCard({ recorder }: { recorder: Recorder }) {
   const [busy, setBusy]   = useState(false)
   const [msg,  setMsg]    = useState<string | null>(null)
 
+  // 詳細設定（ライブ/VOD/go2rtc）— 従来 SQL 直編集だったフィールドの開閉式編集。
+  const [showDetail, setShowDetail] = useState(false)
+  const [rec, setRec] = useState({
+    live_host:    recorder.live_host ?? '',
+    vod_host:     recorder.vod_host ?? '',
+    vod_username: recorder.vod_username ?? '',
+    vod_password: '',                                   // 書込専用。空欄=現状維持
+    vod_channel:  recorder.vod_channel?.toString() ?? '',
+  })
+  const [recBusy, setRecBusy] = useState(false)
+  const [recMsg,  setRecMsg]  = useState<string | null>(null)
+
+  async function saveRecorder() {
+    setRecBusy(true); setRecMsg(null)
+    const body: Record<string, unknown> = {
+      live_host:    rec.live_host,
+      vod_host:     rec.vod_host,
+      vod_username: rec.vod_username,
+      vod_channel:  rec.vod_channel === '' ? null : Number(rec.vod_channel),
+    }
+    if (rec.vod_password) body.vod_password = rec.vod_password   // 非空のみ更新
+    const res = await fetch(`/api/admin/recorders/${recorder.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    setRecBusy(false)
+    if (!res.ok) { const j = await res.json().catch(() => ({})); setRecMsg(j.error ?? `保存失敗: ${res.status}`); return }
+    setRecMsg('保存しました'); setRec((p) => ({ ...p, vod_password: '' })); router.refresh()
+  }
+
+  const colCount = 5 + (recorder.vendor === 'frigate' ? 1 : 0) + (showDetail ? 2 : 0)
+
   function update(idx: number, patch: Partial<Camera>) {
     setCams((cs) => cs.map((c, i) => i === idx ? { ...c, ...patch, _dirty: !c._new } : c))
   }
@@ -261,7 +343,7 @@ function RecorderCard({ recorder }: { recorder: Recorder }) {
     const maxCh   = Math.max(0, ...cams.map((c) => c.channel))
     const usedPos = new Set(cams.filter((c) => !c._del).map((c) => c.grid_pos))
     const nextPos = [...Array(16).keys()].find((i) => !usedPos.has(i)) ?? 0
-    setCams((cs) => [...cs, { channel: maxCh + 1, name: `ch${maxCh + 1}`, grid_pos: nextPos, enabled: true, frigate_camera: null, _new: true }])
+    setCams((cs) => [...cs, { channel: maxCh + 1, name: `ch${maxCh + 1}`, grid_pos: nextPos, enabled: true, frigate_camera: null, hls_url: null, live_rtsp: null, _new: true }])
   }
   function removeCam(idx: number) {
     setCams((cs) => cs.map((c, i) => i === idx ? { ...c, _del: true } : c))
@@ -306,10 +388,56 @@ function RecorderCard({ recorder }: { recorder: Recorder }) {
           <span className="ml-2 font-mono text-slate-700">{recorder.host}:{recorder.rtsp_port}</span>
         </div>
         <div className="flex gap-2">
+          <button onClick={() => setShowDetail((v) => !v)}
+                  className={'rounded border px-2 py-0.5 text-xs ' + (showDetail ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white')}>
+            {showDetail ? '詳細を隠す' : '⚙ 詳細(ライブ/VOD/go2rtc)'}
+          </button>
           <button onClick={addCam} className="rounded bg-white border border-slate-200 px-2 py-0.5 text-xs">＋ カメラ</button>
           <button onClick={deleteRec} className="rounded border border-red-200 px-2 py-0.5 text-xs text-red-700">🗑 削除</button>
         </div>
       </div>
+
+      {/* 詳細設定パネル（ライブ/VOD）— 従来 SQL 直編集だったレコーダ単位フィールド */}
+      {showDetail && (
+        <div className="border-b border-slate-200 bg-slate-50/50 px-3 py-3">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-2 md:grid-cols-3">
+            <Field label="ライブ host:port (Frigate iframe)">
+              <input value={rec.live_host} onChange={(e) => setRec({ ...rec, live_host: e.target.value })}
+                     className="w-full rounded border border-slate-300 px-2 py-1 font-mono"
+                     placeholder="192.168.0.100:5000" />
+            </Field>
+            <Field label="VOD元 host (NVR HTTPS)">
+              <input value={rec.vod_host} onChange={(e) => setRec({ ...rec, vod_host: e.target.value })}
+                     className="w-full rounded border border-slate-300 px-2 py-1 font-mono"
+                     placeholder="https://192.168.0.10:443" />
+            </Field>
+            <Field label="VOD チャンネル">
+              <input type="number" min={1} max={64} value={rec.vod_channel}
+                     onChange={(e) => setRec({ ...rec, vod_channel: e.target.value })}
+                     className="w-full rounded border border-slate-300 px-2 py-1 font-mono" placeholder="1" />
+            </Field>
+            <Field label="VOD ユーザ名">
+              <input value={rec.vod_username} onChange={(e) => setRec({ ...rec, vod_username: e.target.value })}
+                     className="w-full rounded border border-slate-300 px-2 py-1" placeholder="admin" />
+            </Field>
+            <Field label={`VOD パスワード${recorder.vod_has_password ? '（設定済・変更時のみ入力）' : '（未設定）'}`}>
+              <input type="password" value={rec.vod_password} onChange={(e) => setRec({ ...rec, vod_password: e.target.value })}
+                     className="w-full rounded border border-slate-300 px-2 py-1"
+                     placeholder={recorder.vod_has_password ? '••••••（変更しない場合は空欄）' : ''} />
+            </Field>
+          </div>
+          <div className="mt-2 flex items-center justify-end gap-2">
+            {recMsg && <span className="text-xs text-emerald-700">{recMsg}</span>}
+            <button onClick={saveRecorder} disabled={recBusy}
+                    className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white disabled:opacity-50">
+              {recBusy ? '保存中…' : 'ライブ/VOD設定を保存'}
+            </button>
+          </div>
+          <p className="mt-1 text-[10px] text-slate-400">
+            下のカメラ表の「HLS URL / live RTSP」列も go2rtc 高画質ライブの個別設定です（保存は「カメラを保存」）。
+          </p>
+        </div>
+      )}
       <table className="w-full text-xs">
         <thead className="bg-slate-50/60 text-[10px] font-bold uppercase tracking-wider text-slate-500">
           <tr>
@@ -320,6 +448,8 @@ function RecorderCard({ recorder }: { recorder: Recorder }) {
             )}
             <th className="px-2 py-1.5 text-left w-24">grid 位置</th>
             <th className="px-2 py-1.5 text-left w-16">有効</th>
+            {showDetail && <th className="px-2 py-1.5 text-left">HLS URL (go2rtc)</th>}
+            {showDetail && <th className="px-2 py-1.5 text-left">live RTSP</th>}
             <th className="px-2 py-1.5 w-10"></th>
           </tr>
         </thead>
@@ -355,6 +485,22 @@ function RecorderCard({ recorder }: { recorder: Recorder }) {
                   <input type="checkbox" checked={c.enabled}
                          onChange={(e) => update(realIdx, { enabled: e.target.checked })} />
                 </td>
+                {showDetail && (
+                  <td className="px-2 py-1">
+                    <input value={c.hls_url ?? ''}
+                           onChange={(e) => update(realIdx, { hls_url: e.target.value || null })}
+                           className="w-full min-w-[180px] rounded border border-slate-200 px-1 py-0.5 font-mono text-[10px]"
+                           placeholder="https://…/stream.m3u8?src=cam_…" />
+                  </td>
+                )}
+                {showDetail && (
+                  <td className="px-2 py-1">
+                    <input value={c.live_rtsp ?? ''}
+                           onChange={(e) => update(realIdx, { live_rtsp: e.target.value || null })}
+                           className="w-full min-w-[180px] rounded border border-slate-200 px-1 py-0.5 font-mono text-[10px]"
+                           placeholder="rtsp://… または /path" />
+                  </td>
+                )}
                 <td className="px-2 py-1 text-right">
                   <button onClick={() => removeCam(realIdx)} className="text-red-600">×</button>
                 </td>
@@ -362,7 +508,7 @@ function RecorderCard({ recorder }: { recorder: Recorder }) {
             )
           })}
           {visible.length === 0 && (
-            <tr><td colSpan={recorder.vendor === 'frigate' ? 6 : 5} className="px-2 py-3 text-center text-slate-400">カメラ未登録</td></tr>
+            <tr><td colSpan={colCount} className="px-2 py-3 text-center text-slate-400">カメラ未登録</td></tr>
           )}
         </tbody>
       </table>
