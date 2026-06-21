@@ -150,36 +150,58 @@ create policy "edges_select" on public.edge_devices
         )
     )
   );
+-- edges_modify: 20260621_003 修正後(select と同じ可視範囲にスコープ)。
 create policy "edges_modify" on public.edge_devices
-  for all using (
+  for all
+  using (
     exists (select 1 from public.admin_users u
-      where u.auth_user_id = auth.uid() and u.role in ('super_admin','tenant_admin','store_manager'))
+      where u.auth_user_id = auth.uid()
+        and (u.role = 'super_admin'
+          or exists (select 1 from public.stores s
+                     where s.id = edge_devices.store_id
+                       and (u.role = 'tenant_admin' and s.tenant_id in (
+                              select tenant_id from public.admin_users where auth_user_id = auth.uid()))
+                          or edge_devices.store_id = any(u.store_ids))))
+  )
+  with check (
+    exists (select 1 from public.admin_users u
+      where u.auth_user_id = auth.uid()
+        and (u.role = 'super_admin'
+          or exists (select 1 from public.stores s
+                     where s.id = edge_devices.store_id
+                       and (u.role = 'tenant_admin' and s.tenant_id in (
+                              select tenant_id from public.admin_users where auth_user_id = auth.uid()))
+                          or edge_devices.store_id = any(u.store_ids))))
   );
 
 -- recorders: edge_devices の可視性に連鎖
 create policy "recorders_select" on public.recorders
   for select using (exists (select 1 from public.edge_devices e where e.id = recorders.edge_id));
 create policy "recorders_modify" on public.recorders
-  for all using (
-    exists (select 1 from public.admin_users u
-      where u.auth_user_id = auth.uid() and u.role in ('super_admin','tenant_admin','store_manager'))
-  );
+  for all
+  using (exists (select 1 from public.edge_devices e where e.id = recorders.edge_id))
+  with check (exists (select 1 from public.edge_devices e where e.id = recorders.edge_id));
 
 -- recorder_cameras: recorders の可視性に連鎖
 create policy "cameras_select" on public.recorder_cameras
   for select using (exists (select 1 from public.recorders r where r.id = recorder_cameras.recorder_id));
 create policy "cameras_modify" on public.recorder_cameras
-  for all using (
-    exists (select 1 from public.admin_users u
-      where u.auth_user_id = auth.uid() and u.role in ('super_admin','tenant_admin','store_manager'))
-  );
+  for all
+  using (exists (select 1 from public.recorders r where r.id = recorder_cameras.recorder_id))
+  with check (exists (select 1 from public.recorders r where r.id = recorder_cameras.recorder_id));
 
--- live_sessions: 自分のセッション or tenant_admin/super_admin
+-- live_sessions: 自分 or super_admin or テナント/店舗スコープ(20260621_003 修正後)
 create policy "sessions_select" on public.live_sessions
   for select using (
     user_id = auth.uid()
-    or exists (select 1 from public.admin_users u
-      where u.auth_user_id = auth.uid() and u.role in ('super_admin','tenant_admin'))
+    or exists (select 1 from public.admin_users u where u.auth_user_id = auth.uid() and u.role = 'super_admin')
+    or exists (
+      select 1 from public.admin_users u
+      join public.stores s on s.id = live_sessions.store_id
+      where u.auth_user_id = auth.uid()
+        and ((u.role = 'tenant_admin' and s.tenant_id = u.tenant_id)
+          or (u.role = 'store_manager' and s.id = any(u.store_ids)))
+    )
   );
 create policy "sessions_insert" on public.live_sessions
   for insert with check (user_id = auth.uid());
@@ -192,7 +214,8 @@ create policy "limits_select" on public.session_limits
         and (u.role = 'super_admin' or u.tenant_id = session_limits.tenant_id))
   );
 create policy "limits_modify" on public.session_limits
-  for all using (
-    exists (select 1 from public.admin_users u
-      where u.auth_user_id = auth.uid() and u.role in ('super_admin','tenant_admin'))
-  );
+  for all
+  using (exists (select 1 from public.admin_users u where u.auth_user_id = auth.uid()
+           and (u.role = 'super_admin' or (u.role = 'tenant_admin' and u.tenant_id = session_limits.tenant_id))))
+  with check (exists (select 1 from public.admin_users u where u.auth_user_id = auth.uid()
+           and (u.role = 'super_admin' or (u.role = 'tenant_admin' and u.tenant_id = session_limits.tenant_id))));

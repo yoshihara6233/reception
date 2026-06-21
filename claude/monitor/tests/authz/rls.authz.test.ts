@@ -75,35 +75,6 @@ beforeAll(async () => {
 
 afterAll(async () => { await pool.end() })
 
-describe('diagnostics', () => {
-  it('probe edges_select for E_B1 as tenant_admin A', async () => {
-    const probe = `
-      select
-        (select array(select unnest(store_ids) from admin_users where auth_user_id = auth.uid())) as my_store_ids,
-        (select exists(select 1 from stores s where s.id = '${S_B1}')) as sb1_visible_in_subq,
-        (select exists(select 1 from admin_users where auth_user_id = auth.uid() and '${S_B1}'::uuid = any(store_ids))) as group2,
-        (select exists(
-           select 1 from stores s
-           where s.id = '${S_B1}'
-             and ('tenant_admin' = 'tenant_admin' and s.tenant_id in (select tenant_id from admin_users where auth_user_id = auth.uid()))
-         )) as group1_inner
-    `
-    console.log('PROBE', await asUser(U_TADMINA, probe))
-    console.log('EB1 via policy', await asUser(U_TADMINA, `select id from edge_devices where id = '${E_B1}'`))
-    // 実ポリシー式そのまま（store_id=S_B1 を代入）。OR-c 有/無で比較。
-    const full = (withOrc: boolean) => `select exists(
-      select 1 from admin_users u where u.auth_user_id = auth.uid()
-      and (u.role = 'super_admin' or exists(
-        select 1 from stores s where s.id = '${S_B1}'
-          and (u.role = 'tenant_admin' and s.tenant_id in (select tenant_id from admin_users where auth_user_id = auth.uid()))
-          ${withOrc ? `or '${S_B1}'::uuid = any(u.store_ids)` : ''}
-      ))
-    ) as v`
-    console.log('full_with_orc', await asUser(U_TADMINA, full(true)))
-    console.log('full_without_orc', await asUser(U_TADMINA, full(false)))
-  })
-})
-
 describe('edge_devices RLS（テナント×ロール越権防止）', () => {
   it('super_admin は全エッジを見える', async () => {
     expect(ids(await asUser(U_SUPER, 'select id from edge_devices'))).toEqual([E_A1, E_A2, E_B1].sort())
@@ -140,13 +111,8 @@ describe('live_sessions RLS（自分 or tenant_admin/super_admin）', () => {
   it('同テナントの tenant_admin はテナント内セッションを見える', async () => {
     expect(await asUser(U_TADMINA, 'select id from live_sessions')).toHaveLength(1)
   })
-  it('別テナントの tenant_admin は見えない', async () => {
-    // tenant_admin B はテナント越えでセッションを見られない（user_id 不一致 + 別テナント）
-    // ※現行ポリシーは tenant_admin/super_admin に全セッションSELECTを許す点に注意。
-    //   本テストは「セッション本人 or 管理ロール」の契約を検証する。B は本人でなく、
-    //   ポリシー上 tenant_admin は許可されるため見える → 既知のテナント非スコープ挙動。
-    const rows = await asUser(U_TADMINB, 'select id from live_sessions')
-    expect(rows.length).toBeGreaterThanOrEqual(0)
+  it('別テナントの tenant_admin はセッションを見られない（20260621_003でスコープ）', async () => {
+    expect(await asUser(U_TADMINB, 'select id from live_sessions')).toHaveLength(0)
   })
 })
 
