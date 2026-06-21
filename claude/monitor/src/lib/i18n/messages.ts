@@ -90,6 +90,9 @@ export interface Msg {
     playbackHint:      string
     cameras:           string   // "カメラ"
     camRange:          (from: number, to: number) => string
+    gridUnavailable:     string   // grid composite fetch failed (404/502/edge offline)
+    gridUnavailableHint: string   // reassure: auto-retrying + per-camera still works
+    gridRetry:           string   // manual retry button
   }
   vod: {
     // ── Range picker modal (C4) ──
@@ -504,6 +507,9 @@ const ja: Msg = {
     playbackHint:      '録画再生は「録画」ボタンで開始します。',
     cameras:           'カメラ',
     camRange:          (f, t) => `カメラ ${f}〜${t}`,
+    gridUnavailable:     'グリッド映像を取得できません',
+    gridUnavailableHint: '自動で再試行中です。各カメラはタップで個別表示できます。',
+    gridRetry:           '再試行',
   },
   vod: {
     modalTitle:  '録画を再生',
@@ -902,6 +908,9 @@ const en: Msg = {
     playbackHint:      'Press "Record" to start playback.',
     cameras:           'Cameras',
     camRange:          (f, t) => `Cameras ${f}–${t}`,
+    gridUnavailable:     'Grid view unavailable',
+    gridUnavailableHint: 'Retrying automatically. Tap any camera to view it individually.',
+    gridRetry:           'Retry',
   },
   vod: {
     modalTitle:  'Play Recording',
@@ -1300,6 +1309,9 @@ const zh: Msg = {
     playbackHint:      '点击"录像"按钮开始回放。',
     cameras:           '摄像头',
     camRange:          (f, t) => `摄像头 ${f}〜${t}`,
+    gridUnavailable:     '无法获取分屏画面',
+    gridUnavailableHint: '正在自动重试。点击任意摄像头可单独查看。',
+    gridRetry:           '重试',
   },
   vod: {
     modalTitle:  '回放录像',
@@ -1698,6 +1710,9 @@ const ko: Msg = {
     playbackHint:      '"녹화" 버튼을 눌러 재생을 시작하세요.',
     cameras:           '카메라',
     camRange:          (f, t) => `카메라 ${f}~${t}`,
+    gridUnavailable:     '그리드 영상을 가져올 수 없습니다',
+    gridUnavailableHint: '자동으로 재시도 중입니다. 카메라를 탭하면 개별 표시됩니다.',
+    gridRetry:           '재시도',
   },
   vod: {
     modalTitle:  '녹화 재생',
