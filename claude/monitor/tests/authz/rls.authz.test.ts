@@ -90,6 +90,17 @@ describe('diagnostics', () => {
     `
     console.log('PROBE', await asUser(U_TADMINA, probe))
     console.log('EB1 via policy', await asUser(U_TADMINA, `select id from edge_devices where id = '${E_B1}'`))
+    // 実ポリシー式そのまま（store_id=S_B1 を代入）。OR-c 有/無で比較。
+    const full = (withOrc: boolean) => `select exists(
+      select 1 from admin_users u where u.auth_user_id = auth.uid()
+      and (u.role = 'super_admin' or exists(
+        select 1 from stores s where s.id = '${S_B1}'
+          and (u.role = 'tenant_admin' and s.tenant_id in (select tenant_id from admin_users where auth_user_id = auth.uid()))
+          ${withOrc ? `or '${S_B1}'::uuid = any(u.store_ids)` : ''}
+      ))
+    ) as v`
+    console.log('full_with_orc', await asUser(U_TADMINA, full(true)))
+    console.log('full_without_orc', await asUser(U_TADMINA, full(false)))
   })
 })
 
