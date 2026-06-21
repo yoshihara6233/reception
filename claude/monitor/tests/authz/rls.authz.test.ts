@@ -79,16 +79,16 @@ describe('diagnostics', () => {
   it('probe edges_select for E_B1 as tenant_admin A', async () => {
     const probe = `
       select
+        (select array(select unnest(store_ids) from admin_users where auth_user_id = auth.uid())) as my_store_ids,
         (select exists(select 1 from stores s where s.id = '${S_B1}')) as sb1_visible_in_subq,
-        ('${S_B1}'::uuid = any((select store_ids from admin_users where auth_user_id = auth.uid()))) as group2,
+        (select exists(select 1 from admin_users where auth_user_id = auth.uid() and '${S_B1}'::uuid = any(store_ids))) as group2,
         (select exists(
            select 1 from stores s
            where s.id = '${S_B1}'
              and ('tenant_admin' = 'tenant_admin' and s.tenant_id in (select tenant_id from admin_users where auth_user_id = auth.uid()))
-         )) as group1
+         )) as group1_inner
     `
     console.log('PROBE', await asUser(U_TADMINA, probe))
-    // E_B1 そのものの可視性（policy 経由）
     console.log('EB1 via policy', await asUser(U_TADMINA, `select id from edge_devices where id = '${E_B1}'`))
   })
 })
