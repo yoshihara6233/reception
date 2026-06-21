@@ -8,3 +8,8 @@ out/
 next-env.d.ts
 .DS_Store
 .vercel
+
+# Supabase CLI (ローカルスタック・リンク状態)
+supabase/.temp/
+supabase/.branches/
+supabase/seed.sql

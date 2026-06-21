@@ -9,7 +9,16 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:authz": "vitest run --config vitest.authz.config.ts"
+    "test:authz": "vitest run --config vitest.authz.config.ts",
+    "db:start": "supabase start",
+    "db:stop": "supabase stop",
+    "db:status": "supabase status",
+    "db:reset": "supabase db reset",
+    "db:new": "supabase migration new",
+    "db:diff": "supabase db diff",
+    "db:lint": "supabase db lint",
+    "db:pull": "supabase db pull",
+    "db:push": "supabase db push"
   },
   "dependencies": {
     "@fontsource/noto-sans-jp": "^5.2.9",
