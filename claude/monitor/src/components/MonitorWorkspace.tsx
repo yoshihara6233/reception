@@ -25,6 +25,13 @@ import { cancelPendingStop, scheduleStop } from '@/lib/edge-stop-registry'
 // matches the "occasional check" use case rather than "real-time monitor".
 const REFRESH_MS = 5000
 
+// Consecutive failed grid-image loads (404 grid.jpg not yet uploaded / 502 storage
+// / edge offline) before we surface the "unavailable" placeholder + retry. The
+// stitched JPEG can briefly 404 right after start_grid (edge hasn't uploaded the
+// first frame yet), so we tolerate a couple of misses (~2 refresh cycles) before
+// alarming — and never leave the operator staring at a blank/broken <img>.
+const GRID_FAIL_THRESHOLD = 2
+
 // The store has no per-store timezone column yet, so we treat the entered
 // wall-clock as Asia/Tokyo (+09:00, no DST).
 const STORE_TZ_OFFSET = '+09:00'
@@ -104,6 +111,16 @@ export function MonitorWorkspace({
   const [page, setPage]     = useState(0)
   const [err]               = useState<string | null>(null)
   const [vodOpen, setVodOpen] = useState(false)
+  // Consecutive failed loads of the stitched grid JPEG. Reset to 0 on every
+  // successful <img> load; incremented on error. Drives the placeholder + retry
+  // UX so a failing composite never shows as a blank/broken image.
+  const [gridErrStreak, setGridErrStreak] = useState(0)
+  const onGridLoad  = () => setGridErrStreak(0)
+  const onGridError = () => setGridErrStreak((n) => Math.min(n + 1, 99))
+  // Healthy = the most recent load succeeded → show the composite. Failed =
+  // enough consecutive misses to surface the retry overlay.
+  const gridHealthy = gridErrStreak === 0
+  const gridFailed  = gridErrStreak >= GRID_FAIL_THRESHOLD
   const timer               = useRef<NodeJS.Timeout | null>(null)
   // Pending stop_grid timer — see grid effect below. Refs persist across
   // effect re-runs, so a fresh mount can cancel a stop scheduled by the
@@ -183,6 +200,10 @@ export function MonitorWorkspace({
       stopTimer.current = null
     }
     sendCommand('start_grid')
+    // Fresh start (mount / resume / store switch) — clear any stale failure
+    // overlay so the new grid isn't pre-judged before its first load resolves.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setGridErrStreak(0)
     refreshGridUrl()
     timer.current = setInterval(refreshGridUrl, REFRESH_MS)
 
@@ -297,30 +318,43 @@ export function MonitorWorkspace({
       {/* ── Viewport ───────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-auto p-2 md:p-3.5">
 
-        {/* Desktop: 4×4 grid */}
+        {/* Desktop: 4×4 grid. The per-cell placeholder (with working single-camera
+            links) is the always-present base layer; the stitched composite is
+            overlaid on top when healthy. If the composite fails to load (404 not-
+            yet-uploaded / 502 storage / edge offline) it fades out — revealing the
+            still-clickable placeholder — and a retry overlay appears, so the
+            operator is never stuck on a blank/broken image. */}
         <div className="relative hidden aspect-video overflow-hidden rounded bg-slate-950 p-0.5 md:block">
-          {imgUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={imgUrl} alt={t.workspace.split16} className="h-full w-full object-contain" />
-          ) : (
-            <div className="grid h-full w-full grid-cols-4 grid-rows-4 gap-px">
-              {cells.map((cam, i) => (
-                <GridCell key={i} cam={cam} storeId={storeId} edgeId={edgeId} />
-              ))}
-              <StatusOverlay edgeId={edgeId} active={active} />
+          {/* Base layer: per-cell placeholder + single-camera live links */}
+          <div className="grid h-full w-full grid-cols-4 grid-rows-4 gap-px">
+            {cells.map((cam, i) => (
+              <GridCell key={i} cam={cam} storeId={storeId} edgeId={edgeId} />
+            ))}
+          </div>
+          {/* Composite on top; pointer-events-none keeps the base cell links
+              clickable. Hidden while failing so no broken-image icon shows.
+              Wrapped because an absolutely-positioned <img> won't stretch to the
+              inset box (replaced elements shrink-to-fit) — the div does, and the
+              img fills it via h/w-full + object-contain. */}
+          {imgUrl && (
+            <div
+              className={
+                'pointer-events-none absolute inset-0.5 transition-opacity duration-300 ' +
+                (gridHealthy ? 'opacity-100' : 'opacity-0')
+              }
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={imgUrl}
+                alt={t.workspace.split16}
+                onLoad={onGridLoad}
+                onError={onGridError}
+                className="h-full w-full object-contain"
+              />
             </div>
           )}
-          {imgUrl && edgeId && (
-            <div className="absolute inset-0.5 grid grid-cols-4 grid-rows-4 gap-px">
-              {cells.map((cam, i) => (
-                <Link
-                  key={i}
-                  href={cam ? `/stores/${storeId}/cam/${cam.id}/live` : '#'}
-                  className={cam ? 'hover:bg-blue-500/10' : 'pointer-events-none'}
-                />
-              ))}
-            </div>
-          )}
+          {active && gridFailed && <GridFailOverlay onRetry={refreshGridUrl} />}
+          <StatusOverlay edgeId={edgeId} active={active} />
         </div>
 
         {/* Mobile: 4-split — a zoomed 2×2 quadrant of the composite + tappable cells */}
@@ -348,18 +382,33 @@ export function MonitorWorkspace({
           </div>
 
           <div className="relative aspect-video overflow-hidden rounded bg-slate-950">
-            {imgUrl ? (
+            {/* Base: this quadrant's 4 cells as placeholders + single-camera links */}
+            <div className="absolute inset-0 grid grid-cols-2 grid-rows-2 gap-px">
+              {quadCells.map((cam, i) => (
+                <GridCell key={i} cam={cam} storeId={storeId} edgeId={edgeId} />
+              ))}
+            </div>
+            {imgUrl && (
               <>
-                {/* Composite zoomed 2× so this page's 4 cameras fill the screen */}
+                {/* Composite zoomed 2× so this page's 4 cameras fill the screen.
+                    pointer-events-none keeps the base cell links tappable; hidden
+                    while failing so no broken-image icon shows. */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={imgUrl}
                   alt={t.workspace.split16}
-                  className="absolute left-0 top-0 h-[200%] w-[200%] max-w-none object-cover"
+                  onLoad={onGridLoad}
+                  onError={onGridError}
+                  className={
+                    'pointer-events-none absolute left-0 top-0 h-[200%] w-[200%] max-w-none object-cover transition-opacity duration-300 ' +
+                    (gridHealthy ? 'opacity-100' : 'opacity-0')
+                  }
                   style={{ transform: `translate(${-(mobilePage % 2) * 50}%, ${-Math.floor(mobilePage / 2) * 50}%)` }}
                 />
-                {/* Transparent tappable cells → single-camera live (mirrors desktop) */}
-                {edgeId && (
+                {/* ch labels over the composite when healthy (the stitched JPEG has
+                    no per-cell labels). Tap targets are on top so they win the click;
+                    the base layer also links when the composite is hidden. */}
+                {edgeId && gridHealthy && (
                   <div className="absolute inset-0 grid grid-cols-2 grid-rows-2 gap-px">
                     {quadCells.map((cam, i) => (
                       <Link
@@ -378,13 +427,8 @@ export function MonitorWorkspace({
                   </div>
                 )}
               </>
-            ) : (
-              <div className="grid h-full w-full grid-cols-2 grid-rows-2 gap-px">
-                {quadCells.map((cam, i) => (
-                  <GridCell key={i} cam={cam} storeId={storeId} edgeId={edgeId} />
-                ))}
-              </div>
             )}
+            {active && gridFailed && <GridFailOverlay onRetry={refreshGridUrl} />}
             <StatusOverlay edgeId={edgeId} active={active} />
           </div>
 
@@ -430,6 +474,35 @@ function StatusOverlay({
     )
   }
   return null
+}
+
+/**
+ * Shown over the grid when the stitched composite has failed to load enough
+ * times in a row (404 not-yet-uploaded / 502 storage / edge offline). The
+ * wrapper is pointer-events-none so the still-clickable per-cell placeholder
+ * underneath keeps working; only the retry button captures clicks. Auto-retry
+ * keeps running in the background — this is the manual nudge + reassurance.
+ */
+function GridFailOverlay({ onRetry }: { onRetry: () => void }) {
+  const { t } = useLang()
+  return (
+    <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-4">
+      <div className="pointer-events-auto flex max-w-xs flex-col items-center gap-2 rounded-lg bg-slate-900/85 px-4 py-3 text-center shadow-lg ring-1 ring-white/10 backdrop-blur-sm">
+        <svg className="h-5 w-5 animate-spin text-slate-300" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.37 0 0 5.37 0 12h4z" />
+        </svg>
+        <p className="text-sm font-semibold text-white">{t.workspace.gridUnavailable}</p>
+        <p className="text-[11px] leading-snug text-slate-300">{t.workspace.gridUnavailableHint}</p>
+        <button
+          onClick={onRetry}
+          className="mt-1 rounded bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-500"
+        >
+          {t.workspace.gridRetry}
+        </button>
+      </div>
+    </div>
+  )
 }
 
 /** Current store-local (JST) wall-clock, minus `offsetMin`, as "YYYY-MM-DDTHH:mm". */
