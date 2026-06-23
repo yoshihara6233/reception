@@ -1,0 +1,11 @@
+# 依存・CI Action の自動更新（サプライチェーン衛生）。
+# bun.lock の npm 依存は `bun audit`(security.yml) + 手動更新で対応。
+# ここでは確実に機能する github-actions エコシステムを自動更新（SHA固定の追従にも有効）。
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "ci"]

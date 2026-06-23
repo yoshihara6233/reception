@@ -16,6 +16,7 @@ import { randomBytes, createCipheriv, createDecipheriv } from 'node:crypto'
 
 const ENC_PREFIX = 'enc:v1:'
 const PLAIN_PREFIX = 'plain:'
+const TAG_LEN = 16   // GCM 認証タグ長(bytes)。短縮タグ偽造を防ぐため明示。
 
 /** env の鍵を 32byte Buffer に。未設定は null。hex(64) か base64 を受理。 */
 function loadKey(): Buffer | null {
@@ -33,7 +34,7 @@ export function encryptSecret(plain: string): string {
   const key = loadKey()
   if (!key) return PLAIN_PREFIX + plain
   const iv = randomBytes(12)
-  const cipher = createCipheriv('aes-256-gcm', key, iv)
+  const cipher = createCipheriv('aes-256-gcm', key, iv, { authTagLength: TAG_LEN })
   const ct = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()])
   const tag = cipher.getAuthTag()
   return ENC_PREFIX + Buffer.concat([iv, ct, tag]).toString('base64')
@@ -46,9 +47,11 @@ export function decryptSecret(stored: string): string {
     if (!key) throw new Error('SECRETS_ENC_KEY not set but value is enc:v1 (cannot decrypt)')
     const buf = Buffer.from(stored.slice(ENC_PREFIX.length), 'base64')
     const iv  = buf.subarray(0, 12)
-    const tag = buf.subarray(buf.length - 16)
-    const ct  = buf.subarray(12, buf.length - 16)
-    const decipher = createDecipheriv('aes-256-gcm', key, iv)
+    const tag = buf.subarray(buf.length - TAG_LEN)
+    const ct  = buf.subarray(12, buf.length - TAG_LEN)
+    // authTagLength を明示し、短縮タグ偽造(GCM truncation)を拒否する。
+    if (tag.length !== TAG_LEN) throw new Error('invalid GCM auth tag length')
+    const decipher = createDecipheriv('aes-256-gcm', key, iv, { authTagLength: TAG_LEN })
     decipher.setAuthTag(tag)
     return decipher.update(ct, undefined, 'utf8') + decipher.final('utf8')
   }

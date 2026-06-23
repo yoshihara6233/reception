@@ -1,0 +1,57 @@
+# 内部脆弱性診断の自動化（外部業者発注の代替・継続実行）。
+# - Semgrep: SAST + secrets + OWASP Top10（プライベートrepoでも無料・GHAS不要）。
+# - bun audit: 依存脆弱性レポート（informational）。
+# 運用と手動診断の cadence は docs/security-assessment.md を参照。
+name: Security
+
+on:
+  push:
+    branches: [monitor-prod]
+  pull_request:
+    branches: [monitor-prod]
+  schedule:
+    - cron: '0 18 * * 1'   # 毎週月曜 03:00 JST 定期スキャン
+
+permissions:
+  contents: read
+
+jobs:
+  # ── SAST + シークレット検出（ERROR重大度のみゲート）─────────────────────
+  semgrep:
+    name: SAST (Semgrep)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install semgrep
+        run: pip install semgrep
+      - name: Semgrep scan (security-audit + secrets + OWASP + ts/react)
+        run: |
+          semgrep scan \
+            --config p/security-audit \
+            --config p/secrets \
+            --config p/typescript \
+            --config p/react \
+            --config p/owasp-top-ten \
+            --severity ERROR \
+            --error \
+            --metrics off \
+            --exclude '**/*.test.ts' \
+            --exclude '**/node_modules/**' \
+            --exclude 'docs/**'
+
+  # ── 依存脆弱性レポート（情報。HIGH/CRITICAL を目視確認）──────────────────
+  deps-audit:
+    name: Dependency audit (bun)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.12
+      - name: Install dependencies (workspace)
+        run: bun install --frozen-lockfile
+      - name: bun audit (report)
+        run: bun audit || true   # 情報提供。HIGH是正は docs/security-assessment.md の運用で対応
