@@ -40,6 +40,12 @@ const FRAME_GAP_MS = 400
 const ERROR_THRESHOLD = 5
 const STOP_DELAY_MS = 300
 
+// MJPEG/スナップの帯域自動劣化（回線細時に軽量化）。フレーム取得が遅いほど
+// 取得間隔を段階的に広げ(=fps低下=帯域減)、回復したら戻す。level=0 が通常。
+const ADAPTIVE_GAPS_MS = [FRAME_GAP_MS, 1000, 2500, 5000]
+const SLOW_FRAME_MS = 1200   // 1フレーム取得がこれ超で「回線細」と判定→劣化
+const FAST_FRAME_MS = 600    // これ未満が続けば回復→1段戻す
+
 // 'hq' = go2rtc 高画質(H.265→H.264 変換ライブ・Cloudflare Tunnel経由 stream.html iframe)
 type Mode = 'hq' | 'iframe' | 'jpeg'
 
@@ -471,21 +477,42 @@ function JpegMode({
   const [failStreak, setFails]  = useState(0)
   const cancelledRef            = useRef(false)
   const pollTimer               = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const frameStartRef           = useRef(0)        // 現フレームの取得開始時刻
+  const levelRef                = useRef(0)        // 帯域劣化レベル(0=通常)
+  const [degraded, setDegraded] = useState(0)      // 表示用ミラー
 
   // Advance to the next frame after the current <img> settles (load or error).
   // onLoad-driven instead of a fixed interval so a slow snapshot route never
-  // gets its request cancelled by the next tick.
+  // gets its request cancelled by the next tick. 取得間隔は劣化レベルで可変。
   function scheduleNextFrame() {
     if (cancelledRef.current) return
     if (pollTimer.current) clearTimeout(pollTimer.current)
+    const gap = ADAPTIVE_GAPS_MS[levelRef.current] ?? FRAME_GAP_MS
     pollTimer.current = setTimeout(() => {
       if (cancelledRef.current) return
+      frameStartRef.current = Date.now()
       setTick((t) => t + 1)
-    }, FRAME_GAP_MS)
+    }, gap)
+  }
+
+  // フレーム取得完了。所要時間で帯域劣化レベルを上げ下げする。
+  function onFrameLoad() {
+    setLoaded((n) => n + 1)
+    setFails(0)
+    const dt = frameStartRef.current ? Date.now() - frameStartRef.current : 0
+    if (dt > SLOW_FRAME_MS && levelRef.current < ADAPTIVE_GAPS_MS.length - 1) {
+      levelRef.current += 1; setDegraded(levelRef.current)
+    } else if (dt > 0 && dt < FAST_FRAME_MS && levelRef.current > 0) {
+      levelRef.current -= 1; setDegraded(levelRef.current)
+    }
+    scheduleNextFrame()
   }
 
   useEffect(() => {
     cancelledRef.current = false
+    levelRef.current = 0
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDegraded(0)   // カメラ切替時に劣化表示をリセット
     cancelPendingStop(edgeId)
     fetch(`/api/edges/${edgeId}/commands`, {
       method: 'POST',
@@ -495,6 +522,7 @@ function JpegMode({
 
     // Kick off the first fetch; subsequent frames are driven by the <img>
     // onLoad/onError handlers via scheduleNextFrame().
+    frameStartRef.current = Date.now()
     setTick((t) => t + 1)
 
     const cleanupEdgeId = edgeId
@@ -522,7 +550,7 @@ function JpegMode({
         src={`/api/edges/${edgeId}/cam/${cameraId}/snapshot?_=${tick}`}
         alt="live"
         className="h-full w-full object-contain"
-        onLoad={() => { setLoaded((n) => n + 1); setFails(0); scheduleNextFrame() }}
+        onLoad={onFrameLoad}
         onError={() => { setFails((n) => n + 1); scheduleNextFrame() }}
       />
 
@@ -557,6 +585,13 @@ function JpegMode({
       {loaded > 0 && (
         <div className="absolute bottom-2 left-2 rounded bg-black/60 px-2 py-0.5 font-mono text-[10px] tabular-nums text-slate-300">
           #{loaded}
+        </div>
+      )}
+
+      {degraded > 0 && (
+        <div className="absolute bottom-2 right-2 rounded bg-amber-900/80 px-2 py-0.5 text-[10px] font-medium text-amber-100 ring-1 ring-amber-700/60"
+             title="回線が細いため自動で軽量化しています（フレーム間隔を拡大）">
+          ⚠ 回線細→軽量化中 (約 {(1000 / (ADAPTIVE_GAPS_MS[degraded] ?? FRAME_GAP_MS)).toFixed(1)} fps)
         </div>
       )}
     </div>
