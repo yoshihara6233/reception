@@ -10,3 +10,4 @@
 export * from './nvr-adapter'
 export * from './constants'
 export * from './commands'
+export * from './secret-codec'

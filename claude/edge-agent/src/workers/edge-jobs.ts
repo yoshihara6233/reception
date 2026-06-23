@@ -17,6 +17,7 @@ import { OnvifSoapClient } from '../adapters/onvif/onvif-soap-client.js'
 import { resolveOnvifRtspUrl } from '../adapters/onvif/onvif-rtsp.js'
 import { injectRtspCreds, captureRtspKeyframe } from '../rtsp/keyframe.js'
 import { buildOnvifEndpoint } from './onvif-endpoint.js'
+import { decryptSecret } from '@intereco/shared'
 
 const POLL_MS = 3000
 
@@ -28,9 +29,9 @@ interface EdgeJob {
   id: string; kind: 'onvif_discovery' | 'connection_test'; params: { recorder_id?: string; channel?: number }
 }
 
-/** `plain:` 接頭辞を剥がす（password_enc は当面平文運用）。 */
+/** 保存値(enc:v1 / plain: / 生)を平文に復号。 */
 function decodePassword(stored: string): string {
-  return stored.startsWith('plain:') ? stored.slice('plain:'.length) : stored
+  return decryptSecret(stored)
 }
 
 async function resolveRecorder(recorderId: string): Promise<RecorderRow | null> {

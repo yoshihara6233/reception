@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
 import { recordAudit, storeIdForEdge } from '@/lib/admin/audit'
+import { encryptSecret } from '@intereco/shared'
 
 const Body = z.object({
   edge_id:     z.string().uuid(),
@@ -22,10 +23,9 @@ export async function POST(req: NextRequest) {
   const parsed = Body.safeParse(await req.json())
   if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
 
-  // TODO Phase 9: write `password` to Supabase Vault, store ref in password_enc.
-  // For now we persist plaintext to unblock Phase 5; mark with a sentinel prefix.
+  // Vault化: AES-256-GCM 封筒暗号で保存（鍵=env SECRETS_ENC_KEY。未設定時は plain: にフォールバック）。
   const { password, ...rest } = parsed.data
-  const password_enc = `plain:${password}`
+  const password_enc = encryptSecret(password)
 
   const { data, error } = await guard.supa
     .from('recorders')
