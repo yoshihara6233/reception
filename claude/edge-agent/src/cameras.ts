@@ -1,10 +1,11 @@
 /**
  * Fetch the local camera list for this edge from Supabase.
- * For Phase 2 the password is read in clear text from `recorders.password_enc`;
- * Vault decryption is wired up in Phase 9 once the rotation flow is in place.
+ * パスワードは Vault化（AES-256-GCM）された `recorders.password_enc` を decryptSecret で復号。
+ * 旧 `plain:` 値も後方互換で読める（鍵=env SECRETS_ENC_KEY）。
  */
 import { config } from './config.js'
 import { getSupabase } from './supabase.js'
+import { decryptSecret } from '@intereco/shared'
 import type { CameraDescriptor } from './types.js'
 
 interface Row {
@@ -29,12 +30,9 @@ interface Row {
   } | null
 }
 
-/**
- * password_enc は当面平文運用。管理API(/api/admin/recorders)が `plain:` 接頭辞を
- * 付けて保存するため、ここで剥がす（Vault 化は後フェーズ）。
- */
+/** 保存値(enc:v1 / plain: / 生)を平文に復号。 */
 function decodePassword(stored: string): string {
-  return stored.startsWith('plain:') ? stored.slice('plain:'.length) : stored
+  return decryptSecret(stored)
 }
 
 export async function loadCameras(): Promise<CameraDescriptor[]> {

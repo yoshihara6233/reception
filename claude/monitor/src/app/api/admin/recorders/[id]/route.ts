@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
 import { recordAudit, storeIdForRecorder } from '@/lib/admin/audit'
+import { encryptSecret } from '@intereco/shared'
 
 const PatchBody = z.object({
   model:      z.string().nullable().optional(),
@@ -37,13 +38,14 @@ export async function PUT(
   for (const k of NULLABLE_TEXT) {
     if (patch[k] === '') patch[k] = null
   }
+  // Vault化: AES-256-GCM で保存（鍵=env SECRETS_ENC_KEY。未設定時は plain: フォールバック）。
   if (patch.password) {
-    patch.password_enc = `plain:${patch.password}`     // TODO Phase 9: Vault
+    patch.password_enc = encryptSecret(patch.password as string)
   }
   delete patch.password
-  // VOD パスワードは空欄=現状維持。非空のときだけ plain: sentinel で更新。
+  // VOD パスワードは空欄=現状維持。非空のときだけ暗号化して更新。
   if (typeof patch.vod_password === 'string' && patch.vod_password !== '') {
-    patch.vod_password_enc = `plain:${patch.vod_password}`
+    patch.vod_password_enc = encryptSecret(patch.vod_password)
   }
   delete patch.vod_password
 
