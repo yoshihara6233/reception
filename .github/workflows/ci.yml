@@ -30,7 +30,7 @@ jobs:
       docs:       ${{ steps.changes.outputs.docs }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590  # v3.0.2 (SHA-pinned: supply-chain)
         id: changes
         with:
           filters: |
