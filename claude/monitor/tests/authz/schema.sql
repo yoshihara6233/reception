@@ -90,6 +90,20 @@ create table public.session_limits (
   max_concurrent int not null default 5
 );
 
+-- enrollment_tokens（DR2）: RLS 有効・ポリシー無し ＝ service_role のみ。
+-- authenticated セッションからは一切読めない（トークン漏洩面を作らない）契約。
+create table public.enrollment_tokens (
+  id          uuid primary key default gen_random_uuid(),
+  token_hash  text not null unique,
+  store_id    uuid not null references public.stores(id) on delete cascade,
+  tenant_id   uuid not null,
+  name        text not null,
+  camera_tier int not null default 16,
+  edge_id     uuid references public.edge_devices(id) on delete set null,
+  expires_at  timestamptz not null,
+  used_at     timestamptz
+);
+
 -- ── 権限(authenticated にテーブルアクセス付与・RLSで絞る) ──
 grant usage on schema public, auth to authenticated;
 grant execute on function auth.uid() to authenticated;
@@ -107,6 +121,7 @@ alter table public.recorders       enable row level security;
 alter table public.recorder_cameras enable row level security;
 alter table public.live_sessions   enable row level security;
 alter table public.session_limits  enable row level security;
+alter table public.enrollment_tokens enable row level security;   -- ポリシー無し=全拒否
 
 -- admin_users: 自分の行のみ(本番 admin_users_self_select 相当)。
 create policy admin_users_self_select on public.admin_users
