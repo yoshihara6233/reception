@@ -70,6 +70,8 @@ beforeAll(async () => {
     insert into public.recorder_cameras (id, recorder_id, channel, name) values ('${CAM_B1}','${REC_B1}',1,'camB1');
     insert into public.live_sessions (user_id, store_id, mode) values ('${U_SMGRA1}','${S_A1}','live');
     insert into public.session_limits (tenant_id) values ('${T_A}'),('${T_B}');
+    insert into public.enrollment_tokens (token_hash, store_id, tenant_id, name, expires_at)
+      values ('hash_a1', '${S_A1}', '${T_A}', 'pendingA1', now() + interval '1 day');
   `)
 })
 
@@ -113,6 +115,14 @@ describe('live_sessions RLS（自分 or tenant_admin/super_admin）', () => {
   })
   it('別テナントの tenant_admin はセッションを見られない（20260621_003でスコープ）', async () => {
     expect(await asUser(U_TADMINB, 'select id from live_sessions')).toHaveLength(0)
+  })
+})
+
+describe('enrollment_tokens は RLS で全拒否（service_role のみアクセス可）', () => {
+  it('super_admin / tenant_admin / store_manager / anon いずれも読めない', async () => {
+    for (const u of [U_SUPER, U_TADMINA, U_SMGRA1, null]) {
+      expect(await asUser(u, 'select id from enrollment_tokens')).toHaveLength(0)
+    }
   })
 })
 
