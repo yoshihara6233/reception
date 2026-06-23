@@ -88,6 +88,9 @@ export function createPlaybackPipeline(opts: PlaybackPipelineOptions): PlaybackP
   }
   args.push('pipe:1')
 
+  // 安全: シェル不使用の spawn(配列引数)。ffmpegBin は config(env)由来の信頼値、
+  // rtspUrl は単一の -i 引数値でシェル展開されない(フラグ脱出も不可)。
+  // nosemgrep: javascript.lang.security.detect-child-process.detect-child-process
   const proc = spawn(ffmpegBin, args, {
     stdio: ['ignore', 'pipe', 'pipe'],
   })
