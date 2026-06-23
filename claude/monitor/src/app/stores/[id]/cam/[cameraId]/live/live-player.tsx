@@ -107,6 +107,42 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
     setMode(resolveMode(prefer, !!hqUrl, !!liveIframeUrl))
   }, [cameraId, defaultMode, liveIframeUrl, hqUrl])
 
+  // ライブ視聴セッション(audit + 同時上限 F-10)を全モード共通で1本管理する。
+  // モード切替(hq/iframe/jpeg)を跨いで1セッション。429=上限到達で視聴をブロック。
+  const sessionId = useRef<string | null>(null)
+  const [limitReached, setLimitReached] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch('/api/sessions', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ action: 'start', mode: 'live', storeId, cameraId }),
+        })
+        if (cancelled) return
+        if (res.status === 429) { setLimitReached(true); return }
+        if (res.ok) {
+          const j = await res.json().catch(() => null) as { id?: string } | null
+          if (!cancelled && j?.id) sessionId.current = j.id
+        }
+      } catch { /* 上限チェックの一時失敗では視聴を止めない(可用性優先) */ }
+    })()
+    return () => {
+      cancelled = true
+      const sid = sessionId.current
+      if (sid) {
+        sessionId.current = null
+        void fetch('/api/sessions', {
+          method:    'POST',
+          headers:   { 'Content-Type': 'application/json' },
+          body:      JSON.stringify({ action: 'end', id: sid }),
+          keepalive: true,
+        }).catch(() => {})
+      }
+    }
+  }, [storeId, cameraId])
+
   function switchMode(next: Mode): void {
     setIframeFailed(false)
     setMode(next)
@@ -123,7 +159,9 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
         onSwitch={switchMode}
       />
       <div className="relative flex-1">
-        {mode === 'hq' && hqUrl ? (
+        {limitReached ? (
+          <LiveLimitOverlay />
+        ) : mode === 'hq' && hqUrl ? (
           <Go2rtcMode url={hqUrl} storeId={storeId} cameraId={cameraId} />
         ) : mode === 'iframe' && liveIframeUrl ? (
           liveIsImageStream ? (
@@ -146,8 +184,29 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
             />
           )
         ) : (
-          <JpegMode edgeId={edgeId} cameraId={cameraId} storeId={storeId} />
+          <JpegMode edgeId={edgeId} cameraId={cameraId} />
         )}
+      </div>
+    </div>
+  )
+}
+
+// 同時視聴上限(F-10)に達した時のオーバーレイ。
+function LiveLimitOverlay() {
+  return (
+    <div className="absolute inset-0 flex items-center justify-center p-4">
+      <div className="max-w-md rounded-lg bg-amber-950/90 px-5 py-4 text-center text-sm text-amber-100 ring-1 ring-amber-700">
+        <div className="text-base font-semibold">同時視聴の上限に達しました</div>
+        <p className="mt-2 text-xs text-amber-200">
+          現在、契約の同時ライブ/再生の上限まで視聴中です。
+          他の端末・タブの視聴を終了してから、もう一度開いてください。
+        </p>
+        <button
+          onClick={() => history.back()}
+          className="mt-3 rounded bg-amber-700 px-3 py-1 text-xs font-semibold text-white hover:bg-amber-600"
+        >
+          監視に戻る
+        </button>
       </div>
     </div>
   )
@@ -400,16 +459,16 @@ function ImageStreamMode({ url }: { url: string }) {
 // ─── JPEG mode (legacy F13 + F74/F75 flow) ──────────────────────────────────
 
 function JpegMode({
-  edgeId, cameraId, storeId,
+  edgeId, cameraId,
 }: {
   edgeId:   string
   cameraId: string
-  storeId:  string
 }) {
+  // セッション(audit + 同時上限)は LivePlayer 直下で全モード共通に管理する。
+  // ここは描画と edge への start_live/stop_stream コマンドのみ。
   const [tick, setTick]         = useState(0)
   const [loaded, setLoaded]     = useState(0)
   const [failStreak, setFails]  = useState(0)
-  const sessionId               = useRef<string | null>(null)
   const cancelledRef            = useRef(false)
   const pollTimer               = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -426,7 +485,6 @@ function JpegMode({
   }
 
   useEffect(() => {
-    let cancelled = false
     cancelledRef.current = false
     cancelPendingStop(edgeId)
     fetch(`/api/edges/${edgeId}/commands`, {
@@ -435,15 +493,6 @@ function JpegMode({
       body: JSON.stringify({ action: 'start_live', camera_id: cameraId }),
     }).catch(() => {})
 
-    void fetch('/api/sessions', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ action: 'start', mode: 'live', storeId, cameraId }),
-    })
-      .then(async (r) => r.ok ? r.json() as Promise<{ id: string }> : null)
-      .then((j) => { if (!cancelled && j?.id) sessionId.current = j.id })
-      .catch(() => {})
-
     // Kick off the first fetch; subsequent frames are driven by the <img>
     // onLoad/onError handlers via scheduleNextFrame().
     setTick((t) => t + 1)
@@ -451,7 +500,6 @@ function JpegMode({
     const cleanupEdgeId = edgeId
 
     return () => {
-      cancelled = true
       cancelledRef.current = true
       if (pollTimer.current) { clearTimeout(pollTimer.current); pollTimer.current = null }
       scheduleStop(cleanupEdgeId, () => {
@@ -461,18 +509,8 @@ function JpegMode({
           body: JSON.stringify({ action: 'stop_stream' }),
         }).catch(() => {})
       }, STOP_DELAY_MS)
-      const sid = sessionId.current
-      if (sid) {
-        sessionId.current = null
-        void fetch('/api/sessions', {
-          method:    'POST',
-          headers:   { 'Content-Type': 'application/json' },
-          body:      JSON.stringify({ action: 'end', id: sid }),
-          keepalive: true,
-        }).catch(() => {})
-      }
     }
-  }, [edgeId, cameraId, storeId])
+  }, [edgeId, cameraId])
 
   const showError   = failStreak >= ERROR_THRESHOLD && loaded === 0
   const showWaiting = loaded === 0 && !showError

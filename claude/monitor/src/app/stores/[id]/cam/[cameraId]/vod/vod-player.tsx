@@ -97,6 +97,31 @@ export default function VodPlayer({
 
     ;(async () => {
       try {
+        // 同時視聴上限(F-10)を、重い VOD 生成より前に確認。429=上限到達でブロック。
+        // 一時失敗(ネットワーク等)では上限チェックを諦めて再生を続行(可用性優先)。
+        try {
+          const sres = await fetch('/api/sessions', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({
+              action: 'start', mode: 'vod', storeId, cameraId,
+              vodFrom: fromIso, vodTo: toIso,
+            }),
+            signal:  ac.signal,
+          })
+          if (cancelled) return
+          if (sres.status === 429) {
+            setStatus('failed')
+            setError('同時視聴の上限に達しました。他の視聴を終了してからお試しください。')
+            return
+          }
+          if (sres.ok) {
+            const sj = await sres.json().catch(() => null) as { id?: string } | null
+            if (!cancelled && sj?.id) sessionIdRef.current = sj.id
+          }
+        } catch { /* 上限チェック一時失敗は無視して続行 */ }
+        if (cancelled) return
+
         const r = await fetch('/api/vod', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -114,19 +139,6 @@ export default function VodPlayer({
         setClipId(j.clip_id)
         setStatus(j.status ?? 'queued')
         if (j.reused) setReused(true)
-
-        // Audit log
-        void fetch('/api/sessions', {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({
-            action: 'start', mode: 'vod', storeId, cameraId,
-            vodFrom: fromIso, vodTo: toIso,
-          }),
-        })
-          .then((rr) => rr.ok ? rr.json() as Promise<{ id: string }> : null)
-          .then((jj) => { if (!cancelled && jj?.id) sessionIdRef.current = jj.id })
-          .catch(() => {})
       } catch (e) {
         if (!cancelled) {
           setStatus('failed')
