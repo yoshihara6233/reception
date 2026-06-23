@@ -295,6 +295,28 @@ function NewRecorderForm({
   )
 }
 
+type OnvifProfile = { token: string; name: string; encoding: string | null }
+type DiscoveryResult = {
+  device: { manufacturer?: string; model?: string; firmwareVersion?: string } | null
+  profiles: OnvifProfile[]
+  count: number
+}
+type ConnResult = { ok: boolean; bytes?: number; error?: string }
+
+/** edge_jobs を done/error まで2秒間隔でポーリング（最大45秒）。 */
+async function pollEdgeJob(jobId: string, timeoutMs = 45_000): Promise<{ status: string; result: unknown; error: string | null }> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const res = await fetch(`/api/admin/edge-jobs/${jobId}`)
+    if (res.ok) {
+      const j = await res.json() as { status: string; result: unknown; error: string | null }
+      if (j.status === 'done' || j.status === 'error') return j
+    }
+    await new Promise((r) => setTimeout(r, 2000))
+  }
+  return { status: 'timeout', result: null, error: 'タイムアウト（エッジ未応答）' }
+}
+
 function RecorderCard({ recorder }: { recorder: Recorder }) {
   const router = useRouter()
   const [cams, setCams]   = useState<Camera[]>(
@@ -332,6 +354,46 @@ function RecorderCard({ recorder }: { recorder: Recorder }) {
     setRecBusy(false)
     if (!res.ok) { const j = await res.json().catch(() => ({})); setRecMsg(j.error ?? `保存失敗: ${res.status}`); return }
     setRecMsg('保存しました'); setRec((p) => ({ ...p, vod_password: '' })); router.refresh()
+  }
+
+  // Stage 2b: ONVIF探索 / 接続テスト（エッジ経由・ジョブをポーリング）。
+  const [jobBusy, setJobBusy]       = useState(false)
+  const [jobMsg, setJobMsg]         = useState<string | null>(null)
+  const [discovery, setDiscovery]   = useState<DiscoveryResult | null>(null)
+  const [connResult, setConnResult] = useState<ConnResult | null>(null)
+
+  async function discover() {
+    setJobBusy(true); setJobMsg('ONVIF探索中…（最大45秒）'); setDiscovery(null)
+    try {
+      const r = await fetch(`/api/admin/recorders/${recorder.id}/discover`, { method: 'POST' })
+      if (!r.ok) { const j = await r.json().catch(() => ({})); setJobMsg(j.error ?? '探索開始失敗'); return }
+      const { job_id } = await r.json() as { job_id: string }
+      const j = await pollEdgeJob(job_id)
+      if (j.status === 'done') { setDiscovery(j.result as DiscoveryResult); setJobMsg(null) }
+      else setJobMsg(`探索失敗: ${j.error ?? j.status}`)
+    } finally { setJobBusy(false) }
+  }
+
+  async function connTest() {
+    setJobBusy(true); setJobMsg('接続テスト中…'); setConnResult(null)
+    try {
+      const r = await fetch(`/api/admin/recorders/${recorder.id}/conn-test`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+      })
+      if (!r.ok) { const j = await r.json().catch(() => ({})); setJobMsg(j.error ?? 'テスト開始失敗'); return }
+      const { job_id } = await r.json() as { job_id: string }
+      const j = await pollEdgeJob(job_id)
+      if (j.status === 'done') { setConnResult(j.result as ConnResult); setJobMsg(null) }
+      else setJobMsg(`テスト失敗: ${j.error ?? j.status}`)
+    } finally { setJobBusy(false) }
+  }
+
+  /** 探索プロファイルから名前指定でカメラ行を1つ追加（grid 未使用位置へ）。 */
+  function addCamNamed(camName: string) {
+    const maxCh   = Math.max(0, ...cams.map((c) => c.channel))
+    const usedPos = new Set(cams.filter((c) => !c._del).map((c) => c.grid_pos))
+    const nextPos = [...Array(16).keys()].find((i) => !usedPos.has(i)) ?? 0
+    setCams((cs) => [...cs, { channel: maxCh + 1, name: camName || `ch${maxCh + 1}`, grid_pos: nextPos, enabled: true, frigate_camera: null, hls_url: null, live_rtsp: null, _new: true }])
   }
 
   const colCount = 5 + (recorder.vendor === 'frigate' ? 1 : 0) + (showDetail ? 2 : 0)
@@ -436,6 +498,53 @@ function RecorderCard({ recorder }: { recorder: Recorder }) {
           <p className="mt-1 text-[10px] text-slate-400">
             下のカメラ表の「HLS URL / live RTSP」列も go2rtc 高画質ライブの個別設定です（保存は「カメラを保存」）。
           </p>
+
+          {/* Stage 2b: ONVIF探索 / 接続テスト（エッジ経由） */}
+          <div className="mt-3 border-t border-slate-200 pt-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <button onClick={discover} disabled={jobBusy}
+                      className="rounded border border-blue-300 bg-white px-3 py-1 text-xs font-medium text-blue-700 disabled:opacity-50">
+                🔍 ONVIF探索
+              </button>
+              <button onClick={connTest} disabled={jobBusy}
+                      className="rounded border border-slate-300 bg-white px-3 py-1 text-xs disabled:opacity-50">
+                🔌 接続テスト
+              </button>
+              {jobMsg && <span className="text-xs text-slate-500">{jobMsg}</span>}
+              {connResult && (
+                <span className={'rounded px-2 py-0.5 text-[11px] font-semibold ' + (connResult.ok ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700')}>
+                  {connResult.ok ? `到達OK (${connResult.bytes ?? 0}B)` : `到達NG: ${connResult.error ?? 'unknown'}`}
+                </span>
+              )}
+            </div>
+            <p className="mt-1 text-[10px] text-slate-400">
+              探索/テストは現地エッジが LAN 内で実行します（エッジがオフラインだと結果が返りません）。
+            </p>
+
+            {discovery && (
+              <div className="mt-2 rounded border border-slate-200 bg-white p-2">
+                <div className="mb-1 text-[11px] text-slate-600">
+                  {discovery.device?.manufacturer || '—'} {discovery.device?.model || ''}
+                  <span className="ml-2 text-slate-400">プロファイル {discovery.count} 件</span>
+                </div>
+                <ul className="space-y-1">
+                  {discovery.profiles.map((p) => (
+                    <li key={p.token} className="flex items-center justify-between gap-2 rounded bg-slate-50 px-2 py-1">
+                      <span className="font-mono text-[10px] text-slate-600">
+                        {p.name}{p.encoding ? <span className="ml-1 rounded bg-slate-200 px-1 text-slate-500">{p.encoding}</span> : null}
+                      </span>
+                      <button onClick={() => addCamNamed(p.name)}
+                              className="shrink-0 rounded bg-blue-600 px-2 py-0.5 text-[10px] font-medium text-white">
+                        ＋ カメラ追加
+                      </button>
+                    </li>
+                  ))}
+                  {discovery.profiles.length === 0 && <li className="text-[11px] text-slate-400">プロファイルが見つかりませんでした</li>}
+                </ul>
+                <p className="mt-1 text-[10px] text-slate-400">追加後、ch/grid位置を調整して「カメラを保存」してください。</p>
+              </div>
+            )}
+          </div>
         </div>
       )}
       <table className="w-full text-xs">

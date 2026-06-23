@@ -13,6 +13,7 @@ import { loadCameras } from './cameras.js'
 import { startGo2rtcSync } from './go2rtc/sync.js'
 import { refreshSupabaseKey, startKeySync } from './supabase.js'
 import { subscribeCommands } from './realtime.js'
+import { startEdgeJobWorker } from './workers/edge-jobs.js'
 import { StateMachine } from './state-machine.js'
 import { heartbeat } from './upload/storage.js'
 import { startWhipProxy, wrapWhip } from './whip-proxy.js'
@@ -35,6 +36,9 @@ async function main() {
   // go2rtc 高画質ライブ: 担当カメラの stream を go2rtc に自動登録（起動時+定期）。
   // 視聴は monitor のHLS認証プロキシ経由。手動 go2rtc.yaml 編集は不要。
   startGo2rtcSync(loadCameras)
+
+  // 登録ウィザード支援: 本部からの ONVIF探索 / 接続テスト ジョブを処理（pending をポーリング）。
+  const jobs = startEdgeJobWorker()
 
   const rt = subscribeCommands(async (cmd) => {
     try {
@@ -185,6 +189,7 @@ async function main() {
     logger.info({ sig }, 'shutdown')
     clearInterval(hb)
     await rt.close()
+    jobs.close()
     await fsm.toIdle()
     await whipProxy.stop().catch(() => {})
     await heartbeat('offline')
