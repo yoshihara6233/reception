@@ -140,7 +140,7 @@ export interface Msg {
     intro: string
     crumb: string
   }
-  bcpNav: { eventsReports: string; testIssue: string; glossary: string }
+  bcpNav: { eventsReports: string; jalerts: string; testIssue: string; glossary: string }
   // F36: /bcp の上部に表示する J-Alert フロー解説 (短文)
   bcpHelp: {
     title: string
@@ -552,7 +552,7 @@ const ja: Msg = {
     intro: '警備トリアージ・巡回機能で使われる用語の解説です。',
     crumb: '用語説明',
   },
-  bcpNav: { eventsReports: 'アラート履歴', testIssue: 'テスト発令', glossary: '用語説明' },
+  bcpNav: { eventsReports: 'アラート履歴', jalerts: 'Jアラート受信履歴', testIssue: 'テスト発令', glossary: '用語説明' },
   bcpHelp: {
     title: 'J-Alert 連動 BCP 自動記録',
     body: '気象庁・内閣府が発表する全国瞬時警報システム (Jアラート) を受信すると、対象エリアの店舗に対して自動で 8 枚の JPEG スナップショット (5分前 / 発生時 / 5分後 / 10分後 / 15分後 / 20分後 / 25分後 / 30分後) を保存し、PDF レポートを生成します。発令から人手を介さずに証跡を残せるため、保険・行政対応で活用できます。',
@@ -953,7 +953,7 @@ const en: Msg = {
     intro: 'Terminology used in the security triage / patrol pages.',
     crumb: 'Glossary',
   },
-  bcpNav: { eventsReports: 'Alert History', testIssue: 'Test Issue', glossary: 'Glossary' },
+  bcpNav: { eventsReports: 'Alert History', jalerts: 'J-Alert Log', testIssue: 'Test Issue', glossary: 'Glossary' },
   bcpHelp: {
     title: 'J-Alert linked BCP auto-recording',
     body: 'When Japan\'s nationwide instant warning system (J-Alert, issued by JMA / Cabinet Office) fires, this system automatically saves 8 JPEG snapshots (T-5, T+0, T+5, T+10, T+15, T+20, T+25, T+30 minutes) for affected stores and generates a PDF report. Evidence is preserved without human intervention — useful for insurance and regulatory response.',
@@ -1354,7 +1354,7 @@ const zh: Msg = {
     intro: '安全分诊・巡逻功能中使用的术语解释。',
     crumb: '术语说明',
   },
-  bcpNav: { eventsReports: '警报历史', testIssue: '测试发布', glossary: '术语说明' },
+  bcpNav: { eventsReports: '警报历史', jalerts: 'J-Alert 接收历史', testIssue: '测试发布', glossary: '术语说明' },
   bcpHelp: {
     title: 'J-Alert 联动 BCP 自动记录',
     body: '当日本气象厅 / 内阁府发布的全国瞬时警报系统 (J-Alert) 触发时，系统将自动为对象区域内的门店保存 8 张 JPEG 快照 (前 5 分钟 / 发生时 / 后 5 / 10 / 15 / 20 / 25 / 30 分钟) 并生成 PDF 报告。无需人工干预即可保留证据，可用于保险与监管应对。',
@@ -1755,7 +1755,7 @@ const ko: Msg = {
     intro: '경비 트리아지 · 순찰 기능에서 사용되는 용어 해설입니다.',
     crumb: '용어 설명',
   },
-  bcpNav: { eventsReports: '알림 이력', testIssue: '테스트 발령', glossary: '용어 설명' },
+  bcpNav: { eventsReports: '알림 이력', jalerts: 'J-Alert 수신 이력', testIssue: '테스트 발령', glossary: '용어 설명' },
   bcpHelp: {
     title: 'J-Alert 연동 BCP 자동 기록',
     body: '일본 기상청·내각부가 발표하는 전국 즉시 경보 시스템 (J-Alert) 을 수신하면, 대상 지역 매장에 대해 자동으로 8 장의 JPEG 스냅샷 (5분 전 / 발생 시점 / 5분 후 / 10 / 15 / 20 / 25 / 30분 후) 을 저장하고 PDF 보고서를 생성합니다. 수동 개입 없이 증거를 보존할 수 있어 보험 및 행정 대응에 활용 가능합니다.',

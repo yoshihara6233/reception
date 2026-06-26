@@ -3,12 +3,14 @@
  *
  * Polls the JMA (Japan Meteorological Agency) Atom feed every 60 seconds.
  * When a relevant J-Alert entry is found (tsunami / earthquake), it:
- *   1. Deduplicates against bcp_events.alert_source
- *   2. Fetches the detail XML and extracts area codes
- *   3. Matches stores with BCP enabled for those areas
- *   4. Inserts bcp_events + bcp_clips rows
- *   5. Sends start-notification email
- *   6. Writes pending_command to edge_devices
+ *   1. Deduplicates against jalert_receipts.alert_source
+ *   2. Fetches the detail XML and extracts area codes + max intensity
+ *   3. Records the receipt in jalert_receipts (ALWAYS, store-match independent)
+ *      → this is the data source for the "J-Alert 受信履歴" page
+ *   4. Matches stores with BCP enabled for those areas
+ *   5. Inserts bcp_events + bcp_clips rows
+ *   6. Sends start-notification email
+ *   7. Writes pending_command to edge_devices
  *
  * Deploy with:
  *   supabase functions deploy jalert-poller --schedule "* * * * *"
@@ -212,37 +214,48 @@ async function processEntry(
   supa: any,
   entry: FeedEntry,
 ): Promise<void> {
-  // 4. Dedup — skip if already processed
+  // 4. Dedup — skip if already received. jalert_receipts には店舗マッチに関係なく
+  //    全件記録するため、ここを重複判定の確実なアンカーにする（旧実装は bcp_events
+  //    を見ていたが、無マッチ時は行が無く毎分再処理していた）。
   const { data: existing } = await supa
-    .from('bcp_events')
+    .from('jalert_receipts')
     .select('id')
     .eq('alert_source', entry.id)
     .limit(1)
 
   if (existing && existing.length > 0) {
-    console.log(`[jalert-poller] Already processed ${entry.id}, skipping`)
+    console.log(`[jalert-poller] Already received ${entry.id}, skipping`)
     return
   }
 
   console.log(`[jalert-poller] New entry: ${entry.title} (${entry.id})`)
 
-  // 5. Fetch detail XML and extract area codes
-  const areaCodes = await fetchAreaCodes(entry.linkHref)
-  console.log(`[jalert-poller] Area codes: ${areaCodes.join(', ') || '(none)'}`)
+  // 5. Fetch detail XML and extract area codes + max intensity
+  const { areaCodes, maxIntensity } = await fetchDetail(entry.linkHref)
+  console.log(
+    `[jalert-poller] Area codes: ${areaCodes.join(', ') || '(none)'}` +
+    (maxIntensity ? `, MaxInt: ${maxIntensity}` : ''),
+  )
 
   // 6. Find matching stores with BCP enabled
+  const alertType = classifyAlertType(entry.title)
+  const alertIssuedAt = entry.updated || new Date().toISOString()
   const matchingStores = await findMatchingStores(supa, areaCodes)
+
+  // 6.5. 受信ログを必ず記録（店舗マッチの有無に関わらず）。これが「J-Alert受信履歴」の
+  //      データ源。東北の地震のように該当店舗が無くても、ここには残る。
+  await recordReceipt(
+    supa, entry, alertType, areaCodes, maxIntensity, alertIssuedAt, matchingStores.length,
+  )
+
   if (matchingStores.length === 0) {
-    console.log('[jalert-poller] No matching stores for this alert')
+    console.log('[jalert-poller] No matching stores for this alert (受信ログには記録済み)')
     return
   }
 
   console.log(`[jalert-poller] ${matchingStores.length} matching store(s)`)
 
   // 7. Process each matching store
-  const alertType = classifyAlertType(entry.title)
-  const alertIssuedAt = entry.updated || new Date().toISOString()
-
   for (const { store, settings } of matchingStores) {
     try {
       await processStore(supa, entry, store, settings, alertType, alertIssuedAt, areaCodes)
@@ -259,21 +272,32 @@ async function processEntry(
 // Detail XML area code extraction
 // ---------------------------------------------------------------------------
 
-async function fetchAreaCodes(linkHref: string): Promise<string[]> {
-  if (!linkHref) return []
+interface AlertDetail {
+  areaCodes: string[]
+  maxIntensity: string | null
+}
+
+async function fetchDetail(linkHref: string): Promise<AlertDetail> {
+  if (!linkHref) return { areaCodes: [], maxIntensity: null }
 
   try {
     const res = await fetch(linkHref)
     if (!res.ok) {
       console.error(`[jalert-poller] Detail fetch failed: HTTP ${res.status}`)
-      return []
+      return { areaCodes: [], maxIntensity: null }
     }
     const xml = await res.text()
-    return parseAreaCodes(xml)
+    return { areaCodes: parseAreaCodes(xml), maxIntensity: parseMaxIntensity(xml) }
   } catch (err) {
     console.error('[jalert-poller] Detail fetch error:', err)
-    return []
+    return { areaCodes: [], maxIntensity: null }
   }
+}
+
+/** JMA 詳細XMLの最大震度 <MaxInt> を抽出（'6+','5-','4' 等の生値。無ければ null） */
+function parseMaxIntensity(xml: string): string | null {
+  const m = xml.match(/<(?:\w+:)?MaxInt[^>]*>([^<]+)<\/(?:\w+:)?MaxInt>/)
+  return m ? m[1].trim() : null
 }
 
 /** Extract JIS X 0402 municipality codes from JMA detail XML */
@@ -566,6 +590,41 @@ async function updateEventStatus(
 
   if (error) {
     console.error(`[jalert-poller] Failed to update event ${eventId} status to ${status}:`, error)
+  }
+}
+
+/** 受信した J-Alert を jalert_receipts へ全件記録（店舗マッチの有無に関わらず）。 */
+async function recordReceipt(
+  // deno-lint-ignore no-explicit-any
+  supa: any,
+  entry: FeedEntry,
+  alertType: string,
+  areaCodes: string[],
+  maxIntensity: string | null,
+  alertIssuedAt: string,
+  matchedStoreCount: number,
+): Promise<void> {
+  // alert_source は UNIQUE。競合（同時実行で二重）時は無視して握りつぶす。
+  const { error } = await supa
+    .from('jalert_receipts')
+    .upsert(
+      {
+        alert_source:        entry.id,
+        alert_type:          alertType,
+        title:               entry.title,
+        area_codes:          areaCodes,
+        max_intensity:       maxIntensity,
+        alert_issued_at:     alertIssuedAt,
+        matched_store_count: matchedStoreCount,
+        detail_url:          entry.linkHref || null,
+      },
+      { onConflict: 'alert_source', ignoreDuplicates: true },
+    )
+
+  if (error) {
+    console.error(`[jalert-poller] Failed to record receipt for ${entry.id}:`, error)
+  } else {
+    console.log(`[jalert-poller] Receipt recorded: ${entry.title} (matched ${matchedStoreCount} store(s))`)
   }
 }
 
