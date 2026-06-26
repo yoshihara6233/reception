@@ -44,6 +44,7 @@ export function getSecurityNav(t: Msg): NavItem[] {
 export function getBcpNav(t: Msg): NavItem[] {
   return [
     { href: '/bcp',          label: t.bcpNav.eventsReports, icon: '🚨', exact: true },
+    { href: '/bcp/jalerts',  label: t.bcpNav.jalerts,       icon: '📡' },
     { href: '/bcp/test',     label: t.bcpNav.testIssue,     icon: '⚡' },
     { href: '/bcp/glossary', label: t.bcpNav.glossary,      icon: '?' },
   ]
