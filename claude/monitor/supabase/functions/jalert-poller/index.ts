@@ -31,9 +31,6 @@ const JMA_FEED_URL = 'https://www.data.jma.go.jp/developer/xml/feed/extra.xml'
 const RESEND_API_URL = 'https://api.resend.com/emails'
 const FROM_ADDRESS = 'bcp@noreply.intareco.jp'
 
-// Only process these JMA product types
-const RELEVANT_TYPES = ['VPWW54', 'VXSE51']
-
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -123,7 +120,7 @@ async function pollJalert(): Promise<void> {
   // 3. Filter to relevant types only
   const relevant = entries.filter((e) => isRelevantEntry(e))
   if (relevant.length === 0) {
-    console.log('[jalert-poller] No relevant entries (no VPWW54/VXSE51)')
+    console.log('[jalert-poller] No relevant J-Alert entries (地震/津波/ミサイル)')
     return
   }
 
@@ -191,17 +188,26 @@ function extractTag(xml: string, tag: string): string | null {
   return m ? m[1].trim() : null
 }
 
-/** Check whether the entry is a tsunami or earthquake warning */
+/**
+ * J-Alert（地震・津波・ミサイル）の発令だけを通すタイトル許可リスト。
+ *
+ * 旧実装は RELEVANT_TYPES=['VPWW54','VXSE51'] で判定していたが、VPWW54 は「津波」では
+ * なく「気象警報・注意報」だったため、平常時の気象警報が大量に混入していた（実データで確認）。
+ * JMA の地震・津波・国民保護のタイトルは常に説明的なので、タイトルベースの方が確実。
+ */
 function isRelevantEntry(entry: FeedEntry): boolean {
-  for (const type of RELEVANT_TYPES) {
-    if (entry.linkHref.includes(type) || entry.id.includes(type)) {
-      return true
-    }
-  }
-  // Fallback: check title text
-  if (entry.title.includes('津波') || entry.title.includes('震度')) {
-    return true
-  }
+  const t = entry.title
+
+  // 津波を最優先で判定（タイトルに「注意報」を含むため、気象の除外判定より先に通す）。
+  if (t.includes('津波')) return true
+
+  // 地震（震度速報・緊急地震速報・各種地震情報）。
+  if (t.includes('震度') || t.includes('緊急地震速報') || t.includes('地震')) return true
+
+  // 国民保護（弾道ミサイル等）。
+  if (t.includes('ミサイル') || t.includes('弾道') || t.includes('国民保護')) return true
+
+  // それ以外（気象警報・注意報、噴火など平常時の気象情報）は J-Alert 受信履歴に含めない。
   return false
 }
 
