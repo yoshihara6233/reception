@@ -52,6 +52,14 @@ function offsetLabel(min: number): string {
   if (min < 0)    return `${Math.abs(min)}分前`
   return `${min}分後`
 }
+/** 発令時刻 + オフセット分 の実時刻を HH:MM(JST) で返す。 */
+function offsetClock(alertIso: string, min: number): string {
+  const t = Date.parse(alertIso)
+  if (isNaN(t)) return ''
+  return new Date(t + min * 60_000).toLocaleTimeString('ja-JP', {
+    timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit',
+  })
+}
 
 interface BcpReport {
   id: string
@@ -325,6 +333,7 @@ export default async function BcpEventDetailPage({
                             }
                           >
                             {offsetLabel(offset)}
+                            <span className="ml-1 font-normal opacity-90">({offsetClock(event.alert_issued_at, offset)})</span>
                           </div>
                         </div>
                       )
@@ -349,7 +358,7 @@ export default async function BcpEventDetailPage({
                             download={`${g.name}_${offsetLabel(offset)}.jpg`}
                             className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600 hover:bg-slate-200"
                           >
-                            {offsetLabel(offset)}
+                            {offsetLabel(offset)} ({offsetClock(event.alert_issued_at, offset)})
                           </a>
                         )
                       })}
