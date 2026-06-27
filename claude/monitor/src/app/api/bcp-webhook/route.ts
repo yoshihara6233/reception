@@ -43,9 +43,6 @@ interface BcpEventRow {
     name: string
     address: string | null
   } | null
-  bcp_settings: {
-    notify_emails: string[] | null
-  } | null
 }
 
 interface BcpClipRow {
@@ -117,8 +114,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         area_code,
         status,
         is_test,
-        stores ( name, address ),
-        bcp_settings ( notify_emails )
+        stores ( name, address )
       `)
       .eq('id', eventId)
       .single()
@@ -129,6 +125,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
 
     const event = eventRow as unknown as BcpEventRow
+
+    // 2b. Fetch BCP settings separately. There is NO foreign-key relationship
+    // between bcp_events and bcp_settings (both relate via stores), so PostgREST
+    // cannot embed `bcp_settings ( notify_emails )` into the event select —
+    // doing so made the whole fetch error with "Could not find a relationship …
+    // in the schema cache", which this route reported as 404 event_not_found.
+    // The result: the sweep retried forever, no PDF/email was sent, and status
+    // stayed 'clips_uploaded'. See investigate 2026-06-27 (event 1127abc5…).
+    const { data: settingsRow } = event.store_id
+      ? await supa
+          .from('bcp_settings')
+          .select('notify_emails')
+          .eq('store_id', event.store_id)
+          .maybeSingle()
+      : { data: null }
+    const notifyEmails = (settingsRow?.notify_emails ?? []) as string[]
 
     // 3. Idempotency guard
     if (event.status !== 'clips_uploaded') {
@@ -261,7 +273,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
 
     // 10. Send completion email
-    const recipients = event.bcp_settings?.notify_emails ?? []
+    const recipients = notifyEmails
     if (recipients.length > 0) {
       try {
         const alertTime = new Date(event.alert_issued_at).toLocaleString('ja-JP', {
