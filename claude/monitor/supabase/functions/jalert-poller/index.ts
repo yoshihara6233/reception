@@ -66,6 +66,9 @@ interface BcpSettings {
   enabled: boolean
   pre_minutes: number
   post_minutes: number
+  quake_min_intensity: string   // この震度以上の地震でのみ録画起動（JMA MaxInt 表記）
+  tsunami_enabled: boolean      // 津波発令で録画起動するか
+  missile_enabled: boolean      // 国民保護(弾道ミサイル等)で録画起動するか
 }
 
 interface EdgeDevice {
@@ -243,26 +246,35 @@ async function processEntry(
     (maxIntensity ? `, MaxInt: ${maxIntensity}` : ''),
   )
 
-  // 6. Find matching stores with BCP enabled
+  // 6. Find matching stores with BCP enabled（エリア一致＋有効化のみ。発動条件は次段で判定）
   const alertType = classifyAlertType(entry.title)
   const alertIssuedAt = entry.updated || new Date().toISOString()
-  const matchingStores = await findMatchingStores(supa, areaCodes)
+  const areaStores = await findMatchingStores(supa, areaCodes)
 
-  // 6.5. 受信ログを必ず記録（店舗マッチの有無に関わらず）。これが「J-Alert受信履歴」の
-  //      データ源。東北の地震のように該当店舗が無くても、ここには残る。
-  await recordReceipt(
-    supa, entry, alertType, areaCodes, maxIntensity, alertIssuedAt, matchingStores.length,
+  // 6.5. 店舗ごとの発動条件（震度しきい値 / 津波 ON-OFF / ミサイル ON-OFF）で絞り込む。
+  //      条件未満の店舗は録画を起動しない（受信ログには下で残す）。
+  const triggeredStores = areaStores.filter(({ settings }) =>
+    shouldTrigger(alertType, maxIntensity, settings),
   )
 
-  if (matchingStores.length === 0) {
-    console.log('[jalert-poller] No matching stores for this alert (受信ログには記録済み)')
+  // 6.6. 受信ログを必ず記録（店舗マッチの有無に関わらず）。これが「J-Alert受信履歴」の
+  //      データ源。東北の地震のように該当店舗が無くても、ここには残る。
+  //      matched_store_count は「実際に録画を起動した店舗数」。
+  await recordReceipt(
+    supa, entry, alertType, areaCodes, maxIntensity, alertIssuedAt, triggeredStores.length,
+  )
+
+  if (triggeredStores.length === 0) {
+    console.log(
+      `[jalert-poller] 発動条件を満たす店舗なし（エリア一致${areaStores.length}店 / 受信ログには記録済み）`,
+    )
     return
   }
 
-  console.log(`[jalert-poller] ${matchingStores.length} matching store(s)`)
+  console.log(`[jalert-poller] ${triggeredStores.length} store(s) meet trigger condition`)
 
-  // 7. Process each matching store
-  for (const { store, settings } of matchingStores) {
+  // 7. Process each triggered store
+  for (const { store, settings } of triggeredStores) {
     try {
       await processStore(supa, entry, store, settings, alertType, alertIssuedAt, areaCodes)
     } catch (err) {
@@ -348,7 +360,7 @@ async function findMatchingStores(
   // Fetch all active BCP settings with their store's area_code
   const { data, error } = await supa
     .from('bcp_settings')
-    .select('id, store_id, notify_emails, enabled, pre_minutes, post_minutes, stores ( id, name, area_code )')
+    .select('id, store_id, notify_emails, enabled, pre_minutes, post_minutes, quake_min_intensity, tsunami_enabled, missile_enabled, stores ( id, name, area_code )')
     .eq('enabled', true)
 
   if (error) {
@@ -385,6 +397,9 @@ async function findMatchingStores(
           enabled: row.enabled,
           pre_minutes: row.pre_minutes ?? 3,
           post_minutes: row.post_minutes ?? 3,
+          quake_min_intensity: row.quake_min_intensity ?? '5+',
+          tsunami_enabled: row.tsunami_enabled ?? true,
+          missile_enabled: row.missile_enabled ?? true,
         },
       })
     }
@@ -632,6 +647,42 @@ async function recordReceipt(
   } else {
     console.log(`[jalert-poller] Receipt recorded: ${entry.title} (matched ${matchedStoreCount} store(s))`)
   }
+}
+
+/** JMA 震度表記を順序ランクへ。未知/未取得は 0（＝条件未満扱い）。 */
+function intensityRank(code: string | null): number {
+  switch (code) {
+    case '1':  return 1
+    case '2':  return 2
+    case '3':  return 3
+    case '4':  return 4
+    case '5-': return 5
+    case '5+': return 6
+    case '6-': return 7
+    case '6+': return 8
+    case '7':  return 9
+    default:   return 0
+  }
+}
+
+/**
+ * 店舗の発動条件を満たすか（録画を起動すべきか）。
+ *   - 地震   : 最大震度がしきい値以上
+ *   - 津波   : tsunami_enabled
+ *   - ミサイル: missile_enabled
+ *   - その他 : 起動しない
+ */
+function shouldTrigger(
+  alertType: string,
+  maxIntensity: string | null,
+  s: BcpSettings,
+): boolean {
+  if (alertType === 'earthquake') {
+    return intensityRank(maxIntensity) >= intensityRank(s.quake_min_intensity)
+  }
+  if (alertType === 'tsunami') return s.tsunami_enabled !== false
+  if (alertType === 'missile') return s.missile_enabled !== false
+  return false
 }
 
 /** Determine alert type string from JMA title text */
