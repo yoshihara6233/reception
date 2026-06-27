@@ -51,6 +51,7 @@ interface BcpClipRow {
   clip_from: string
   clip_to: string
   clip_url: string | null
+  storage_path: string | null
   duration_sec: number | null
   upload_status: string
   recorder_cameras: {
@@ -162,6 +163,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         clip_from,
         clip_to,
         clip_url,
+        storage_path,
         duration_sec,
         upload_status,
         recorder_cameras ( name )
@@ -175,6 +177,29 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
 
     const clips = (clipRows ?? []) as unknown as BcpClipRow[]
+
+    // 4b. Resolve each snapshot to a short-lived signed URL. The bcp-clips
+    // bucket is Private (Phase 8), so the legacy public clip_url returns 403 —
+    // embedding it made @react-pdf fail with "Not valid image extension" and the
+    // PDF came out with empty image boxes. Sign via the service-role client
+    // (bypasses Storage RLS), matching the generate-report route. See
+    // investigate 2026-06-27 (event 1127abc5…).
+    const SIGNED_TTL = 300
+    const imageByClip = new Map<string, string>()
+    await Promise.all(
+      clips
+        .filter((c) => c.upload_status === 'completed' && c.storage_path)
+        .map(async (c) => {
+          const { data, error } = await supa.storage
+            .from('bcp-clips')
+            .createSignedUrl(c.storage_path!, SIGNED_TTL)
+          if (error || !data?.signedUrl) {
+            console.warn('[bcp-webhook] clip image signing failed:', c.id, error?.message)
+            return
+          }
+          imageByClip.set(c.id, data.signedUrl)
+        }),
+    )
 
     // 5. Generate PDF
     const generatedAt = new Date().toISOString()
@@ -199,7 +224,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         clipFrom:     c.clip_from,
         clipTo:       c.clip_to,
         durationSec:  c.duration_sec ?? 0,
-        clipUrl:      c.clip_url ?? undefined,
+        clipUrl:      imageByClip.get(c.id) ?? undefined,
         uploadStatus: c.upload_status,
       })),
       generatedAt,
