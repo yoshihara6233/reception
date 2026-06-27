@@ -32,6 +32,7 @@ import { logger } from '../logger.js'
 import { snapshotUrl } from '../rtsp/url.js'
 import { Semaphore } from '../util/semaphore.js'
 import { fetchBcpSnapshot } from '../bcp-fetchers/index.js'
+import { downloadIproNvrMp4 } from '../adapters/i-pro/nvr-vod.js'
 import type { CameraDescriptor } from '../types.js'
 
 const BCP_BUCKET    = 'bcp-clips'
@@ -135,6 +136,15 @@ async function fetchFrigateHistoricalFrame(
     return null
   }
 
+  return extractFirstFrame(mp4)
+}
+
+/**
+ * Pipe an MP4 buffer into `ffmpeg -frames:v 1` and return the first frame as a
+ * JPEG buffer. Returns null on any failure. Shared by the Frigate and i-PRO NVR
+ * historical-frame paths.
+ */
+function extractFirstFrame(mp4: Buffer): Promise<Buffer | null> {
   return new Promise<Buffer | null>((resolve) => {
     const ff = spawn(config.FFMPEG_BIN, [
       '-hide_banner',
@@ -180,6 +190,38 @@ async function fetchFrigateHistoricalFrame(
   })
 }
 
+/**
+ * i-PRO NVR (NU-100 等) の録画から、指定時刻のフレームを 1 枚取り出す。
+ *
+ * VOD と同じ httpdl.cgi 経路（downloadIproNvrMp4）で対象時刻±数秒の録画 MP4 を取得し、
+ * ffmpeg で先頭フレームを JPEG 化する。これにより onvif-generic（カメラ直ライブ）でも
+ * NU-100 に録画がある店舗では BCP の過去フレームを取得できる。
+ *
+ * 失敗時（録画なし・到達不可・抽出失敗）は null を返し、呼び出し側がフォールバックする。
+ */
+async function fetchIproNvrHistoricalFrame(
+  nvr:      { endpoint: string; username: string; password: string },
+  channel:  number,
+  targetMs: number,
+): Promise<Buffer | null> {
+  try {
+    // 対象時刻を含む短い窓（±数秒）。差は 1 時間以内（NVR 制約）。
+    const from = new Date(targetMs - 1_000)
+    const to   = new Date(targetMs + 2_000)
+    const mp4  = await downloadIproNvrMp4(
+      { endpoint: nvr.endpoint, username: nvr.username, password: nvr.password, timeoutMs: 30_000 },
+      channel,
+      from,
+      to,
+    )
+    if (!mp4 || mp4.length < 1024) return null
+    return await extractFirstFrame(mp4)
+  } catch (e) {
+    logger.debug({ err: (e as Error).message, channel }, 'bcp: i-PRO NVR historical frame failed')
+    return null
+  }
+}
+
 async function captureOneSnapshot(
   eventId:    string,
   cameraId:   string,
@@ -211,6 +253,30 @@ async function captureOneSnapshot(
       buf = historical
       source = 'frigate-recording'
     }
+  }
+
+  // NU-100 等 i-PRO NVR: onvif-generic（カメラ直ライブ）でも recorder に vod_host(NVR) が
+  // あれば、VOD と同経路で NU-100 の録画から過去フレームを取得する。これにより録画は
+  // NVR・ライブはカメラ直、という PoC 構成でも BCP の8枚を作れる。
+  if (
+    !buf &&
+    camera.recorder.vendor === 'onvif-generic' &&
+    camera.recorder.vod_host &&
+    isPast
+  ) {
+    const endpoint = camera.recorder.vod_host.startsWith('http')
+      ? camera.recorder.vod_host
+      : `https://${camera.recorder.vod_host}`
+    const nvrFrame = await fetchIproNvrHistoricalFrame(
+      {
+        endpoint,
+        username: camera.recorder.vod_username ?? camera.recorder.username,
+        password: camera.recorder.vod_password ?? camera.recorder.password,
+      },
+      camera.recorder.vod_channel ?? camera.channel,
+      targetMs,
+    )
+    if (nvrFrame) { buf = nvrFrame; source = 'ipro-nvr-recording' }
   }
 
   // F106: i-PRO / Uniview dispatch via BCP fetchers. i-PRO v3+ supports
