@@ -247,15 +247,11 @@ export async function POST(
       // Non-fatal — return without pdfUrl
     }
 
-    // 7. Resolve public URL with cache-busting query so re-generated PDF
-    //    bypasses browser/CDN cache (otherwise the user would download the
-    //    previous PDF on click)
-    const { data: publicUrlData } = supa.storage
-      .from('bcp-reports')
-      .getPublicUrl(storageKey)
-    const baseUrl  = publicUrlData?.publicUrl ?? ''
-    const cacheTag = Date.now().toString(36)
-    const pdfUrl   = baseUrl ? `${baseUrl}?v=${cacheTag}` : ''
+    // 7. Store the auth-gated proxy path (NOT a public bucket URL). The
+    //    bcp-reports bucket is Private; /api/bcp/<eventId>/report signs a fresh
+    //    short-lived URL on each click, so re-generated PDFs are never stale
+    //    and the report is not publicly reachable.
+    const pdfUrl = `/api/bcp/${eventId}/report`
 
     await supa
       .from('bcp_reports')

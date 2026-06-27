@@ -44,7 +44,6 @@ export async function POST(req: NextRequest) {
     (hostname.endsWith('.vercel.app') ||
       hostname === 'localhost' ||
       hostname === '127.0.0.1' ||
-      hostname.endsWith('.intareco.jp') ||
       hostname.endsWith('.genesis-edge.com'))
   const origin = hostAllowed ? `${proto}://${host}` : 'https://intereco-monitor.vercel.app'
 

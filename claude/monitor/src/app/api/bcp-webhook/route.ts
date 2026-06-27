@@ -15,7 +15,7 @@
  *  5. Generate PDF
  *  6. Insert bcp_reports row (placeholder url)
  *  7. Upload PDF to Supabase Storage bucket "bcp-reports"
- *  8. Update bcp_reports.pdf_url with public URL
+ *  8. Update bcp_reports.pdf_url with the auth-gated proxy path
  *  9. Update bcp_events.status = 'report_generated'
  * 10. Send bcpCompletedEmail to bcp_settings.notify_emails
  * 11. Update bcp_events.status = 'completed'
@@ -270,12 +270,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       // Non-fatal: continue without a URL
     }
 
-    // 8. Resolve public URL and update bcp_reports
-    const { data: publicUrlData } = supa.storage
-      .from('bcp-reports')
-      .getPublicUrl(storageKey)
-
-    const pdfUrl = publicUrlData?.publicUrl ?? ''
+    // 8. Store the auth-gated proxy path (NOT a public bucket URL). The
+    //    bcp-reports bucket is Private; /api/bcp/<eventId>/report verifies the
+    //    session and redirects to a short-lived signed URL on demand.
+    const pdfUrl = `/api/bcp/${eventId}/report`
 
     const { error: reportUpdateErr } = await supa
       .from('bcp_reports')
