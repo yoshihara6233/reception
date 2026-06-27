@@ -7,10 +7,13 @@
  *   2. Fetches the detail XML and extracts area codes + max intensity
  *   3. Records the receipt in jalert_receipts (ALWAYS, store-match independent)
  *      → this is the data source for the "J-Alert 受信履歴" page
- *   4. Matches stores with BCP enabled for those areas
- *   5. Inserts bcp_events + bcp_clips rows
- *   6. Sends start-notification email
- *   7. Writes pending_command to edge_devices
+ *   4. Matches stores with BCP enabled + per-store trigger condition (震度しきい値/津波/ミサイル)
+ *   5. Inserts a bcp_events row (status='pending') and notifies HQ
+ *
+ * NOTE: 録画(8枚スナップ)取得は自動では行わない。本部が BCP イベント詳細ページの
+ *       「現地レコーダの録画を取得」ボタンで /api/bcp/<id>/retrieve をオンデマンド実行する
+ *       （災害時の回線輻輳・アップロード負荷を避けるため）。しきい値は「録画の発動」ではなく
+ *       「本部への通知・イベント化」のゲートとして機能する。
  *
  * Deploy with:
  *   supabase functions deploy jalert-poller --schedule "* * * * *"
@@ -66,14 +69,11 @@ interface BcpSettings {
   enabled: boolean
   pre_minutes: number
   post_minutes: number
+  quake_min_intensity: string   // この震度以上の地震でのみ録画起動（JMA MaxInt 表記）
+  tsunami_enabled: boolean      // 津波発令で録画起動するか
+  missile_enabled: boolean      // 国民保護(弾道ミサイル等)で録画起動するか
 }
 
-interface EdgeDevice {
-  id: string
-  store_id: string
-  status: string
-  recorders: { id: string; recorder_cameras: { id: string; name: string }[] }[]
-}
 
 // ---------------------------------------------------------------------------
 // Main handler
@@ -243,26 +243,35 @@ async function processEntry(
     (maxIntensity ? `, MaxInt: ${maxIntensity}` : ''),
   )
 
-  // 6. Find matching stores with BCP enabled
+  // 6. Find matching stores with BCP enabled（エリア一致＋有効化のみ。発動条件は次段で判定）
   const alertType = classifyAlertType(entry.title)
   const alertIssuedAt = entry.updated || new Date().toISOString()
-  const matchingStores = await findMatchingStores(supa, areaCodes)
+  const areaStores = await findMatchingStores(supa, areaCodes)
 
-  // 6.5. 受信ログを必ず記録（店舗マッチの有無に関わらず）。これが「J-Alert受信履歴」の
-  //      データ源。東北の地震のように該当店舗が無くても、ここには残る。
-  await recordReceipt(
-    supa, entry, alertType, areaCodes, maxIntensity, alertIssuedAt, matchingStores.length,
+  // 6.5. 店舗ごとの発動条件（震度しきい値 / 津波 ON-OFF / ミサイル ON-OFF）で絞り込む。
+  //      条件を満たした店舗だけを「本部に通知・イベント化」する（録画取得は手動）。
+  const triggeredStores = areaStores.filter(({ settings }) =>
+    shouldTrigger(alertType, maxIntensity, settings),
   )
 
-  if (matchingStores.length === 0) {
-    console.log('[jalert-poller] No matching stores for this alert (受信ログには記録済み)')
+  // 6.6. 受信ログを必ず記録（店舗マッチの有無に関わらず）。これが「J-Alert受信履歴」の
+  //      データ源。東北の地震のように該当店舗が無くても、ここには残る。
+  //      matched_store_count は「通知・イベント化した店舗数」。
+  await recordReceipt(
+    supa, entry, alertType, areaCodes, maxIntensity, alertIssuedAt, triggeredStores.length,
+  )
+
+  if (triggeredStores.length === 0) {
+    console.log(
+      `[jalert-poller] 通知条件を満たす店舗なし（エリア一致${areaStores.length}店 / 受信ログには記録済み）`,
+    )
     return
   }
 
-  console.log(`[jalert-poller] ${matchingStores.length} matching store(s)`)
+  console.log(`[jalert-poller] ${triggeredStores.length} store(s) meet notify condition`)
 
-  // 7. Process each matching store
-  for (const { store, settings } of matchingStores) {
+  // 7. 各店舗のイベント生成＋通知（録画取得は手動）
+  for (const { store, settings } of triggeredStores) {
     try {
       await processStore(supa, entry, store, settings, alertType, alertIssuedAt, areaCodes)
     } catch (err) {
@@ -348,7 +357,7 @@ async function findMatchingStores(
   // Fetch all active BCP settings with their store's area_code
   const { data, error } = await supa
     .from('bcp_settings')
-    .select('id, store_id, notify_emails, enabled, pre_minutes, post_minutes, stores ( id, name, area_code )')
+    .select('id, store_id, notify_emails, enabled, pre_minutes, post_minutes, quake_min_intensity, tsunami_enabled, missile_enabled, stores ( id, name, area_code )')
     .eq('enabled', true)
 
   if (error) {
@@ -385,6 +394,9 @@ async function findMatchingStores(
           enabled: row.enabled,
           pre_minutes: row.pre_minutes ?? 3,
           post_minutes: row.post_minutes ?? 3,
+          quake_min_intensity: row.quake_min_intensity ?? '5+',
+          tsunami_enabled: row.tsunami_enabled ?? true,
+          missile_enabled: row.missile_enabled ?? true,
         },
       })
     }
@@ -407,14 +419,13 @@ async function processStore(
   alertIssuedAt: string,
   areaCodes: string[],
 ): Promise<void> {
-  const now = new Date()
+  // 手動録画取得モデル: 発令を検知したら「イベント生成＋本部通知」のみ行う。
+  // 現地レコーダからの録画(8枚スナップ)取得は、本部が BCP イベント詳細ページの
+  // 「現地レコーダの録画を取得」ボタンでオンデマンドに実行する。
+  // 災害時は回線が輻輳しアップロードも重いため、発令の瞬間に自動取得はしない。
+  // status='pending' = 発令検知・録画未取得。
 
-  // Compute clip window from alert issuance time (not from now)
-  const alertTs = new Date(alertIssuedAt)
-  const clipFrom = new Date(alertTs.getTime() - settings.pre_minutes * 60_000).toISOString()
-  const clipTo   = new Date(alertTs.getTime() + settings.post_minutes * 60_000).toISOString()
-
-  // a. Insert bcp_events row
+  // a. Insert bcp_events row（録画は起動しない）
   const { data: eventRows, error: eventError } = await supa
     .from('bcp_events')
     .insert({
@@ -439,143 +450,11 @@ async function processStore(
 
   const eventId = eventRows.id as string
 
-  // b. Fetch active edge devices for this store
-  const { data: edges, error: edgesError } = await supa
-    .from('edge_devices')
-    .select(`
-      id, store_id, status,
-      recorders ( id, recorder_cameras ( id, name ) )
-    `)
-    .eq('store_id', store.id)
-    .neq('status', 'offline')
-
-  if (edgesError) {
-    console.error(
-      `[jalert-poller] Failed to fetch edges for store ${store.id}:`,
-      edgesError,
-    )
-    await updateEventStatus(supa, eventId, 'failed')
-    return
-  }
-
-  const activeEdges = (edges ?? []) as EdgeDevice[]
-
-  if (activeEdges.length === 0) {
-    console.warn(
-      `[jalert-poller] No active edge devices for store ${store.id} (${store.name})`,
-    )
-    // Still create the event in 'recording' state so the UI shows it
-    await updateEventStatus(supa, eventId, 'recording')
-    await sendAlertEmail(settings, store, alertType, alertIssuedAt, eventId, false)
-    return
-  }
-
-  // c. Insert bcp_clips rows — one per camera per edge device
-  const clipInserts: {
-    event_id: string
-    camera_id: string
-    clip_from: string
-    clip_to: string
-    upload_status: string
-  }[] = []
-
-  const commandsByEdge: Map<
-    string,
-    { clipId: string; cameraId: string }[]
-  > = new Map()
-
-  for (const edge of activeEdges) {
-    const clips: { clipId: string; cameraId: string }[] = []
-
-    for (const recorder of edge.recorders ?? []) {
-      for (const camera of recorder.recorder_cameras ?? []) {
-        clipInserts.push({
-          event_id: eventId,
-          camera_id: camera.id,
-          clip_from: clipFrom,
-          clip_to: clipTo,
-          upload_status: 'pending',
-        })
-
-        // We'll fill clipId after insert; collect camera IDs for now
-        clips.push({ clipId: '', cameraId: camera.id })
-      }
-    }
-
-    commandsByEdge.set(edge.id, clips)
-  }
-
-  let insertedClips: { id: string; camera_id: string }[] = []
-  if (clipInserts.length > 0) {
-    const { data: clipData, error: clipError } = await supa
-      .from('bcp_clips')
-      .insert(clipInserts)
-      .select('id, camera_id')
-
-    if (clipError) {
-      console.error(
-        `[jalert-poller] Failed to insert bcp_clips for event ${eventId}:`,
-        clipError,
-      )
-    } else {
-      insertedClips = clipData ?? []
-    }
-  }
-
-  // Map camera_id -> clip_id for the pending_command payload
-  const cameraToClip = new Map<string, string>(
-    insertedClips.map((c) => [c.camera_id, c.id]),
-  )
-
-  // d. Send start notification email
+  // b. 本部へ通知（録画は自動取得しない旨を含む）
   await sendAlertEmail(settings, store, alertType, alertIssuedAt, eventId, false)
 
-  // e. Update event status to 'recording'
-  await updateEventStatus(supa, eventId, 'recording')
-
-  // f. Write pending_command to each edge device
-  for (const edge of activeEdges) {
-    const edgeClips: { clipId: string; cameraId: string }[] = []
-
-    for (const recorder of edge.recorders ?? []) {
-      for (const camera of recorder.recorder_cameras ?? []) {
-        const clipId = cameraToClip.get(camera.id) ?? ''
-        edgeClips.push({ clipId, cameraId: camera.id })
-      }
-    }
-
-    const command = {
-      action: 'start_bcp_capture',
-      request_id: crypto.randomUUID(),
-      eventId,
-      clips: edgeClips.map((c) => ({ clipId: c.clipId, cameraId: c.cameraId })),
-      clipFrom,
-      clipTo,
-    }
-
-    const { error: cmdError } = await supa
-      .from('edge_devices')
-      .update({
-        pending_command: command,
-        pending_command_at: new Date().toISOString(),
-      })
-      .eq('id', edge.id)
-
-    if (cmdError) {
-      console.error(
-        `[jalert-poller] Failed to write pending_command to edge ${edge.id}:`,
-        cmdError,
-      )
-    } else {
-      console.log(
-        `[jalert-poller] Dispatched BCP command to edge ${edge.id} (${edgeClips.length} camera(s))`,
-      )
-    }
-  }
-
   console.log(
-    `[jalert-poller] BCP event ${eventId} created for store ${store.name} ` +
-    `(${insertedClips.length} clip(s), ${activeEdges.length} edge(s))`,
+    `[jalert-poller] BCP event ${eventId} created for store ${store.name}（通知のみ・録画は手動取得）`,
   )
 }
 
@@ -583,21 +462,6 @@ async function processStore(
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function updateEventStatus(
-  // deno-lint-ignore no-explicit-any
-  supa: any,
-  eventId: string,
-  status: string,
-): Promise<void> {
-  const { error } = await supa
-    .from('bcp_events')
-    .update({ status })
-    .eq('id', eventId)
-
-  if (error) {
-    console.error(`[jalert-poller] Failed to update event ${eventId} status to ${status}:`, error)
-  }
-}
 
 /** 受信した J-Alert を jalert_receipts へ全件記録（店舗マッチの有無に関わらず）。 */
 async function recordReceipt(
@@ -632,6 +496,42 @@ async function recordReceipt(
   } else {
     console.log(`[jalert-poller] Receipt recorded: ${entry.title} (matched ${matchedStoreCount} store(s))`)
   }
+}
+
+/** JMA 震度表記を順序ランクへ。未知/未取得は 0（＝条件未満扱い）。 */
+function intensityRank(code: string | null): number {
+  switch (code) {
+    case '1':  return 1
+    case '2':  return 2
+    case '3':  return 3
+    case '4':  return 4
+    case '5-': return 5
+    case '5+': return 6
+    case '6-': return 7
+    case '6+': return 8
+    case '7':  return 9
+    default:   return 0
+  }
+}
+
+/**
+ * 店舗の発動条件を満たすか（録画を起動すべきか）。
+ *   - 地震   : 最大震度がしきい値以上
+ *   - 津波   : tsunami_enabled
+ *   - ミサイル: missile_enabled
+ *   - その他 : 起動しない
+ */
+function shouldTrigger(
+  alertType: string,
+  maxIntensity: string | null,
+  s: BcpSettings,
+): boolean {
+  if (alertType === 'earthquake') {
+    return intensityRank(maxIntensity) >= intensityRank(s.quake_min_intensity)
+  }
+  if (alertType === 'tsunami') return s.tsunami_enabled !== false
+  if (alertType === 'missile') return s.missile_enabled !== false
+  return false
 }
 
 /** Determine alert type string from JMA title text */
@@ -755,7 +655,7 @@ function buildAlertEmailHtml(params: {
       <td style="padding:8px;border:1px solid #ddd">${escHtml(alertTime)}</td>
     </tr>
   </table>
-  <p>店舗の防犯カメラによる録画を開始しました。録画完了後、改めてご連絡いたします。</p>
+  <p>J-Alert の発令を検知しました。必要に応じて、BCPイベント詳細ページの「現地レコーダの録画を取得」から、該当時間帯の映像を取得してください。<br>（災害時の通信混雑を避けるため、録画は自動取得せず手動取得方式としています。）</p>
   <p>
     <a href="${eventUrl}"
        style="display:inline-block;background:#c0392b;color:#fff;padding:10px 20px;border-radius:4px;text-decoration:none;font-weight:bold">

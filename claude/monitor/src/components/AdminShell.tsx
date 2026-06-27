@@ -27,6 +27,7 @@ export function getAdminNav(t: Msg): NavItem[] {
     // デッドリンク（/admin/recorders）はナビから除外。
     // F49.J: NVR 機種マスタ (EOL/EOS 管理)
     { href: '/admin/nvr-models', label: 'NVR 機種',           icon: '🛰' },
+    { href: '/admin/bcp',        label: 'BCP発動条件',         icon: '🚨' },
     { href: '/admin/users',      label: t.adminNav.users,     icon: '⚇' },
     { href: '/admin/import',     label: t.adminNav.csvImport, icon: '⇪' },
     { href: '/admin/audit',      label: t.adminNav.audit,     icon: '☰' },
@@ -77,6 +78,7 @@ export const ADMIN_NAV: NavItem[] = [
   { href: '/admin',            label: 'ダッシュボード', icon: '▣', exact: true },
   { href: '/admin/stores',     label: '店舗',           icon: '⛬' },
   { href: '/admin/edges',      label: 'エッジサーバ',   icon: '⌬' },
+  { href: '/admin/bcp',        label: 'BCP発動条件',     icon: '🚨' },
   { href: '/admin/users',      label: 'ユーザ',         icon: '⚇' },
   { href: '/admin/import',     label: 'CSV 一括投入',   icon: '⇪' },
   { href: '/admin/audit',      label: '監査ログ',       icon: '☰' },
