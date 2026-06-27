@@ -25,6 +25,9 @@
  *   20260531_001. clip_url and thumbnail_url both point at the same JPEG.
  */
 import { spawn } from 'child_process'
+import { mkdir, unlink, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { type SupabaseClient } from '@supabase/supabase-js'
 import { getSupabase } from '../supabase.js'
 import { config } from '../config.js'
@@ -140,54 +143,67 @@ async function fetchFrigateHistoricalFrame(
 }
 
 /**
- * Pipe an MP4 buffer into `ffmpeg -frames:v 1` and return the first frame as a
- * JPEG buffer. Returns null on any failure. Shared by the Frigate and i-PRO NVR
- * historical-frame paths.
+ * Extract the first frame of an MP4 buffer as a JPEG. Returns null on failure.
+ * Shared by the Frigate and i-PRO NVR historical-frame paths.
+ *
+ * We write the MP4 to a temp FILE and let ffmpeg read it with `-i <file>`
+ * (seekable) instead of piping via stdin. i-PRO NVR (NU-100) recordings are
+ * standard MP4 with the `moov` atom at the END, which a non-seekable stdin
+ * pipe cannot demux ("partial file / Invalid data found"). A real file lets
+ * ffmpeg seek to the moov. Frigate's fragmented MP4 also reads fine from a file.
  */
-function extractFirstFrame(mp4: Buffer): Promise<Buffer | null> {
-  return new Promise<Buffer | null>((resolve) => {
-    const ff = spawn(config.FFMPEG_BIN, [
-      '-hide_banner',
-      '-loglevel', 'error',
-      '-i', 'pipe:0',
-      '-frames:v', '1',
-      '-q:v', '3',          // JPEG quality (2-31, lower is better)
-      '-f', 'image2',
-      '-c:v', 'mjpeg',
-      'pipe:1',
-    ])
+async function extractFirstFrame(mp4: Buffer): Promise<Buffer | null> {
+  const dir    = join(tmpdir(), 'intereco-edge-bcp')
+  const inPath = join(dir, `${crypto.randomUUID()}.mp4`)
+  try {
+    await mkdir(dir, { recursive: true })
+    await writeFile(inPath, mp4)
 
-    const chunks: Buffer[] = []
-    let stderrBuf = ''
-    let resolved = false
+    return await new Promise<Buffer | null>((resolve) => {
+      const ff = spawn(config.FFMPEG_BIN, [
+        '-hide_banner',
+        '-loglevel', 'error',
+        '-i', inPath,
+        '-frames:v', '1',
+        '-q:v', '3',          // JPEG quality (2-31, lower is better)
+        '-f', 'image2',
+        '-c:v', 'mjpeg',
+        'pipe:1',
+      ])
 
-    ff.stdout.on('data', (c: Buffer) => chunks.push(c))
-    ff.stderr.on('data', (c: Buffer) => { stderrBuf += c.toString('utf8') })
+      const chunks: Buffer[] = []
+      let stderrBuf = ''
+      let resolved = false
 
-    ff.on('error', () => {
-      if (resolved) return
-      resolved = true
-      resolve(null)
+      ff.stdout.on('data', (c: Buffer) => chunks.push(c))
+      ff.stderr.on('data', (c: Buffer) => { stderrBuf += c.toString('utf8') })
+
+      ff.on('error', () => {
+        if (resolved) return
+        resolved = true
+        resolve(null)
+      })
+      ff.on('close', (code) => {
+        if (resolved) return
+        resolved = true
+        if (code !== 0) {
+          logger.debug({ code, stderr: stderrBuf.slice(0, 200) }, 'bcp: ffmpeg frame extract failed')
+          return resolve(null)
+        }
+        const out = Buffer.concat(chunks)
+        // Validate: minimum JPEG SOI marker (0xFFD8)
+        if (out.length < 2 || out[0] !== 0xff || out[1] !== 0xd8) {
+          return resolve(null)
+        }
+        resolve(out)
+      })
     })
-    ff.on('close', (code) => {
-      if (resolved) return
-      resolved = true
-      if (code !== 0) {
-        logger.debug({ code, stderr: stderrBuf.slice(0, 200) }, 'bcp: ffmpeg frame extract failed')
-        return resolve(null)
-      }
-      const out = Buffer.concat(chunks)
-      // Validate: minimum JPEG SOI marker (0xFFD8)
-      if (out.length < 2 || out[0] !== 0xff || out[1] !== 0xd8) {
-        return resolve(null)
-      }
-      resolve(out)
-    })
-
-    ff.stdin.on('error', () => { /* ignore EPIPE if ffmpeg already gave up */ })
-    ff.stdin.write(mp4)
-    ff.stdin.end()
-  })
+  } catch (e) {
+    logger.debug({ err: (e as Error).message }, 'bcp: extractFirstFrame temp write failed')
+    return null
+  } finally {
+    await unlink(inPath).catch(() => {})
+  }
 }
 
 /**
@@ -205,9 +221,10 @@ async function fetchIproNvrHistoricalFrame(
   targetMs: number,
 ): Promise<Buffer | null> {
   try {
-    // 対象時刻を含む短い窓（±数秒）。差は 1 時間以内（NVR 制約）。
+    // 対象時刻から約10秒の窓。短すぎる(±数秒)と完全なGOPが入らず demux 不可になるため、
+    // 先頭フレーム(≒対象時刻)を確実に取れるよう少し広めに取る。差は1時間以内（NVR制約）。
     const from = new Date(targetMs - 1_000)
-    const to   = new Date(targetMs + 2_000)
+    const to   = new Date(targetMs + 10_000)
     const mp4  = await downloadIproNvrMp4(
       { endpoint: nvr.endpoint, username: nvr.username, password: nvr.password, timeoutMs: 30_000 },
       channel,
