@@ -20,8 +20,6 @@ interface SettingRow {
   quake_min_intensity: string | null
   tsunami_enabled: boolean | null
   missile_enabled: boolean | null
-  pre_minutes: number | null
-  post_minutes: number | null
   notify_emails: string[] | null
 }
 
@@ -30,7 +28,7 @@ export default async function AdminBcpPage() {
 
   const [storesRes, settingsRes] = await Promise.all([
     supa.from('stores').select('id, name, area_code').order('area_code', { ascending: true, nullsFirst: false }).order('name').limit(10_000),
-    supa.from('bcp_settings').select('store_id, enabled, quake_min_intensity, tsunami_enabled, missile_enabled, pre_minutes, post_minutes, notify_emails').limit(10_000),
+    supa.from('bcp_settings').select('store_id, enabled, quake_min_intensity, tsunami_enabled, missile_enabled, notify_emails').limit(10_000),
   ])
 
   const stores   = (storesRes.data   ?? []) as StoreRow[]
@@ -47,8 +45,6 @@ export default async function AdminBcpPage() {
       quakeMinIntensity: cfg?.quake_min_intensity ?? '5+',
       tsunamiEnabled:    cfg?.tsunami_enabled ?? true,
       missileEnabled:    cfg?.missile_enabled ?? true,
-      preMinutes:        cfg?.pre_minutes ?? 3,
-      postMinutes:       cfg?.post_minutes ?? 5,
       notifyEmails:      cfg?.notify_emails ?? [],
     }
   })

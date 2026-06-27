@@ -49,8 +49,9 @@ export function RetrieveRecordingButton({ eventId, alreadyHasClips }: { eventId:
         {err && <span className="text-[11px] text-red-600">{err}</span>}
       </div>
       <p className="text-[11px] leading-relaxed text-slate-500">
-        発令時刻の前後（既定 −3分〜+5分）の映像を、現地レコーダから8枚スナップショットとして取得します。
-        災害時は回線が混み合うため、回線が落ち着いてからの取得を推奨します。取得完了後、PDFは自動生成されます。
+        発令時刻の前後（−5分〜+30分）の8枚スナップショットを現地レコーダから取得します。
+        通常は<b>発令時に自動取得</b>されます。自動取得に失敗した場合や、もう一度取り直したい場合に、このボタンで手動取得できます。
+        取得完了後、PDFは自動生成されます。
       </p>
     </div>
   )

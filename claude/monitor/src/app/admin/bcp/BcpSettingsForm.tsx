@@ -11,8 +11,6 @@ export interface BcpStoreSetting {
   quakeMinIntensity: string
   tsunamiEnabled:    boolean
   missileEnabled:    boolean
-  preMinutes:        number
-  postMinutes:       number
   notifyEmails:      string[]
 }
 
@@ -34,8 +32,6 @@ export function BcpSettingsCard({ row }: { row: BcpStoreSetting }) {
   const [intensity, setInt]     = useState(row.quakeMinIntensity)
   const [tsunami, setTsunami]   = useState(row.tsunamiEnabled)
   const [missile, setMissile]   = useState(row.missileEnabled)
-  const [pre, setPre]           = useState(row.preMinutes)
-  const [post, setPost]         = useState(row.postMinutes)
   const [emails, setEmails]     = useState(row.notifyEmails.join(', '))
   const [pending, startTransition] = useTransition()
   const [saved, setSaved] = useState(false)
@@ -50,8 +46,6 @@ export function BcpSettingsCard({ row }: { row: BcpStoreSetting }) {
         quakeMinIntensity: intensity,
         tsunamiEnabled:    tsunami,
         missileEnabled:    missile,
-        preMinutes:        pre,
-        postMinutes:       post,
         notifyEmails:      emails.split(',').map((e) => e.trim()).filter(Boolean),
       })
       if (res.ok) { setSaved(true); setTimeout(() => setSaved(false), 1500) }
@@ -109,24 +103,17 @@ export function BcpSettingsCard({ row }: { row: BcpStoreSetting }) {
           </div>
         </fieldset>
 
-        {/* 録画範囲・通知 */}
+        {/* 通知 */}
         <fieldset className="rounded border border-slate-200 p-3 dark:border-gedline">
-          <legend className="px-1 text-[11px] font-bold text-slate-500 dark:text-gedink3">録画範囲・通知</legend>
+          <legend className="px-1 text-[11px] font-bold text-slate-500 dark:text-gedink3">通知</legend>
           <div className="space-y-2 text-xs">
-            <div className="flex items-center gap-2">
-              <span className="w-20 text-slate-500">発令前</span>
-              <input type="number" min={1} max={10} value={pre} onChange={(e) => setPre(Number(e.target.value))} className={`${input} w-20`} />
-              <span className="text-slate-400">分</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="w-20 text-slate-500">発令後</span>
-              <input type="number" min={1} max={30} value={post} onChange={(e) => setPost(Number(e.target.value))} className={`${input} w-20`} />
-              <span className="text-slate-400">分</span>
-            </div>
             <div className="flex items-start gap-2">
               <span className="w-20 pt-1 text-slate-500">通知先</span>
               <input type="text" value={emails} onChange={(e) => setEmails(e.target.value)} placeholder="a@example.com, b@example.com" className={`${input} flex-1`} />
             </div>
+            <p className="text-[10px] leading-relaxed text-slate-400">
+              発令時に取得開始、証拠PDF生成後に完了メールを送信します。録画は8枚スナップ（発生時の前後・固定範囲）を自動取得します。
+            </p>
           </div>
         </fieldset>
       </div>
