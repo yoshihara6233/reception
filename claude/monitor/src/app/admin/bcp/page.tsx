@@ -11,7 +11,8 @@
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
-import { BcpSettingsCard, type BcpStoreSetting } from './BcpSettingsForm'
+import { type BcpStoreSetting } from './BcpSettingsForm'
+import { BcpSettingsTable } from './BcpSettingsTable'
 
 interface StoreRow { id: string; name: string; area_code: string | null }
 interface SettingRow {
@@ -59,15 +60,14 @@ export default async function AdminBcpPage() {
       />
       <div className="space-y-3 px-5 py-4">
         <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-xs leading-relaxed text-blue-800/90 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200/80">
-          店舗ごとに、J-Alert 連動の自動録画を<b>どの発令で起動するか</b>を設定します。
-          地震は<b>最大震度のしきい値</b>、津波・ミサイルは ON/OFF。条件未満の発令も
-          <b>受信履歴</b>（BCP → 📡 Jアラート受信履歴）には残ります。
+          店舗ごとに、J-Alert 連動の<b>BCPレポート自動作成</b>を設定します。
+          地震は<b>最大震度のしきい値</b>、津波・ミサイルは ON/OFF、<b>撮影タイミング</b>で写真枚数を選べます。
+          絞り込み・複数選択して<b>一括設定</b>も可能。条件未満の発令も<b>受信履歴</b>には残ります。
         </div>
-        {rows.map((r) => (
-          <BcpSettingsCard key={r.storeId} row={r} />
-        ))}
-        {rows.length === 0 && (
+        {rows.length === 0 ? (
           <p className="text-xs text-slate-500 dark:text-gedink3">店舗がありません。</p>
+        ) : (
+          <BcpSettingsTable initialRows={rows} />
         )}
       </div>
     </AdminShell>
