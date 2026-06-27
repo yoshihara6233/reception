@@ -23,8 +23,8 @@ describe('passwordResetEmail', () => {
     expect(html).toContain('一度のみ')
   })
 
-  it('security sender uses the verified noreply.intareco.jp domain', () => {
-    expect(SECURITY_FROM_ADDRESS).toContain('@noreply.intareco.jp')
+  it('security sender uses a domain we own and can verify in Resend', () => {
+    expect(SECURITY_FROM_ADDRESS).toContain('@genesis-edge.com')
   })
 })
 
