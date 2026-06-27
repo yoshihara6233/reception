@@ -158,12 +158,17 @@ export default async function BcpEventDetailPage({
   }
   const cameraGroups = [...byCamera.entries()].map(([camId, g]) => ({ camId, ...g }))
 
-  // Fetch report (if any)
+  // Fetch the latest report (if any). A new bcp_reports row is inserted on each
+  // successful webhook/generate run, so an event can have MORE THAN ONE report
+  // row — `.single()` would error on duplicates and hide the PDF download link.
+  // Take the most recent by created_at instead. See investigate 2026-06-27.
   const { data: reportData } = await supa
     .from('bcp_reports')
     .select('id, event_id, pdf_url, generated_at, sent_to_emails, created_at')
     .eq('event_id', id)
-    .single()
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
 
   const report = reportData as BcpReport | null
 
