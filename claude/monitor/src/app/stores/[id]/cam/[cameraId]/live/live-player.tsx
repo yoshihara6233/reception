@@ -30,6 +30,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Hls from 'hls.js'
 import { cancelPendingStop, scheduleStop } from '@/lib/edge-stop-registry'
+import { SaveJpegButton } from '@/components/SaveJpegButton'
 
 // Floor between snapshot frames. Polling is onLoad-driven (the next fetch
 // starts only after the current frame settles), so this is just a small gap
@@ -553,6 +554,12 @@ function JpegMode({
         onLoad={onFrameLoad}
         onError={() => { setFails((n) => n + 1); scheduleNextFrame() }}
       />
+
+      {loaded > 0 && (
+        <div className="absolute right-2 top-2">
+          <SaveJpegButton endpoint={`/api/edges/${edgeId}/cam/${cameraId}/snapshot`} name={`live_${cameraId.slice(0, 8)}`} />
+        </div>
+      )}
 
       {showWaiting && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-slate-300">
