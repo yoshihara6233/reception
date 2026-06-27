@@ -72,8 +72,11 @@ export async function POST(req: NextRequest) {
     .upload(path, bytes, { contentType: image.type || 'image/jpeg', upsert: true })
   if (upErr) return NextResponse.json({ error: `storage: ${upErr.message}` }, { status: 500 })
 
-  const { data: pub } = supa.storage.from('security-snapshots').getPublicUrl(path)
-  const snapshotUrl = pub?.publicUrl ?? null
+  // The security-snapshots bucket is Private (by design). Store the auth-gated
+  // proxy path — /api/security/patrol/<runId>/<cameraId>/snapshot signs a
+  // short-lived URL on demand — instead of a public URL that would not resolve
+  // on a private bucket (and would be an exposure if it did).
+  const snapshotUrl = `/api/security/patrol/${runId}/${cameraId}/snapshot`
 
   // ── 4. Threshold decision (rule-based; server is the policy point)
   const { data: cfg } = await supa
