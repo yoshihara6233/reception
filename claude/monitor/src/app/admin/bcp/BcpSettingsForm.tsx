@@ -16,7 +16,7 @@ export interface BcpStoreSetting {
 }
 
 /** レポートで撮影するオフセット（発令からの分）の選択肢。 */
-const OFFSET_OPTIONS: { value: number; label: string }[] = [
+export const OFFSET_OPTIONS: { value: number; label: string }[] = [
   { value: -5, label: '5分前' },
   { value: 0,  label: '発生時' },
   { value: 5,  label: '5分後' },
@@ -28,7 +28,7 @@ const OFFSET_OPTIONS: { value: number; label: string }[] = [
 ]
 
 /** 震度しきい値の選択肢（JMA MaxInt 表記 → 日本式ラベル）。 */
-const INTENSITY_OPTIONS: { value: string; label: string }[] = [
+export const INTENSITY_OPTIONS: { value: string; label: string }[] = [
   { value: '1',  label: '震度1以上' },
   { value: '2',  label: '震度2以上' },
   { value: '3',  label: '震度3以上' },
@@ -40,7 +40,7 @@ const INTENSITY_OPTIONS: { value: string; label: string }[] = [
   { value: '7',  label: '震度7' },
 ]
 
-export function BcpSettingsCard({ row }: { row: BcpStoreSetting }) {
+export function BcpSettingsCard({ row, onSaved }: { row: BcpStoreSetting; onSaved?: (next: BcpStoreSetting) => void }) {
   const [enabled, setEnabled]   = useState(row.enabled)
   const [intensity, setInt]     = useState(row.quakeMinIntensity)
   const [tsunami, setTsunami]   = useState(row.tsunamiEnabled)
@@ -62,6 +62,7 @@ export function BcpSettingsCard({ row }: { row: BcpStoreSetting }) {
   function save() {
     setErr('')
     if (offsets.length === 0) { setErr('撮影タイミングを1つ以上選んでください'); return }
+    const notifyEmails = emails.split(',').map((e) => e.trim()).filter(Boolean)
     startTransition(async () => {
       const res = await upsertBcpSettings({
         storeId:           row.storeId,
@@ -69,10 +70,17 @@ export function BcpSettingsCard({ row }: { row: BcpStoreSetting }) {
         quakeMinIntensity: intensity,
         tsunamiEnabled:    tsunami,
         missileEnabled:    missile,
-        notifyEmails:      emails.split(',').map((e) => e.trim()).filter(Boolean),
+        notifyEmails,
         snapshotOffsets:   offsets,
       })
-      if (res.ok) { setSaved(true); setTimeout(() => setSaved(false), 1500) }
+      if (res.ok) {
+        setSaved(true); setTimeout(() => setSaved(false), 1500)
+        onSaved?.({
+          ...row,
+          enabled, quakeMinIntensity: intensity, tsunamiEnabled: tsunami,
+          missileEnabled: missile, notifyEmails, snapshotOffsets: offsets,
+        })
+      }
       else setErr(res.error ?? '保存に失敗しました')
     })
   }
