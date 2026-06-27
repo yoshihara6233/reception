@@ -80,22 +80,6 @@ const STATUS_LABEL: Record<string, string> = {
   failed:           '失敗',
 }
 
-const CLIP_STATUS_STYLE: Record<string, string> = {
-  pending:       'bg-yellow-100 text-yellow-700',
-  uploading:     'bg-orange-100 text-orange-700',
-  completed:     'bg-emerald-100 text-emerald-700',
-  failed:        'bg-red-100 text-red-700',
-  skipped_ipro:  'bg-slate-100 text-slate-600',
-}
-
-const CLIP_STATUS_LABEL: Record<string, string> = {
-  pending:       '待機中',
-  uploading:     'アップロード中',
-  completed:     '完了',
-  failed:        '失敗',
-  skipped_ipro:  'スキップ(i-PRO)',
-}
-
 const ALERT_TYPE_LABEL: Record<string, string> = {
   tsunami:    '津波情報',
   earthquake: '震度情報',
@@ -239,10 +223,10 @@ export default async function BcpEventDetailPage({
           </dl>
         </div>
 
-        {/* 現地レコーダ 録画取得（手動・オンデマンド） */}
+        {/* 現地レコーダ 録画取得（発令時に自動・このボタンは手動再取得用） */}
         <div className="overflow-hidden rounded-lg border border-red-200 bg-red-50/40">
           <div className="border-b border-red-100 px-4 py-3">
-            <h2 className="text-sm font-bold text-slate-900">現地レコーダ 録画取得</h2>
+            <h2 className="text-sm font-bold text-slate-900">現地レコーダ 録画取得（手動・再取得用）</h2>
           </div>
           <div className="px-4 py-4">
             <RetrieveRecordingButton eventId={event.id} alreadyHasClips={clips.length > 0} />
@@ -275,7 +259,7 @@ export default async function BcpEventDetailPage({
 
           {cameraGroups.length === 0 ? (
             <div className="px-4 py-8 text-center text-xs text-slate-400">
-              スナップショットはまだありません。上の「現地レコーダの録画を取得」から取得してください。
+              スナップショットはまだありません。発令時に自動取得されますが、表示されない場合は上の「現地レコーダの録画を取得」で手動取得できます。
             </div>
           ) : (
             <div className="divide-y divide-slate-100">
@@ -371,35 +355,6 @@ export default async function BcpEventDetailPage({
                       })}
                     </div>
                   )}
-
-                  {/* Legacy video clips (if any) — small list at the bottom */}
-                  {g.legacy.length > 0 && (
-                    <details className="mt-2 text-[11px] text-slate-500">
-                      <summary className="cursor-pointer hover:text-slate-700">
-                        旧仕様の動画クリップ ({g.legacy.length}件) を表示
-                      </summary>
-                      <ul className="mt-1 space-y-0.5 pl-4">
-                        {g.legacy.map((c) => (
-                          <li key={c.id}>
-                            <a
-                              href={c.clip_url ?? '#'}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className={c.clip_url ? 'text-blue-600 hover:underline' : 'text-slate-400'}
-                            >
-                              {fmtDateTime(c.clip_from)} → {fmtDateTime(c.clip_to)} ({c.duration_sec}s)
-                            </a>
-                            <span className={
-                              'ml-2 inline-block rounded px-1.5 py-px text-[10px] font-semibold ' +
-                              (CLIP_STATUS_STYLE[c.upload_status] ?? 'bg-slate-100 text-slate-500')
-                            }>
-                              {CLIP_STATUS_LABEL[c.upload_status] ?? c.upload_status}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    </details>
-                  )}
                 </div>
               ))}
             </div>
@@ -446,8 +401,8 @@ export default async function BcpEventDetailPage({
               </div>
             ) : (
               <p className="text-xs text-slate-400">
-                レポートはまだ生成されていません。上の「現地レコーダの録画を取得」で 8 枚スナップショット
-                (T-5〜T+30) を取得すると、アップロード完了後に PDF が自動生成されます
+                レポートはまだ生成されていません。8 枚スナップショット (T-5〜T+30) のアップロードが
+                完了すると PDF が自動生成され、完了メールが送信されます
                 （下のボタンで手動生成・再生成も可能）。
               </p>
             )}
