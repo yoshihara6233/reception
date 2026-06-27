@@ -3,11 +3,16 @@
  * Requires RESEND_API_KEY env var.
  *
  * Used for BCP (J-Alert) notifications. All emails sent from:
- *   bcp@noreply.intareco.jp
+ *   bcp@genesis-edge.com
+ *
+ * NOTE: the from-domain MUST be a domain we own and have verified in Resend.
+ * It was previously noreply.intareco.jp — a domain we do NOT own — so Resend
+ * rejected every send with 403 "domain is not verified". genesis-edge.com is
+ * ours (same domain as the Cloudflare tunnel). See investigate 2026-06-27.
  */
 
 const RESEND_API_URL = 'https://api.resend.com/emails'
-const FROM_ADDRESS   = 'bcp@noreply.intareco.jp'
+const FROM_ADDRESS   = 'bcp@genesis-edge.com'
 
 interface ResendAttachment {
   filename: string
@@ -87,7 +92,7 @@ export async function sendEmail(
 // ---------------------------------------------------------------------------
 
 /** Sender for account/security mail (verified Resend domain). */
-export const SECURITY_FROM_ADDRESS = 'Intereco Monitor <no-reply@noreply.intareco.jp>'
+export const SECURITY_FROM_ADDRESS = 'Intereco Monitor <no-reply@genesis-edge.com>'
 
 /**
  * Password reset email. The reset link carries a one-time recovery token that
