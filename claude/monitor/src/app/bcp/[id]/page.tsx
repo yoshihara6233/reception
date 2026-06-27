@@ -12,6 +12,7 @@ import { createSupabaseServer } from '@/lib/supabase/server'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
 import { GenerateReportButton } from './GenerateReportButton'
+import { RetrieveRecordingButton } from './RetrieveRecordingButton'
 
 interface BcpEvent {
   id: string
@@ -71,8 +72,8 @@ const STATUS_STYLE: Record<string, string> = {
 }
 
 const STATUS_LABEL: Record<string, string> = {
-  pending:          '処理中',
-  recording:        '録画中',
+  pending:          '録画未取得',
+  recording:        '取得中',
   clips_uploaded:   'アップロード済',
   report_generated: '報告書生成済',
   completed:        '完了',
@@ -238,6 +239,16 @@ export default async function BcpEventDetailPage({
           </dl>
         </div>
 
+        {/* 現地レコーダ 録画取得（手動・オンデマンド） */}
+        <div className="overflow-hidden rounded-lg border border-red-200 bg-red-50/40">
+          <div className="border-b border-red-100 px-4 py-3">
+            <h2 className="text-sm font-bold text-slate-900">現地レコーダ 録画取得</h2>
+          </div>
+          <div className="px-4 py-4">
+            <RetrieveRecordingButton eventId={event.id} alreadyHasClips={clips.length > 0} />
+          </div>
+        </div>
+
         {/* F40: Snapshot timeline section (1 card per camera, 8 thumbnails each) */}
         <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
@@ -264,7 +275,7 @@ export default async function BcpEventDetailPage({
 
           {cameraGroups.length === 0 ? (
             <div className="px-4 py-8 text-center text-xs text-slate-400">
-              スナップショットはまだありません
+              スナップショットはまだありません。上の「現地レコーダの録画を取得」から取得してください。
             </div>
           ) : (
             <div className="divide-y divide-slate-100">
@@ -435,9 +446,9 @@ export default async function BcpEventDetailPage({
               </div>
             ) : (
               <p className="text-xs text-slate-400">
-                レポートはまだ生成されていません。8 枚スナップショット (T-5〜T+30) の撮影が
-                順次完了しますので、任意のタイミングで下のボタンから生成できます。
-                本番アラート (J-Alert 経路) では自動生成されます。
+                レポートはまだ生成されていません。上の「現地レコーダの録画を取得」で 8 枚スナップショット
+                (T-5〜T+30) を取得すると、アップロード完了後に PDF が自動生成されます
+                （下のボタンで手動生成・再生成も可能）。
               </p>
             )}
 
