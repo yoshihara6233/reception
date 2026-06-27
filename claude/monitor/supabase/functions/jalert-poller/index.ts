@@ -29,7 +29,19 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 // Config
 // ---------------------------------------------------------------------------
 
-const JMA_FEED_URL = 'https://www.data.jma.go.jp/developer/xml/feed/extra.xml'
+/**
+ * JMA Atom feeds to poll.
+ *
+ * 地震・津波・噴火は **eqvol.xml**（地震火山）にしか載らない。extra.xml は
+ * 「気象警報・注意報」など気象の随時情報のみで、震度速報/津波予報は含まれない。
+ * 以前は extra.xml だけを見ていたため、タイトル許可リスト(地震/津波)を整えても
+ * フィードに地震エントリが無く /bcp/jalerts が空になっていた（根本原因）。
+ * eqvol.xml を最優先で追加し、extra.xml も将来の特別警報等のために併読する。
+ */
+const JMA_FEED_URLS = [
+  'https://www.data.jma.go.jp/developer/xml/feed/eqvol.xml', // 地震・津波・噴火（本命）
+  'https://www.data.jma.go.jp/developer/xml/feed/extra.xml', // 気象の随時情報（特別警報など将来用）
+]
 const RESEND_API_URL = 'https://api.resend.com/emails'
 const FROM_ADDRESS = 'bcp@noreply.intareco.jp'
 
@@ -113,14 +125,11 @@ async function pollJalert(): Promise<void> {
     auth: { persistSession: false, autoRefreshToken: false },
   })
 
-  // 1. Fetch the Atom feed
-  const feedXml = await fetchFeed()
-  if (!feedXml) return
-
-  // 2. Parse entries from the Atom feed
-  const entries = parseFeedEntries(feedXml)
+  // 1+2. Fetch every JMA feed and merge their entries (dedup by id). 地震/津波は
+  //      eqvol.xml にしか無いので、複数フィードを必ず併読する。
+  const entries = await fetchAllEntries()
   if (entries.length === 0) {
-    console.log('[jalert-poller] No entries in feed')
+    console.log('[jalert-poller] No entries in any feed')
     return
   }
 
@@ -146,20 +155,34 @@ async function pollJalert(): Promise<void> {
 // Feed parsing
 // ---------------------------------------------------------------------------
 
-async function fetchFeed(): Promise<string | null> {
+/** Fetch one feed's raw XML (null on failure — one bad feed never blocks others). */
+async function fetchFeed(url: string): Promise<string | null> {
   try {
-    const res = await fetch(JMA_FEED_URL, {
+    const res = await fetch(url, {
       headers: { 'Accept': 'application/atom+xml, application/xml, text/xml' },
     })
     if (!res.ok) {
-      console.error(`[jalert-poller] Feed fetch failed: HTTP ${res.status}`)
+      console.error(`[jalert-poller] Feed fetch failed (${url}): HTTP ${res.status}`)
       return null
     }
     return await res.text()
   } catch (err) {
-    console.error('[jalert-poller] Feed fetch error:', err)
+    console.error(`[jalert-poller] Feed fetch error (${url}):`, err)
     return null
   }
+}
+
+/** Fetch all configured feeds and merge their entries, deduped by entry id. */
+async function fetchAllEntries(): Promise<FeedEntry[]> {
+  const xmls = await Promise.all(JMA_FEED_URLS.map((u) => fetchFeed(u)))
+  const byId = new Map<string, FeedEntry>()
+  for (const xml of xmls) {
+    if (!xml) continue
+    for (const entry of parseFeedEntries(xml)) {
+      if (!byId.has(entry.id)) byId.set(entry.id, entry)
+    }
+  }
+  return [...byId.values()]
 }
 
 function parseFeedEntries(xml: string): FeedEntry[] {
