@@ -36,11 +36,11 @@ import { snapshotUrl } from '../rtsp/url.js'
 import { Semaphore } from '../util/semaphore.js'
 import { fetchBcpSnapshot } from '../bcp-fetchers/index.js'
 import { downloadIproNvrMp4 } from '../adapters/i-pro/nvr-vod.js'
+import { SNAPSHOT_OFFSETS_MIN, captureAtMs } from './bcp-timing.js'
 import type { CameraDescriptor } from '../types.js'
 
 const BCP_BUCKET    = 'bcp-clips'
 const CONCURRENCY   = 4
-const SNAPSHOT_OFFSETS_MIN = [-5, 0, 5, 10, 15, 20, 25, 30] as const
 
 // ── Public types ─────────────────────────────────────────────────────────────
 
@@ -378,8 +378,12 @@ async function captureCameraTimeline(
   for (const offsetMin of SNAPSHOT_OFFSETS_MIN) {
     const targetMs = alertIssuedMs + offsetMin * 60_000
     if (offsetMin >= 0) {
-      // Future offsets: wait until that moment to capture a fresh frame.
-      await waitUntil(targetMs)
+      // Future offsets: wait until the moment has *passed* (target + settle),
+      // not the exact instant. This flips isPast=true so the NVR/Frigate
+      // historical path captures the recorded frame — capturing live at the
+      // instant has no valid source for NVR-backed onvif-generic cameras and
+      // fails. See FUTURE_OFFSET_SETTLE_MS / investigate 2026-06-27.
+      await waitUntil(captureAtMs(offsetMin, alertIssuedMs))
     }
     // F70: For past offsets (T-5 etc.), captureOneSnapshot first tries to
     // pull the historical frame from Frigate's recordings via clip.mp4 +
@@ -462,13 +466,35 @@ export async function runBcpCapture(
 
   logger.info({ eventId, successCount, totalCount }, 'bcp: snapshot capture complete')
 
-  // Mark event failed only if literally no snapshot succeeded.
-  if (successCount === 0) {
+  // The poller / retrieve route insert placeholder bcp_clips rows
+  // (offset_min IS NULL, upload_status='pending') *before* dispatching this
+  // capture. This pass writes its own per-offset rows but never touched those
+  // placeholders, so they lingered 'pending' forever — which kept the
+  // bcp_check_clips_complete trigger from ever advancing the event to
+  // 'clips_uploaded' (so the auto-PDF sweep and completion email never fired).
+  // Remove the superseded placeholders so they don't block completion or
+  // pollute the PDF. See investigate 2026-06-27 (event 1127abc5…).
+  {
+    const { error } = await getSupa()
+      .from('bcp_clips')
+      .delete()
+      .eq('event_id', eventId)
+      .is('offset_min', null)
+    if (error) logger.warn({ err: error.message, eventId }, 'bcp: placeholder cleanup failed')
+  }
+
+  // Finalize the event status explicitly. A DELETE does not fire the
+  // bcp_check_clips_complete trigger, so the edge is authoritative here:
+  // any snapshot captured → 'clips_uploaded' (sweep → PDF + email); none → 'failed'.
+  // Guarded to in-progress states so we never regress an event a manual
+  // report run already advanced (which would re-trigger the sweep / email).
+  {
     const { error } = await getSupa()
       .from('bcp_events')
-      .update({ status: 'failed' })
+      .update({ status: successCount > 0 ? 'clips_uploaded' : 'failed' })
       .eq('id', eventId)
-    if (error) logger.warn({ err: error.message, eventId }, 'bcp: event update failed')
+      .in('status', ['pending', 'recording'])
+    if (error) logger.warn({ err: error.message, eventId }, 'bcp: event finalize failed')
   }
 
   return { successCount, totalCount }
