@@ -164,7 +164,7 @@ async function main() {
         case 'start_bcp_capture': {
           const cams = await loadCameras()
           await fsm.toBcp(
-            { eventId: cmd.eventId, clips: cmd.clips, clipFrom: cmd.clipFrom, clipTo: cmd.clipTo },
+            { eventId: cmd.eventId, clips: cmd.clips, clipFrom: cmd.clipFrom, clipTo: cmd.clipTo, offsets: cmd.offsets },
             cams,
           )
           break

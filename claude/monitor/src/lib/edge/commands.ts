@@ -27,7 +27,7 @@ export type EdgeCommand =
   | { action: 'capture_snapshot'; request_id: string; run_id: string; camera_ids: string[]; ingest_url: string }
   // BCP/J-Alert: 事象発生時にエッジ側でクリップを録画して BCP ストレージへアップロード。
   // bcp/test/route.ts から発火。エッジ側 (modes/bcp.ts) が消費する。
-  | { action: 'start_bcp_capture'; request_id: string; eventId: string; clips: Array<{ clipId: string; cameraId: string }>; clipFrom: string; clipTo: string }
+  | { action: 'start_bcp_capture'; request_id: string; eventId: string; clips: Array<{ clipId: string; cameraId: string }>; clipFrom: string; clipTo: string; offsets?: number[] }
 
 export type EdgeAck =
   | { request_id: string; ok: true;  agent_version: string }

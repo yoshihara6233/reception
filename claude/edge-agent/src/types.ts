@@ -16,7 +16,7 @@ export type EdgeCommand =
   | { action: 'start_vod';   request_id: string; camera_id: string; clip_id: string; from_iso: string; to_iso: string; livekit_room?: string; livekit_whip_url?: string }
   | { action: 'stop_stream'; request_id: string }
   | { action: 'reboot';      request_id: string }
-  | { action: 'start_bcp_capture'; request_id: string; eventId: string; clips: Array<{ clipId: string; cameraId: string }>; clipFrom: string; clipTo: string }
+  | { action: 'start_bcp_capture'; request_id: string; eventId: string; clips: Array<{ clipId: string; cameraId: string }>; clipFrom: string; clipTo: string; offsets?: number[] }
   // 警備: 巡回スナップショット。型契約はクラウドと一致させるが、本Phaseではエッジ側ハンドラ未実装
   // （index.ts の switch に case 無し → 受信しても無音で読み飛ばす no-op）。
   // 実装は別タスク化（ffmpeg 静止画取得 + ingest_url への POST）。

@@ -3,8 +3,24 @@
  * stay unit-testable in isolation.
  */
 
-/** Fixed snapshot offsets (minutes from the alert moment). */
+/** All selectable snapshot offsets (minutes from the alert moment). */
 export const SNAPSHOT_OFFSETS_MIN = [-5, 0, 5, 10, 15, 20, 25, 30] as const
+
+/**
+ * Default offsets when a capture command carries none (older dispatch, or a
+ * store with no explicit selection). Kept small on purpose — fewer snapshots
+ * means less storage / bandwidth / NVR load. Mirrors bcp_settings.snapshot_offsets
+ * default ({-5,5}).
+ */
+export const DEFAULT_SNAPSHOT_OFFSETS = [-5, 5] as const
+
+/** Keep only allowed offsets, sorted ascending; fall back to the default set. */
+export function normalizeOffsets(offsets: number[] | undefined | null): number[] {
+  const allowed = new Set<number>(SNAPSHOT_OFFSETS_MIN)
+  const cleaned = (offsets ?? []).filter((o) => allowed.has(o))
+  const unique = [...new Set(cleaned)].sort((a, b) => a - b)
+  return unique.length > 0 ? unique : [...DEFAULT_SNAPSHOT_OFFSETS]
+}
 
 // Future offsets (T+5 .. T+30) are captured *after* the moment has passed, not
 // at the exact instant. Capturing at the instant leaves the moment "live"
