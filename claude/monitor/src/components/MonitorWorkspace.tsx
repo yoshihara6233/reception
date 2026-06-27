@@ -19,6 +19,12 @@ import {
   type VodVendor,
 } from '@/lib/types/db'
 import { cancelPendingStop, scheduleStop } from '@/lib/edge-stop-registry'
+import { SaveJpegButton } from '@/components/SaveJpegButton'
+
+/** ファイル名に使えない文字をアンダースコアに（日本語は保持）。 */
+function safeName(s: string): string {
+  return s.replace(/[\\/:*?"<>|\s]+/g, '_')
+}
 
 // Cadence for re-fetching the stitched grid JPEG. Edge uploads at ~0.5 fps
 // (one frame every ~2s); a 5s viewer cadence keeps the bandwidth low and
@@ -354,6 +360,11 @@ export function MonitorWorkspace({
             </div>
           )}
           {active && gridFailed && <GridFailOverlay onRetry={refreshGridUrl} />}
+          {edgeId && active && gridHealthy && (
+            <div className="absolute right-1.5 top-1.5 z-10">
+              <SaveJpegButton endpoint={`/api/edges/${edgeId}/grid`} name={`grid_${safeName(storeName)}`} />
+            </div>
+          )}
           <StatusOverlay edgeId={edgeId} active={active} />
         </div>
 
@@ -363,7 +374,14 @@ export function MonitorWorkspace({
             <span className="text-[11px] font-semibold text-slate-500">
               4分割 {mobilePages.indexOf(mobilePage) + 1}/{mobilePages.length}
             </span>
-            <div className="flex gap-1">
+            <div className="flex items-center gap-1">
+              {edgeId && active && gridHealthy && (
+                <SaveJpegButton
+                  endpoint={`/api/edges/${edgeId}/grid`}
+                  name={`grid_${safeName(storeName)}`}
+                  className="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                />
+              )}
               {mobilePages.map((p) => (
                 <button
                   key={p}
