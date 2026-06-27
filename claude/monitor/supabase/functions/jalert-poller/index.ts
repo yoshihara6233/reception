@@ -71,6 +71,7 @@ interface BcpSettings {
   quake_min_intensity: string   // この震度以上の地震でのみ録画起動（JMA MaxInt 表記）
   tsunami_enabled: boolean      // 津波発令で録画起動するか
   missile_enabled: boolean      // 国民保護(弾道ミサイル等)で録画起動するか
+  snapshot_offsets: number[] | null  // レポートで撮影するオフセット(分)。既定 [-5,5]
 }
 
 interface EdgeDevice {
@@ -363,7 +364,7 @@ async function findMatchingStores(
   // Fetch all active BCP settings with their store's area_code
   const { data, error } = await supa
     .from('bcp_settings')
-    .select('id, store_id, notify_emails, enabled, pre_minutes, post_minutes, quake_min_intensity, tsunami_enabled, missile_enabled, stores ( id, name, area_code )')
+    .select('id, store_id, notify_emails, enabled, pre_minutes, post_minutes, quake_min_intensity, tsunami_enabled, missile_enabled, snapshot_offsets, stores ( id, name, area_code )')
     .eq('enabled', true)
 
   if (error) {
@@ -403,6 +404,7 @@ async function findMatchingStores(
           quake_min_intensity: row.quake_min_intensity ?? '5+',
           tsunami_enabled: row.tsunami_enabled ?? true,
           missile_enabled: row.missile_enabled ?? true,
+          snapshot_offsets: row.snapshot_offsets ?? [-5, 5],
         },
       })
     }
@@ -520,7 +522,7 @@ async function processStore(
         edgeClips.push({ clipId: cameraToClip.get(camera.id) ?? '', cameraId: camera.id })
       }
     }
-    const command = { action: 'start_bcp_capture', request_id: crypto.randomUUID(), eventId, clips: edgeClips, clipFrom, clipTo }
+    const command = { action: 'start_bcp_capture', request_id: crypto.randomUUID(), eventId, clips: edgeClips, clipFrom, clipTo, offsets: settings.snapshot_offsets ?? [-5, 5] }
     const { error: cmdError } = await supa
       .from('edge_devices')
       .update({ pending_command: command, pending_command_at: new Date().toISOString() })

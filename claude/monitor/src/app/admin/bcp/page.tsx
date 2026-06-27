@@ -21,6 +21,7 @@ interface SettingRow {
   tsunami_enabled: boolean | null
   missile_enabled: boolean | null
   notify_emails: string[] | null
+  snapshot_offsets: number[] | null
 }
 
 export default async function AdminBcpPage() {
@@ -28,7 +29,7 @@ export default async function AdminBcpPage() {
 
   const [storesRes, settingsRes] = await Promise.all([
     supa.from('stores').select('id, name, area_code').order('area_code', { ascending: true, nullsFirst: false }).order('name').limit(10_000),
-    supa.from('bcp_settings').select('store_id, enabled, quake_min_intensity, tsunami_enabled, missile_enabled, notify_emails').limit(10_000),
+    supa.from('bcp_settings').select('store_id, enabled, quake_min_intensity, tsunami_enabled, missile_enabled, notify_emails, snapshot_offsets').limit(10_000),
   ])
 
   const stores   = (storesRes.data   ?? []) as StoreRow[]
@@ -46,6 +47,7 @@ export default async function AdminBcpPage() {
       tsunamiEnabled:    cfg?.tsunami_enabled ?? true,
       missileEnabled:    cfg?.missile_enabled ?? true,
       notifyEmails:      cfg?.notify_emails ?? [],
+      snapshotOffsets:   cfg?.snapshot_offsets ?? [-5, 5],
     }
   })
 

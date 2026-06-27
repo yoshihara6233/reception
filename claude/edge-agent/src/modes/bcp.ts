@@ -36,7 +36,7 @@ import { snapshotUrl } from '../rtsp/url.js'
 import { Semaphore } from '../util/semaphore.js'
 import { fetchBcpSnapshot } from '../bcp-fetchers/index.js'
 import { downloadIproNvrMp4 } from '../adapters/i-pro/nvr-vod.js'
-import { SNAPSHOT_OFFSETS_MIN, captureAtMs } from './bcp-timing.js'
+import { captureAtMs, normalizeOffsets } from './bcp-timing.js'
 import type { CameraDescriptor } from '../types.js'
 
 const BCP_BUCKET    = 'bcp-clips'
@@ -56,6 +56,8 @@ export interface BcpCaptureCommand {
   clipFrom: string
   /** ISO 8601 — kept for backward compat; ignored in snapshot mode */
   clipTo:   string
+  /** Snapshot offsets (minutes from the alert) to capture. Empty/undefined → DEFAULT_SNAPSHOT_OFFSETS. */
+  offsets?: number[]
 }
 
 export interface BcpResult {
@@ -372,10 +374,11 @@ async function captureCameraTimeline(
   camera:         CameraDescriptor,
   alertIssuedMs:  number,
   sem:            Semaphore,
+  offsets:        number[],
 ): Promise<number> {
   let successCount = 0
 
-  for (const offsetMin of SNAPSHOT_OFFSETS_MIN) {
+  for (const offsetMin of offsets) {
     const targetMs = alertIssuedMs + offsetMin * 60_000
     if (offsetMin >= 0) {
       // Future offsets: wait until the moment has *passed* (target + settle),
@@ -432,10 +435,13 @@ export async function runBcpCapture(
 ): Promise<BcpResult> {
   const { eventId, clips, clipFrom } = cmd
   const alertIssuedMs = new Date(clipFrom).getTime()
+  // Per-store snapshot offsets (selected in /admin/bcp). Empty/undefined falls
+  // back to DEFAULT_SNAPSHOT_OFFSETS. Fewer offsets → less storage/bandwidth/NVR load.
+  const offsets = normalizeOffsets(cmd.offsets)
   // Deduplicate cameras (the legacy command structure has 1 clip per camera
   // already, but defensive in case it ever sends duplicates).
   const cameraIds = [...new Set(clips.map((c) => c.cameraId))]
-  const totalCount = cameraIds.length * SNAPSHOT_OFFSETS_MIN.length
+  const totalCount = cameraIds.length * offsets.length
 
   if (cameraIds.length === 0) {
     logger.info({ eventId }, 'bcp: no cameras to snapshot')
@@ -443,7 +449,7 @@ export async function runBcpCapture(
   }
 
   logger.info(
-    { eventId, cameras: cameraIds.length, snapshotsTotal: totalCount, alertIssued: clipFrom },
+    { eventId, cameras: cameraIds.length, offsets, snapshotsTotal: totalCount, alertIssued: clipFrom },
     'bcp: starting snapshot timeline capture',
   )
 
@@ -455,7 +461,7 @@ export async function runBcpCapture(
         logger.warn({ eventId, cameraId }, 'bcp: unknown camera, skipping')
         return Promise.resolve(0)
       }
-      return captureCameraTimeline(eventId, camera, alertIssuedMs, sem)
+      return captureCameraTimeline(eventId, camera, alertIssuedMs, sem, offsets)
     }),
   )
 

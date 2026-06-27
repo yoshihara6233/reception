@@ -13,7 +13,7 @@
  * so the settled capture time MUST land comfortably beyond target + 5s.
  */
 import { describe, it, expect } from 'vitest'
-import { captureAtMs } from './bcp-timing.js'
+import { captureAtMs, normalizeOffsets, DEFAULT_SNAPSHOT_OFFSETS } from './bcp-timing.js'
 
 // Mirror of the isPast threshold in captureOneSnapshot.
 const IS_PAST_THRESHOLD_MS = 5_000
@@ -39,5 +39,22 @@ describe('captureAtMs', () => {
 
   it('honors a custom settle window', () => {
     expect(captureAtMs(10, alertMs, 90_000)).toBe(alertMs + 10 * 60_000 + 90_000)
+  })
+})
+
+describe('normalizeOffsets', () => {
+  it('falls back to the default set when empty/undefined', () => {
+    expect(normalizeOffsets(undefined)).toEqual([...DEFAULT_SNAPSHOT_OFFSETS])
+    expect(normalizeOffsets(null)).toEqual([...DEFAULT_SNAPSHOT_OFFSETS])
+    expect(normalizeOffsets([])).toEqual([...DEFAULT_SNAPSHOT_OFFSETS])
+  })
+
+  it('keeps only allowed offsets, deduped and sorted ascending', () => {
+    expect(normalizeOffsets([20, -5, 5, 5])).toEqual([-5, 5, 20])
+  })
+
+  it('drops out-of-set values and falls back if nothing valid remains', () => {
+    expect(normalizeOffsets([3, 7, 99])).toEqual([...DEFAULT_SNAPSHOT_OFFSETS])
+    expect(normalizeOffsets([3, 30])).toEqual([30])
   })
 })

@@ -53,11 +53,12 @@ export async function POST(
   // 2. 録画ウィンドウ（発令時刻 ± pre/post 分）。設定が無ければ既定 3/5 分。
   const { data: settings } = await svc
     .from('bcp_settings')
-    .select('pre_minutes, post_minutes')
+    .select('pre_minutes, post_minutes, snapshot_offsets')
     .eq('store_id', event.store_id)
     .maybeSingle()
   const preMin  = settings?.pre_minutes  ?? 3
   const postMin = settings?.post_minutes ?? 5
+  const offsets = (settings?.snapshot_offsets as number[] | null) ?? [-5, 5]
   const alertTs  = new Date(event.alert_issued_at)
   const clipFrom = new Date(alertTs.getTime() - preMin  * 60_000).toISOString()
   const clipTo   = new Date(alertTs.getTime() + postMin * 60_000).toISOString()
@@ -116,6 +117,7 @@ export async function POST(
       clips,
       clipFrom,
       clipTo,
+      offsets,
     }
     const { error: cmdErr } = await svc
       .from('edge_devices')
