@@ -16,6 +16,7 @@ import { getSupabase } from '../supabase.js'
 import { OnvifSoapClient } from '../adapters/onvif/onvif-soap-client.js'
 import { resolveOnvifRtspUrl } from '../adapters/onvif/onvif-rtsp.js'
 import { injectRtspCreds, captureRtspKeyframe } from '../rtsp/keyframe.js'
+import { getOnvifSnapshotUrl, fetchOnvifJpeg } from '../adapters/onvif/onvif-snapshot.js'
 import { buildOnvifEndpoint } from './onvif-endpoint.js'
 import { decryptSecret } from '@intereco/shared'
 
@@ -69,13 +70,34 @@ async function runConnectionTest(rec: RecorderRow, channel: number): Promise<unk
     password: decodePassword(rec.password_enc),
     timeoutMs: 10_000,
   }
+  // 1) ONVIF snapshot (HTTP JPEG) を最優先。grid/ライブ/BCP と同じ経路で、
+  //    NVR がメイン RTSP を占有していても（i-PRO+NVR 構成は新規 RTSP が 503/競合で
+  //    取れない）GetSnapshotUri は別枠で取得できる。到達性判定はこちらが正しい。
+  let snapshotError: string | undefined
+  try {
+    const snapUrl = await getOnvifSnapshotUrl(opts, rec.host, channel)
+    if (snapUrl) {
+      const jpeg = await fetchOnvifJpeg(snapUrl, opts.username, opts.password, opts.timeoutMs)
+      return { ok: true, method: 'onvif_snapshot', bytes: jpeg.length }
+    }
+    snapshotError = 'GetSnapshotUri 非対応（JPEGプロファイル無し）'
+  } catch (e) {
+    snapshotError = String((e as Error)?.message ?? e)
+  }
+
+  // 2) フォールバック: RTSP キーフレーム（snapshot 非対応機）。
   try {
     const base = await resolveOnvifRtspUrl(opts, channel)
     const rtsp = injectRtspCreds(base, opts.username, opts.password)
     const frame = await captureRtspKeyframe(rtsp, config.FFMPEG_BIN)
     return { ok: true, method: 'rtsp_keyframe', bytes: frame.length }
   } catch (e) {
-    return { ok: false, method: 'rtsp_keyframe', error: String((e as Error)?.message ?? e) }
+    return {
+      ok: false,
+      method: 'rtsp_keyframe',
+      error: String((e as Error)?.message ?? e),
+      snapshotError,
+    }
   }
 }
 
