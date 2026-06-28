@@ -2,6 +2,8 @@ import './globals.css'
 import type { Metadata, Viewport } from 'next'
 import Script from 'next/script'
 import { SwRegister } from '@/components/SwRegister'
+import { PwaInstallPrompt } from '@/components/PwaInstallPrompt'
+import { OfflineIndicator } from '@/components/OfflineIndicator'
 import { LangProvider } from '@/lib/i18n/context'
 import { getLang } from '@/lib/i18n/server'
 
@@ -62,7 +64,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           {THEME_INIT}
         </Script>
         <LangProvider initialLang={lang}>
+          <OfflineIndicator />
           {children}
+          <PwaInstallPrompt />
         </LangProvider>
         <SwRegister />
       </body>
