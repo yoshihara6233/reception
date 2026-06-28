@@ -25,6 +25,13 @@ create or replace function auth.uid() returns uuid
   language sql stable
   as $$ select nullif(current_setting('request.jwt.claims', true)::json->>'sub','')::uuid $$;
 
+-- auth.jwt(): リクエストの JWT クレーム全体を jsonb で返す（edge スコープRLS用）。
+-- edge_jobs のRLSは auth.jwt()->'app_metadata'->>'edge_id' を見るため、テストは
+-- `set local request.jwt.claims = '{"sub":...,"app_metadata":{"edge_id":...}}'` する。
+create or replace function auth.jwt() returns jsonb
+  language sql stable
+  as $$ select coalesce(nullif(current_setting('request.jwt.claims', true), '')::jsonb, '{}'::jsonb) $$;
+
 create table auth.users ( id uuid primary key );
 
 -- RLS が効く非所有・非superのロール(本番の authenticated 相当)。
@@ -104,9 +111,21 @@ create table public.enrollment_tokens (
   used_at     timestamptz
 );
 
+-- edge_jobs（Phase B1）: service_role=全可 / authenticated(エッジ scoped トークン)=
+-- 自分の edge_id 行のみ SELECT/UPDATE。app_metadata.edge_id でスコープ。
+create table public.edge_jobs (
+  id         uuid primary key default gen_random_uuid(),
+  edge_id    uuid not null references public.edge_devices(id) on delete cascade,
+  kind       text not null default 'connection_test',
+  status     text not null default 'pending',
+  result     jsonb,
+  created_at timestamptz not null default now()
+);
+
 -- ── 権限(authenticated にテーブルアクセス付与・RLSで絞る) ──
 grant usage on schema public, auth to authenticated;
 grant execute on function auth.uid() to authenticated;
+grant execute on function auth.jwt() to authenticated;
 grant select on auth.users to authenticated;
 grant select, insert, update, delete on all tables in schema public to authenticated;
 
@@ -234,3 +253,13 @@ create policy "limits_modify" on public.session_limits
            and (u.role = 'super_admin' or (u.role = 'tenant_admin' and u.tenant_id = session_limits.tenant_id))))
   with check (exists (select 1 from public.admin_users u where u.auth_user_id = auth.uid()
            and (u.role = 'super_admin' or (u.role = 'tenant_admin' and u.tenant_id = session_limits.tenant_id))));
+
+-- edge_jobs（Phase B1・20260629_001 転記）: エッジ scoped トークンは自分の edge_id 行のみ。
+alter table public.edge_jobs enable row level security;
+create policy edge_jobs_edge_select on public.edge_jobs
+  for select to authenticated
+  using ((auth.jwt() -> 'app_metadata' ->> 'edge_id')::uuid = edge_id);
+create policy edge_jobs_edge_update on public.edge_jobs
+  for update to authenticated
+  using      ((auth.jwt() -> 'app_metadata' ->> 'edge_id')::uuid = edge_id)
+  with check ((auth.jwt() -> 'app_metadata' ->> 'edge_id')::uuid = edge_id);

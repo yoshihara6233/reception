@@ -10,9 +10,10 @@
  * クレデンシャルは params に載せず recorder_id 参照で DB から解決（漏洩面を作らない）。
  * edge_jobs 未作成(マイグレーション未適用)でも poll エラーは debug に留め、無害に no-op。
  */
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { config } from '../config.js'
 import { logger } from '../logger.js'
-import { getSupabase } from '../supabase.js'
+import { getSupabase, getScopedSupabase } from '../supabase.js'
 import { OnvifSoapClient } from '../adapters/onvif/onvif-soap-client.js'
 import { resolveOnvifRtspUrl } from '../adapters/onvif/onvif-rtsp.js'
 import { injectRtspCreds, captureRtspKeyframe } from '../rtsp/keyframe.js'
@@ -101,8 +102,19 @@ async function runConnectionTest(rec: RecorderRow, channel: number): Promise<unk
   }
 }
 
-async function processJob(job: EdgeJob): Promise<void> {
-  const supa = getSupabase()
+/**
+ * edge_jobs テーブル操作に使うクライアントを選ぶ（Phase B1）。
+ * - EDGE_SCOPED_JOBS=false: 従来通り service_role。
+ * - true: このエッジ専用の短命スコープトークン。未取得/失効間近なら null
+ *   → 呼び出し側はそのtickをスキップ（service_role には落ちない＝越権面を作らない）。
+ * 注意: recorders 読み取り(resolveRecorder)は未移行のため常に service_role を使う。
+ */
+function jobsClient(): SupabaseClient | null {
+  if (!config.EDGE_SCOPED_JOBS) return getSupabase()
+  return getScopedSupabase()
+}
+
+async function processJob(job: EdgeJob, jobsSupa: SupabaseClient): Promise<void> {
   try {
     const recorderId = job.params?.recorder_id
     if (!recorderId) throw new Error('params.recorder_id required')
@@ -113,12 +125,12 @@ async function processJob(job: EdgeJob): Promise<void> {
       ? await runOnvifDiscovery(rec)
       : await runConnectionTest(rec, job.params?.channel ?? 1)
 
-    await supa.from('edge_jobs')
+    await jobsSupa.from('edge_jobs')
       .update({ status: 'done', result, updated_at: new Date().toISOString() })
       .eq('id', job.id)
     logger.info({ job: job.id, kind: job.kind }, 'edge_jobs: done')
   } catch (e) {
-    await supa.from('edge_jobs')
+    await jobsSupa.from('edge_jobs')
       .update({ status: 'error', error: String((e as Error)?.message ?? e), updated_at: new Date().toISOString() })
       .eq('id', job.id)
     logger.warn({ job: job.id, err: String(e) }, 'edge_jobs: failed')
@@ -126,7 +138,8 @@ async function processJob(job: EdgeJob): Promise<void> {
 }
 
 async function pollOnce(): Promise<void> {
-  const supa = getSupabase()
+  const supa = jobsClient()
+  if (!supa) { logger.debug('edge_jobs: scoped token not ready, skipping tick'); return }
   const { data, error } = await supa
     .from('edge_jobs')
     .select('id, kind, params')
@@ -148,7 +161,7 @@ async function pollOnce(): Promise<void> {
     .maybeSingle()
   if (!claimed) return
 
-  await processJob(data as EdgeJob)
+  await processJob(data as EdgeJob, supa)
 }
 
 /** ジョブポーリング開始（go2rtc sync と同じ setInterval パターン）。 */

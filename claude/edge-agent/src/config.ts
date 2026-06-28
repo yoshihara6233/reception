@@ -14,6 +14,15 @@ const Env = z.object({
   MONITOR_URL:               z.string().url().optional(),
   BOOTSTRAP_INTERVAL_MS:     z.coerce.number().default(300_000),
 
+  // エッジ専用スコープ鍵化 Phase B1: edge_jobs を service_role ではなく
+  // bootstrap 発行の短命スコープトークン(authenticated/RLS)で叩く。
+  // ロールアウト安全のため既定 false。本番で migration+provisioning を確認後、
+  // エッジ .env に EDGE_SCOPED_JOBS=true を設定して有効化する。
+  // 有効でも scoped トークン未取得時はそのtickをスキップ(service_roleへは落ちない)。
+  // z.coerce.boolean は "false" も true になる罠があるため明示パース('true'/'1'のみ真)。
+  EDGE_SCOPED_JOBS:          z.string().optional()
+                              .transform((v) => v === 'true' || v === '1'),
+
   // LiveKit endpoint URL — informational/diagnostic only since the F3 Ingress
   // migration. The edge no longer constructs WHIP URLs from this; the cloud
   // mints a per-session Ingress URL and passes it in livekit_whip_url. Kept

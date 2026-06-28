@@ -25,6 +25,10 @@ const E_A2 = 'e2000000-0000-0000-0000-0000000000a2'
 const E_B1 = 'eb000000-0000-0000-0000-0000000000b1'
 const REC_B1 = 'cb000000-0000-0000-0000-0000000000b1'
 const CAM_B1 = 'fb000000-0000-0000-0000-0000000000b1'
+// edge_jobs（Phase B1）: 各エッジ宛ジョブ
+const J_A1 = '1a000000-0000-0000-0000-0000000000a1'
+const J_A2 = '1a000000-0000-0000-0000-0000000000a2'
+const J_B1 = '1b000000-0000-0000-0000-0000000000b1'
 // personas (auth.users.id = admin_users.auth_user_id)
 const U_SUPER  = '00000000-0000-0000-0000-000000000099'
 const U_TADMINA = '00000000-0000-0000-0000-0000000000a0'
@@ -72,8 +76,28 @@ beforeAll(async () => {
     insert into public.session_limits (tenant_id) values ('${T_A}'),('${T_B}');
     insert into public.enrollment_tokens (token_hash, store_id, tenant_id, name, expires_at)
       values ('hash_a1', '${S_A1}', '${T_A}', 'pendingA1', now() + interval '1 day');
+    insert into public.edge_jobs (id, edge_id) values
+      ('${J_A1}','${E_A1}'),('${J_A2}','${E_A2}'),('${J_B1}','${E_B1}');
   `)
 })
+
+/** authenticated ロール + エッジ scoped クレーム(app_metadata.edge_id)で実行（RLS適用）。 */
+async function asEdge(edgeId: string | null, sql: string): Promise<Record<string, unknown>[]> {
+  const client = await pool.connect()
+  try {
+    await client.query('begin')
+    await client.query('set local role authenticated')
+    const claims = edgeId
+      ? { sub: '00000000-0000-0000-0000-0000000000ee', app_metadata: { edge_id: edgeId, role: 'edge' } }
+      : {}
+    await client.query(`set local request.jwt.claims = '${JSON.stringify(claims)}'`)
+    const res = await client.query(sql)
+    return res.rows
+  } finally {
+    await client.query('rollback').catch(() => {})
+    client.release()
+  }
+}
 
 afterAll(async () => { await pool.end() })
 
@@ -123,6 +147,29 @@ describe('enrollment_tokens は RLS で全拒否（service_role のみアクセ�
     for (const u of [U_SUPER, U_TADMINA, U_SMGRA1, null]) {
       expect(await asUser(u, 'select id from enrollment_tokens')).toHaveLength(0)
     }
+  })
+})
+
+describe('edge_jobs RLS（エッジ専用スコープ鍵化 Phase B1）', () => {
+  it('エッジA1 は自分宛の edge_jobs のみ可視（他エッジ不可視）', async () => {
+    expect(ids(await asEdge(E_A1, 'select id from edge_jobs'))).toEqual([J_A1])
+  })
+  it('エッジB1 は自分宛のみ（A の job は不可視＝クロスエッジ漏洩なし）', async () => {
+    expect(ids(await asEdge(E_B1, 'select id from edge_jobs'))).toEqual([J_B1])
+  })
+  it('app_metadata.edge_id 無しのトークンは何も見えない', async () => {
+    expect(await asEdge(null, 'select id from edge_jobs')).toHaveLength(0)
+  })
+  it('エッジA1 は他エッジ宛ジョブを UPDATE できない（0行）', async () => {
+    const rows = await asEdge(E_A1, `update edge_jobs set status='running' where id='${J_B1}' returning id`)
+    expect(rows).toHaveLength(0)
+  })
+  it('エッジA1 は自分宛ジョブを UPDATE できる（1行）', async () => {
+    const rows = await asEdge(E_A1, `update edge_jobs set status='running' where id='${J_A1}' returning id`)
+    expect(ids(rows)).toEqual([J_A1])
+  })
+  it('エッジ scoped トークンでは未移行テーブル(recorders)は見えない（権限はedge_jobsに限定）', async () => {
+    expect(await asEdge(E_A1, 'select id from recorders')).toHaveLength(0)
   })
 })
 
