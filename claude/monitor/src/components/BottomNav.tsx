@@ -31,8 +31,18 @@ export function BottomNav() {
         </svg>
       ),
     },
-    // スマホでは BCP / 設定(admin) タブは非表示（モニタリングと地図のみ）。
-    // BCP・設定はデスクトップのヘッダーから利用する。
+    {
+      href: '/bcp',
+      label: t.nav.bcp,
+      icon: (active: boolean) => (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? 2.2 : 1.8} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          <path d="M12 8v4"/>
+          <path d="M12 16h.01"/>
+        </svg>
+      ),
+    },
+    // 設定(admin) はスマホ/PWA では非表示。設定は PC/ブラウザのヘッダーから行う。
   ]
 
   return (
