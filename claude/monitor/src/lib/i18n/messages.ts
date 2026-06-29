@@ -27,7 +27,6 @@ export interface Msg {
     infra:    string
     bcp:      string
     security: string
-    factory:  string
     // F24: header right-side icon labels (tooltips + aria-labels)
     logout:   string
   }
@@ -453,7 +452,6 @@ const ja: Msg = {
     infra:    '死活監視',
     bcp:      'BCP',
     security: '警備OP',
-    factory:  '製造業OP',
     logout:   'ログアウト',
   },
   kpi: {
@@ -859,7 +857,6 @@ const en: Msg = {
     infra:    'Health',
     bcp:      'BCP',
     security: 'Security',
-    factory:  'Factory OP',
     logout:   'Log out',
   },
   kpi: {
@@ -1265,7 +1262,6 @@ const zh: Msg = {
     infra:    '健康监控',
     bcp:      'BCP',
     security: '安全',
-    factory:  '制造OP',
     logout:   '退出',
   },
   kpi: {
@@ -1671,7 +1667,6 @@ const ko: Msg = {
     infra:    '헬스 모니터링',
     bcp:      'BCP',
     security: '보안',
-    factory:  '제조OP',
     logout:   '로그아웃',
   },
   kpi: {
