@@ -137,10 +137,13 @@ body {
 .text-blue-600, .text-blue-700,
 .text-violet-600, .text-violet-700,
 .text-purple-600, .text-purple-700 { color: #2C4A7E !important; }
-.text-blue-800 { color: #21386A !important; }
+.text-blue-800, .text-blue-900 { color: #21386A !important; }
+.bg-blue-50, .bg-violet-50, .bg-purple-50 { background-color: #EEF2F9 !important; }
 .bg-blue-100, .bg-violet-100, .bg-purple-100 { background-color: #E4EAF3 !important; }
 .bg-blue-500, .bg-purple-500 { background-color: #2C4A7E !important; }
-.border-blue-400 { border-color: #2C4A7E !important; }
+.bg-blue-600, .bg-blue-700, .bg-purple-600 { background-color: #2C4A7E !important; }   /* プライマリボタン */
+.hover\:bg-blue-700:hover, .hover\:bg-blue-800:hover { background-color: #21386A !important; }
+.border-blue-200, .border-blue-400 { border-color: #C5D2E8 !important; }
 
 /* =========================================================================
    GE Phase 2d: フォーカス規律。インタラクティブ要素に藍25%・3px リングを統一
@@ -195,12 +198,15 @@ body {
 .dark [class~="divide-stone-200"] > * { border-color: #2A2F38 !important; }
 
 /* Accent（藍）: 暗所は ge-dark-accent(#6A90C8) で視認性確保（Phase 2b） */
-.dark .text-blue-600, .dark .text-blue-700, .dark .text-blue-800,
+.dark .text-blue-600, .dark .text-blue-700, .dark .text-blue-800, .dark .text-blue-900,
 .dark .text-violet-600, .dark .text-violet-700,
 .dark .text-purple-600, .dark .text-purple-700 { color: #6A90C8 !important; }
+.dark .bg-blue-50, .dark .bg-violet-50, .dark .bg-purple-50,
 .dark .bg-blue-100, .dark .bg-violet-100, .dark .bg-purple-100 { background-color: #1C2A40 !important; }
-.dark .bg-blue-500, .dark .bg-purple-500 { background-color: #6A90C8 !important; }
-.dark .border-blue-400 { border-color: #6A90C8 !important; }
+.dark .bg-blue-500, .dark .bg-purple-500,
+.dark .bg-blue-600, .dark .bg-blue-700, .dark .bg-purple-600 { background-color: #6A90C8 !important; }
+.dark .hover\:bg-blue-700:hover, .dark .hover\:bg-blue-800:hover { background-color: #7FA0D4 !important; }
+.dark .border-blue-200, .dark .border-blue-400 { border-color: #2A3A55 !important; }
 
 /* Form fields */
 .dark input, .dark select, .dark textarea { background-color: #1C2028; color: #E8E6E0; border-color: #2A2F38; }
