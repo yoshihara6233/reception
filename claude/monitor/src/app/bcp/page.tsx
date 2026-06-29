@@ -13,6 +13,7 @@ import { AdminShell } from '@/components/AdminShell'
 import { PageHeader, LinkBtn } from '@/components/admin/PageHeader'
 import { getT } from '@/lib/i18n/server'
 import { EventsTreeTable, type BcpEventChild, type BcpReportLite } from './EventsTreeTable'
+import { Siren } from 'lucide-react'
 
 interface BcpEventRow {
   id: string
@@ -72,7 +73,7 @@ export default async function BcpPage() {
         {/* F36: J-Alert フロー解説バナー */}
         <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 dark:border-blue-900/50 dark:bg-blue-950/30">
           <div className="flex items-start gap-3">
-            <span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 text-base dark:bg-blue-900/40">🚨</span>
+            <span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 text-base dark:bg-blue-900/40"><Siren size={16} strokeWidth={1.5} aria-hidden /></span>
             <div className="min-w-0 flex-1">
               <h2 className="text-sm font-bold text-blue-900 dark:text-blue-200">
                 {t.bcpHelp.title}

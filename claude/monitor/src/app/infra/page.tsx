@@ -6,6 +6,7 @@
  * 能動チェック（P2）未実装のため「未検証」。未対応は monitor_incidents から。
  * テナントスコープは RLS（admin_users.auth_user_id）が自動適用。
  */
+import { TriangleAlert, CircleCheck, Video } from 'lucide-react'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
@@ -129,7 +130,7 @@ export default async function InfraDashboard() {
         {/* 接続障害バナー (D3) */}
         {networkOutage && (
           <div className="flex items-center gap-3 rounded-lg border border-red-300 bg-red-50 px-4 py-3 dark:border-[#A3332B]/50 dark:bg-[#A3332B]/15">
-            <span className="text-lg">⚠</span>
+            <TriangleAlert size={20} strokeWidth={1.5} className="flex-shrink-0 text-red-700 dark:text-[#E87D74]" aria-hidden />
             <div className="text-sm text-red-800 dark:text-[#E87D74]">
               <b>{tInfra.networkOutageTitle}</b> — {tInfra.networkOutageBody}
             </div>
@@ -171,7 +172,7 @@ export default async function InfraDashboard() {
           /* 全拠点正常（最頻出） */
           <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-6 dark:border-emerald-900/50 dark:bg-emerald-950/30">
             <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-xl text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400">✓</span>
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400"><CircleCheck size={22} strokeWidth={1.5} aria-hidden /></span>
               <div>
                 <p className="text-base font-bold text-emerald-800 dark:text-emerald-300">{tInfra.allHealthyTitle(monitored.length)}</p>
                 <p className="text-xs text-emerald-700 dark:text-emerald-400/80">{tInfra.allHealthyBody}</p>
@@ -207,7 +208,7 @@ export default async function InfraDashboard() {
                     <span className="inline-flex items-center gap-1.5"><Dot h={r.edgeHealth} />{r.edgeLabel}</span>
                     {/* TC3: 監視/録画区別 — 監視が止まっても録画は NVR 本体で継続する旨を明示。 */}
                     {r.recordingContinues && (
-                      <div className="mt-0.5 text-[10px] text-slate-400 dark:text-gedink3">📼 {t.status.recordingNote}</div>
+                      <div className="mt-0.5 flex items-center gap-1 text-[10px] text-slate-400 dark:text-gedink3"><Video size={11} strokeWidth={1.5} aria-hidden />{t.status.recordingNote}</div>
                     )}
                   </td>
                   <td className="px-3 py-2"><span className="inline-flex items-center gap-1.5"><Dot h={r.devHealth} /><span className="font-mono tabular-nums text-slate-600 dark:text-gedink2">{r.recCount}</span></span></td>

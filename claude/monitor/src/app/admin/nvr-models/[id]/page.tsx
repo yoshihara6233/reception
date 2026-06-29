@@ -3,6 +3,7 @@
  */
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
+import { Save } from 'lucide-react'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
 import { createSupabaseServer } from '@/lib/supabase/server'
@@ -83,9 +84,9 @@ export default async function EditNvrModelPage(
         <div className="flex gap-2 pt-2">
           <button
             type="submit"
-            className="rounded bg-slate-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700"
+            className="inline-flex items-center gap-1 rounded bg-slate-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700"
           >
-            💾 保存
+            <Save size={14} strokeWidth={1.5} aria-hidden /> 保存
           </button>
           <Link
             href="/admin/nvr-models"

@@ -11,6 +11,7 @@
  * 旧パス /stores/[id]/nvr からの移設。AdminShell を使い admin 全体ナビと統合。
  */
 import { notFound } from 'next/navigation'
+import { Check, X } from 'lucide-react'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
 import { createSupabaseServer } from '@/lib/supabase/server'
@@ -134,13 +135,13 @@ export default async function AdminStoreNvrPage(
         </p>
 
         {saved && (
-          <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
-            ✓ 保存しました
+          <div className="flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
+            <Check size={15} strokeWidth={1.5} aria-hidden /> 保存しました
           </div>
         )}
         {errorMsg && (
-          <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-700 dark:bg-red-950/30 dark:text-red-300">
-            ✕ {errorMsg}
+          <div className="flex items-center gap-1.5 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-700 dark:bg-red-950/30 dark:text-red-300">
+            <X size={15} strokeWidth={1.5} aria-hidden /> {errorMsg}
           </div>
         )}
 

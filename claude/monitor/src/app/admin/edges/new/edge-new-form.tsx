@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { QRCodeSVG } from 'qrcode.react'
+import { CircleCheck, TriangleAlert } from 'lucide-react'
 
 type StoreOption = { id: string; name: string; area_code: string | null }
 type Config = 'relay' | 'hq_direct' | 'frigate_unit'
@@ -83,7 +84,7 @@ export function EdgeNewForm({ storeCandidates }: { storeCandidates: StoreOption[
   if (step === 'done') {
     return (
       <div className="space-y-4 rounded-lg border border-emerald-200 bg-emerald-50 p-5 text-sm">
-        <h2 className="font-bold text-emerald-900">✅ エンロール完了</h2>
+        <h2 className="flex items-center gap-1.5 font-bold text-emerald-900"><CircleCheck size={18} strokeWidth={1.5} aria-hidden /> エンロール完了</h2>
         <p className="text-emerald-800">現地ユニットが登録され、device_token が払い出されました。続けてレコーダ/カメラを設定してください。</p>
         <div className="flex gap-2 pt-1">
           <button onClick={() => edgeId && router.push(`/admin/edges/${edgeId}`)}
@@ -118,7 +119,7 @@ export function EdgeNewForm({ storeCandidates }: { storeCandidates: StoreOption[
         <div className="rounded border border-slate-200 p-3">
           <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">手入力用トークン（QRが読めない場合）</p>
           <code className="block break-all rounded bg-slate-900 px-2 py-1.5 font-mono text-[11px] text-emerald-200">{enroll.token}</code>
-          <p className="mt-1 text-[10px] text-slate-400">有効期限: {new Date(enroll.expires_at).toLocaleString('ja-JP')}（24時間・単一使用）。⚠ トークンは再表示できません。</p>
+          <p className="mt-1 inline-flex items-center gap-1 text-[10px] text-slate-400">有効期限: {new Date(enroll.expires_at).toLocaleString('ja-JP')}（24時間・単一使用）。<TriangleAlert size={13} strokeWidth={1.5} aria-hidden /> トークンは再表示できません。</p>
         </div>
 
         {err && <p className="rounded bg-red-50 px-3 py-2 text-xs text-red-700">{err}</p>}

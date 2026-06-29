@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Globe } from 'lucide-react'
 
 interface Initial {
   name: string
@@ -58,8 +59,8 @@ export function StoreEditForm({ id, initial }: { id: string; initial: Initial })
           <input value={form.address ?? ''} onChange={(e) => setForm({ ...form, address: e.target.value })}
                  className="flex-1 rounded border border-slate-300 px-2 py-1.5 text-sm" />
           <button type="button" onClick={geocode} disabled={busy || !form.address}
-                  className="rounded bg-slate-700 px-3 text-xs text-white disabled:opacity-50">
-            🌐 住所→座標
+                  className="inline-flex items-center gap-1 rounded bg-slate-700 px-3 text-xs text-white disabled:opacity-50">
+            <Globe size={14} strokeWidth={1.5} aria-hidden /> 住所→座標
           </button>
         </div>
       </Field>

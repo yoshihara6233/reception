@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { Camera } from 'lucide-react'
 import { updateFindingStatus } from './actions'
 
 export interface Finding {
@@ -91,7 +92,7 @@ export function SecurityTriageClient({ findings }: { findings: Finding[] }) {
                   {f.snapshotUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={f.snapshotUrl} alt="" className="h-full w-full rounded object-cover" />
-                  ) : '📷'}
+                  ) : <Camera size={18} strokeWidth={1.5} aria-hidden />}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 text-[13px] font-semibold text-slate-800 dark:text-gedink">

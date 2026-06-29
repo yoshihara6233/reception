@@ -17,6 +17,7 @@
  * Phase 3: 後で Prometheus + Grafana に統合する想定だが、それまでは
  * Supabase に書き溜めたメトリクスから直接計算する。
  */
+import { BarChart3 } from 'lucide-react'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
@@ -168,8 +169,8 @@ export default async function SloDashboard() {
 
         {/* メトリクスエンドポイント案内 */}
         <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-xs dark:border-blue-900/50 dark:bg-blue-950/30">
-          <h4 className="mb-2 text-sm font-semibold text-blue-900 dark:text-blue-200">
-            📊 詳細メトリクス (Prometheus)
+          <h4 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-blue-900 dark:text-blue-200">
+            <BarChart3 size={15} strokeWidth={1.5} aria-hidden />詳細メトリクス (Prometheus)
           </h4>
           <p className="text-blue-800 dark:text-blue-200/80">
             中央エージェントは <code className="rounded bg-blue-100 px-1 dark:bg-blue-900/40">/metrics</code> エンドポイント (デフォルト port 9464) で

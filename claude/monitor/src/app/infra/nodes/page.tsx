@@ -31,10 +31,11 @@ interface StoreCountRow {
   count:            number
 }
 
+// GE: 絵文字不使用。状態は色付きドット(完全な丸はドットのみ許容)＋ラベルで示す。
 const STATUS_STYLE = {
-  active:   { label: '稼働中',   style: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300', emoji: '🟢' },
-  draining: { label: '排出中',   style: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300',     emoji: '🟡' },
-  down:     { label: 'ダウン',   style: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',                 emoji: '🔴' },
+  active:   { label: '稼働中',   style: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' },
+  draining: { label: '排出中',   style: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300' },
+  down:     { label: 'ダウン',   style: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' },
 } as const
 
 function fmtTimeAgo(iso: string | null): string {
@@ -148,8 +149,8 @@ export default async function InfraNodesPage() {
                       </td>
                       <td className="px-3 py-2 font-mono text-slate-500">{n.region ?? '—'}</td>
                       <td className="px-3 py-2">
-                        <span className={'rounded px-2 py-0.5 text-[11px] font-semibold ' + sty.style}>
-                          {sty.emoji} {sty.label}
+                        <span className={'inline-flex items-center gap-1.5 rounded px-2 py-0.5 text-[11px] font-semibold ' + sty.style}>
+                          <span className="inline-block h-1.5 w-1.5 rounded-full bg-current" />{sty.label}
                         </span>
                       </td>
                       <td className="px-3 py-2 text-right">
