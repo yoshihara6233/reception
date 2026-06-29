@@ -2,6 +2,7 @@
  * Right-side detail panel: store info, edge agent telemetry, recorder spec,
  * camera list. Server component — single fetch per page render.
  */
+import { Video } from 'lucide-react'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { deriveEdgeStatus, type DerivedEdgeStatus } from '@/lib/edge-status'
 
@@ -80,8 +81,8 @@ export async function StoreDetail({ storeId }: { storeId: string }) {
           </span>
           {/* TC3: 監視/録画区別 — 監視が止まっても録画は NVR 本体で継続する旨を明示。 */}
           {derived.recordingContinues && (
-            <p className="mt-1 text-[10px] leading-tight text-slate-500">
-              📼 録画はレコーダ本体で継続中（監視プレーンのみ中断）
+            <p className="mt-1 flex items-center gap-1 text-[10px] leading-tight text-slate-500">
+              <Video size={11} strokeWidth={1.5} aria-hidden />録画はレコーダ本体で継続中（監視プレーンのみ中断）
             </p>
           )}
         </Kv>

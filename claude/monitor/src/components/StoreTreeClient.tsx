@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Siren } from 'lucide-react'
 import { deriveEdgeStatus } from '@/lib/edge-status'
 
 // Persist the tree scroll position across navigations. The tree is re-mounted
@@ -102,7 +103,7 @@ export function TreeClient({
                 : 'border border-red-300 bg-red-50 text-red-700 hover:bg-red-100')
             }
           >
-            <span>🚨</span>
+            <Siren size={13} strokeWidth={1.5} aria-hidden />
             <span className="flex-1 text-left">直近アラート対象店舗</span>
             <span
               className={
@@ -160,9 +161,7 @@ export function TreeClient({
                       />
                       <span className="flex-1 truncate">{s.name}</span>
                       {alertSet.has(s.id) && (
-                        <span className="flex-shrink-0 text-[9px] font-bold text-red-500" title="直近24h以内にBCPアラート発令">
-                          🚨
-                        </span>
+                        <Siren size={11} strokeWidth={1.5} className="flex-shrink-0 text-red-500" aria-label="直近24h以内にBCPアラート発令" />
                       )}
                     </Link>
                   )
