@@ -143,6 +143,16 @@ body {
 .border-blue-400 { border-color: #2C4A7E !important; }
 
 /* =========================================================================
+   GE Phase 2d: フォーカス規律。インタラクティブ要素に藍25%・3px リングを統一
+   （GE: --ge-shadow-focus）。opacity 変化での状態表現はしない方針。
+   :where() は詳細度0なので、要素側の明示 focus スタイルがあればそちらが勝つ。
+   ========================================================================= */
+:where(a, button, input, select, textarea, [role="button"], [tabindex]):focus-visible {
+  outline: none;
+  box-shadow: var(--ge-shadow-focus);
+}
+
+/* =========================================================================
    App-wide dark mode (Genesis Edge dark palette)
    The app uses hardcoded slate/white utility classes. Rather than annotate
    every element with dark: variants, remap the common surface / text / border
