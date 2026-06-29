@@ -18,6 +18,17 @@ export const HEARTBEAT_INTERVAL_PER_STORE_SEC = 60
  */
 export const HEARTBEAT_INTERVAL_CENTRAL_SEC = 6 * 60 * 60
 
+/**
+ * TC3: 監視プレーン中断と判定する last_seen_at の許容遅延 (秒)。既定 180秒=3分。
+ *
+ * エッジは約60秒毎にクラウドへ heartbeat を送る (HEARTBEAT_INTERVAL_PER_STORE_SEC)
+ * ため、3分無応答 ≒ 3回連続ミス = 「監視中断」。この閾値を **単一源** とし、
+ * 死活監視 cron (api/cron/edge-health) と UI の状態派生 (lib/edge-status) の双方が
+ * 同じ値を参照する。cron は運用調整用に env EDGE_STALE_SECONDS で上書きできるが、
+ * 未設定時の既定はこの定数に揃える (監視画面と通知のズレを防ぐ)。
+ */
+export const MONITOR_STALE_SECONDS = 180
+
 // ─── コマンド再試行 ──────────────────────────────────────────────────────────
 
 export const COMMAND_RETRY_MAX = 2

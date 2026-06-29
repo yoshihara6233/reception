@@ -3,8 +3,10 @@
  * camera list. Server component — single fetch per page render.
  */
 import { createSupabaseServer } from '@/lib/supabase/server'
+import { deriveEdgeStatus, type DerivedEdgeStatus } from '@/lib/edge-status'
 
-const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
+// 鮮度OK の動作モード表示（status 文字列ベース）。中断/停止/未設置は派生結果で上書き。
+const MODE_LABEL: Record<string, { label: string; cls: string }> = {
   online:  { label: '● オンライン', cls: 'bg-emerald-100 text-emerald-700' },
   idle:    { label: '● 待機',       cls: 'bg-emerald-100 text-emerald-700' },
   grid:    { label: '● 監視中',     cls: 'bg-blue-100 text-blue-700' },
@@ -14,7 +16,20 @@ const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
   error:   { label: '● エラー',     cls: 'bg-red-100 text-red-700' },
   offline: { label: '● オフライン', cls: 'bg-slate-200 text-slate-600' },
 }
-const STATUS_FALLBACK = { label: '● 不明', cls: 'bg-slate-200 text-slate-600' }
+const MODE_FALLBACK = { label: '● 不明', cls: 'bg-slate-200 text-slate-600' }
+
+/**
+ * TC3: 監視プレーン状態 → バッジ表示。中断/停止/未設置は last_seen 鮮度で派生した
+ * plane を優先し、固着した status 文字列（grid 等）に化けさせない。
+ */
+function statusBadge(d: DerivedEdgeStatus): { label: string; cls: string } {
+  switch (d.plane) {
+    case 'interrupted':  return { label: '● 監視中断', cls: 'bg-red-100 text-red-700' }
+    case 'stopped':      return { label: '● 監視停止', cls: 'bg-slate-200 text-slate-600' }
+    case 'unconfigured': return { label: '● 未設置',   cls: 'bg-slate-200 text-slate-600' }
+    default:             return MODE_LABEL[d.mode ?? 'idle'] ?? MODE_FALLBACK
+  }
+}
 
 export async function StoreDetail({ storeId }: { storeId: string }) {
   const supa = await createSupabaseServer()
@@ -48,8 +63,9 @@ export async function StoreDetail({ storeId }: { storeId: string }) {
   const edge = s.edge_devices?.[0]
   const rec  = edge?.recorders?.[0]
   const cams = rec?.recorder_cameras ?? []
-  const statusInfo =
-    STATUS_LABEL[edge?.status ?? 'offline'] ?? STATUS_FALLBACK
+  // TC3: last_seen 鮮度を真実源に監視プレーン状態を派生（status 文字列の固着を補正）。
+  const derived    = deriveEdgeStatus(edge?.status, edge?.last_seen_at)
+  const statusInfo = statusBadge(derived)
 
   return (
     <aside className="flex-1 min-h-0 overflow-y-auto border-l border-slate-200 bg-white text-xs">
@@ -62,6 +78,12 @@ export async function StoreDetail({ storeId }: { storeId: string }) {
           <span className={`inline-block rounded-full px-2 py-px text-[11px] font-semibold ${statusInfo.cls}`}>
             {statusInfo.label}
           </span>
+          {/* TC3: 監視/録画区別 — 監視が止まっても録画は NVR 本体で継続する旨を明示。 */}
+          {derived.recordingContinues && (
+            <p className="mt-1 text-[10px] leading-tight text-slate-500">
+              📼 録画はレコーダ本体で継続中（監視プレーンのみ中断）
+            </p>
+          )}
         </Kv>
         <Kv
           label="最終接続"

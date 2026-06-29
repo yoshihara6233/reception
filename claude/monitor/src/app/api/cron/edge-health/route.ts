@@ -19,6 +19,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { sendEmail, edgeOfflineAlertEmail, edgeRecoveredEmail, SECURITY_FROM_ADDRESS } from '@/lib/email/send'
 import { recordMetric } from '@/lib/metrics'
+import { MONITOR_STALE_SECONDS } from '@intereco/shared'
 
 interface EdgeRow {
   id: string
@@ -44,7 +45,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     || req.headers.get('x-cron-secret') === secret
   if (!authed) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
-  const staleSec   = Number(process.env.EDGE_STALE_SECONDS ?? 180)
+  // TC3: 中断判定の閾値は @intereco/shared の単一源に揃える（UI 派生と同値）。
+  // 運用調整が要る場合のみ env EDGE_STALE_SECONDS で上書き。
+  const staleSec   = Number(process.env.EDGE_STALE_SECONDS ?? MONITOR_STALE_SECONDS)
   const staleMin   = Math.round(staleSec / 60)
   const thresholdMs = Date.now() - staleSec * 1000
   const recipients = (process.env.ALERT_EMAILS ?? '').split(',').map((s) => s.trim()).filter(Boolean)
