@@ -1,0 +1,15 @@
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Recorder Monitor">
+  <!-- クリーム地（アプリ/ホーム画面アイコン用の背景） -->
+  <rect width="512" height="512" fill="#F4F2EC"/>
+  <!-- モニター画面: 角丸＋右下が折れ角(チャンファ) -->
+  <path d="M 80 72 L 432 72 Q 454 72 454 94 L 454 262 L 352 378 L 80 378 Q 58 378 58 356 L 58 94 Q 58 72 80 72 Z"
+        fill="none" stroke="#15171A" stroke-width="26" stroke-linejoin="round"/>
+  <!-- 折れ角(青) -->
+  <path d="M 454 262 L 454 378 L 352 378 Z" fill="#2C4A7E"/>
+  <!-- ステータスドット(青) -->
+  <circle cx="146" cy="150" r="30" fill="#2C4A7E"/>
+  <!-- スタンド首 -->
+  <path d="M 256 378 L 256 432" fill="none" stroke="#15171A" stroke-width="26" stroke-linecap="round"/>
+  <!-- スタンド台 -->
+  <path d="M 176 450 L 336 450" fill="none" stroke="#15171A" stroke-width="26" stroke-linecap="round"/>
+</svg>

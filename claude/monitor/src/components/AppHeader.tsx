@@ -8,6 +8,7 @@ import { LangSwitcher } from './LangSwitcher'
 import { ThemeToggle } from './ThemeToggle'
 import { LogoutButton } from './LogoutButton'
 import { ServerClock } from './ServerClock'
+import { MonitorMark } from './MonitorMark'
 
 // F25: userName / avatar はフッターの StatusBar に移動したので、ここでは表示しない。
 // プロップは互換性のためそのまま受領（残置）するが、UI には出さない。
@@ -75,7 +76,7 @@ export function AppHeader({
           aria-label={t.nav.monitor}
           className="flex items-center gap-2 rounded text-sm font-bold transition-opacity hover:opacity-80"
         >
-          <span className="block h-[18px] w-[18px] flex-shrink-0 rounded bg-gradient-to-br from-blue-500 to-violet-500" />
+          <MonitorMark className="h-[22px] w-[22px] flex-shrink-0 text-white" />
           <div className="flex flex-col leading-tight">
             <span>
               <span className="hidden sm:inline">Recorder {t.appName}</span>
