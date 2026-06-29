@@ -9,7 +9,7 @@ interface StoreRow {
   id: string
   name: string
   area_code: string | null
-  edge_devices: { status: string }[] | null
+  edge_devices: { status: string; last_seen_at: string | null }[] | null
 }
 
 interface Group {

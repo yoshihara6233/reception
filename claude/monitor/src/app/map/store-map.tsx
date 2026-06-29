@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import L from 'leaflet'
 import type { EdgeStatus } from '@/lib/types/db'
+import { deriveEdgeStatus } from '@/lib/edge-status'
 
 type StoreRow = {
   id: string
@@ -25,6 +26,18 @@ const COLORS: Record<EdgeStatus, string> = {
 }
 
 /**
+ * TC3: last_seen 鮮度を真実源にマーカーの既定色/ラベルを決める。監視中断=赤、
+ * 監視停止/未設置=グレー。固着した status(grid 等)に化けさせない。
+ */
+function displayDot(dev: { status: EdgeStatus; last_seen_at: string | null } | undefined): { color: string; label: string } {
+  const d = deriveEdgeStatus(dev?.status, dev?.last_seen_at)
+  if (d.plane === 'interrupted')  return { color: '#ef4444', label: '監視中断' }
+  if (d.plane === 'stopped')      return { color: '#9ca3af', label: '監視停止' }
+  if (d.plane === 'unconfigured') return { color: '#9ca3af', label: '未設置' }
+  return { color: COLORS[(d.mode ?? 'offline') as EdgeStatus] ?? '#9ca3af', label: d.mode ?? 'idle' }
+}
+
+/**
  * Build a marker icon.
  *
  * F26: variants for the alert-zoom mode.
@@ -33,10 +46,10 @@ const COLORS: Record<EdgeStatus, string> = {
  *   - 既定                → 14 px (通常表示)
  */
 function makeIcon(
-  status: EdgeStatus,
+  dotColor: string,
   variant: 'normal' | 'highlight' | 'dimmed',
 ): L.DivIcon {
-  const color = variant === 'highlight' ? '#ef4444' : COLORS[status]
+  const color = variant === 'highlight' ? '#ef4444' : dotColor
   const size  = variant === 'highlight' ? 22 : variant === 'dimmed' ? 10 : 14
   const opacity = variant === 'dimmed' ? 0.4 : 1
   const pulseCls = variant === 'highlight' ? ' intereco-alert-pulse' : ''
@@ -99,7 +112,7 @@ export default function StoreMap({
     markersRef.current = markers
 
     stores.forEach((s) => {
-      const status = s.edge_devices?.[0]?.status ?? 'offline'
+      const disp = displayDot(s.edge_devices?.[0])   // TC3: 派生色/ラベル
       // F28: data-store-id 属性を仕込んでおき、popupopen ハンドラ側で
       // クリックを捕まえて router.push に流す（プレーン <a> による
       // フルページリロードを回避）。
@@ -108,12 +121,12 @@ export default function StoreMap({
           <div style="font-weight:600;margin-bottom:2px">${s.name}</div>
           ${s.address ? `<div style="font-size:11px;color:#64748b">${s.address}</div>` : ''}
           <div style="margin:4px 0">
-            <span style="display:inline-block;padding:1px 6px;border-radius:8px;color:white;font-size:11px;background:${COLORS[status]}">${status}</span>
+            <span style="display:inline-block;padding:1px 6px;border-radius:8px;color:white;font-size:11px;background:${disp.color}">${disp.label}</span>
           </div>
           <a href="/stores/${s.id}" data-store-id="${s.id}" class="intereco-popup-go-store" style="display:block;text-align:center;margin-top:4px;padding:4px 8px;border-radius:4px;background:#2563eb;color:white;font-size:11px;text-decoration:none">16分割で見る</a>
         </div>
       `)
-      const m = L.marker([s.latitude, s.longitude], { icon: makeIcon(status, 'normal') })
+      const m = L.marker([s.latitude, s.longitude], { icon: makeIcon(disp.color, 'normal') })
         .bindPopup(popup)
         .addTo(map)
       markers.set(s.id, m)
@@ -177,11 +190,10 @@ export default function StoreMap({
     stores.forEach((s) => {
       const m = markers.get(s.id)
       if (!m) return
-      const status = s.edge_devices?.[0]?.status ?? 'offline'
       const variant: 'normal' | 'highlight' | 'dimmed' =
         !highlight        ? 'normal' :
         highlight.has(s.id) ? 'highlight' : 'dimmed'
-      m.setIcon(makeIcon(status, variant))
+      m.setIcon(makeIcon(displayDot(s.edge_devices?.[0]).color, variant))
     })
 
     // Fit the viewport to highlighted stores (if any).
