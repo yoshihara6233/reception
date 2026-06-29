@@ -36,6 +36,8 @@ export interface Msg {
     monitoring: string
     live:       string
     alerts:     string
+    interrupted: string   // TC3: 監視中断のみのアラート数
+    bcp:         string   // TC3: BCP/インシデント/巡回など監視中断以外
   }
   status: {
     offline: string
@@ -459,6 +461,8 @@ const ja: Msg = {
     monitoring: '監視中',
     live:       'LIVE',
     alerts:     'アラート',
+    interrupted: '監視中断',
+    bcp:         'BCP・他',
   },
   status: {
     offline: 'オフ',
@@ -863,6 +867,8 @@ const en: Msg = {
     monitoring: 'Active',
     live:       'LIVE',
     alerts:     'Alerts',
+    interrupted: 'Monitor down',
+    bcp:         'BCP/Other',
   },
   status: {
     offline: 'Off',
@@ -1267,6 +1273,8 @@ const zh: Msg = {
     monitoring: '监控中',
     live:       '直播',
     alerts:     '警报',
+    interrupted: '监控中断',
+    bcp:         'BCP·其他',
   },
   status: {
     offline: '离线',
@@ -1671,6 +1679,8 @@ const ko: Msg = {
     monitoring: '모니터링',
     live:       'LIVE',
     alerts:     '알림',
+    interrupted: '모니터링 중단',
+    bcp:         'BCP·기타',
   },
   status: {
     offline: '오프',
