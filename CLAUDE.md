@@ -19,6 +19,22 @@ Key routing rules:
 - Save progress, checkpoint, resume → invoke checkpoint
 - Code quality, health check → invoke health
 
+## デザイン基本（Genesis Edge デザインシステム）★最優先で従う
+
+**本開発の視覚（色・型・余白・コンポーネント）はすべて Genesis Edge デザインシステムに従う。**
+正本: **`docs/GENESIS_EDGE_USAGE.md`**（UI を触る前に必ず読む）。独自の色・フォント・余白を発明しない。
+
+要点（詳細は正本）:
+- **三色**: 紙 `#F7F5F1`(--ge-paper) × 墨 `#0F0F10`(--ge-ink) × 藍 `#2C4A7E`(--ge-accent)。
+  **一画面で藍は2〜3要素まで・グラデーション禁止。** semantic: 成功`#2F7A4F`/警告`#B5761A`/危険`#A3332B`。ダーク: bg`#0E1013`/藍`#6A90C8`。
+- **タイポ**: 本文 Noto Sans JP / 欧文見出し Inter Tight / 数字・コード IBM Plex Mono(tabular)。スケール 11/12/13/14/16/20/24/32/44/64（4pxグリッド）。
+- **形状**: 角丸=ボタン/入力/タグ4px・カード6px・モーダル10px。カードは影なし×1pxボーダー（影はフロート要素のみ）。**色付き左ボーダー強調は使わない**。selected=`--ge-accent-soft`+左2px藍。
+- **アイコン**: Lucide(1.5px ストローク・currentColor)。ラベルなし単体アイコン/絵文字/カラフルアイコン禁止。ブランド専用「録画モニター」アイコン（右下切り欠き＋藍ドット）の SVG が正本§6 にある＝現行のヘッダー/PWAアイコンと同意匠。
+- **コピー**: です・ます調、UIラベルは体言止め。数字は半角三桁カンマ＋単位前に半角スペース(`1,234 件`)。二人称「あなた」不可→職種/「現場」。機能を擬人化しない。
+- **やらない**: 独自トークン発明 / グラデ・ノイズ・blur(frosted glass) / 手描きSVG・装飾アイコン・絵文字 / カード持ち上げhover / 藍4箇所以上。
+
+注: アプリは現状 Tailwind トークン実装。`--ge-*` への完全移行は段階的（未完）だが、**新規 UI・改修は本基本に合わせる**こと。`#2C4A7E` 藍と `#F7F5F1` 紙は既に整合済み。
+
 ## Intereco プロジェクト状況（2026-06-13 更新）
 
 **本番公開済み**: `https://intereco-monitor.vercel.app`（Vercel project `intereco-monitor`・本番ブランチ `monitor-prod`・reception と独立）。
