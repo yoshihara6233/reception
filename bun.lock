@@ -34,7 +34,10 @@
       "name": "monitor",
       "version": "0.1.0",
       "dependencies": {
+        "@fontsource/ibm-plex-mono": "^5.2.7",
+        "@fontsource/inter-tight": "^5.2.7",
         "@fontsource/noto-sans-jp": "^5.2.9",
+        "@fontsource/noto-serif-jp": "^5.2.8",
         "@intereco/shared": "workspace:*",
         "@livekit/components-react": "^2.9.0",
         "@react-pdf/renderer": "^4.5.1",
@@ -204,7 +207,13 @@
 
     "@floating-ui/utils": ["@floating-ui/utils@0.2.11", "", {}, "sha512-RiB/yIh78pcIxl6lLMG0CgBXAZ2Y0eVHqMPYugu+9U0AeT6YBeiJpf7lbdJNIugFP5SIjwNRgo4DhR1Qxi26Gg=="],
 
+    "@fontsource/ibm-plex-mono": ["@fontsource/ibm-plex-mono@5.2.7", "", {}, "sha512-MKAb8qV+CaiMQn2B0dIi1OV3565NYzp3WN5b4oT6LTkk+F0jR6j0ZN+5BKJiIhffDC3rtBULsYZE65+0018z9w=="],
+
+    "@fontsource/inter-tight": ["@fontsource/inter-tight@5.2.7", "", {}, "sha512-44TmSfHdNQus/3MWOMIonUEnbxwQhiaFo2sfBJEGIE4c7TN+GO6kfLzsTH4Nu52BC9HDZFl9fPQ6Cwzp9vYTtQ=="],
+
     "@fontsource/noto-sans-jp": ["@fontsource/noto-sans-jp@5.2.9", "", {}, "sha512-6yVGiofnrnbiJjU8ch4JGSs2HqyozxMvsVyVmFwOnDH3u//qQKLqmKM4n0lqN0637uaJNzUW9nIJqbbMgHVQzw=="],
+
+    "@fontsource/noto-serif-jp": ["@fontsource/noto-serif-jp@5.2.8", "", {}, "sha512-x+tGrrK+4t/hoHLxAl7Ry5nN8CVPermqz0fD7HtCXzBJSxzFKxNH9y+cuOD3gZW0tyKZ2CD7WvuAfHbISvjL5Q=="],
 
     "@humanfs/core": ["@humanfs/core@0.19.2", "", { "dependencies": { "@humanfs/types": "^0.15.0" } }, "sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA=="],
 

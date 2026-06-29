@@ -21,7 +21,10 @@
     "db:push": "supabase db push"
   },
   "dependencies": {
+    "@fontsource/ibm-plex-mono": "^5.2.7",
+    "@fontsource/inter-tight": "^5.2.7",
     "@fontsource/noto-sans-jp": "^5.2.9",
+    "@fontsource/noto-serif-jp": "^5.2.8",
     "@intereco/shared": "workspace:*",
     "@livekit/components-react": "^2.9.0",
     "@react-pdf/renderer": "^4.5.1",
