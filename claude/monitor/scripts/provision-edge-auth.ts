@@ -25,10 +25,12 @@ function edgeAuthEmail(edgeId: string): string {
 }
 
 async function main() {
-  const edgeId = process.argv[2]
-  if (!edgeId) { console.error('usage: provision-edge-auth.ts <edge_id>'); process.exit(1) }
+  // edge_id は引数優先、無ければ EDGE_ID env（エッジ上で .env から実行する用途）。
+  const edgeId = process.argv[2] ?? process.env.EDGE_ID
+  if (!edgeId) { console.error('usage: provision-edge-auth.ts <edge_id>  (または EDGE_ID env)'); process.exit(1) }
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  // URL は monitor の NEXT_PUBLIC_… 優先、無ければ edge .env の SUPABASE_URL を使う。
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!url || !key) { console.error('NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY required'); process.exit(1) }
   if (!process.env.SECRETS_ENC_KEY) {
