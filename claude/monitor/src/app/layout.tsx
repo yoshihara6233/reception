@@ -1,4 +1,14 @@
 import './globals.css'
+// Genesis Edge デザインシステムのフォント（self-host=@fontsource・ビルド堅牢）。
+// 本文 Noto Sans JP / 欧文見出し Inter Tight / 数字・コード IBM Plex Mono / 章扉 Noto Serif JP。
+import '@fontsource/noto-sans-jp/400.css'
+import '@fontsource/noto-sans-jp/500.css'
+import '@fontsource/noto-sans-jp/700.css'
+import '@fontsource/inter-tight/500.css'
+import '@fontsource/inter-tight/600.css'
+import '@fontsource/ibm-plex-mono/400.css'
+import '@fontsource/ibm-plex-mono/500.css'
+import '@fontsource/noto-serif-jp/400.css'
 import type { Metadata, Viewport } from 'next'
 import Script from 'next/script'
 import { SwRegister } from '@/components/SwRegister'

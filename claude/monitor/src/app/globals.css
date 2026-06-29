@@ -5,9 +5,36 @@
    Scoped to /security via ThemeToggle — other sections are unaffected. */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* Genesis Edge — dark control-center palette (案A) as Tailwind theme colors.
-   Use as dark:bg-gedbg2 / dark:text-gedink / dark:border-gedline etc. */
+/* =========================================================================
+   Genesis Edge デザインシステム（正本: docs/GENESIS_EDGE_USAGE.md）
+   紙 × 墨 × 藍。Tailwind v4 @theme でユーティリティ化（bg-ge-paper /
+   text-ge-accent / border-ge-line / font-ge-display 等）。
+   ダーク管制パレット(gedbg…)は従来どおり併存。
+   ========================================================================= */
 @theme {
+  /* GE: 紙 × 墨 × 藍 */
+  --color-ge-paper:        #F7F5F1;
+  --color-ge-paper-2:      #EFEBE3;
+  --color-ge-paper-3:      #E4DED3;
+  --color-ge-ink:          #0F0F10;
+  --color-ge-ink-2:        #2A2A2C;
+  --color-ge-ink-3:        #5B5B5F;
+  --color-ge-line:         #D6CFC1;
+  --color-ge-line-2:       #B9B0A0;
+  --color-ge-accent:       #2C4A7E;
+  --color-ge-accent-soft:  #E4EAF3;
+  --color-ge-success:      #2F7A4F;
+  --color-ge-warning:      #B5761A;
+  --color-ge-danger:       #A3332B;
+  --color-ge-dark-bg:      #0E1013;
+  --color-ge-dark-accent:  #6A90C8;
+  /* GE: フォントファミリ → font-ge-sans / font-ge-display / font-ge-mono / font-ge-serif */
+  --font-ge-sans:    "Noto Sans JP", system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "Yu Gothic UI", sans-serif;
+  --font-ge-display: "Inter Tight", "Noto Sans JP", system-ui, sans-serif;
+  --font-ge-mono:    "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+  --font-ge-serif:   "Noto Serif JP", serif;
+
+  /* 既存: ダーク管制パレット(案A) */
   --color-gedbg:     #0E1013;
   --color-gedbg2:    #14171C;
   --color-gedbg3:    #1C2028;
@@ -19,25 +46,52 @@
 }
 
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
+  /* GE トークン（raw CSS / 型クラスから参照） */
+  --ge-paper: #F7F5F1; --ge-paper-2: #EFEBE3; --ge-paper-3: #E4DED3;
+  --ge-ink: #0F0F10; --ge-ink-2: #2A2A2C; --ge-ink-3: #5B5B5F;
+  --ge-line: #D6CFC1; --ge-line-2: #B9B0A0;
+  --ge-accent: #2C4A7E; --ge-accent-soft: #E4EAF3;
+  --ge-success: #2F7A4F; --ge-warning: #B5761A; --ge-danger: #A3332B;
+  --ge-font-sans: "Noto Sans JP", system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "Yu Gothic UI", sans-serif;
+  --ge-font-display: "Inter Tight", "Noto Sans JP", system-ui, sans-serif;
+  --ge-font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+  --ge-font-serif: "Noto Serif JP", serif;
+  --ge-shadow-focus: 0 0 0 3px rgba(44, 74, 126, 0.25);
+
+  /* ベースキャンバスを GE 紙×墨に（Phase 1: 既存slate utilityは温存し段階移行）。 */
+  --background: var(--ge-paper);
+  --foreground: var(--ge-ink);
   --header-bg:  #0f172a;
   --header-fg:  #f8fafc;
   --status-bg:  #1e293b;
-  --tree-bg:    #f8fafc;
+  --tree-bg:    var(--ge-paper);
   --tree-fg:    #1e293b;
-  --panel-border: #e2e8f0;
+  --panel-border: var(--ge-line);
 }
 
 html, body { height: 100%; }
 body {
-  font-family: "SF Pro Text", -apple-system, "Hiragino Kaku Gothic ProN",
-    "Yu Gothic UI", system-ui, sans-serif;
+  font-family: var(--ge-font-sans);
+  font-feature-settings: "palt" 1;     /* GE: 和文プロポーショナル */
   background: var(--background);
   color: var(--foreground);
   font-size: 13px;
   overflow: hidden;
 }
+
+/* =========================================================================
+   GE タイポグラフィ型クラス（docs/GENESIS_EDGE_USAGE.md §3）
+   ========================================================================= */
+.ge-h1 { font-family: var(--ge-font-display); font-weight: 600; font-size: 44px; letter-spacing: -0.02em; line-height: 1.1; }
+.ge-h2 { font-family: var(--ge-font-display); font-weight: 600; font-size: 32px; letter-spacing: -0.02em; line-height: 1.15; }
+.ge-h3 { font-family: var(--ge-font-display); font-weight: 600; font-size: 24px; letter-spacing: -0.01em; line-height: 1.25; }
+.ge-h4 { font-family: var(--ge-font-sans); font-weight: 700; font-size: 20px; line-height: 1.4; }
+.ge-body    { font-family: var(--ge-font-sans); font-size: 16px; line-height: 1.6; }
+.ge-body-sm { font-family: var(--ge-font-sans); font-size: 14px; line-height: 1.6; }
+.ge-caption { font-family: var(--ge-font-sans); font-size: 12px; line-height: 1.5; color: var(--ge-ink-3); }
+.ge-overline { font-family: var(--ge-font-sans); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ge-ink-3); }
+.ge-mono { font-family: var(--ge-font-mono); font-variant-numeric: tabular-nums; }
+.ge-num  { font-family: var(--ge-font-mono); font-variant-numeric: tabular-nums; }
 
 .leaflet-container { width: 100%; height: 100%; }
 
