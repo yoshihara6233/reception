@@ -60,6 +60,13 @@ export type AlertRecord = {
   href:       string
 }
 
+// TC3: KPI 帯の集計。alerts は総数、interrupted=監視中断のみ、bcp=それ以外
+// (BCP/インシデント/巡回)。監視中断を独立カウントして系統を区別する。
+type KpiCounts = {
+  total: number; monitoring: number; live: number
+  alerts: number; interrupted: number; bcp: number
+}
+
 // ─── Status badge styles ──────────────────────────────────────────────────────
 
 const STATUS_BADGE: Record<EdgeStatus, string> = {
@@ -187,9 +194,11 @@ export function StoresDashboard({
       if (d.mode === 'grid')      monitoring++
       else if (d.mode === 'live') live++
     })
-    // KPI の「アラート」は件数 (per-alert) を表示
-    return { total: stores.length, monitoring, live, alerts: alertList.length }
-  }, [stores, alertList.length])
+    // TC3: アラートを「監視中断」と「BCP・他(BCP/インシデント/巡回)」に分けて数える。
+    const interrupted = alertList.filter((a) => a.kind === 'edge_offline' || a.kind === 'edge_error').length
+    const bcp = alertList.length - interrupted
+    return { total: stores.length, monitoring, live, alerts: alertList.length, interrupted, bcp }
+  }, [stores, alertList])
 
   const groups = useMemo(() => {
     const map = new Map<string, StoreDashRow[]>()
@@ -283,7 +292,7 @@ function ListView({
   kpis,
   groups,
 }: {
-  kpis: { total: number; monitoring: number; live: number; alerts: number }
+  kpis: KpiCounts
   groups: { area: string; items: StoreDashRow[] }[]
 }) {
   const { t } = useLang()
@@ -516,19 +525,25 @@ function MapAlertView({
 function KpiStrip({
   kpis,
 }: {
-  kpis: { total: number; monitoring: number; live: number; alerts: number }
+  kpis: KpiCounts
 }) {
   const { t } = useLang()
   return (
-    <div className="grid flex-shrink-0 grid-cols-4 divide-x divide-stone-200 border-b border-stone-200 bg-white">
+    // TC3: アラートを「監視中断(赤)」と「BCP・他(琥珀)」の2列に分離 = 5列。
+    <div className="grid flex-shrink-0 grid-cols-5 divide-x divide-stone-200 border-b border-stone-200 bg-white">
       {[
         { label: t.kpi.total,      value: kpis.total,      cls: 'text-slate-800' },
         { label: t.kpi.monitoring, value: kpis.monitoring, cls: 'text-blue-600' },
         { label: t.kpi.live,       value: kpis.live,        cls: 'text-purple-600' },
         {
-          label: t.kpi.alerts,
-          value: kpis.alerts,
-          cls: kpis.alerts > 0 ? 'text-red-500' : 'text-slate-400',
+          label: t.kpi.interrupted,
+          value: kpis.interrupted,
+          cls: kpis.interrupted > 0 ? 'text-red-500' : 'text-slate-400',
+        },
+        {
+          label: t.kpi.bcp,
+          value: kpis.bcp,
+          cls: kpis.bcp > 0 ? 'text-amber-600' : 'text-slate-400',
         },
       ].map((k) => (
         <div key={k.label} className="flex flex-col items-center py-2.5">
