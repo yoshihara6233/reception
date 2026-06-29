@@ -14,6 +14,7 @@ import dynamic from 'next/dynamic'
 import type { EdgeStatus } from '@/lib/types/db'
 import { useLang } from '@/lib/i18n/context'
 import { deriveEdgeStatus, isMonitoringDown, type DerivedEdgeStatus } from '@/lib/edge-status'
+import { OctagonAlert, WifiOff, Siren, TriangleAlert, Eye, Video, Check, type LucideIcon } from 'lucide-react'
 
 const StoreMap = dynamic(() => import('@/app/map/store-map'), {
   ssr: false,
@@ -99,13 +100,14 @@ const PLANE_BADGE: Record<'interrupted' | 'stopped' | 'unconfigured', string> = 
   unconfigured: 'bg-slate-100 text-slate-400',
 }
 
-// F108: アラート種別ごとの見た目 (emoji / 背景 / ラベル色)
-const ALERT_KIND_META: Record<AlertKind, { emoji: string; bg: string; labelCls: string }> = {
-  edge_error:   { emoji: '🛑', bg: 'bg-red-100',    labelCls: 'text-red-600 font-medium' },
-  edge_offline: { emoji: '📡', bg: 'bg-slate-100',  labelCls: 'text-slate-500' },
-  bcp:          { emoji: '🚨', bg: 'bg-orange-100', labelCls: 'text-orange-600 font-medium' },
-  incident:     { emoji: '⚠️', bg: 'bg-amber-100',  labelCls: 'text-amber-600 font-medium' },
-  patrol:       { emoji: '👁', bg: 'bg-violet-100', labelCls: 'text-violet-600 font-medium' },
+// F108/GE Phase 2c: アラート種別ごとの見た目 (Lucideアイコン / 背景 / 文字色)。
+// 絵文字は GE デザイン基本で不使用 → Lucide(1.5px・currentColor)に置換。
+const ALERT_KIND_META: Record<AlertKind, { icon: LucideIcon; bg: string; fg: string; labelCls: string }> = {
+  edge_error:   { icon: OctagonAlert,  bg: 'bg-red-100',    fg: 'text-red-600',    labelCls: 'text-red-600 font-medium' },
+  edge_offline: { icon: WifiOff,       bg: 'bg-slate-100',  fg: 'text-slate-500',  labelCls: 'text-slate-500' },
+  bcp:          { icon: Siren,         bg: 'bg-orange-100', fg: 'text-orange-600', labelCls: 'text-orange-600 font-medium' },
+  incident:     { icon: TriangleAlert, bg: 'bg-amber-100',  fg: 'text-amber-600',  labelCls: 'text-amber-600 font-medium' },
+  patrol:       { icon: Eye,           bg: 'bg-violet-100', fg: 'text-violet-600', labelCls: 'text-violet-600 font-medium' },
 }
 
 // ─── Relative time (uses translation strings) ─────────────────────────────────
@@ -342,7 +344,7 @@ function ListView({
                       <p className="truncate text-sm font-medium text-slate-800">{s.name}</p>
                       {/* TC3: 監視/録画区別 — 中断/停止でも録画継続を一行で明示。 */}
                       {d.recordingContinues
-                        ? <p className="truncate text-[11px] text-slate-400">📼 {t.status.recordingNote}</p>
+                        ? <p className="flex items-center gap-1 truncate text-[11px] text-slate-400"><Video size={11} strokeWidth={1.5} aria-hidden />{t.status.recordingNote}</p>
                         : s.address && <p className="truncate text-[11px] text-slate-400">{s.address}</p>}
                     </div>
                     <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${badge}`}>
@@ -428,8 +430,8 @@ function MapAlertView({
       {zoomAlerts && !hasGeoAlerts && (
         <div className="absolute left-1/2 top-16 z-[1000] -translate-x-1/2 rounded-lg bg-amber-50 px-4 py-2.5 text-xs text-amber-900 shadow-lg ring-1 ring-amber-200 dark:bg-amber-900/90 dark:text-amber-100 dark:ring-amber-700">
           {alertStores.length > 0
-            ? <>⚠ {t.dashboard.alertZoomNoGeo(alertStores.length)}</>
-            : <>✓ {t.dashboard.alertZoomNoAlerts}</>}
+            ? <span className="inline-flex items-center gap-1"><TriangleAlert size={13} strokeWidth={1.5} aria-hidden />{t.dashboard.alertZoomNoGeo(alertStores.length)}</span>
+            : <span className="inline-flex items-center gap-1"><Check size={13} strokeWidth={1.5} aria-hidden />{t.dashboard.alertZoomNoAlerts}</span>}
         </div>
       )}
 
@@ -490,11 +492,11 @@ function MapAlertView({
                 >
                   <div
                     className={[
-                      'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-base',
+                      'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full',
                       meta.bg,
                     ].join(' ')}
                   >
-                    {meta.emoji}
+                    <meta.icon size={16} strokeWidth={1.5} className={meta.fg} aria-hidden />
                   </div>
 
                   <div className="min-w-0 flex-1">
