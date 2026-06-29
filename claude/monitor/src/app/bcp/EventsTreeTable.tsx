@@ -13,6 +13,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useLang } from '@/lib/i18n/context'
 import type { Msg } from '@/lib/i18n/messages'
+import { FileText } from 'lucide-react'
 
 export interface BcpEventChild {
   id:               string
@@ -355,7 +356,7 @@ function FragmentRows({
                   onClick={(e) => e.stopPropagation()}
                   title={rep.sent_to_emails?.length ? `送信先: ${rep.sent_to_emails.join(', ')}` : undefined}
                 >
-                  📄 PDF
+                  <FileText size={12} strokeWidth={1.5} aria-hidden /> PDF
                 </a>
               ) : (
                 <span className="text-slate-400">—</span>

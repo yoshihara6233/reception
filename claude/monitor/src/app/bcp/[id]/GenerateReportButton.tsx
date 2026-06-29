@@ -7,18 +7,19 @@
  */
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
+import { Check, FileText } from 'lucide-react'
 
 interface Props {
   eventId:      string
   isDisabled?:  boolean
   hintMessage?: string
-  buttonLabel?: string
+  buttonLabel?: ReactNode
 }
 
 export function GenerateReportButton({ eventId, isDisabled, hintMessage, buttonLabel }: Props) {
-  const [message, setMessage]   = useState<string | null>(null)
+  const [message, setMessage]   = useState<ReactNode | null>(null)
   const [error,   setError]     = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
   const router = useRouter()
@@ -42,7 +43,11 @@ export function GenerateReportButton({ eventId, isDisabled, hintMessage, buttonL
           console.error('[GenerateReportButton] API error:', json)
           return
         }
-        setMessage(`✓ PDF を生成しました (${json.snapshotCount ?? '?'} 枚使用)`)
+        setMessage(
+          <>
+            <Check size={13} strokeWidth={2} aria-hidden /> PDF を生成しました ({json.snapshotCount ?? '?'} 枚使用)
+          </>,
+        )
         // refresh server component to show download button
         router.refresh()
       } catch (e) {
@@ -74,7 +79,7 @@ export function GenerateReportButton({ eventId, isDisabled, hintMessage, buttonL
               生成中…
             </>
           ) : (
-            <>{buttonLabel ?? '📄 PDF を生成'}</>
+            <>{buttonLabel ?? <><FileText size={13} strokeWidth={1.5} aria-hidden /> PDF を生成</>}</>
           )}
         </button>
         {hintMessage && (
@@ -82,7 +87,7 @@ export function GenerateReportButton({ eventId, isDisabled, hintMessage, buttonL
         )}
       </div>
       {message && (
-        <p className="text-xs text-emerald-600">{message}</p>
+        <p className="inline-flex items-center gap-1.5 text-xs text-emerald-600">{message}</p>
       )}
       {error && (
         <p className="text-xs text-red-600">エラー: {error}</p>

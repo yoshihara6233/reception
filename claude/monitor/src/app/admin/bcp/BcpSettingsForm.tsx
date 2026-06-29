@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { Check } from 'lucide-react'
 import { upsertBcpSettings } from './actions'
 
 export interface BcpStoreSetting {
@@ -102,8 +103,8 @@ export function BcpSettingsCard({ row, onSaved }: { row: BcpStoreSetting; onSave
         <div className="flex items-center gap-2">
           {err && <span className="text-[11px] text-red-600 dark:text-[#E87D74]">{err}</span>}
           <button onClick={save} disabled={pending}
-            className="rounded bg-blue-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50 dark:bg-gedaccent dark:text-gedbg dark:hover:opacity-90">
-            {saved ? '保存済 ✓' : pending ? '保存中…' : '保存'}
+            className="inline-flex items-center gap-1 rounded bg-blue-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50 dark:bg-gedaccent dark:text-gedbg dark:hover:opacity-90">
+            {saved ? <>保存済 <Check size={14} strokeWidth={1.5} aria-hidden /></> : pending ? '保存中…' : '保存'}
           </button>
         </div>
       </div>

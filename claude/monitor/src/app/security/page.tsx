@@ -5,6 +5,7 @@
  * D3（積極的な「全拠点正常」状態）に基づく。AdminShell + PageHeader で /bcp と一貫。
  */
 import Link from 'next/link'
+import { Shield, Check } from 'lucide-react'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
@@ -110,7 +111,7 @@ export default async function SecurityPage() {
         {/* F38: 警備トリアージ解説バナー */}
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-900/50 dark:bg-emerald-950/30">
           <div className="flex items-start gap-3">
-            <span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-emerald-100 text-base dark:bg-emerald-900/40">🛡</span>
+            <span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400"><Shield size={16} strokeWidth={1.5} aria-hidden /></span>
             <div className="min-w-0 flex-1">
               <h2 className="text-sm font-bold text-emerald-900 dark:text-emerald-200">
                 {t.securityHelp.title}
@@ -155,7 +156,7 @@ export default async function SecurityPage() {
           // D3: active "全拠点正常" state — distinguish "no anomalies" from "system stopped"
           <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-8 dark:border-emerald-900/50 dark:bg-emerald-950/30">
             <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-xl text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400">✓</span>
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400"><Check size={22} strokeWidth={1.5} aria-hidden /></span>
               <div>
                 <p className="text-base font-bold text-emerald-800 dark:text-emerald-300">{tSec.allNormalTitle}</p>
                 <p className="text-xs text-emerald-700 dark:text-emerald-400/80">

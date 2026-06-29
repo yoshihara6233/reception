@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Trash2, Settings, Search, Plug, X } from 'lucide-react'
 
 interface Camera {
   id?: string                 // undefined until saved
@@ -72,8 +73,8 @@ export function EdgeDetail({ edge }: { edge: EdgePayload }) {
       <section className="rounded-lg border border-slate-200 bg-white p-5 text-sm">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="font-bold text-slate-900">エッジサーバ情報</h2>
-          <button onClick={deleteEdge} className="rounded border border-red-200 px-3 py-1 text-xs text-red-700 hover:bg-red-50">
-            🗑 削除
+          <button onClick={deleteEdge} className="inline-flex items-center gap-1 rounded border border-red-200 px-3 py-1 text-xs text-red-700 hover:bg-red-50">
+            <Trash2 size={14} strokeWidth={1.5} aria-hidden /> 削除
           </button>
         </div>
         <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
@@ -451,11 +452,11 @@ function RecorderCard({ recorder }: { recorder: Recorder }) {
         </div>
         <div className="flex gap-2">
           <button onClick={() => setShowDetail((v) => !v)}
-                  className={'rounded border px-2 py-0.5 text-xs ' + (showDetail ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white')}>
-            {showDetail ? '詳細を隠す' : '⚙ 詳細(ライブ/VOD/go2rtc)'}
+                  className={'inline-flex items-center gap-1 rounded border px-2 py-0.5 text-xs ' + (showDetail ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white')}>
+            {showDetail ? '詳細を隠す' : <><Settings size={14} strokeWidth={1.5} aria-hidden /> 詳細(ライブ/VOD/go2rtc)</>}
           </button>
           <button onClick={addCam} className="rounded bg-white border border-slate-200 px-2 py-0.5 text-xs">＋ カメラ</button>
-          <button onClick={deleteRec} className="rounded border border-red-200 px-2 py-0.5 text-xs text-red-700">🗑 削除</button>
+          <button onClick={deleteRec} className="inline-flex items-center gap-1 rounded border border-red-200 px-2 py-0.5 text-xs text-red-700"><Trash2 size={14} strokeWidth={1.5} aria-hidden /> 削除</button>
         </div>
       </div>
 
@@ -503,12 +504,12 @@ function RecorderCard({ recorder }: { recorder: Recorder }) {
           <div className="mt-3 border-t border-slate-200 pt-3">
             <div className="flex flex-wrap items-center gap-2">
               <button onClick={discover} disabled={jobBusy}
-                      className="rounded border border-blue-300 bg-white px-3 py-1 text-xs font-medium text-blue-700 disabled:opacity-50">
-                🔍 ONVIF探索
+                      className="inline-flex items-center gap-1 rounded border border-blue-300 bg-white px-3 py-1 text-xs font-medium text-blue-700 disabled:opacity-50">
+                <Search size={14} strokeWidth={1.5} aria-hidden /> ONVIF探索
               </button>
               <button onClick={connTest} disabled={jobBusy}
-                      className="rounded border border-slate-300 bg-white px-3 py-1 text-xs disabled:opacity-50">
-                🔌 接続テスト
+                      className="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-3 py-1 text-xs disabled:opacity-50">
+                <Plug size={14} strokeWidth={1.5} aria-hidden /> 接続テスト
               </button>
               {jobMsg && <span className="text-xs text-slate-500">{jobMsg}</span>}
               {connResult && (
@@ -611,7 +612,7 @@ function RecorderCard({ recorder }: { recorder: Recorder }) {
                   </td>
                 )}
                 <td className="px-2 py-1 text-right">
-                  <button onClick={() => removeCam(realIdx)} className="text-red-600">×</button>
+                  <button onClick={() => removeCam(realIdx)} className="inline-flex text-red-600" aria-label="削除"><X size={14} strokeWidth={1.5} aria-hidden /></button>
                 </td>
               </tr>
             )

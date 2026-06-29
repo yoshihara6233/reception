@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { Globe2, Waves, Rocket, MapPin, Search, Siren } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -21,9 +22,9 @@ interface ZipResult {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const ALERT_TYPES = [
-  { value: 'earthquake', label: '震度情報',   emoji: '🌏', color: 'border-amber-400 bg-amber-50 text-amber-800' },
-  { value: 'tsunami',    label: '津波情報',   emoji: '🌊', color: 'border-blue-400 bg-blue-50 text-blue-800'   },
-  { value: 'missile',    label: 'ミサイル情報', emoji: '🚀', color: 'border-red-400 bg-red-50 text-red-800'   },
+  { value: 'earthquake', label: '震度情報',   Icon: Globe2, color: 'border-amber-400 bg-amber-50 text-amber-800' },
+  { value: 'tsunami',    label: '津波情報',   Icon: Waves,  color: 'border-blue-400 bg-blue-50 text-blue-800'   },
+  { value: 'missile',    label: 'ミサイル情報', Icon: Rocket, color: 'border-red-400 bg-red-50 text-red-800'   },
 ] as const
 
 const RADIUS_OPTIONS = [1, 3, 5, 10, 20, 30, 50, 100]
@@ -213,7 +214,7 @@ export function TestForm() {
                   : 'text-slate-600 hover:bg-slate-100')
               }
             >
-              {mode === 'zip' ? '〒 郵便番号' : '📍 座標入力'}
+              {mode === 'zip' ? <span className="inline-flex items-center gap-1.5">〒 郵便番号</span> : <span className="inline-flex items-center gap-1.5"><MapPin size={13} strokeWidth={1.5} aria-hidden /> 座標入力</span>}
             </button>
           ))}
         </div>
@@ -244,7 +245,7 @@ export function TestForm() {
             {zipError && <p className="text-xs text-red-600">{zipError}</p>}
             {zipResult && (
               <div className="rounded bg-emerald-50 border border-emerald-200 px-3 py-2 text-xs text-emerald-800">
-                <span className="font-bold">📍 {zipResult.address}</span>
+                <span className="inline-flex items-center gap-1.5 font-bold"><MapPin size={13} strokeWidth={1.5} aria-hidden /> {zipResult.address}</span>
                 <span className="ml-2 font-mono text-emerald-600">
                   ({zipResult.lat.toFixed(5)}, {zipResult.lng.toFixed(5)})
                 </span>
@@ -312,7 +313,7 @@ export function TestForm() {
           disabled={!hasCoords || previewing}
           className="rounded border border-slate-300 bg-slate-50 px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {previewing ? '検索中…' : '🔍 対象店舗を確認'}
+          {previewing ? '検索中…' : <span className="inline-flex items-center gap-1.5"><Search size={13} strokeWidth={1.5} aria-hidden /> 対象店舗を確認</span>}
         </button>
 
         {previewError && <p className="text-xs text-red-600">{previewError}</p>}
@@ -362,7 +363,7 @@ export function TestForm() {
                   : 'border-slate-200 bg-white hover:bg-slate-50')
               }
             >
-              <div className="text-2xl">{at.emoji}</div>
+              <div className="flex justify-center"><at.Icon size={22} strokeWidth={1.5} aria-hidden /></div>
               <div className="mt-1 text-[11px]">{at.label}</div>
             </button>
           ))}
@@ -403,7 +404,7 @@ export function TestForm() {
                 <span className="ml-2 text-red-600">（{previewStores.length}店舗対象）</span>
               )}
             </div>
-            <div>種別: <span className="font-bold">{selectedAlert?.emoji} {selectedAlert?.label}</span></div>
+            <div>種別: <span className="inline-flex items-center gap-1 font-bold">{selectedAlert?.Icon && <selectedAlert.Icon size={13} strokeWidth={1.5} aria-hidden />} {selectedAlert?.label}</span></div>
             <div>発令: <span className="font-bold">{new Date(alertIssued).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}</span></div>
           </div>
           <div className="flex gap-2">
@@ -412,7 +413,7 @@ export function TestForm() {
               disabled={submitting}
               className="rounded bg-red-600 px-4 py-2 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50"
             >
-              {submitting ? '発令中…' : '🚨 テスト発令を確定'}
+              {submitting ? '発令中…' : <span className="inline-flex items-center gap-1.5"><Siren size={13} strokeWidth={1.5} aria-hidden /> テスト発令を確定</span>}
             </button>
             <button
               onClick={() => setConfirming(false)}
@@ -436,7 +437,7 @@ export function TestForm() {
             }}
             className="rounded-lg bg-red-600 px-6 py-3 text-sm font-bold text-white hover:bg-red-700"
           >
-            🚨 テストアラートを発令する
+            <span className="inline-flex items-center gap-1.5"><Siren size={15} strokeWidth={1.5} aria-hidden /> テストアラートを発令する</span>
           </button>
           {noCoordsTried && !hasCoords && (
             <p className="text-xs text-red-600">

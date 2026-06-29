@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
+import { Satellite } from 'lucide-react'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { StoreEditForm } from './store-edit-form'
 
@@ -34,7 +35,7 @@ export default async function StoreEdit(
           className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm hover:border-slate-400 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:border-slate-500 dark:hover:bg-slate-700"
         >
           <span className="flex items-center gap-2">
-            <span className="text-base">🛰</span>
+            <Satellite size={18} strokeWidth={1.5} aria-hidden className="text-slate-500 dark:text-slate-400" />
             <span className="font-semibold text-slate-700 dark:text-slate-200">
               NVR 設定
             </span>

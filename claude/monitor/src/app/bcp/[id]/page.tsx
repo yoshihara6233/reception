@@ -13,6 +13,7 @@ import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
 import { GenerateReportButton } from './GenerateReportButton'
 import { RetrieveRecordingButton } from './RetrieveRecordingButton'
+import { Camera, FileText } from 'lucide-react'
 
 interface BcpEvent {
   id: string
@@ -280,8 +281,8 @@ export default async function BcpEventDetailPage({
                 <div key={g.camId} className="px-4 py-3">
                   {/* Camera header */}
                   <div className="mb-2 flex items-center justify-between">
-                    <h3 className="text-xs font-semibold text-slate-800">
-                      📷 {g.name}
+                    <h3 className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-800">
+                      <Camera size={13} strokeWidth={1.5} aria-hidden /> {g.name}
                     </h3>
                     {g.snapshots.length > 0 && (
                       <span className="text-[10px] text-slate-400">
@@ -425,7 +426,11 @@ export default async function BcpEventDetailPage({
             <div className="border-t border-slate-100 pt-3">
               <GenerateReportButton
                 eventId={event.id}
-                buttonLabel={report ? '📄 PDF を再生成' : '📄 PDF を生成'}
+                buttonLabel={
+                  report
+                    ? <><FileText size={13} strokeWidth={1.5} aria-hidden /> PDF を再生成</>
+                    : <><FileText size={13} strokeWidth={1.5} aria-hidden /> PDF を生成</>
+                }
                 hintMessage={
                   report
                     ? '撮影が進んだ最新の状態で PDF を再作成します (旧 PDF は上書き)'
