@@ -35,7 +35,7 @@ export async function AppShell({
   const [storeRes, alertRes] = await Promise.all([
     supa
       .from('stores')
-      .select('id, name, area_code, edge_devices ( status )')
+      .select('id, name, area_code, edge_devices ( status, last_seen_at )')
       .order('area_code', { ascending: true, nullsFirst: false })
       .order('name')
       .limit(10_000),
@@ -46,8 +46,8 @@ export async function AppShell({
       .not('store_id', 'is', null),
   ])
 
-  const byArea = new Map<string, { id: string; name: string; area_code: string | null; edge_devices: { status: string }[] | null }[]>()
-  for (const s of (storeRes.data ?? []) as { id: string; name: string; area_code: string | null; edge_devices: { status: string }[] | null }[]) {
+  const byArea = new Map<string, { id: string; name: string; area_code: string | null; edge_devices: { status: string; last_seen_at: string | null }[] | null }[]>()
+  for (const s of (storeRes.data ?? []) as { id: string; name: string; area_code: string | null; edge_devices: { status: string; last_seen_at: string | null }[] | null }[]) {
     const a = s.area_code ?? '未分類'
     if (!byArea.has(a)) byArea.set(a, [])
     byArea.get(a)!.push(s)

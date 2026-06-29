@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { deriveEdgeStatus } from '@/lib/edge-status'
 
 // Persist the tree scroll position across navigations. The tree is re-mounted
 // on every /stores/[id] change (it lives in each page's AppShell, not a shared
@@ -24,7 +25,15 @@ interface StoreRow {
   id: string
   name: string
   area_code: string | null
-  edge_devices: { status: string }[] | null
+  edge_devices: { status: string; last_seen_at: string | null }[] | null
+}
+
+/** TC3: last_seen 鮮度を真実源にツリードットの色を決める（監視中断=赤）。 */
+function treeDotColor(dev: { status: string; last_seen_at: string | null } | undefined): string {
+  const d = deriveEdgeStatus(dev?.status, dev?.last_seen_at)
+  if (d.plane === 'interrupted') return '#ef4444'
+  if (d.plane === 'stopped' || d.plane === 'unconfigured') return STATUS_COLOR.offline
+  return STATUS_COLOR[d.mode ?? 'offline'] ?? STATUS_COLOR.offline
 }
 
 interface Group {
@@ -131,7 +140,7 @@ export function TreeClient({
               </div>
               {isOpen &&
                 g.stores.map((s) => {
-                  const status = s.edge_devices?.[0]?.status ?? 'offline'
+                  const dotColor = treeDotColor(s.edge_devices?.[0])   // TC3: 派生色
                   const active = s.id === selectedId
                   return (
                     <Link
@@ -146,7 +155,7 @@ export function TreeClient({
                     >
                       <span
                         className="block h-2 w-2 flex-shrink-0 rounded-full"
-                        style={{ background: STATUS_COLOR[status] ?? STATUS_COLOR.offline }}
+                        style={{ background: dotColor }}
                       />
                       <span className="flex-1 truncate">{s.name}</span>
                       {alertSet.has(s.id) && (
