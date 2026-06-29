@@ -16,13 +16,14 @@ type StoreRow = {
   edge_devices: { id: string; status: EdgeStatus; last_seen_at: string | null }[]
 }
 
+// GE Phase 2b: ブランドアクセントは藍に集約（grid/live=藍）。semantic は GE 値へ。
 const COLORS: Record<EdgeStatus, string> = {
   offline: '#9ca3af',
-  idle:    '#22c55e',
-  grid:    '#3b82f6',
-  live:    '#a855f7',
-  vod:     '#f97316',
-  error:   '#ef4444',
+  idle:    '#2F7A4F',
+  grid:    '#2C4A7E',
+  live:    '#2C4A7E',
+  vod:     '#B5761A',
+  error:   '#A3332B',
 }
 
 /**
@@ -31,7 +32,7 @@ const COLORS: Record<EdgeStatus, string> = {
  */
 function displayDot(dev: { status: EdgeStatus; last_seen_at: string | null } | undefined): { color: string; label: string } {
   const d = deriveEdgeStatus(dev?.status, dev?.last_seen_at)
-  if (d.plane === 'interrupted')  return { color: '#ef4444', label: '監視中断' }
+  if (d.plane === 'interrupted')  return { color: '#A3332B', label: '監視中断' }
   if (d.plane === 'stopped')      return { color: '#9ca3af', label: '監視停止' }
   if (d.plane === 'unconfigured') return { color: '#9ca3af', label: '未設置' }
   return { color: COLORS[(d.mode ?? 'offline') as EdgeStatus] ?? '#9ca3af', label: d.mode ?? 'idle' }
@@ -49,7 +50,7 @@ function makeIcon(
   dotColor: string,
   variant: 'normal' | 'highlight' | 'dimmed',
 ): L.DivIcon {
-  const color = variant === 'highlight' ? '#ef4444' : dotColor
+  const color = variant === 'highlight' ? '#A3332B' : dotColor
   const size  = variant === 'highlight' ? 22 : variant === 'dimmed' ? 10 : 14
   const opacity = variant === 'dimmed' ? 0.4 : 1
   const pulseCls = variant === 'highlight' ? ' intereco-alert-pulse' : ''
@@ -123,7 +124,7 @@ export default function StoreMap({
           <div style="margin:4px 0">
             <span style="display:inline-block;padding:1px 6px;border-radius:8px;color:white;font-size:11px;background:${disp.color}">${disp.label}</span>
           </div>
-          <a href="/stores/${s.id}" data-store-id="${s.id}" class="intereco-popup-go-store" style="display:block;text-align:center;margin-top:4px;padding:4px 8px;border-radius:4px;background:#2563eb;color:white;font-size:11px;text-decoration:none">16分割で見る</a>
+          <a href="/stores/${s.id}" data-store-id="${s.id}" class="intereco-popup-go-store" style="display:block;text-align:center;margin-top:4px;padding:4px 8px;border-radius:4px;background:#2C4A7E;color:white;font-size:11px;text-decoration:none">16分割で見る</a>
         </div>
       `)
       const m = L.marker([s.latitude, s.longitude], { icon: makeIcon(disp.color, 'normal') })
