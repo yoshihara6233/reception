@@ -7,6 +7,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { MonitorMark } from '@/components/MonitorMark'
+import { Smartphone, TriangleAlert } from 'lucide-react'
 
 export default function LoginPage() {
   const router   = useRouter()
@@ -47,7 +48,7 @@ export default function LoginPage() {
         {/* Login form */}
         <form
           onSubmit={onSubmit}
-          className="w-full max-w-sm space-y-4 rounded-xl border border-slate-200 bg-white p-8 shadow-2xl"
+          className="w-full max-w-sm space-y-4 rounded-md border border-slate-200 bg-white p-8"
         >
           <div className="flex items-center gap-2">
             <MonitorMark className="h-8 w-8 flex-shrink-0 text-slate-900" accent="#2C4A7E" />
@@ -81,8 +82,8 @@ export default function LoginPage() {
         </form>
 
         {/* QR code panel for mobile access */}
-        <aside className="flex w-full max-w-[16rem] flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white p-6 shadow-2xl md:max-w-[18rem]">
-          <h2 className="text-sm font-bold text-slate-900">📱 スマホでアクセス</h2>
+        <aside className="flex w-full max-w-[16rem] flex-col items-center justify-center gap-3 rounded-md border border-slate-200 bg-white p-6 md:max-w-[18rem]">
+          <h2 className="flex items-center gap-1.5 text-sm font-bold text-slate-900"><Smartphone size={15} strokeWidth={1.5} aria-hidden />スマホでアクセス</h2>
           <p className="text-[11px] text-slate-500 text-center">
             このページを QR コードで読み取って、お手元のスマートフォンからアクセスできます。
           </p>
@@ -107,9 +108,10 @@ export default function LoginPage() {
           </p>
 
           {isLocal && (
-            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
+            <div className="flex gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
+              <TriangleAlert size={13} strokeWidth={1.5} className="mt-px flex-shrink-0 text-amber-700" aria-hidden />
               <p className="text-[10px] leading-relaxed text-amber-900">
-                ⚠️ <b>localhost</b> はスマホからアクセスできません。
+                <b>localhost</b> はスマホからアクセスできません。
                 Mac の LAN IP (例: <code className="font-mono">http://192.168.0.2:3100/login</code>) に
                 ブラウザで一度アクセスし直してから QR コードを表示してください。
               </p>
