@@ -43,7 +43,8 @@ export async function StatusBar() {
       <span className="ml-auto flex items-center gap-2">
         {userName && (
           <>
-            <span className="block h-3.5 w-3.5 flex-shrink-0 rounded-full bg-gradient-to-br from-amber-400 to-red-500" />
+            {/* GE: グラデーション不使用。ユーザ識別ドットは単色(藍)。 */}
+            <span className="block h-3.5 w-3.5 flex-shrink-0 rounded-full" style={{ background: '#6A90C8' }} />
             <span className="truncate max-w-[200px]" title={userName}>{userName}</span>
             <span className="text-slate-500">|</span>
           </>
