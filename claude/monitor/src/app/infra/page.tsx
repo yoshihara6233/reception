@@ -11,6 +11,8 @@ import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
 import { getT } from '@/lib/i18n/server'
 import { LifecycleSummary } from '@/components/nvr/LifecycleSummary'
+import { deriveEdgeStatus } from '@/lib/edge-status'
+import { MONITOR_STALE_SECONDS } from '@intereco/shared'
 
 // 5状態パレット（色のみ。ラベルは t.infraDashboard.healthLabel から取得）
 const HEALTH_COLOR = {
@@ -69,28 +71,47 @@ export default async function InfraDashboard() {
   const rows = stores.map((st) => {
     const cfg = settings.get(st.id)
     const enabled = cfg?.enabled ?? false
-    const thresholdMs = (cfg?.edge_offline_threshold_min ?? 5) * 60_000
+    // TC3: 中断判定の閾値は @intereco/shared の単一源(3分)を既定とし、店舗別設定
+    // (edge_offline_threshold_min)がある場合のみ上書き。二重定義(旧 ?? 5)を解消。
+    const staleSec = cfg?.edge_offline_threshold_min
+      ? cfg.edge_offline_threshold_min * 60
+      : MONITOR_STALE_SECONDS
     const inMaint = cfg?.maintenance_until ? new Date(cfg.maintenance_until).getTime() > now : false
 
     const edges = st.edge_devices ?? []
     const recCount = edges.reduce((n, e) => n + (e.recorders?.length ?? 0), 0)
     const camCount = edges.reduce((n, e) => n + (e.recorders ?? []).reduce((m, r) => m + (r.recorder_cameras?.length ?? 0), 0), 0)
 
-    // edge health（P1: heartbeat 鮮度）
+    // TC3: edge health を deriveEdgeStatus(単一源)で算出。last_seen 鮮度を真実源に
+    // 「監視中断/監視停止」を区別し、録画は NVR 本体で継続する旨(録画継続)を明示する。
     let edgeHealth: Health
-    if (inMaint) edgeHealth = 'maint'
-    else if (edges.length === 0) edgeHealth = 'unk'
-    else {
-      const anyStale = edges.some((e) => !e.last_seen_at || (now - new Date(e.last_seen_at).getTime()) > thresholdMs)
-      // 接続障害疑い時は個別赤を抑制し未検証に
-      edgeHealth = anyStale ? (networkOutage ? 'unk' : 'fail') : 'ok'
+    let edgeLabel: string
+    let recordingContinues = false
+    if (inMaint) {
+      edgeHealth = 'maint'; edgeLabel = HEALTH_LABEL.maint
+    } else if (edges.length === 0) {
+      edgeHealth = 'unk'; edgeLabel = HEALTH_LABEL.unk
+    } else {
+      const ds = edges.map((e) => deriveEdgeStatus(e.status, e.last_seen_at, { nowMs: now, staleSec }))
+      if (ds.some((d) => d.plane === 'interrupted')) {
+        // 接続障害疑い(tenant network_outage)時は個別赤を抑制し未検証に(従来踏襲)。
+        edgeHealth = networkOutage ? 'unk' : 'fail'
+        edgeLabel = t.status.interrupted
+        recordingContinues = true
+      } else if (ds.some((d) => d.plane === 'stopped')) {
+        edgeHealth = 'warn'; edgeLabel = t.status.stopped; recordingContinues = true
+      } else if (ds.some((d) => d.plane === 'monitoring' && d.mode === 'error')) {
+        edgeHealth = 'warn'; edgeLabel = HEALTH_LABEL.warn
+      } else {
+        edgeHealth = 'ok'; edgeLabel = HEALTH_LABEL.ok
+      }
     }
     // recorder/camera: P1 は能動チェック未実装 → 未検証（メンテ中は maint）
     const devHealth: Health = inMaint ? 'maint' : 'unk'
 
     return {
       id: st.id, name: st.name, enabled, inMaint,
-      edgeHealth, devHealth, recCount, camCount,
+      edgeHealth, edgeLabel, recordingContinues, devHealth, recCount, camCount,
       open: openByStore.get(st.id) ?? 0,
       lastSeen: edges[0]?.last_seen_at ?? null,
     }
@@ -182,7 +203,13 @@ export default async function InfraDashboard() {
                     {!r.enabled && <span className="ml-1 text-[10px] text-slate-400 dark:text-gedink3">{tInfra.notMonitored}</span>}
                     {r.inMaint && <span className="ml-1 text-[10px]" style={{ color: HEALTH_COLOR.maint }}>{tInfra.inMaintenance}</span>}
                   </td>
-                  <td className="px-3 py-2"><span className="inline-flex items-center gap-1.5"><Dot h={r.edgeHealth} />{HEALTH_LABEL[r.edgeHealth]}</span></td>
+                  <td className="px-3 py-2">
+                    <span className="inline-flex items-center gap-1.5"><Dot h={r.edgeHealth} />{r.edgeLabel}</span>
+                    {/* TC3: 監視/録画区別 — 監視が止まっても録画は NVR 本体で継続する旨を明示。 */}
+                    {r.recordingContinues && (
+                      <div className="mt-0.5 text-[10px] text-slate-400 dark:text-gedink3">📼 {t.status.recordingNote}</div>
+                    )}
+                  </td>
                   <td className="px-3 py-2"><span className="inline-flex items-center gap-1.5"><Dot h={r.devHealth} /><span className="font-mono tabular-nums text-slate-600 dark:text-gedink2">{r.recCount}</span></span></td>
                   <td className="px-3 py-2"><span className="inline-flex items-center gap-1.5"><Dot h={r.devHealth} /><span className="font-mono tabular-nums text-slate-600 dark:text-gedink2">{r.camCount}</span></span></td>
                   <td className="px-3 py-2">
