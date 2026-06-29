@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { ThemeToggle } from '@/components/ThemeToggle'
+import { MonitorMark } from '@/components/MonitorMark'
 
 export default function ForgotPasswordPage() {
   const [email, setEmail]   = useState('')
@@ -40,7 +41,7 @@ export default function ForgotPasswordPage() {
 
       <div className="w-full max-w-sm space-y-4 rounded-xl border border-slate-200 bg-white p-8 shadow-2xl">
         <div className="flex items-center gap-2">
-          <span className="block h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500 to-violet-500" />
+          <MonitorMark className="h-8 w-8 flex-shrink-0 text-slate-900" accent="#2C4A7E" />
           <span className="text-lg font-bold text-slate-900">Recorder Monitor</span>
         </div>
 
