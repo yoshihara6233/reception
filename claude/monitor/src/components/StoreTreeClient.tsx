@@ -11,13 +11,14 @@ import { deriveEdgeStatus } from '@/lib/edge-status'
 // and restoring it on mount keeps the position.
 const SCROLL_KEY = 'storeTree:scrollTop'
 
+// GE Phase 2b: ブランドアクセントは藍に集約（grid/live=藍）。semantic は据え置き。
 const STATUS_COLOR: Record<string, string> = {
-  online:  '#22c55e',
-  idle:    '#22c55e',
-  grid:    '#3b82f6',
-  live:    '#a855f7',
-  vod:     '#f97316',
-  error:   '#ef4444',
+  online:  '#2F7A4F',
+  idle:    '#2F7A4F',
+  grid:    '#2C4A7E',
+  live:    '#2C4A7E',
+  vod:     '#B5761A',
+  error:   '#A3332B',
   offline: '#9ca3af',
 }
 
@@ -31,7 +32,7 @@ interface StoreRow {
 /** TC3: last_seen 鮮度を真実源にツリードットの色を決める（監視中断=赤）。 */
 function treeDotColor(dev: { status: string; last_seen_at: string | null } | undefined): string {
   const d = deriveEdgeStatus(dev?.status, dev?.last_seen_at)
-  if (d.plane === 'interrupted') return '#ef4444'
+  if (d.plane === 'interrupted') return '#A3332B'
   if (d.plane === 'stopped' || d.plane === 'unconfigured') return STATUS_COLOR.offline
   return STATUS_COLOR[d.mode ?? 'offline'] ?? STATUS_COLOR.offline
 }

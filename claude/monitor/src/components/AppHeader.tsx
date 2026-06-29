@@ -76,7 +76,7 @@ export function AppHeader({
           aria-label={t.nav.monitor}
           className="flex items-center gap-2 rounded text-sm font-bold transition-opacity hover:opacity-80"
         >
-          <MonitorMark className="h-[22px] w-[22px] flex-shrink-0 text-white" />
+          <MonitorMark className="h-[22px] w-[22px] flex-shrink-0 text-white" accent="#6A90C8" />
           <div className="flex flex-col leading-tight">
             <span>
               <span className="hidden sm:inline">Recorder {t.appName}</span>
