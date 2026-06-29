@@ -44,6 +44,9 @@ export interface Msg {
     live:    string
     vod:     string
     error:   string
+    interrupted:   string   // TC3: 監視中断（異常）
+    stopped:       string   // TC3: 監視停止（正常終了）
+    recordingNote: string   // TC3: 録画は継続している旨
   }
   dashboard: {
     storeView:   string
@@ -464,6 +467,9 @@ const ja: Msg = {
     live:    'LIVE',
     vod:     '再生中',
     error:   'エラー',
+    interrupted:   '監視中断',
+    stopped:       '監視停止',
+    recordingNote: '録画はレコーダ本体で継続中',
   },
   dashboard: {
     storeView:   '店舗ビュー',
@@ -865,6 +871,9 @@ const en: Msg = {
     live:    'LIVE',
     vod:     'Playing',
     error:   'Error',
+    interrupted:   'Monitoring down',
+    stopped:       'Stopped',
+    recordingNote: 'Recording continues on the recorder',
   },
   dashboard: {
     storeView:   'Stores',
@@ -1266,6 +1275,9 @@ const zh: Msg = {
     live:    '直播',
     vod:     '回放中',
     error:   '故障',
+    interrupted:   '监控中断',
+    stopped:       '监控停止',
+    recordingNote: '录像由录像机本体持续进行',
   },
   dashboard: {
     storeView:   '门店列表',
@@ -1667,6 +1679,9 @@ const ko: Msg = {
     live:    'LIVE',
     vod:     '재생중',
     error:   '오류',
+    interrupted:   '모니터링 중단',
+    stopped:       '모니터링 정지',
+    recordingNote: '녹화는 레코더 본체에서 계속됩니다',
   },
   dashboard: {
     storeView:   '매장 목록',

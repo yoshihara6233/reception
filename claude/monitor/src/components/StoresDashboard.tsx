@@ -13,6 +13,7 @@ import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import type { EdgeStatus } from '@/lib/types/db'
 import { useLang } from '@/lib/i18n/context'
+import { deriveEdgeStatus, isMonitoringDown, type DerivedEdgeStatus } from '@/lib/edge-status'
 
 const StoreMap = dynamic(() => import('@/app/map/store-map'), {
   ssr: false,
@@ -79,6 +80,18 @@ const STATUS_DOT: Record<EdgeStatus, string> = {
   error:   'bg-red-500',
 }
 
+// TC3: plane（監視プレーン状態）→ ドット/バッジ配色。中断は赤・停止/未設置はグレー。
+const PLANE_DOT: Record<'interrupted' | 'stopped' | 'unconfigured', string> = {
+  interrupted:  'bg-red-500',
+  stopped:      'bg-slate-300',
+  unconfigured: 'bg-slate-300',
+}
+const PLANE_BADGE: Record<'interrupted' | 'stopped' | 'unconfigured', string> = {
+  interrupted:  'bg-red-100 text-red-600',
+  stopped:      'bg-slate-100 text-slate-500',
+  unconfigured: 'bg-slate-100 text-slate-400',
+}
+
 // F108: アラート種別ごとの見た目 (emoji / 背景 / ラベル色)
 const ALERT_KIND_META: Record<AlertKind, { emoji: string; bg: string; labelCls: string }> = {
   edge_error:   { emoji: '🛑', bg: 'bg-red-100',    labelCls: 'text-red-600 font-medium' },
@@ -135,18 +148,23 @@ export function StoresDashboard({
         href: `/stores/${id}`,
       }))
     }
-    // 完全な後方互換: edge offline/error のみ
+    // 完全な後方互換: 監視中断/停止/エラー（TC3: stale な status=grid も中断扱い）
     return stores
       .filter((s) => {
-        const st = s.edge_devices?.[0]?.status
-        return st === 'offline' || st === 'error'
+        const dev = s.edge_devices?.[0]
+        const d = deriveEdgeStatus(dev?.status, dev?.last_seen_at)
+        return isMonitoringDown(d) || (d.plane === 'monitoring' && d.mode === 'error')
       })
-      .map((s) => ({
-        storeId: s.id, storeName: s.name,
-        kind: (s.edge_devices?.[0]?.status === 'error' ? 'edge_error' : 'edge_offline') as AlertKind,
-        occurredAt: s.edge_devices?.[0]?.last_seen_at ?? null,
-        href: `/stores/${s.id}`,
-      }))
+      .map((s) => {
+        const dev = s.edge_devices?.[0]
+        const d = deriveEdgeStatus(dev?.status, dev?.last_seen_at)
+        return {
+          storeId: s.id, storeName: s.name,
+          kind: (d.plane === 'monitoring' && d.mode === 'error' ? 'edge_error' : 'edge_offline') as AlertKind,
+          occurredAt: dev?.last_seen_at ?? null,
+          href: `/stores/${s.id}`,
+        }
+      })
   }, [alerts, alertStoreIds, stores])
 
   // 地図ハイライト用: アラートを持つ店舗の一意集合
@@ -161,10 +179,13 @@ export function StoresDashboard({
 
   const kpis = useMemo(() => {
     let monitoring = 0, live = 0
+    // TC3: KPI も派生で数える。stale な grid は「監視中」に数えない（中断を隠さない）。
     stores.forEach((s) => {
-      const st = s.edge_devices?.[0]?.status
-      if (st === 'grid')                       monitoring++
-      else if (st === 'live')                  live++
+      const dev = s.edge_devices?.[0]
+      const d = deriveEdgeStatus(dev?.status, dev?.last_seen_at)
+      if (d.plane !== 'monitoring') return
+      if (d.mode === 'grid')      monitoring++
+      else if (d.mode === 'live') live++
     })
     // KPI の「アラート」は件数 (per-alert) を表示
     return { total: stores.length, monitoring, live, alerts: alertList.length }
@@ -290,22 +311,33 @@ function ListView({
               </div>
 
               {items.map((s) => {
-                const status = (s.edge_devices?.[0]?.status ?? 'offline') as EdgeStatus
+                // TC3: last_seen 鮮度を真実源に監視プレーン状態を派生（status 固着を補正）。
+                const dev = s.edge_devices?.[0]
+                const d   = deriveEdgeStatus(dev?.status, dev?.last_seen_at)
+                const mode = (d.mode ?? 'offline') as EdgeStatus
+                const dot   = d.plane === 'monitoring' ? STATUS_DOT[mode]   : PLANE_DOT[d.plane]
+                const badge = d.plane === 'monitoring' ? STATUS_BADGE[mode] : PLANE_BADGE[d.plane]
+                const label =
+                  d.plane === 'interrupted'  ? t.status.interrupted
+                  : d.plane === 'stopped'    ? t.status.stopped
+                  : d.plane === 'unconfigured' ? t.status.offline
+                  : t.status[mode]
                 return (
                   <Link
                     key={s.id}
                     href={`/stores/${s.id}`}
                     className="flex items-center gap-3 border-b border-stone-100 bg-white px-4 py-3 hover:bg-stone-50 active:bg-stone-100"
                   >
-                    <div className={`h-2 w-2 flex-shrink-0 rounded-full ${STATUS_DOT[status]}`} />
+                    <div className={`h-2 w-2 flex-shrink-0 rounded-full ${dot}`} />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-slate-800">{s.name}</p>
-                      {s.address && (
-                        <p className="truncate text-[11px] text-slate-400">{s.address}</p>
-                      )}
+                      {/* TC3: 監視/録画区別 — 中断/停止でも録画継続を一行で明示。 */}
+                      {d.recordingContinues
+                        ? <p className="truncate text-[11px] text-slate-400">📼 {t.status.recordingNote}</p>
+                        : s.address && <p className="truncate text-[11px] text-slate-400">{s.address}</p>}
                     </div>
-                    <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_BADGE[status]}`}>
-                      {t.status[status]}
+                    <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${badge}`}>
+                      {label}
                     </span>
                     <ChevronRight />
                   </Link>

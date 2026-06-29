@@ -10,6 +10,7 @@ import { createSupabaseServer } from '@/lib/supabase/server'
 import { AppShell } from '@/components/AppShell'
 import { StoresDashboard } from '@/components/StoresDashboard'
 import type { StoreDashRow, AlertRecord } from '@/components/StoresDashboard'
+import { deriveEdgeStatus, isMonitoringDown } from '@/lib/edge-status'
 
 export default async function StoresIndex() {
   const supa = await createSupabaseServer()
@@ -123,15 +124,19 @@ export default async function StoresIndex() {
 
   const alerts: AlertRecord[] = []
 
-  // 1) edge offline / error (ライブ状態。24h 窓は適用しない)
+  // 1) 監視中断 / エラー (ライブ状態。24h 窓は適用しない)
+  //    TC3: last_seen 鮮度を真実源に派生。status='grid' のまま固着して無応答の
+  //    エッジ（クラッシュ/回線断）も interrupted として確実にアラート化する。
+  //    未設置(unconfigured)・正常監視中(monitoring) はアラートにしない。
   stores.forEach((s) => {
     const dev = s.edge_devices?.[0]
-    if (dev?.status === 'error') {
+    const d   = deriveEdgeStatus(dev?.status, dev?.last_seen_at)
+    if (d.plane === 'monitoring' && d.mode === 'error') {
       alerts.push({ storeId: s.id, storeName: s.name, kind: 'edge_error',
-        occurredAt: dev.last_seen_at ?? null, href: `/stores/${s.id}` })
-    } else if (dev?.status === 'offline') {
+        occurredAt: dev?.last_seen_at ?? null, href: `/stores/${s.id}` })
+    } else if (isMonitoringDown(d)) {
       alerts.push({ storeId: s.id, storeName: s.name, kind: 'edge_offline',
-        occurredAt: dev.last_seen_at ?? null, href: `/stores/${s.id}` })
+        occurredAt: dev?.last_seen_at ?? null, href: `/stores/${s.id}` })
     }
   })
   // 2) monitor_incidents → /infra/incidents
