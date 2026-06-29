@@ -96,6 +96,40 @@ body {
 .leaflet-container { width: 100%; height: 100%; }
 
 /* =========================================================================
+   GE Phase 2a: ライト面を 紙×墨×罫線 へリマップ（slate/stone/white → GE）。
+   TW v4(Turbopack) はカスタムCSSを utilities より下位レイヤーに置くため、確実な
+   上書きに !important を用いる（ユーティリティ・リマップ用シム）。暗所は後段の
+   `.dark .X`(高詳細度・!important)が優先するので退行しない。常時ダークなヘッダー/
+   StatusBar が使う slate-700/800/900 背景・text-white・明暗両用 text-slate-500 は対象外。
+   ========================================================================= */
+/* Surfaces */
+.bg-white     { background-color: #FCFBF8 !important; }   /* カード: 紙より一段明るい暖白 */
+.bg-slate-50  { background-color: #F7F5F1 !important; }   /* 紙キャンバス */
+.bg-slate-100 { background-color: #EFEBE3 !important; }   /* 紙2 */
+.bg-slate-200 { background-color: #E4DED3 !important; }   /* 紙3 */
+.bg-stone-50  { background-color: #F7F5F1 !important; }
+.bg-stone-100 { background-color: #EFEBE3 !important; }
+.hover\:bg-slate-50:hover  { background-color: #EFEBE3 !important; }
+.hover\:bg-slate-100:hover { background-color: #E4DED3 !important; }
+.hover\:bg-stone-50:hover  { background-color: #EFEBE3 !important; }
+.hover\:bg-stone-100:hover { background-color: #E4DED3 !important; }
+.active\:bg-stone-100:active { background-color: #E4DED3 !important; }
+/* Text（明所専用のみ。500 は明暗両用のため除外） */
+.text-slate-900 { color: #0F0F10 !important; }
+.text-slate-800 { color: #0F0F10 !important; }
+.text-slate-700 { color: #2A2A2C !important; }
+.text-slate-600 { color: #2A2A2C !important; }
+.text-slate-400 { color: #8C8577 !important; }
+/* Borders / dividers */
+.border-slate-100 { border-color: #E4DED3 !important; }
+.border-slate-200 { border-color: #D6CFC1 !important; }
+.border-slate-300 { border-color: #B9B0A0 !important; }
+.border-stone-100 { border-color: #E4DED3 !important; }
+.border-stone-200 { border-color: #D6CFC1 !important; }
+[class~="divide-slate-100"] > *, [class~="divide-slate-200"] > *,
+[class~="divide-stone-100"] > *, [class~="divide-stone-200"] > * { border-color: #D6CFC1 !important; }
+
+/* =========================================================================
    App-wide dark mode (Genesis Edge dark palette)
    The app uses hardcoded slate/white utility classes. Rather than annotate
    every element with dark: variants, remap the common surface / text / border
@@ -103,30 +137,39 @@ body {
    /security accent buttons) still apply and take the same GE values.
    Placed after `@import "tailwindcss"` so these win utility-class ties.
    ========================================================================= */
+/* 暗所は高詳細度(.dark .X)＋!important で、上のライト !important より優先させる。 */
 .dark body { background: #0E1013; color: #E8E6E0; }
 
 /* Surfaces */
-.dark .bg-white        { background-color: #14171C; }
-.dark .bg-slate-50     { background-color: #14171C; }
-.dark .bg-slate-100    { background-color: #0E1013; }
-.dark .hover\:bg-slate-50:hover  { background-color: #1C2028; }
-.dark .hover\:bg-slate-100:hover { background-color: #1C2028; }
-.dark .bg-slate-200    { background-color: #1C2028; }
+.dark .bg-white        { background-color: #14171C !important; }
+.dark .bg-slate-50     { background-color: #14171C !important; }
+.dark .bg-slate-100    { background-color: #0E1013 !important; }
+.dark .bg-slate-200    { background-color: #1C2028 !important; }
+.dark .bg-stone-50     { background-color: #14171C !important; }
+.dark .bg-stone-100    { background-color: #0E1013 !important; }
+.dark .hover\:bg-slate-50:hover  { background-color: #1C2028 !important; }
+.dark .hover\:bg-slate-100:hover { background-color: #1C2028 !important; }
+.dark .hover\:bg-stone-50:hover  { background-color: #1C2028 !important; }
+.dark .hover\:bg-stone-100:hover { background-color: #1C2028 !important; }
 
 /* Text */
-.dark .text-slate-900  { color: #E8E6E0; }
-.dark .text-slate-800  { color: #E8E6E0; }
-.dark .text-slate-700  { color: #C7C7CC; }
-.dark .text-slate-600  { color: #A8A8AE; }
-.dark .text-slate-500  { color: #6E6E75; }
-.dark .text-slate-400  { color: #6E6E75; }
+.dark .text-slate-900  { color: #E8E6E0 !important; }
+.dark .text-slate-800  { color: #E8E6E0 !important; }
+.dark .text-slate-700  { color: #C7C7CC !important; }
+.dark .text-slate-600  { color: #A8A8AE !important; }
+.dark .text-slate-500  { color: #6E6E75 !important; }
+.dark .text-slate-400  { color: #6E6E75 !important; }
 
 /* Borders / dividers */
-.dark .border-slate-200 { border-color: #2A2F38; }
-.dark .border-slate-300 { border-color: #2A2F38; }
-.dark .border-slate-100 { border-color: #2A2F38; }
+.dark .border-slate-200 { border-color: #2A2F38 !important; }
+.dark .border-slate-300 { border-color: #2A2F38 !important; }
+.dark .border-slate-100 { border-color: #2A2F38 !important; }
+.dark .border-stone-100 { border-color: #2A2F38 !important; }
+.dark .border-stone-200 { border-color: #2A2F38 !important; }
 .dark [class~="divide-slate-100"] > *,
-.dark [class~="divide-slate-200"] > * { border-color: #2A2F38; }
+.dark [class~="divide-slate-200"] > *,
+.dark [class~="divide-stone-100"] > *,
+.dark [class~="divide-stone-200"] > * { border-color: #2A2F38 !important; }
 
 /* Form fields */
 .dark input, .dark select, .dark textarea { background-color: #1C2028; color: #E8E6E0; border-color: #2A2F38; }
