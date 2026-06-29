@@ -96,3 +96,11 @@ description: >-
 - 作業worktree: `/Users/junji.y/claude/Intereco/monitor-recover`（ブランチ `monitor-prod`）。
 - スマホ16分割は「合成画像の2×2象限ズーム＋透明タップ格子」で4分割＆単一ライブ遷移を実現（`MonitorWorkspace.tsx`）。
 - 計画書一式は `docs/*.md`（WBS/スケール/意思決定/構成/config②機能）と spec `docs/recorder-monitoring-spec.html`(v6.0)。
+
+## 9. デザイン基本（Genesis Edge）★UIを触る前に必読
+
+**視覚はすべて Genesis Edge デザインシステムに従う。正本: `docs/GENESIS_EDGE_USAGE.md`。** 独自の色/フォント/余白を発明しない。
+- 三色: 紙`#F7F5F1` × 墨`#0F0F10` × 藍`#2C4A7E`。**一画面で藍は2〜3まで・グラデ禁止**。成功`#2F7A4F`/警告`#B5761A`/危険`#A3332B`。
+- タイポ: 本文 Noto Sans JP / 見出し Inter Tight / 数字 IBM Plex Mono(tabular)。角丸=ボタン4px/カード6px/モーダル10px。カードは影なし×1pxボーダー。**色付き左ボーダー強調・カード持ち上げhover は禁止**。
+- アイコンは Lucide(1.5px・currentColor)、絵文字/装飾アイコン不可。ブランド「録画モニター」アイコン＝右下切り欠き＋藍ドット（現行ヘッダー/PWA `MonitorMark`・`public/icons/monitor-icon.svg` と同意匠）。
+- 現状は Tailwind 実装で `--ge-*` 完全移行は未完。**新規/改修UIは本基本に合わせる**。藍`#2C4A7E`・紙`#F7F5F1` は整合済み。
