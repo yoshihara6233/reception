@@ -12,6 +12,13 @@ interface EdgePayload {
   last_seen_at: string | null
   store_id: string
   go2rtc_host: string | null
+  // 自律OTA（docs/edge-ota-design.md）
+  cloudflared_version: string | null
+  desired_agent_version: string | null
+  desired_cloudflared_version: string | null
+  ota_status: string | null
+  ota_updated_at: string | null
+  ota_last_error: string | null
   stores: { name: string; area_code: string | null }
   recorders: {
     id: string
@@ -50,6 +57,8 @@ export default async function EdgeEditPage(
     .from('edge_devices')
     .select(`
       id, name, status, agent_version, last_seen_at, store_id, go2rtc_host,
+      cloudflared_version, desired_agent_version, desired_cloudflared_version,
+      ota_status, ota_updated_at, ota_last_error,
       stores ( name, area_code ),
       recorders (
         id, vendor, model, host, rtsp_port, onvif_port, username, notes,
