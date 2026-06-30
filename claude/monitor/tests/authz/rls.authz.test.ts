@@ -29,6 +29,8 @@ const CAM_B1 = 'fb000000-0000-0000-0000-0000000000b1'
 const J_A1 = '1a000000-0000-0000-0000-0000000000a1'
 const J_A2 = '1a000000-0000-0000-0000-0000000000a2'
 const J_B1 = '1b000000-0000-0000-0000-0000000000b1'
+// jalert_receipts（全国受信ログ・店舗非依存）
+const JR_1 = '7a000000-0000-0000-0000-0000000000a1'
 // personas (auth.users.id = admin_users.auth_user_id)
 const U_SUPER  = '00000000-0000-0000-0000-000000000099'
 const U_TADMINA = '00000000-0000-0000-0000-0000000000a0'
@@ -78,6 +80,8 @@ beforeAll(async () => {
       values ('hash_a1', '${S_A1}', '${T_A}', 'pendingA1', now() + interval '1 day');
     insert into public.edge_jobs (id, edge_id) values
       ('${J_A1}','${E_A1}'),('${J_A2}','${E_A2}'),('${J_B1}','${E_B1}');
+    insert into public.jalert_receipts (id, alert_source, alert_type, title) values
+      ('${JR_1}','jma-entry-1','earthquake','震源・震度に関する情報');
   `)
 })
 
@@ -170,6 +174,23 @@ describe('edge_jobs RLS（エッジ専用スコープ鍵化 Phase B1）', () => 
   })
   it('エッジ scoped トークンでは未移行テーブル(recorders)は見えない（権限はedge_jobsに限定）', async () => {
     expect(await asEdge(E_A1, 'select id from recorders')).toHaveLength(0)
+  })
+})
+
+describe('jalert_receipts RLS（全国受信ログ＝ログイン管理ユーザは全員可視・回帰防止）', () => {
+  // u.id 誤用（auth.uid と不一致）だと全行が不可視になり /bcp/jalerts がゼロ表示になる。
+  // auth_user_id 判定なら各ロールが受信ログを閲覧できることを実証する。
+  it('super_admin は受信ログを閲覧できる', async () => {
+    expect(ids(await asUser(U_SUPER, 'select id from jalert_receipts'))).toEqual([JR_1])
+  })
+  it('tenant_admin は受信ログを閲覧できる（店舗非依存・全国共通）', async () => {
+    expect(ids(await asUser(U_TADMINA, 'select id from jalert_receipts'))).toEqual([JR_1])
+  })
+  it('store_manager も受信ログを閲覧できる', async () => {
+    expect(ids(await asUser(U_SMGRA1, 'select id from jalert_receipts'))).toEqual([JR_1])
+  })
+  it('未認証(anon)は受信ログを見られない', async () => {
+    expect(await asUser(null, 'select id from jalert_receipts')).toHaveLength(0)
   })
 })
 
