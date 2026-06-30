@@ -122,6 +122,23 @@ create table public.edge_jobs (
   created_at timestamptz not null default now()
 );
 
+-- jalert_receipts（20260626_001 + 20260630_001 転記）: 全国 J-Alert 受信ログ＝店舗非依存。
+-- ログイン中の管理ユーザは全員 SELECT 可。書込は service_role のみ（ポリシー無し）。
+-- 判定は auth_user_id（id 誤用だと全行不可視＝/bcp/jalerts がゼロ表示になる回帰を防ぐ）。
+create table public.jalert_receipts (
+  id                  uuid primary key default gen_random_uuid(),
+  alert_source        text not null unique,
+  alert_type          text,
+  title               text,
+  max_intensity       text,
+  area_codes          text[],
+  alert_issued_at     timestamptz,
+  received_at         timestamptz not null default now(),
+  matched_store_count int not null default 0,
+  detail_url          text,
+  created_at          timestamptz not null default now()
+);
+
 -- ── 権限(authenticated にテーブルアクセス付与・RLSで絞る) ──
 grant usage on schema public, auth to authenticated;
 grant execute on function auth.uid() to authenticated;
@@ -263,3 +280,10 @@ create policy edge_jobs_edge_update on public.edge_jobs
   for update to authenticated
   using      ((auth.jwt() -> 'app_metadata' ->> 'edge_id')::uuid = edge_id)
   with check ((auth.jwt() -> 'app_metadata' ->> 'edge_id')::uuid = edge_id);
+
+-- jalert_receipts（20260626_001 + 20260630_001 転記）: ログイン中の管理ユーザは全員閲覧可。
+alter table public.jalert_receipts enable row level security;
+create policy jalert_receipts_select on public.jalert_receipts
+  for select using (
+    exists (select 1 from public.admin_users u where u.auth_user_id = auth.uid())
+  );

@@ -42,7 +42,9 @@ ALTER TABLE jalert_receipts ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "jalert_receipts_select" ON jalert_receipts;
 CREATE POLICY "jalert_receipts_select" ON jalert_receipts
   FOR SELECT USING (
-    EXISTS (SELECT 1 FROM admin_users u WHERE u.id = auth.uid())
+    -- ⚠ admin_users の自己判定は auth_user_id（=auth.uid()）で行う。
+    --   id はアプリ側PKであり auth.uid() とは一致しない（BCP の u.id 誤用と同型バグ）。
+    EXISTS (SELECT 1 FROM admin_users u WHERE u.auth_user_id = auth.uid())
   );
 
 -- ---------------------------------------------------------------------------
