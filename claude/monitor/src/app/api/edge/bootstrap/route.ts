@@ -39,7 +39,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const supa = createSupabaseService()
   const { data, error } = await supa
     .from('edge_devices')
-    .select('id, auth_user_id, auth_password_enc')
+    .select('id, auth_user_id, auth_password_enc, desired_agent_version, desired_cloudflared_version')
     .eq('device_token', token)
     .single()
   if (error || !data) return NextResponse.json({ error: 'invalid device token' }, { status: 401 })
@@ -50,10 +50,16 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     supabase_service_role_key: string
     scoped_access_token?: string
     scoped_expires_at?: number
+    // 自律OTA: 本部が宣言する目標版（NULL=更新指示なし）。エッジは pull で受けて
+    // shouldUpdateAgent 判断のうえ self-update する（docs/edge-ota-design.md）。
+    desired_agent_version?: string | null
+    desired_cloudflared_version?: string | null
   } = {
     edge_id: data.id,
     supabase_url: url,
     supabase_service_role_key: key,
+    desired_agent_version: (data.desired_agent_version as string | null) ?? null,
+    desired_cloudflared_version: (data.desired_cloudflared_version as string | null) ?? null,
   }
 
   // Phase B1: provisioning 済みなら短命スコープトークンを発行して同梱。

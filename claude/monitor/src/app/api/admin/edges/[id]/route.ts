@@ -9,6 +9,10 @@ const PatchBody = z.object({
   // go2rtc 公開オリジン（Cloudflare Tunnel）。このエッジ配下の onvif-generic
   // カメラが継承。従来は SQL Editor 直編集だった。空文字は NULL 化。
   go2rtc_host:   z.string().nullable().optional(),
+  // 自律OTA: 本部が宣言する目標版（per-device＝カナリア）。空文字/NULL=更新指示なし。
+  // エッジは /api/edge/bootstrap の pull で受信して self-update する。
+  desired_agent_version:       z.string().nullable().optional(),
+  desired_cloudflared_version: z.string().nullable().optional(),
 })
 
 export async function PUT(
@@ -24,6 +28,9 @@ export async function PUT(
 
   const patch: Record<string, unknown> = { ...parsed.data }
   if (patch.go2rtc_host === '') patch.go2rtc_host = null
+  // 空文字の desired は「更新指示なし」＝NULL 化（誤って空版を配らない）。
+  if (patch.desired_agent_version === '') patch.desired_agent_version = null
+  if (patch.desired_cloudflared_version === '') patch.desired_cloudflared_version = null
 
   const { error } = await guard.supa.from('edge_devices').update(patch).eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

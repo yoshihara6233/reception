@@ -1,0 +1,28 @@
+# 自律OTA レイアウト版の intereco-edge ユニット（docs/edge-ota-design.md §1,§3,§7）。
+# 既存 PoC 機（/home/intereco/intereco を直実行）から移行する場合は RUNBOOK.md を参照。
+#
+#  - WorkingDirectory は current シンボリックリンク（= releases/<sha>）。版切替は symlink 差替で原子的。
+#  - 層2ロールバック: 短時間に StartLimitBurst 回クラッシュ → OnFailure で
+#    intereco-edge-rollback.service（current→known-good へ戻して立て直す）を発火。
+#  - 層1（起動はするが不健全）は agent 自身の verifyOnBoot が処理する。
+[Unit]
+Description=Intereco Recorder Monitoring Edge Agent (OTA)
+After=network-online.target
+Wants=network-online.target
+# DOA/クラッシュループ時の自動ロールバック（層2）。
+OnFailure=intereco-edge-rollback.service
+# 120秒に4回落ちたら "failed" 状態に落として OnFailure を起動させる。
+StartLimitIntervalSec=120
+StartLimitBurst=4
+
+[Service]
+Type=simple
+User=intereco
+WorkingDirectory=/home/intereco/edge/current/claude/edge-agent
+EnvironmentFile=/home/intereco/edge/shared/agent.env
+ExecStart=/home/intereco/.bun/bin/bun run src/index.ts
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

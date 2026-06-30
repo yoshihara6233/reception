@@ -53,6 +53,16 @@ const Env = z.object({
 
   HEARTBEAT_INTERVAL_MS:  z.coerce.number().default(60_000),
 
+  // 自律OTA（docs/edge-ota-design.md）。EDGE_ROOT 未設定なら OTA 無効＝no-op で安全に空振り
+  // （ローカル/CI・旧レイアウト機を壊さない）。設定時のみ desired 版に追従する。
+  EDGE_ROOT:              z.string().optional(),
+  // 再起動する systemd ユニット（NOPASSWD sudoers 前提）。
+  EDGE_AGENT_UNIT:        z.string().default('intereco-edge'),
+  CLOUDFLARED_UNIT:       z.string().default('cloudflared-intereco'),
+  // 健全とみなす最小安定時間・heartbeat 到達猶予（ms）。
+  OTA_MIN_STABLE_MS:      z.coerce.number().default(90_000),
+  OTA_HEARTBEAT_GRACE_MS: z.coerce.number().default(90_000),
+
   // VOD: if ffmpeg spawns but no first frame is published within this window,
   // kill it and surface onError so the browser shows "再生できません" instead of
   // spinning forever (T2 / external review "spawn-but-no-frames").

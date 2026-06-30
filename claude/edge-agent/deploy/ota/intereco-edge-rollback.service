@@ -1,0 +1,10 @@
+# 層2ロールバック（DOA/クラッシュループ用）。intereco-edge.service の OnFailure で起動。
+# agent が一切動けなくても known-good へ戻す最後の砦（docs/edge-ota-design.md §3）。
+[Unit]
+Description=Intereco Edge OTA rollback to known-good
+# 自分の失敗で再帰しないよう、ロールバック自身は OnFailure を持たない。
+
+[Service]
+Type=oneshot
+User=intereco
+ExecStart=/home/intereco/edge/bin/rollback-edge.sh systemd-onfailure

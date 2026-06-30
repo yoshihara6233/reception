@@ -18,6 +18,8 @@ import { StateMachine } from './state-machine.js'
 import { heartbeat } from './upload/storage.js'
 import { startWhipProxy, wrapWhip } from './whip-proxy.js'
 import { snapshotUrl } from './rtsp/url.js'
+import { verifyOnBoot, type RunnerDeps } from './ota/runner.js'
+import { healthProbe } from './ota/signal.js'
 
 const fsm = new StateMachine()
 
@@ -27,6 +29,19 @@ async function main() {
   // MONITOR_URL 未設定なら no-op（.env キー運用）。
   await refreshSupabaseKey()
   startKeySync()
+
+  // 自律OTA: 直前に新版へ切替えて再起動した場合、健全性を確認して known-good 昇格 or
+  // ロールバックする（pending_verify が無い通常起動は即 no-op）。heartbeat を流しながら
+  // 背後で検証するため非ブロッキングで起動する。EDGE_ROOT 未設定なら no-op。
+  const otaDeps: RunnerDeps = {
+    edgeRoot: config.EDGE_ROOT,
+    agentUnit: config.EDGE_AGENT_UNIT,
+    minStableMs: config.OTA_MIN_STABLE_MS,
+    heartbeatGraceMs: config.OTA_HEARTBEAT_GRACE_MS,
+  }
+  void verifyOnBoot(otaDeps, async () => healthProbe(config.OTA_MIN_STABLE_MS))
+    .catch((e) => logger.warn({ err: String(e) }, 'ota: verifyOnBoot failed'))
+
   // F3+: localhost WHIP proxy. Strips TCP ICE candidates from LiveKit Cloud's
   // SDP answer so ffmpeg 8.1's WHIP muxer (which errors on the first TCP
   // candidate) can complete the handshake on the UDP candidates that follow.

@@ -15,6 +15,16 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { config } from './config.js'
 import { logger } from './logger.js'
+import { applyDesired, type RunnerDeps } from './ota/runner.js'
+
+// 自律OTA: bootstrap が返す desired 版を1度に1更新だけ処理する多重起動ガード。
+let otaBusy = false
+const otaDeps: RunnerDeps = {
+  edgeRoot: config.EDGE_ROOT,
+  agentUnit: config.EDGE_AGENT_UNIT,
+  minStableMs: config.OTA_MIN_STABLE_MS,
+  heartbeatGraceMs: config.OTA_HEARTBEAT_GRACE_MS,
+}
 
 let currentKey = config.SUPABASE_SERVICE_ROLE_KEY
 let client: SupabaseClient | null = null
@@ -71,6 +81,8 @@ export async function refreshSupabaseKey(): Promise<void> {
       supabase_service_role_key?: string
       scoped_access_token?: string
       scoped_expires_at?: number
+      desired_agent_version?: string | null
+      desired_cloudflared_version?: string | null
     }
 
     const key = j.supabase_service_role_key
@@ -86,6 +98,18 @@ export async function refreshSupabaseKey(): Promise<void> {
       scopedExpEpoch = typeof j.scoped_expires_at === 'number' ? j.scoped_expires_at : 0
       scopedClient = null
       logger.info({ exp: scopedExpEpoch }, 'bootstrap: scoped access token refreshed')
+    }
+
+    // 自律OTA: desired 版を受信したら更新を試みる（EDGE_ROOT 設定時のみ実効）。
+    // 多重起動ガード＋更新判断(shouldUpdateAgent)は内部で行う。fire-and-forget。
+    if (config.EDGE_ROOT && !otaBusy) {
+      otaBusy = true
+      void applyDesired(otaDeps, {
+        agent: j.desired_agent_version ?? null,
+        cloudflared: j.desired_cloudflared_version ?? null,
+      })
+        .catch((e) => logger.warn({ err: String(e) }, 'ota: applyDesired failed'))
+        .finally(() => { otaBusy = false })
     }
   } catch (e) {
     logger.warn({ err: String(e) }, 'bootstrap: key refresh failed (keeping current key)')

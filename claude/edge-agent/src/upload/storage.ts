@@ -1,6 +1,8 @@
 import { config } from '../config.js'
 import { logger } from '../logger.js'
 import { getSupabase, refreshSupabaseKey } from '../supabase.js'
+import { reportedOta } from '../ota/report.js'
+import { markHeartbeatOk } from '../ota/signal.js'
 
 const BUCKET = 'edge-grids'
 const KEY    = `edges/${config.EDGE_ID}/grid.jpg`
@@ -41,20 +43,40 @@ export async function uploadCameraSnapshot(cameraId: string, buf: Buffer): Promi
   logger.debug({ bytes: buf.length, cameraId }, 'storage: cam snapshot ok')
 }
 
-/** Update the edge_devices row with a fresh heartbeat. */
+/**
+ * Update the edge_devices row with a fresh heartbeat.
+ *
+ * OTA 有効機（EDGE_ROOT 設定済）は agent_version / ota_status も相乗りで報告する。
+ * 未設定機（旧レイアウト/ローカル/CI）は従来通り status / last_seen_at だけ送る
+ * ＝ 新規カラム未 migration の DB を壊さない（カラム不明エラーを避ける）。
+ */
 export async function heartbeat(state: string): Promise<void> {
+  const payload: Record<string, unknown> = {
+    status: state,
+    last_seen_at: new Date().toISOString(),
+  }
+  const ota = await reportedOta()
+  if (ota.agent_version) payload.agent_version = ota.agent_version
+  if (ota.ota_status) payload.ota_status = ota.ota_status
+
   const { error } = await getSupabase()
     .from('edge_devices')
-    .update({ status: state, last_seen_at: new Date().toISOString() })
+    .update(payload)
     .eq('id', config.EDGE_ID)
-  if (!error) return
+  if (!error) {
+    markHeartbeatOk() // 新版の健全性プローブ用（到達＝OK）
+    return
+  }
   logger.warn({ err: error.message }, 'heartbeat: update failed')
   // 鍵失効(ローテ)の可能性 → monitor から鍵を取り直して1回だけ再試行（無停止追従）。
   await refreshSupabaseKey()
   const retry = await getSupabase()
     .from('edge_devices')
-    .update({ status: state, last_seen_at: new Date().toISOString() })
+    .update(payload)
     .eq('id', config.EDGE_ID)
   if (retry.error) logger.warn({ err: retry.error.message }, 'heartbeat: retry after key refresh failed')
-  else logger.info('heartbeat: recovered after key refresh')
+  else {
+    markHeartbeatOk()
+    logger.info('heartbeat: recovered after key refresh')
+  }
 }
