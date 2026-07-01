@@ -116,7 +116,9 @@ export function buildPatrolReportPdf(input: PatrolReportInput): Promise<Buffer> 
 
   return new Promise<Buffer>((resolve, reject) => {
     const chunks: Buffer[] = []
-    const doc = new PDFDocument({ size: 'A4', margin: 42 })
+    // font:'' で pdfkit の既定 Helvetica 読込を抑止（serverless で Helvetica.afm が
+    // 無く ENOENT になるため）。直後に埋め込み日本語フォントを登録して既定にする。
+    const doc = new PDFDocument({ size: 'A4', margin: 42, font: '' })
     doc.on('data', (c: Buffer) => chunks.push(c))
     doc.on('end', () => resolve(Buffer.concat(chunks)))
     doc.on('error', reject)
