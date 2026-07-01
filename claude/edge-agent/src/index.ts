@@ -18,6 +18,7 @@ import { StateMachine } from './state-machine.js'
 import { heartbeat } from './upload/storage.js'
 import { startWhipProxy, wrapWhip } from './whip-proxy.js'
 import { snapshotUrl } from './rtsp/url.js'
+import { go2rtcStreamName } from './go2rtc/sync.js'
 import { verifyOnBoot, type RunnerDeps } from './ota/runner.js'
 import { healthProbe } from './ota/signal.js'
 
@@ -132,6 +133,10 @@ async function main() {
               logger.warn({ cam_id: camId }, 'capture_snapshot: unknown camera')
               continue
             }
+            // Frigate は latest.jpg を直取り。それ以外で go2rtc に載っている
+            // (onvif-generic / live_rtsp override) カメラは go2rtc の現フレーム
+            // JPEG(/api/frame.jpeg?src=cam_<id>)を使う。grid/live と同じ映像源。
+            const isGo2rtc = cam.recorder.vendor === 'onvif-generic' || !!cam.live_rtsp
             const url = snapshotUrl({
               vendor:         cam.recorder.vendor,
               host:           cam.recorder.host,
@@ -141,11 +146,11 @@ async function main() {
               channel:         cam.channel,
               frigateCamera:  cam.frigate_camera ?? undefined,
               frigateApiPort: config.FRIGATE_API_PORT,
-            })
+            }) ?? (isGo2rtc ? `${config.GO2RTC_API}/api/frame.jpeg?src=${go2rtcStreamName(camId)}` : null)
             if (!url) {
               logger.warn(
                 { cam_id: camId, vendor: cam.recorder.vendor },
-                'capture_snapshot: vendor has no HTTP snapshot URL (ONVIF TODO)',
+                'capture_snapshot: no snapshot source (frigate/go2rtc 以外は未対応)',
               )
               continue
             }
