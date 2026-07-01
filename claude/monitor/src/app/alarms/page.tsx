@@ -5,7 +5,7 @@
  * 発報の受信は /api/alarms/ingest（エッジ/Webhook源）、記録は alarm_events。
  */
 import { createSupabaseServer } from '@/lib/supabase/server'
-import { AdminShell } from '@/components/AdminShell'
+import { AdminShell, ALARM_NAV } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
 import { AlarmTimeline, type AlarmEventVM, type AlarmStoreOption } from './AlarmTimeline'
 
@@ -52,8 +52,8 @@ export default async function AlarmsPage() {
   const stores: AlarmStoreOption[] = ((storesRes.data ?? []) as StoreRow[]).map((s) => ({ id: s.id, name: s.name }))
 
   return (
-    <AdminShell pathname="/security/alarms" section="security">
-      <PageHeader title="発報" crumb={[{ href: '/security', label: '警備' }, { href: '/security/alarms', label: '発報' }]} />
+    <AdminShell pathname="/alarms" nav={ALARM_NAV} navTitle="発報">
+      <PageHeader title="発報タイムライン" crumb={[{ href: '/alarms', label: '発報' }]} />
       <div className="px-5 py-4">
         <AlarmTimeline events={events} stores={stores} />
       </div>

@@ -21,7 +21,7 @@ export async function updateAlarmStatus(
     .update({ status, reviewed_by: admin?.id ?? null, reviewed_at: new Date().toISOString() })
     .eq('id', eventId)
   if (error) return { ok: false, error: error.message }
-  revalidatePath('/security/alarms')
+  revalidatePath('/alarms')
   return { ok: true }
 }
 
@@ -44,7 +44,7 @@ export async function createTestAlarm(storeId: string): Promise<{ ok: boolean; i
   if (error || !ev) return { ok: false, error: error?.message ?? 'テスト発報の作成に失敗しました' }
 
   await notifyAlarm(service, ev.id as string).catch(() => {})
-  revalidatePath('/security/alarms')
+  revalidatePath('/alarms')
   return { ok: true, id: ev.id as string }
 }
 
@@ -80,7 +80,7 @@ export async function upsertAlarmSettings(input: AlarmSettingsInput): Promise<{ 
     { onConflict: 'store_id' },
   )
   if (error) return { ok: false, error: error.message }
-  revalidatePath('/security/alarms')
-  revalidatePath('/security/alarms/settings')
+  revalidatePath('/alarms')
+  revalidatePath('/alarms/settings')
   return { ok: true }
 }

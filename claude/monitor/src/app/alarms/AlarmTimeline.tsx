@@ -75,7 +75,7 @@ export function AlarmTimeline({ events, stores }: { events: AlarmEventVM[]; stor
           <Play size={13} strokeWidth={2} aria-hidden /> 発報を作成
         </button>
         {msg && <span className="text-[12px] text-emerald-600 dark:text-[#5CC98B]">{msg}</span>}
-        <Link href="/security/alarms/settings" className="ml-auto inline-flex items-center gap-1 text-xs text-blue-600 hover:underline dark:text-gedaccent">
+        <Link href="/alarms/settings" className="ml-auto inline-flex items-center gap-1 text-xs text-blue-600 hover:underline dark:text-gedaccent">
           <Settings size={13} strokeWidth={1.75} aria-hidden /> 発報設定
         </Link>
       </div>

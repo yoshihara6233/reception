@@ -37,7 +37,6 @@ export function getSecurityNav(t: Msg): NavItem[] {
   return [
     { href: '/security/reports',  label: t.securityNav.reports,  icon: '📋' },
     { href: '/security',          label: t.securityNav.triage,   icon: '🛡', exact: true },
-    { href: '/security/alarms',   label: '発報',                 icon: '🔔' },
     { href: '/security/settings', label: t.securityNav.settings, icon: '⏱' },
     { href: '/security/glossary', label: t.securityNav.glossary, icon: '?' },
   ]
@@ -95,6 +94,12 @@ export const SECURITY_NAV: NavItem[] = [
 export const BCP_NAV: NavItem[] = [
   { href: '/bcp',      label: 'レポート / イベント', icon: '🚨', exact: true },
   { href: '/bcp/test', label: 'テスト発令',          icon: '⚡' },
+]
+
+// 発報（独立縦割り）
+export const ALARM_NAV: NavItem[] = [
+  { href: '/alarms',          label: '発報タイムライン', icon: '🔔', exact: true },
+  { href: '/alarms/settings', label: '発報設定',         icon: '⚙' },
 ]
 
 // インフラ管理（機器ヘルス監視）
