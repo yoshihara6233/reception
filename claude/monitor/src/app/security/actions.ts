@@ -200,58 +200,69 @@ export async function generateRunReportPdf(
   }
 }
 
-/** 店舗の警備設定を upsert（スケジュール・AI・通知先・有効化）。 */
-export async function upsertSecuritySettings(input: {
+/**
+ * 巡回設定（店舗別）— 固定時刻モード。1日最大4回の巡回時刻を指定する。
+ * 曜日指定は撤去し全曜日実施（active_days は全曜日固定）。
+ */
+export interface SecurityPatrolInput {
   storeId: string
-  scheduleMode: 'interval' | 'fixed'
-  patrolIntervalMin: number
-  activeFrom: string
-  activeTo: string
-  activeDays: number[]
-  patrolTimes: string[]
+  patrolTimes: string[] // "HH:MM" 最大4件（空は無視）
   notifyEmails: string[]
-  reportShowVerification: boolean
   enabled: boolean
-}): Promise<{ ok: boolean; error?: string }> {
+}
+
+const HHMM_24 = /^([01]\d|2[0-3]):[0-5]\d$/
+
+/** 入力を security_settings 行に写像（固定モード・全曜日）。 */
+function toSecurityRow(input: SecurityPatrolInput) {
+  return {
+    store_id: input.storeId,
+    schedule_mode: 'fixed' as const,
+    patrol_times: input.patrolTimes.filter((t) => HHMM_24.test(t)).slice(0, 4),
+    active_days: [0, 1, 2, 3, 4, 5, 6],
+    notify_emails: input.notifyEmails,
+    enabled: input.enabled,
+  }
+}
+
+function validateTimes(input: SecurityPatrolInput): string | null {
+  const nonEmpty = input.patrolTimes.filter((t) => t.trim() !== '')
+  if (nonEmpty.some((t) => !HHMM_24.test(t))) return '時刻は HH:MM 形式で入力してください'
+  return null
+}
+
+/** 1店舗の巡回設定を保存。 */
+export async function upsertSecurityPatrolTimes(
+  input: SecurityPatrolInput,
+): Promise<{ ok: boolean; error?: string }> {
   const supa = await createSupabaseServer()
   const { data: { user } } = await supa.auth.getUser()
   if (!user) return { ok: false, error: 'unauthorized' }
+  const verr = validateTimes(input)
+  if (verr) return { ok: false, error: verr }
 
-  // 入力検証: HH:MM 形式
-  const hhmm = /^([01]\d|2[0-4]):[0-5]\d$/
-  if (input.scheduleMode === 'interval') {
-    if (!hhmm.test(input.activeFrom) || !hhmm.test(input.activeTo)) {
-      return { ok: false, error: '時刻は HH:MM 形式で入力してください' }
-    }
-  } else {
-    if (input.patrolTimes.length === 0) {
-      return { ok: false, error: '指定時刻を1つ以上入力してください' }
-    }
-    if (!input.patrolTimes.every((t) => hhmm.test(t))) {
-      return { ok: false, error: '指定時刻は HH:MM 形式で入力してください' }
-    }
-  }
-
-  const { error } = await supa
-    .from('security_settings')
-    .upsert(
-      {
-        store_id:                 input.storeId,
-        schedule_mode:            input.scheduleMode,
-        patrol_interval_min:      input.patrolIntervalMin,
-        active_from:              input.activeFrom,
-        active_to:                input.activeTo,
-        active_days:              input.activeDays,
-        patrol_times:             input.patrolTimes,
-        notify_emails:            input.notifyEmails,
-        report_show_verification: input.reportShowVerification,
-        enabled:                  input.enabled,
-      },
-      { onConflict: 'store_id' },
-    )
-
+  const { error } = await supa.from('security_settings').upsert(toSecurityRow(input), { onConflict: 'store_id' })
   if (error) return { ok: false, error: error.message }
   revalidatePath('/security/settings')
   revalidatePath('/security')
   return { ok: true }
+}
+
+/** 複数店舗の巡回設定を一括保存。 */
+export async function bulkUpsertSecurityPatrolTimes(
+  inputs: SecurityPatrolInput[],
+): Promise<{ ok: boolean; count?: number; error?: string }> {
+  const supa = await createSupabaseServer()
+  const { data: { user } } = await supa.auth.getUser()
+  if (!user) return { ok: false, error: 'unauthorized' }
+  for (const i of inputs) {
+    const verr = validateTimes(i)
+    if (verr) return { ok: false, error: verr }
+  }
+
+  const { error } = await supa.from('security_settings').upsert(inputs.map(toSecurityRow), { onConflict: 'store_id' })
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/security/settings')
+  revalidatePath('/security')
+  return { ok: true, count: inputs.length }
 }
