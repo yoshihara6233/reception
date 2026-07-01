@@ -60,5 +60,9 @@ else
 fi
 
 # 3. 旧版で立て直す。
+#    層2は StartLimitBurst 超過で unit が start-limit-hit(failed) になっているため、
+#    reset-failed で失敗状態＋起動回数カウンタを解除してから restart する
+#    （これをしないと restart が "start request repeated too quickly" で拒否される）。
+sudo systemctl reset-failed "$UNIT" 2>/dev/null || true
 sudo systemctl restart "$UNIT"
 log "$UNIT を再起動しました（known-good で復帰）"

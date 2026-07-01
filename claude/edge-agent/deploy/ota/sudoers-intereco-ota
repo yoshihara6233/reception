@@ -1,4 +1,5 @@
 # /etc/sudoers.d/intereco-ota （visudo で検証して配置。所有 root:root, 権限 0440）
 # 自律OTA がユニットを再起動するための限定 NOPASSWD（docs/edge-ota-design.md §7）。
 # restart 対象を完全パスで限定列挙し、他のコマンドは許可しない。
-intereco ALL=(root) NOPASSWD: /usr/bin/systemctl restart intereco-edge, /usr/bin/systemctl restart intereco-edge.service, /usr/bin/systemctl restart cloudflared-intereco, /usr/bin/systemctl restart cloudflared-intereco.service
+# restart に加え、層2ロールバック用に reset-failed（start-limit-hit 解除）も許可する。
+intereco ALL=(root) NOPASSWD: /usr/bin/systemctl restart intereco-edge, /usr/bin/systemctl restart intereco-edge.service, /usr/bin/systemctl restart cloudflared-intereco, /usr/bin/systemctl restart cloudflared-intereco.service, /usr/bin/systemctl reset-failed intereco-edge, /usr/bin/systemctl reset-failed intereco-edge.service, /usr/bin/systemctl reset-failed cloudflared-intereco, /usr/bin/systemctl reset-failed cloudflared-intereco.service
