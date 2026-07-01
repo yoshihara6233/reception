@@ -70,7 +70,7 @@ export async function triggerManualPatrol(
   }
 
   const service = createSupabaseService()
-  const camIds = await listPatrolCameraIds(service, storeId)
+  const camIds = await listPatrolCameraIds(service, edge.id)
   if (!camIds.length) return { ok: false, error: '巡回対象カメラがありません' }
 
   const { data: run, error: runErr } = await service

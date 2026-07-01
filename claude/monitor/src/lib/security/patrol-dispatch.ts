@@ -17,18 +17,28 @@ export function patrolIngestUrl(): string {
 }
 
 /**
- * 店舗の巡回対象カメラ ID を返す。
- * 店舗の全カメラのうち、security_camera_config で patrol_enabled=false のものだけ除外
+ * エッジ配下の巡回対象カメラ ID を返す。
+ *
+ * カメラは店舗に直接紐づかない: recorder_cameras → recorders(edge_id) → edge_devices(store_id)。
+ * 呼び出し側は既に対象店舗の edge を引いているので edge.id で辿る。
+ * 対象 = そのエッジの recorder 配下カメラのうち、security_camera_config.patrol_enabled=false を除外
  * （config 行が無いカメラは既定 true 扱いで含める）。
  */
 export async function listPatrolCameraIds(
   service: SupabaseClient,
-  storeId: string,
+  edgeId: string,
 ): Promise<string[]> {
+  const { data: recs } = await service
+    .from('recorders')
+    .select('id')
+    .eq('edge_id', edgeId)
+  const recorderIds = (recs ?? []).map((r) => r.id as string)
+  if (!recorderIds.length) return []
+
   const { data: cams } = await service
     .from('recorder_cameras')
     .select('id')
-    .eq('store_id', storeId)
+    .in('recorder_id', recorderIds)
   const camIds = (cams ?? []).map((c) => c.id as string)
   if (!camIds.length) return []
 

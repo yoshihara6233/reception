@@ -71,8 +71,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     if (!fresh) { skippedOffline++; details.push({ store_id: storeId, result: 'edge_offline' }); continue }
     if (edge.pending_command != null) { skippedBusy++; details.push({ store_id: storeId, result: 'edge_busy' }); continue }
 
-    // 巡回対象カメラ = 店舗のカメラのうち、config で patrol_enabled=false のものを除く。
-    const patrolCams = await listPatrolCameraIds(supa, storeId)
+    // 巡回対象カメラ = エッジ配下カメラのうち、config で patrol_enabled=false のものを除く。
+    const patrolCams = await listPatrolCameraIds(supa, edge.id)
     if (!patrolCams.length) { skippedNoCam++; details.push({ store_id: storeId, result: 'no_camera' }); continue }
 
     // patrol_runs 起票（冪等: 同一 store×scheduled_for は unique index で1件）。
