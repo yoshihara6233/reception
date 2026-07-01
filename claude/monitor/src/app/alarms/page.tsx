@@ -7,7 +7,7 @@
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { AdminShell, ALARM_NAV } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
-import { AlarmTimeline, type AlarmEventVM, type AlarmStoreOption } from './AlarmTimeline'
+import { AlarmTimeline, type AlarmEventVM } from './AlarmTimeline'
 
 interface EventRow {
   id: string
@@ -21,7 +21,6 @@ interface EventRow {
   stores: { name: string } | { name: string }[] | null
   recorder_cameras: { name: string } | { name: string }[] | null
 }
-interface StoreRow { id: string; name: string }
 
 const nameOf = (s: { name: string } | { name: string }[] | null | undefined) =>
   (Array.isArray(s) ? s[0]?.name : s?.name) ?? null
@@ -29,14 +28,11 @@ const nameOf = (s: { name: string } | { name: string }[] | null | undefined) =>
 export default async function AlarmsPage() {
   const supa = await createSupabaseServer()
 
-  const [eventsRes, storesRes] = await Promise.all([
-    supa
-      .from('alarm_events')
-      .select('id, store_id, source, event_type, occurred_at, snapshot_url, status, notified_at, stores ( name ), recorder_cameras ( name )')
-      .order('occurred_at', { ascending: false })
-      .limit(300),
-    supa.from('stores').select('id, name').eq('is_active', true).order('name').limit(10_000),
-  ])
+  const eventsRes = await supa
+    .from('alarm_events')
+    .select('id, store_id, source, event_type, occurred_at, snapshot_url, status, notified_at, stores ( name ), recorder_cameras ( name )')
+    .order('occurred_at', { ascending: false })
+    .limit(300)
 
   const events: AlarmEventVM[] = ((eventsRes.data ?? []) as unknown as EventRow[]).map((e) => ({
     id: e.id,
@@ -49,13 +45,12 @@ export default async function AlarmsPage() {
     status: e.status,
     notified: !!e.notified_at,
   }))
-  const stores: AlarmStoreOption[] = ((storesRes.data ?? []) as StoreRow[]).map((s) => ({ id: s.id, name: s.name }))
 
   return (
     <AdminShell pathname="/alarms" nav={ALARM_NAV} navTitle="ALARM">
       <PageHeader title="発報タイムライン" crumb={[{ href: '/alarms', label: 'ALARM' }]} />
       <div className="px-5 py-4">
-        <AlarmTimeline events={events} stores={stores} />
+        <AlarmTimeline events={events} />
       </div>
     </AdminShell>
   )
