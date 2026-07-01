@@ -20,11 +20,10 @@
  *   踏めなかった店舗は次の cron tick で再評価される（4時間巡回なので取りこぼしは軽微）。
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { randomUUID } from 'node:crypto'
 import { createSupabaseService } from '@/lib/supabase/server'
-import type { EdgeCommand } from '@/lib/edge/commands'
 import { MONITOR_STALE_SECONDS } from '@intereco/shared'
 import { jstNow, isDue, type PatrolSettings } from '@/lib/security/patrol-schedule'
+import { listPatrolCameraIds, buildCaptureCommand } from '@/lib/security/patrol-dispatch'
 
 export const runtime = 'nodejs'
 
@@ -43,8 +42,6 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const jst = jstNow(now)
   const cronWindowMin = Number(process.env.SECURITY_PATROL_CRON_MIN ?? 10)
   const staleMs = Number(process.env.EDGE_STALE_SECONDS ?? MONITOR_STALE_SECONDS) * 1000
-  const monitorUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://intereco-monitor.vercel.app'
-  const ingestUrl = `${monitorUrl}/api/security/patrol/ingest`
 
   const supa = createSupabaseService()
 
@@ -75,20 +72,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     if (edge.pending_command != null) { skippedBusy++; details.push({ store_id: storeId, result: 'edge_busy' }); continue }
 
     // 巡回対象カメラ = 店舗のカメラのうち、config で patrol_enabled=false のものを除く。
-    const { data: cams } = await supa
-      .from('recorder_cameras')
-      .select('id')
-      .eq('store_id', storeId)
-    const camIds = (cams ?? []).map((c) => c.id as string)
-    if (!camIds.length) { skippedNoCam++; details.push({ store_id: storeId, result: 'no_camera' }); continue }
-
-    const { data: cfgs } = await supa
-      .from('security_camera_config')
-      .select('camera_id, patrol_enabled')
-      .in('camera_id', camIds)
-    const disabled = new Set((cfgs ?? []).filter((c) => c.patrol_enabled === false).map((c) => c.camera_id as string))
-    const patrolCams = camIds.filter((id) => !disabled.has(id))
-    if (!patrolCams.length) { skippedNoCam++; details.push({ store_id: storeId, result: 'all_cams_disabled' }); continue }
+    const patrolCams = await listPatrolCameraIds(supa, storeId)
+    if (!patrolCams.length) { skippedNoCam++; details.push({ store_id: storeId, result: 'no_camera' }); continue }
 
     // patrol_runs 起票（冪等: 同一 store×scheduled_for は unique index で1件）。
     const scheduledFor = new Date(Math.floor(now.getTime() / 60000) * 60000).toISOString()
@@ -104,13 +89,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
 
     // capture_snapshot を pending_command に書込む。
-    const command: EdgeCommand = {
-      action: 'capture_snapshot',
-      request_id: randomUUID(),
-      run_id: run.id as string,
-      camera_ids: patrolCams,
-      ingest_url: ingestUrl,
-    }
+    const command = buildCaptureCommand(run.id as string, patrolCams)
     await supa
       .from('edge_devices')
       .update({ pending_command: command, pending_command_at: now.toISOString() })
