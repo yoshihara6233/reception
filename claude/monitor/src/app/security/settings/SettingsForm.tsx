@@ -14,8 +14,6 @@ export interface StoreSetting {
   activeTo: string
   activeDays: number[]
   patrolTimes: string[]
-  aiEnabled: boolean
-  aiDailyCap: number
   notifyEmails: string[]
   reportShowVerification: boolean
   enabled: boolean
@@ -31,8 +29,6 @@ export function SettingsCard({ row }: { row: StoreSetting }) {
   const [to, setTo] = useState(row.activeTo)
   const [days, setDays] = useState<number[]>(row.activeDays)
   const [times, setTimes] = useState(row.patrolTimes.join(', '))
-  const [aiEnabled, setAiEnabled] = useState(row.aiEnabled)
-  const [aiCap, setAiCap] = useState(row.aiDailyCap)
   const [showVerif, setShowVerif] = useState(row.reportShowVerification)
   const [emails, setEmails] = useState(row.notifyEmails.join(', '))
   const [pending, startTransition] = useTransition()
@@ -54,8 +50,6 @@ export function SettingsCard({ row }: { row: StoreSetting }) {
         activeTo: to,
         activeDays: days,
         patrolTimes: times.split(',').map((t) => t.trim()).filter(Boolean),
-        aiEnabled,
-        aiDailyCap: aiCap,
         notifyEmails: emails.split(',').map((e) => e.trim()).filter(Boolean),
         reportShowVerification: showVerif,
         enabled,
@@ -145,19 +139,10 @@ export function SettingsCard({ row }: { row: StoreSetting }) {
           </div>
         </fieldset>
 
-        {/* AI + notify + report */}
+        {/* notify + report */}
         <fieldset className="rounded border border-slate-200 p-3 dark:border-gedline">
-          <legend className="px-1 text-[11px] font-bold text-slate-500 dark:text-gedink3">分析・通知</legend>
+          <legend className="px-1 text-[11px] font-bold text-slate-500 dark:text-gedink3">通知・報告</legend>
           <div className="space-y-2 text-xs">
-            <label className="flex items-center gap-2">
-              <input type="checkbox" checked={aiEnabled} onChange={(e) => setAiEnabled(e.target.checked)} />
-              AI分析を有効化
-            </label>
-            <div className="flex items-center gap-2">
-              <span className="w-24 text-slate-500">AI日次上限</span>
-              <input type="number" min={0} value={aiCap} onChange={(e) => setAiCap(Number(e.target.value))} className={`${input} w-24`} />
-              <span className="text-slate-400">回/日・店舗</span>
-            </div>
             <label className="flex items-center gap-2">
               <input type="checkbox" checked={showVerif} onChange={(e) => setShowVerif(e.target.checked)} />
               報告書に検証方法・カバレッジを明示

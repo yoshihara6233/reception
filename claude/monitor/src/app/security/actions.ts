@@ -152,8 +152,6 @@ export async function upsertSecuritySettings(input: {
   activeTo: string
   activeDays: number[]
   patrolTimes: string[]
-  aiEnabled: boolean
-  aiDailyCap: number
   notifyEmails: string[]
   reportShowVerification: boolean
   enabled: boolean
@@ -188,8 +186,6 @@ export async function upsertSecuritySettings(input: {
         active_to:                input.activeTo,
         active_days:              input.activeDays,
         patrol_times:             input.patrolTimes,
-        ai_enabled:               input.aiEnabled,
-        ai_daily_cap:             input.aiDailyCap,
         notify_emails:            input.notifyEmails,
         report_show_verification: input.reportShowVerification,
         enabled:                  input.enabled,
@@ -200,37 +196,5 @@ export async function upsertSecuritySettings(input: {
   if (error) return { ok: false, error: error.message }
   revalidatePath('/security/settings')
   revalidatePath('/security')
-  return { ok: true }
-}
-
-/** カメラの巡回設定を upsert（プロンプト・感度・ベースライン・有効化）。 */
-export async function upsertCameraConfig(input: {
-  cameraId: string
-  aiPrompt: string
-  sensitivity: number
-  patrolEnabled: boolean
-  baselineDayUrl?: string | null
-  baselineNightUrl?: string | null
-}): Promise<{ ok: boolean; error?: string }> {
-  const supa = await createSupabaseServer()
-  const { data: { user } } = await supa.auth.getUser()
-  if (!user) return { ok: false, error: 'unauthorized' }
-
-  const { error } = await supa
-    .from('security_camera_config')
-    .upsert(
-      {
-        camera_id:          input.cameraId,
-        ai_prompt:          input.aiPrompt,
-        sensitivity:        input.sensitivity,
-        patrol_enabled:     input.patrolEnabled,
-        baseline_day_url:   input.baselineDayUrl ?? null,
-        baseline_night_url: input.baselineNightUrl ?? null,
-      },
-      { onConflict: 'camera_id' },
-    )
-
-  if (error) return { ok: false, error: error.message }
-  revalidatePath('/security/cameras')
   return { ok: true }
 }

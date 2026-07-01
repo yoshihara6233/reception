@@ -23,8 +23,6 @@ interface SettingRow {
   active_to: string
   active_days: number[] | null
   patrol_times: string[] | null
-  ai_enabled: boolean
-  ai_daily_cap: number
   notify_emails: string[] | null
   report_show_verification: boolean
   enabled: boolean
@@ -37,7 +35,7 @@ export default async function SecuritySettingsPage() {
 
   const [storesRes, settingsRes] = await Promise.all([
     supa.from('stores').select('id, name, area_code').order('area_code', { ascending: true, nullsFirst: false }).order('name').limit(10_000),
-    supa.from('security_settings').select('store_id, schedule_mode, patrol_interval_min, active_from, active_to, active_days, patrol_times, ai_enabled, ai_daily_cap, notify_emails, report_show_verification, enabled').limit(10_000),
+    supa.from('security_settings').select('store_id, schedule_mode, patrol_interval_min, active_from, active_to, active_days, patrol_times, notify_emails, report_show_verification, enabled').limit(10_000),
   ])
 
   const stores = (storesRes.data ?? []) as StoreRow[]
@@ -51,13 +49,11 @@ export default async function SecuritySettingsPage() {
       storeName: st.name,
       areaCode: st.area_code,
       scheduleMode: (cfg?.schedule_mode === 'fixed' ? 'fixed' : 'interval'),
-      patrolIntervalMin: cfg?.patrol_interval_min ?? 30,
+      patrolIntervalMin: cfg?.patrol_interval_min ?? 240,
       activeFrom: cfg?.active_from ?? '00:00',
       activeTo: cfg?.active_to ?? '24:00',
       activeDays: cfg?.active_days ?? [0, 1, 2, 3, 4, 5, 6],
       patrolTimes: cfg?.patrol_times ?? [],
-      aiEnabled: cfg?.ai_enabled ?? false,
-      aiDailyCap: cfg?.ai_daily_cap ?? 200,
       notifyEmails: cfg?.notify_emails ?? [],
       reportShowVerification: cfg?.report_show_verification ?? true,
       enabled: cfg?.enabled ?? false,
