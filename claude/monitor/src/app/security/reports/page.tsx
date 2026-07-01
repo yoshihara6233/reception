@@ -4,6 +4,7 @@
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
+import { ReportImagesButton } from '../ReportImagesButton'
 import { getT } from '@/lib/i18n/server'
 
 interface ReportRow {
@@ -127,6 +128,7 @@ export default async function SecurityReportsPage() {
                   <th className="px-3 py-1.5 text-center">{t.securityReports.colAnomalies}</th>
                   <th className="px-3 py-1.5 text-center">{t.securityReports.colReviews}</th>
                   <th className="px-3 py-1.5">{t.securityReports.colPdf}</th>
+                  <th className="px-3 py-1.5">画像</th>
                   <th className="px-3 py-1.5">{t.securityReports.colEmails}</th>
                 </tr>
               </thead>
@@ -159,6 +161,9 @@ export default async function SecurityReportsPage() {
                         ) : (
                           <span className="text-slate-400 dark:text-gedink3">{t.common.notGenerated}</span>
                         )}
+                      </td>
+                      <td className="px-3 py-1.5">
+                        <ReportImagesButton reportId={r.id} count={s.total} />
                       </td>
                       <td className="max-w-xs truncate px-3 py-1.5 text-slate-500 dark:text-gedink3">
                         {r.sent_to_emails && r.sent_to_emails.length > 0
