@@ -6,10 +6,9 @@
  * 行から確認(ack/close)・詳細へ遷移できる。
  */
 import { useState, useMemo, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Bell, Play, Settings } from 'lucide-react'
-import { updateAlarmStatus, createTestAlarm } from './actions'
+import { Bell, Copy, Settings } from 'lucide-react'
+import { updateAlarmStatus } from './actions'
 
 export interface AlarmEventVM {
   id: string
@@ -22,7 +21,6 @@ export interface AlarmEventVM {
   status: 'new' | 'ack' | 'closed'
   notified: boolean
 }
-export interface AlarmStoreOption { id: string; name: string }
 
 function fmtJst(iso: string) {
   return new Date(iso).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
@@ -32,15 +30,15 @@ const STATUS = {
   ack:    { label: '対応中', cls: 'bg-amber-100 text-amber-700 dark:bg-[#B5761A]/20 dark:text-[#E2A55A]' },
   closed: { label: '完了',   cls: 'bg-slate-100 text-slate-500 dark:bg-gedbg3 dark:text-gedink3' },
 }
+/** 発報受け口（現地エッジのローカルHTTP）を直接叩く参考URL。<IP>/<カメラID> は置換して使用。 */
+const RECEIVER_URL = 'http://<BeelinkのLAN_IP>:9080/alarm?cam=<カメラID>&src=ipro&type=input'
 
-export function AlarmTimeline({ events, stores }: { events: AlarmEventVM[]; stores: AlarmStoreOption[] }) {
-  const router = useRouter()
+export function AlarmTimeline({ events }: { events: AlarmEventVM[] }) {
   const [rows, setRows] = useState(events)
   const [store, setStore] = useState('')
   const [status, setStatus] = useState<'all' | 'new' | 'ack' | 'closed'>('all')
-  const [testStore, setTestStore] = useState(stores[0]?.id ?? '')
   const [pending, startTransition] = useTransition()
-  const [msg, setMsg] = useState('')
+  const [copied, setCopied] = useState(false)
 
   const storeNames = useMemo(() => [...new Set(rows.map((r) => r.storeName))].sort(), [rows])
   const filtered = useMemo(() => rows.filter((r) =>
@@ -57,14 +55,10 @@ export function AlarmTimeline({ events, stores }: { events: AlarmEventVM[]; stor
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status: s } : r)))
     startTransition(async () => { await updateAlarmStatus(id, s) })
   }
-  function test() {
-    if (!testStore) return
-    setMsg('')
-    startTransition(async () => {
-      const res = await createTestAlarm(testStore)
-      if (res.ok) { setMsg('テスト発報を作成しました'); setTimeout(() => router.refresh(), 1200) }
-      else setMsg(res.error ?? 'テスト発報に失敗しました')
-    })
+  function copyUrl() {
+    navigator.clipboard?.writeText(RECEIVER_URL)
+      .then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500) })
+      .catch(() => {})
   }
 
   const ctrl = 'rounded border border-slate-200 px-2 py-1 text-xs dark:border-gedline dark:bg-gedbg3 dark:text-gedink'
@@ -87,20 +81,22 @@ export function AlarmTimeline({ events, stores }: { events: AlarmEventVM[]; stor
         </div>
       </div>
 
-      {/* テスト発報 + 設定リンク */}
-      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 dark:border-gedline dark:bg-gedbg2">
-        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-gedink3">テスト発報</span>
-        <select value={testStore} onChange={(e) => setTestStore(e.target.value)} className={ctrl}>
-          {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
-        <button onClick={test} disabled={pending || !testStore}
-          className="inline-flex items-center gap-1 rounded bg-slate-900 px-3 py-1 text-xs font-medium text-white disabled:opacity-50 dark:bg-gedaccent dark:text-gedbg">
-          <Play size={13} strokeWidth={2} aria-hidden /> 発報を作成
-        </button>
-        {msg && <span className="text-[12px] text-emerald-600 dark:text-[#5CC98B]">{msg}</span>}
-        <Link href="/alarms/settings" className="ml-auto inline-flex items-center gap-1 text-xs text-blue-600 hover:underline dark:text-gedaccent">
-          <Settings size={13} strokeWidth={1.75} aria-hidden /> 発報設定
-        </Link>
+      {/* 発報テスト（受け口URLを直接叩く）+ 設定リンク */}
+      <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 dark:border-gedline dark:bg-gedbg2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-gedink3">発報テスト（受け口URL）</span>
+          <code className="min-w-0 flex-1 truncate rounded border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[12px] text-slate-700 dark:border-gedline dark:bg-gedbg3 dark:text-gedink2">{RECEIVER_URL}</code>
+          <button onClick={copyUrl}
+            className="inline-flex items-center gap-1 rounded border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 disabled:opacity-50 dark:border-gedline dark:text-gedink">
+            <Copy size={13} strokeWidth={1.75} aria-hidden /> {copied ? 'コピーしました' : 'コピー'}
+          </button>
+          <Link href="/alarms/settings" className="ml-auto inline-flex items-center gap-1 text-xs text-blue-600 hover:underline dark:text-gedaccent">
+            <Settings size={13} strokeWidth={1.75} aria-hidden /> 発報設定
+          </Link>
+        </div>
+        <p className="mt-2 text-[11px] text-slate-400 dark:text-gedink3">
+          現地エッジ(Beelink)と同一LAN内のブラウザで上記URLを開くと発報を投入できます（<code className="font-mono">&lt;IP&gt;</code>・<code className="font-mono">&lt;カメラID&gt;</code> は実値に置換）。実運用ではカメラ/NVRの接点通知先も同じURLに向けます。
+        </p>
       </div>
 
       {/* フィルタ */}
