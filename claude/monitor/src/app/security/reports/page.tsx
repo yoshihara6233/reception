@@ -4,7 +4,7 @@
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
-import { ReportImagesButton } from '../ReportImagesButton'
+import { ReportsTable, type ReportRowVM } from './ReportsTable'
 import { getT } from '@/lib/i18n/server'
 
 interface ReportRow {
@@ -90,10 +90,20 @@ export default async function SecurityReportsPage() {
     else findingsByRun.set(f.run_id, [f])
   }
 
-  const totalRuns   = runs.length
-  const doneRuns    = runs.filter((r) => r.status === 'done').length
-  const anomalies   = findings.filter((f) => f.status === 'anomaly' || f.status === 'confirmed').length
-  const reviewQueue = findings.filter((f) => f.status === 'review').length
+  const rows: ReportRowVM[] = reports.map((r) => {
+    const s = statsForReport(r, runs, findingsByRun)
+    return {
+      id: r.id,
+      storeName: r.store_id ? (storeMap.get(r.store_id) ?? t.common.dash) : t.common.dash,
+      dateLabel: fmtDay(r.period_from),
+      generatedLabel: fmtJst(r.generated_at),
+      runs: s.runs,
+      done: s.doneRuns,
+      pdfUrl: r.pdf_url,
+      emails: (r.sent_to_emails ?? []).join(', '),
+      count: s.total,
+    }
+  })
 
   return (
     <AdminShell pathname="/security/reports" section="security">
@@ -105,95 +115,9 @@ export default async function SecurityReportsPage() {
         ]}
       />
 
-      <div className="space-y-5 p-5">
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Stat label={t.securityReports.statRegistered} value={reports.length} />
-          <Stat label={t.securityReports.statTotalRuns}  value={totalRuns} sub={t.securityReports.statTotalRunsSub(doneRuns)} />
-          <Stat label={t.securityReports.statAnomalies}  value={anomalies}   tone={anomalies > 0 ? 'danger' : undefined} />
-          <Stat label={t.securityReports.statReviews}    value={reviewQueue} tone={reviewQueue > 0 ? 'warn' : undefined} />
-        </div>
-
-        {reports.length === 0 ? (
-          <p className="text-xs text-slate-500 dark:text-gedink3">{t.securityReports.empty}</p>
-        ) : (
-          <div className="overflow-hidden rounded border border-slate-200 dark:border-gedline">
-            <table className="min-w-full divide-y divide-slate-200 text-xs dark:divide-gedline">
-              <thead className="bg-slate-50 dark:bg-gedbg3">
-                <tr className="text-left text-[10px] uppercase tracking-wide text-slate-500 dark:text-gedink3">
-                  <th className="px-3 py-1.5">{t.securityReports.colStore}</th>
-                  <th className="px-3 py-1.5">{t.securityReports.colPeriod}</th>
-                  <th className="px-3 py-1.5">{t.securityReports.colGenerated}</th>
-                  <th className="px-3 py-1.5 text-center">{t.securityReports.colRuns}</th>
-                  <th className="px-3 py-1.5 text-center">{t.securityReports.colDone}</th>
-                  <th className="px-3 py-1.5 text-center">{t.securityReports.colAnomalies}</th>
-                  <th className="px-3 py-1.5 text-center">{t.securityReports.colReviews}</th>
-                  <th className="px-3 py-1.5">{t.securityReports.colPdf}</th>
-                  <th className="px-3 py-1.5">画像</th>
-                  <th className="px-3 py-1.5">{t.securityReports.colEmails}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-gedline">
-                {reports.map((r) => {
-                  const s = statsForReport(r, runs, findingsByRun)
-                  return (
-                    <tr key={r.id} className="text-slate-700 dark:text-gedink">
-                      <td className="px-3 py-1.5">{r.store_id ? (storeMap.get(r.store_id) ?? t.common.dash) : t.common.dash}</td>
-                      <td className="px-3 py-1.5 font-mono tabular-nums">
-                        {fmtDay(r.period_from)} 〜 {fmtDay(r.period_to)}
-                      </td>
-                      <td className="px-3 py-1.5 font-mono tabular-nums">{fmtJst(r.generated_at)}</td>
-                      <td className="px-3 py-1.5 text-center font-mono tabular-nums">{s.runs}</td>
-                      <td className="px-3 py-1.5 text-center font-mono tabular-nums">{s.doneRuns}</td>
-                      <td className={'px-3 py-1.5 text-center font-mono tabular-nums ' +
-                          (s.anomalies > 0 ? 'text-red-600 dark:text-red-400 font-semibold' : '')}>
-                        {s.anomalies}
-                      </td>
-                      <td className={'px-3 py-1.5 text-center font-mono tabular-nums ' +
-                          (s.reviews > 0 ? 'text-amber-600 dark:text-amber-400' : '')}>
-                        {s.reviews}
-                      </td>
-                      <td className="px-3 py-1.5">
-                        {r.pdf_url ? (
-                          <a href={r.pdf_url} target="_blank" rel="noopener noreferrer"
-                             className="text-blue-600 underline hover:text-blue-800 dark:text-gedaccent">
-                            {t.common.open}
-                          </a>
-                        ) : (
-                          <span className="text-slate-400 dark:text-gedink3">{t.common.notGenerated}</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-1.5">
-                        <ReportImagesButton reportId={r.id} count={s.total} />
-                      </td>
-                      <td className="max-w-xs truncate px-3 py-1.5 text-slate-500 dark:text-gedink3">
-                        {r.sent_to_emails && r.sent_to_emails.length > 0
-                          ? r.sent_to_emails.join(', ')
-                          : t.common.dash}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+      <div className="space-y-4 p-5">
+        <ReportsTable rows={rows} />
       </div>
     </AdminShell>
-  )
-}
-
-function Stat({
-  label, value, sub, tone,
-}: { label: string; value: number; sub?: string; tone?: 'danger' | 'warn' }) {
-  const toneCls =
-    tone === 'danger' ? 'text-red-600 dark:text-red-400' :
-    tone === 'warn'   ? 'text-amber-600 dark:text-amber-400' :
-                        'text-slate-900 dark:text-gedink'
-  return (
-    <div className="rounded border border-slate-200 bg-white px-4 py-3 dark:border-gedline dark:bg-gedbg2">
-      <div className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-gedink3">{label}</div>
-      <div className={'mt-1 text-2xl font-bold tabular-nums ' + toneCls}>{value}</div>
-      {sub && <div className="text-[10px] text-slate-500 dark:text-gedink3">{sub}</div>}
-    </div>
   )
 }
