@@ -18,6 +18,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseService } from '@/lib/supabase/server'
+import { notifyAlarm } from '@/lib/alarms/notify'
 
 export const runtime = 'nodejs'
 
@@ -99,5 +100,8 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, id: ev.id, status: 'new', snapshot_url: snapshotUrl })
+  // 6. 通知（enabled/quiet hours は notify 内で判定・best-effort）
+  const notify = await notifyAlarm(supa, ev.id).catch(() => ({ notified: false, reason: 'error' }))
+
+  return NextResponse.json({ ok: true, id: ev.id, status: 'new', snapshot_url: snapshotUrl, notified: notify.notified })
 }

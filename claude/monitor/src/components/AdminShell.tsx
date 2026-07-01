@@ -37,6 +37,7 @@ export function getSecurityNav(t: Msg): NavItem[] {
   return [
     { href: '/security/reports',  label: t.securityNav.reports,  icon: '📋' },
     { href: '/security',          label: t.securityNav.triage,   icon: '🛡', exact: true },
+    { href: '/security/alarms',   label: '発報',                 icon: '🔔' },
     { href: '/security/settings', label: t.securityNav.settings, icon: '⏱' },
     { href: '/security/glossary', label: t.securityNav.glossary, icon: '?' },
   ]
