@@ -12,12 +12,24 @@ const config: NextConfig = {
   experimental: {
     serverActions: { bodySizeLimit: '2mb' },
   },
-  // A4: 巡回レポート PDF 生成 cron が同梱フォント(OTF)を実行時に読むため、
-  // serverless バンドルにフォントを含める（未指定だと本番で ENOENT）。
+  // 巡回レポート PDF 生成が実行時に読むファイルを serverless バンドルへ強制同梱。
+  //  1) 同梱日本語フォント(OTF)
+  //  2) pdfkit の標準フォント metrics(js/data/*.afm) — pdfkit が動的 readFileSync
+  //     するため静的トレースから漏れ、未指定だと本番で ENOENT: Helvetica.afm。
+  //     node_modules/pdfkit は monorepo ルート .bun 実体への symlink なので、
+  //     symlink 経路と実体経路の両方を指定して取りこぼしを防ぐ。
+  // 対象は日次 cron と /security の server action(generateRunReportPdf)の両方。
   outputFileTracingIncludes: {
-    '/api/cron/security-report': ['./fonts/**'],
-    // /security の server action generateRunReportPdf も同梱フォントを読む。
-    '/security': ['./fonts/**'],
+    '/api/cron/security-report': [
+      './fonts/**',
+      './node_modules/pdfkit/js/data/**',
+      '../../node_modules/.bun/pdfkit@*/node_modules/pdfkit/js/data/**',
+    ],
+    '/security': [
+      './fonts/**',
+      './node_modules/pdfkit/js/data/**',
+      '../../node_modules/.bun/pdfkit@*/node_modules/pdfkit/js/data/**',
+    ],
   },
   images: {
     remotePatterns: [
