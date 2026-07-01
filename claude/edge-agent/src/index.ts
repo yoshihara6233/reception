@@ -19,6 +19,7 @@ import { heartbeat } from './upload/storage.js'
 import { startWhipProxy, wrapWhip } from './whip-proxy.js'
 import { captureCameraJpeg } from './security/snapshot.js'
 import { startAlarmListener } from './alarm/listener.js'
+import { runAlarmTimelineCapture } from './alarm/timeline.js'
 import { verifyOnBoot, type RunnerDeps } from './ota/runner.js'
 import { healthProbe } from './ota/signal.js'
 
@@ -171,6 +172,22 @@ async function main() {
               clearTimeout(timer)
             }
           }))
+          break
+        }
+        case 'capture_alarm_timeline': {
+          // 発報前後スナップ: 全カメラ×秒オフセットを録画から抽出し ingest_url へ中継。
+          // 数分かかるため await せず detached 起動し、コマンドループを即返す
+          // （発報直後に利用者がライブ/VOD を見られるようにする）。
+          const cams = await loadCameras()
+          void runAlarmTimelineCapture(
+            {
+              alarmId:    cmd.alarm_id,
+              occurredAt: cmd.occurred_at,
+              offsetsSec: cmd.offsets_sec,
+              ingestUrl:  cmd.ingest_url,
+            },
+            cams,
+          ).catch((e) => logger.warn({ err: String(e), alarm_id: cmd.alarm_id }, 'alarm-timeline: run failed'))
           break
         }
         case 'start_bcp_capture': {
