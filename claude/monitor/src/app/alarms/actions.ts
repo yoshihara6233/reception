@@ -84,3 +84,35 @@ export async function upsertAlarmSettings(input: AlarmSettingsInput): Promise<{ 
   revalidatePath('/alarms/settings')
   return { ok: true }
 }
+
+/** 複数店舗の発報設定を一括保存（/admin/bcp と同形の一括反映）。 */
+export async function bulkUpsertAlarmSettings(
+  inputs: AlarmSettingsInput[],
+): Promise<{ ok: boolean; count?: number; error?: string }> {
+  const supa = await createSupabaseServer()
+  const { data: { user } } = await supa.auth.getUser()
+  if (!user) return { ok: false, error: 'unauthorized' }
+  if (!inputs.length) return { ok: false, error: '対象店舗がありません' }
+
+  for (const input of inputs) {
+    const qf = (input.quietFrom ?? '').trim()
+    const qt = (input.quietTo ?? '').trim()
+    if ((qf && !HHMM.test(qf)) || (qt && !HHMM.test(qt))) {
+      return { ok: false, error: '静音時間は HH:MM 形式で入力してください' }
+    }
+  }
+
+  const rows = inputs.map((input) => ({
+    store_id: input.storeId,
+    enabled: input.enabled,
+    notify_emails: input.notifyEmails,
+    quiet_from: (input.quietFrom ?? '').trim() || null,
+    quiet_to: (input.quietTo ?? '').trim() || null,
+    notify_webhook_url: (input.notifyWebhookUrl ?? '').trim() || null,
+  }))
+  const { error } = await supa.from('alarm_settings').upsert(rows, { onConflict: 'store_id' })
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/alarms')
+  revalidatePath('/alarms/settings')
+  return { ok: true, count: rows.length }
+}
