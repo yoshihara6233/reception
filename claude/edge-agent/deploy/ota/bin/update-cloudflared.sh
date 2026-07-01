@@ -38,14 +38,24 @@ mv -Tf "$LINK.tmp" "$LINK"
 sudo systemctl restart "$UNIT"
 log "$UNIT を $VER で再起動"
 
-# 3. 接続確認（最大30秒）。失敗で前バイナリへ戻す。
+# 3. 接続確認（最大~40秒）。失敗で前バイナリへ戻す。
+#    「起動はするが接続しない」cloudflared を弾くため、is-active だけでなく
+#    journal のトンネル接続確立ログ（Registered tunnel connection）を確認する。
+#    journal が読めない環境では is-active + --version にフォールバック。
 ok=0
-for _ in $(seq 1 15); do
-  if systemctl is-active --quiet "$UNIT" && "$LINK" --version >/dev/null 2>&1; then
-    # トンネル健全性: メトリクス/接続が立っていれば is-active で十分。さらに厳密化は将来。
-    ok=1; break
-  fi
+JOURNAL_OK=1
+journalctl -u "$UNIT" -n1 >/dev/null 2>&1 || JOURNAL_OK=0
+for _ in $(seq 1 20); do
   sleep 2
+  systemctl is-active --quiet "$UNIT" || continue
+  if [[ "$JOURNAL_OK" == 1 ]]; then
+    if journalctl -u "$UNIT" --since "-45s" 2>/dev/null | grep -q "Registered tunnel connection"; then
+      ok=1; break
+    fi
+  else
+    # フォールバック: 接続の直接確認はできないので起動＋バイナリ健全性で代替
+    "$LINK" --version >/dev/null 2>&1 && { ok=1; break; }
+  fi
 done
 
 if [[ "$ok" != 1 ]]; then
