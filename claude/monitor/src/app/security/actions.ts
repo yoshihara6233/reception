@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { MONITOR_STALE_SECONDS } from '@intereco/shared'
 import { listPatrolCameraIds, buildCaptureCommand } from '@/lib/security/patrol-dispatch'
-import { renderReportForRuns, type ReportRun } from '@/lib/security/patrol-report'
+import { generateAndStoreRunReport } from '@/lib/security/patrol-report'
 
 /**
  * 監視員が finding をトリアージする（現認→異常確定 / 誤検知）。
@@ -106,41 +106,22 @@ export async function generateRunReportPdf(
   const { data: { user } } = await supa.auth.getUser()
   if (!user) return { ok: false, error: 'unauthorized' }
 
+  // 認可ゲート: run をセッション RLS 越しに読めれば権限あり。
   const { data: run } = await supa
     .from('patrol_runs')
-    .select('id, started_at, trigger, status, stores ( name )')
+    .select('id')
     .eq('id', runId)
     .maybeSingle()
   if (!run) return { ok: false, error: '巡回が見つからないか、権限がありません' }
 
-  const st = (run as unknown as { stores?: { name: string } | { name: string }[] | null }).stores
-  const storeName = (Array.isArray(st) ? st[0]?.name : st?.name) ?? '—'
-  const service = createSupabaseService()
-  const nowIso = new Date().toISOString()
-
-  let pdf: Buffer
   try {
-    const r = await renderReportForRuns(service, {
-      storeName,
-      runs: [{ id: run.id, started_at: run.started_at, trigger: run.trigger, status: run.status } as ReportRun],
-      periodFrom: run.started_at,
-      periodTo: nowIso,
-      sentTo: [],
-      generatedAt: nowIso,
-    })
-    pdf = r.pdf
+    const service = createSupabaseService()
+    const { url } = await generateAndStoreRunReport(service, runId)
+    revalidatePath('/security/reports')
+    return { ok: true, url }
   } catch (e) {
     return { ok: false, error: `PDF 生成に失敗しました: ${(e as Error).message}` }
   }
-
-  const key = `security/run-${runId}.pdf`
-  const { error: upErr } = await service.storage
-    .from('reports')
-    .upload(key, pdf, { contentType: 'application/pdf', upsert: true })
-  if (upErr) return { ok: false, error: `保存に失敗しました: ${upErr.message}` }
-
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
-  return { ok: true, url: `${base}/storage/v1/object/public/reports/${key}` }
 }
 
 /** 店舗の警備設定を upsert（スケジュール・AI・通知先・有効化）。 */

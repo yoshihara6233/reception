@@ -24,8 +24,10 @@ import { createSupabaseService } from '@/lib/supabase/server'
 import { MONITOR_STALE_SECONDS } from '@intereco/shared'
 import { jstNow, isDue, type PatrolSettings } from '@/lib/security/patrol-schedule'
 import { listPatrolCameraIds, buildCaptureCommand } from '@/lib/security/patrol-dispatch'
+import { generateAndStoreRunReport } from '@/lib/security/patrol-report'
 
 export const runtime = 'nodejs'
+export const maxDuration = 120
 
 const PURGE_DAYS = 30
 const PURGE_RUN_LIMIT = 500 // 1 tick あたりの purge 上限（タイムアウト回避）
@@ -103,6 +105,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     details.push({ store_id: storeId, result: 'dispatched' })
   }
 
+  // ── 手動巡回(今すぐ巡回)の自動レポート化 → /security/reports に載せる。
+  //    撮影が settle するよう 2分以上経過・findings 有り・未生成 のものだけ対象。
+  //    定時巡回は日次ロールアップ(security-report cron)に任せるため対象外。
+  const finalizedReports = await finalizeManualReports(supa, now)
+
   // ── 保持 30 日 purge（毎時1回だけ＝10分cronの無駄打ち回避）
   let purged: { runs: number } | null = null
   if (now.getUTCMinutes() < cronWindowMin) {
@@ -117,9 +124,56 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     skippedBusy,
     skippedOffline,
     skippedNoCam,
+    finalizedReports,
     purged,
     details,
   })
+}
+
+/**
+ * 手動巡回(trigger='manual')で撮影が終わった run を自動レポート化する。
+ * 2分以上前〜1日以内・findings 有り・security_reports 未生成 のものだけを対象に、
+ * PDF生成＋security_reports 行 upsert（generateAndStoreRunReport が冪等）。
+ */
+async function finalizeManualReports(
+  supa: ReturnType<typeof createSupabaseService>,
+  now: Date,
+): Promise<number> {
+  const settleBefore = new Date(now.getTime() - 2 * 60 * 1000).toISOString()
+  const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()
+  const { data: runs } = await supa
+    .from('patrol_runs')
+    .select('id, store_id, started_at')
+    .eq('trigger', 'manual')
+    .lt('started_at', settleBefore)
+    .gt('started_at', dayAgo)
+    .order('started_at', { ascending: false })
+    .limit(50)
+
+  let made = 0
+  for (const r of runs ?? []) {
+    // 既に生成済み？（period_from = started_at をキーに）
+    const { data: rep } = await supa
+      .from('security_reports')
+      .select('id')
+      .eq('store_id', r.store_id)
+      .eq('period_from', r.started_at)
+      .maybeSingle()
+    if (rep) continue
+    // findings が無い run は撮影失敗/撮影中 → まだレポート化しない
+    const { count } = await supa
+      .from('patrol_findings')
+      .select('id', { count: 'exact', head: true })
+      .eq('run_id', r.id)
+    if (!count) continue
+    try {
+      await generateAndStoreRunReport(supa, r.id as string)
+      made++
+    } catch {
+      /* 次tickで再試行 */
+    }
+  }
+  return made
 }
 
 /** 30日より古い巡回とスナップショットを削除。security_reports は残す。 */
