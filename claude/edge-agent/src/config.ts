@@ -73,6 +73,11 @@ const Env = z.object({
   // the host. macOS users may need to remap (e.g. 5050→5000) because the
   // built-in AirPlay Receiver also binds to host:5000 and silently wins.
   FRIGATE_API_PORT: z.coerce.number().default(5000),
+
+  // 発報受け口（Phase B PB5）: i-PRO/NVR の HTTP アラーム通知・外部Webhook を LAN で受ける
+  // ローカル HTTP リスナーのポート。0（既定）＝無効。設定すると 0.0.0.0:<port> で待受け、
+  // 受信時に該当カメラを撮影して cloud /api/alarms/ingest へ中継する（要 MONITOR_URL）。
+  ALARM_LISTEN_PORT: z.coerce.number().default(0),
 })
 
 export const config = Env.parse(process.env)

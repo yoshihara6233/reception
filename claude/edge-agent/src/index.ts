@@ -18,6 +18,7 @@ import { StateMachine } from './state-machine.js'
 import { heartbeat } from './upload/storage.js'
 import { startWhipProxy, wrapWhip } from './whip-proxy.js'
 import { captureCameraJpeg } from './security/snapshot.js'
+import { startAlarmListener } from './alarm/listener.js'
 import { verifyOnBoot, type RunnerDeps } from './ota/runner.js'
 import { healthProbe } from './ota/signal.js'
 
@@ -54,6 +55,10 @@ async function main() {
 
   // 登録ウィザード支援: 本部からの ONVIF探索 / 接続テスト ジョブを処理（pending をポーリング）。
   const jobs = startEdgeJobWorker()
+
+  // 発報受け口: i-PRO/NVR の HTTP アラーム通知・外部 Webhook を LAN で受けて中継する
+  // （ALARM_LISTEN_PORT>0 かつ MONITOR_URL 設定時のみ起動。それ以外は no-op）。
+  const alarmListener = startAlarmListener(loadCameras)
 
   const rt = subscribeCommands(async (cmd) => {
     try {
@@ -197,6 +202,7 @@ async function main() {
     clearInterval(hb)
     await rt.close()
     jobs.close()
+    alarmListener.close()
     await fsm.toIdle()
     await whipProxy.stop().catch(() => {})
     await heartbeat('offline')
