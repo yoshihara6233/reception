@@ -6,6 +6,57 @@ import { MONITOR_STALE_SECONDS } from '@intereco/shared'
 import { listPatrolCameraIds, buildCaptureCommand } from '@/lib/security/patrol-dispatch'
 import { generateAndStoreRunReport } from '@/lib/security/patrol-report'
 
+export interface ReportSnapshot { url: string; camera: string; at: string }
+
+/**
+ * レポート（security_reports 1件）の対象期間・店舗に属する巡回スナップショットを列挙する。
+ * 一覧の「画像」ビューアが使う。URL は認証付き署名プロキシのパス（同一オリジンの <img> で開ける）。
+ * 認可はセッション RLS（patrol_runs/patrol_findings は store-scoped）に委ねる。
+ * ※ スナップは 30 日で purge されるため、古いレポートは PDF 内の焼き込み画像のみ。
+ */
+export async function listReportSnapshots(
+  reportId: string,
+): Promise<{ ok: boolean; snapshots?: ReportSnapshot[]; error?: string }> {
+  const supa = await createSupabaseServer()
+  const { data: { user } } = await supa.auth.getUser()
+  if (!user) return { ok: false, error: 'unauthorized' }
+
+  const { data: report } = await supa
+    .from('security_reports')
+    .select('id, store_id, period_from, period_to')
+    .eq('id', reportId)
+    .maybeSingle()
+  if (!report) return { ok: false, error: 'レポートが見つからないか、権限がありません' }
+
+  const { data: runs } = await supa
+    .from('patrol_runs')
+    .select('id, started_at')
+    .eq('store_id', report.store_id)
+    .gte('started_at', report.period_from)
+    .lte('started_at', report.period_to)
+    .limit(2000)
+  const runIds = (runs ?? []).map((r) => r.id as string)
+  const runAt = new Map((runs ?? []).map((r) => [r.id as string, r.started_at as string]))
+  if (!runIds.length) return { ok: true, snapshots: [] }
+
+  const { data: fs } = await supa
+    .from('patrol_findings')
+    .select('run_id, snapshot_url, recorder_cameras ( name )')
+    .in('run_id', runIds)
+    .not('snapshot_url', 'is', null)
+    .limit(5000)
+
+  const snapshots: ReportSnapshot[] = ((fs ?? []) as unknown as Array<{
+    run_id: string; snapshot_url: string; recorder_cameras: { name: string } | { name: string }[] | null
+  }>).map((f) => {
+    const rc = f.recorder_cameras
+    const camera = (Array.isArray(rc) ? rc[0]?.name : rc?.name) ?? '—'
+    return { url: f.snapshot_url, camera, at: runAt.get(f.run_id) ?? '' }
+  }).sort((a, b) => a.at.localeCompare(b.at) || a.camera.localeCompare(b.camera))
+
+  return { ok: true, snapshots }
+}
+
 /**
  * 監視員が finding をトリアージする（現認→異常確定 / 誤検知）。
  * RLS の *_modify ポリシー（admin role）で書込みを許可。
