@@ -42,7 +42,7 @@ export function AppHeader({
     { href: '/stores',   label: t.nav.monitor  },
     { href: '/bcp',      label: t.nav.bcp      },
     { href: '/security', label: t.nav.security },
-    { href: '/alarms',   label: '発報'          },
+    { href: '/alarms',   label: 'ALARM'         },
     { href: '/infra',    label: t.nav.infra    },
     // F23: /logs タブは削除（マスタ内の監査ログと重複していたため）
     // F24: /admin（設定）は中央タブから外し、右側のアイコンに移動

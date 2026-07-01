@@ -93,8 +93,8 @@ export default async function AlarmDetailPage({ params }: { params: Promise<{ id
   const h2 = 'text-sm font-bold text-slate-900 dark:text-gedink'
 
   return (
-    <AdminShell pathname="/alarms" nav={ALARM_NAV} navTitle="発報">
-      <PageHeader title="発報詳細" crumb={[{ href: '/alarms', label: '発報' }, { href: `/alarms/${id}`, label: '詳細' }]} />
+    <AdminShell pathname="/alarms" nav={ALARM_NAV} navTitle="ALARM">
+      <PageHeader title="発報詳細" crumb={[{ href: '/alarms', label: 'ALARM' }, { href: `/alarms/${id}`, label: '詳細' }]} />
       <div className="space-y-5 px-5 py-4">
         <Link href="/alarms" className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline dark:text-gedaccent">
           <ArrowLeft size={13} strokeWidth={2} aria-hidden /> 発報一覧に戻る

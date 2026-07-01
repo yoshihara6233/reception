@@ -451,7 +451,7 @@ const ja: Msg = {
     settings: '設定',
     infra:    '死活監視',
     bcp:      'BCP',
-    security: 'SECURITY',
+    security: 'PATROL',
     logout:   'ログアウト',
   },
   kpi: {
@@ -572,7 +572,7 @@ const ja: Msg = {
     crumb: '用語説明',
   },
   infraNav: { dashboard: 'ダッシュボード', incidents: 'インシデント', checks: 'チェック設定', reports: '稼働率レポート', settings: '監視設定', glossary: '用語説明' },
-  navTitle: { admin: '設定', security: 'SECURITY', bcp: 'BCP', infra: '死活監視' },
+  navTitle: { admin: '設定', security: 'PATROL', bcp: 'BCP', infra: '死活監視' },
   common: { open: '開く', notGenerated: '未生成', dash: '—' },
   infraIncidents: {
     title: 'インシデント',
@@ -608,7 +608,7 @@ const ja: Msg = {
     colStore: '店舗', colPeriod: '対象期間', colGenerated: '生成時刻', colRuns: '巡回', colDone: '完了', colAnomalies: '異常', colReviews: '要確認', colPdf: 'PDF', colEmails: '送信先',
   },
   breadcrumb: {
-    admin: '設定', security: 'SECURITY', bcp: 'BCP', infra: '死活監視',
+    admin: '設定', security: 'PATROL', bcp: 'BCP', infra: '死活監視',
     infraIncidents: 'インシデント', infraChecks: 'チェック設定', infraReports: '稼働率レポート',
     securityReports: '巡回レポート',
   },
@@ -856,7 +856,7 @@ const en: Msg = {
     settings: 'Settings',
     infra:    'Health',
     bcp:      'BCP',
-    security: 'Security',
+    security: 'PATROL',
     logout:   'Log out',
   },
   kpi: {
@@ -977,7 +977,7 @@ const en: Msg = {
     crumb: 'Glossary',
   },
   infraNav: { dashboard: 'Dashboard', incidents: 'Incidents', checks: 'Checks', reports: 'Uptime Reports', settings: 'Settings', glossary: 'Glossary' },
-  navTitle: { admin: 'Settings', security: 'Security', bcp: 'BCP', infra: 'Health Monitoring' },
+  navTitle: { admin: 'Settings', security: 'PATROL', bcp: 'BCP', infra: 'Health Monitoring' },
   common: { open: 'Open', notGenerated: 'Not generated', dash: '—' },
   infraIncidents: {
     title: 'Incidents',
@@ -1013,7 +1013,7 @@ const en: Msg = {
     colStore: 'Store', colPeriod: 'Period', colGenerated: 'Generated', colRuns: 'Patrols', colDone: 'Done', colAnomalies: 'Anomalies', colReviews: 'Review', colPdf: 'PDF', colEmails: 'Recipients',
   },
   breadcrumb: {
-    admin: 'Settings', security: 'Security', bcp: 'BCP', infra: 'Health',
+    admin: 'Settings', security: 'PATROL', bcp: 'BCP', infra: 'Health',
     infraIncidents: 'Incidents', infraChecks: 'Checks', infraReports: 'Uptime Reports',
     securityReports: 'Patrol Reports',
   },
@@ -1261,7 +1261,7 @@ const zh: Msg = {
     settings: '设置',
     infra:    '健康监控',
     bcp:      'BCP',
-    security: '安全',
+    security: 'PATROL',
     logout:   '退出',
   },
   kpi: {
@@ -1382,7 +1382,7 @@ const zh: Msg = {
     crumb: '术语说明',
   },
   infraNav: { dashboard: '仪表盘', incidents: '事件', checks: '检查配置', reports: '可用率报告', settings: '监控设置', glossary: '术语表' },
-  navTitle: { admin: '设置', security: '安全', bcp: 'BCP', infra: '健康监控' },
+  navTitle: { admin: '设置', security: 'PATROL', bcp: 'BCP', infra: '健康监控' },
   common: { open: '打开', notGenerated: '未生成', dash: '—' },
   infraIncidents: {
     title: '事件',
@@ -1418,7 +1418,7 @@ const zh: Msg = {
     colStore: '门店', colPeriod: '对象期间', colGenerated: '生成时间', colRuns: '巡逻', colDone: '完成', colAnomalies: '异常', colReviews: '待确认', colPdf: 'PDF', colEmails: '发送至',
   },
   breadcrumb: {
-    admin: '设置', security: '安全', bcp: 'BCP', infra: '健康监控',
+    admin: '设置', security: 'PATROL', bcp: 'BCP', infra: '健康监控',
     infraIncidents: '事件', infraChecks: '检查配置', infraReports: '可用率报告',
     securityReports: '巡逻报告',
   },
@@ -1666,7 +1666,7 @@ const ko: Msg = {
     settings: '설정',
     infra:    '헬스 모니터링',
     bcp:      'BCP',
-    security: '보안',
+    security: 'PATROL',
     logout:   '로그아웃',
   },
   kpi: {
@@ -1787,7 +1787,7 @@ const ko: Msg = {
     crumb: '용어 설명',
   },
   infraNav: { dashboard: '대시보드', incidents: '인시던트', checks: '체크 설정', reports: '가동률 보고서', settings: '모니터링 설정', glossary: '용어 설명' },
-  navTitle: { admin: '설정', security: '보안', bcp: 'BCP', infra: '헬스 모니터링' },
+  navTitle: { admin: '설정', security: 'PATROL', bcp: 'BCP', infra: '헬스 모니터링' },
   common: { open: '열기', notGenerated: '미생성', dash: '—' },
   infraIncidents: {
     title: '인시던트',
@@ -1823,7 +1823,7 @@ const ko: Msg = {
     colStore: '매장', colPeriod: '대상 기간', colGenerated: '생성 시각', colRuns: '순찰', colDone: '완료', colAnomalies: '이상', colReviews: '확인 필요', colPdf: 'PDF', colEmails: '발송처',
   },
   breadcrumb: {
-    admin: '설정', security: '보안', bcp: 'BCP', infra: '헬스 모니터링',
+    admin: '설정', security: 'PATROL', bcp: 'BCP', infra: '헬스 모니터링',
     infraIncidents: '인시던트', infraChecks: '체크 설정', infraReports: '가동률 보고서',
     securityReports: '순찰 보고서',
   },
