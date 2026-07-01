@@ -12,6 +12,10 @@
     {
       "path": "/api/cron/security-patrol",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/security-report",
+      "schedule": "0 20 * * *"
     }
   ]
 }
