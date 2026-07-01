@@ -11,15 +11,13 @@
  * 認証: edge-health / security-patrol と同じ CRON_SECRET。
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { Buffer } from 'node:buffer'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { sendEmail, SECURITY_FROM_ADDRESS } from '@/lib/email/send'
-import { buildPatrolReportPdf, type ReportRun, type ReportFinding } from '@/lib/security/patrol-report'
+import { renderReportForRuns, type ReportRun } from '@/lib/security/patrol-report'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
 
-const MAX_THUMBS = 120
 const BUCKET = 'reports'
 
 /** now から「前日 JST 00:00〜当日 JST 00:00」を UTC ISO で返す。 */
@@ -31,14 +29,6 @@ function prevJstDay(now: Date): { fromISO: string; toISO: string } {
   const toISO = new Date(todayJstMidnightUtc).toISOString()
   const fromISO = new Date(todayJstMidnightUtc - 24 * 60 * 60 * 1000).toISOString()
   return { fromISO, toISO }
-}
-
-interface FindingRow {
-  id: string
-  run_id: string
-  camera_id: string
-  status: string
-  recorder_cameras: { name: string } | null
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
@@ -86,31 +76,6 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const runs = (runRows ?? []) as ReportRun[]
     if (!runs.length) { skippedNoRuns++; details.push({ store_id: storeId, result: 'no_runs' }); continue }
 
-    const runIds = runs.map((r) => r.id)
-    const { data: fRows } = await supa
-      .from('patrol_findings')
-      .select('id, run_id, camera_id, status, recorder_cameras ( name )')
-      .in('run_id', runIds)
-      .order('created_at', { ascending: true })
-    const fr = (fRows ?? []) as unknown as FindingRow[]
-    const findings: ReportFinding[] = fr.map((f) => ({
-      id: f.id, run_id: f.run_id, cameraName: f.recorder_cameras?.name ?? '—', status: f.status,
-    }))
-
-    // スナップショット取得（storage から直接 download。jpg→png フォールバック）。上限で打切り。
-    const images = new Map<string, Buffer | null>()
-    let downloaded = 0
-    for (const f of fr) {
-      if (downloaded >= MAX_THUMBS) { images.set(f.id, null); continue }
-      let buf: Buffer | null = null
-      for (const ext of ['jpg', 'png']) {
-        const { data: blob } = await supa.storage.from('security-snapshots').download(`${f.run_id}/${f.camera_id}.${ext}`)
-        if (blob) { buf = Buffer.from(await blob.arrayBuffer()); break }
-      }
-      if (buf) downloaded++
-      images.set(f.id, buf)
-    }
-
     const storeName = s.stores?.name ?? '—'
     const notify = (s.notify_emails ?? []).filter(Boolean)
 
@@ -122,13 +87,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       .maybeSingle()
     if (repErr || !report) { details.push({ store_id: storeId, result: 'insert_failed' }); continue }
 
-    // 2. PDF 生成 + アップロード
-    let pdf: Buffer
+    // 2. PDF 生成（findings 取得＋スナップ download＋描画は共通ヘルパー）+ アップロード
+    let pdf: Buffer, findingCount: number
     try {
-      pdf = await buildPatrolReportPdf({
-        storeName, periodFrom: fromISO, periodTo: toISO, generatedAt: now.toISOString(),
-        sentTo: notify, runs, findings, images,
+      const r = await renderReportForRuns(supa, {
+        storeName, runs, periodFrom: fromISO, periodTo: toISO, sentTo: notify, generatedAt: now.toISOString(),
       })
+      pdf = r.pdf; findingCount = r.findingCount
     } catch (e) {
       details.push({ store_id: storeId, result: `pdf_failed: ${(e as Error).message}` })
       continue
@@ -143,7 +108,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     if (notify.length) {
       const dateLabel = new Date(fromISO).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' })
       const html = `<p>${storeName} の巡回レポート（${dateLabel}）です。</p>`
-        + `<p>巡回 ${runs.length} 回・撮影 ${findings.length} 枚。詳細は添付 PDF、またはダッシュボードをご確認ください。</p>`
+        + `<p>巡回 ${runs.length} 回・撮影 ${findingCount} 枚。詳細は添付 PDF、またはダッシュボードをご確認ください。</p>`
         + `<p><a href="${pdfUrl}">レポート PDF を開く</a></p>`
       const res = await sendEmail(notify, `【巡回レポート】${storeName} ${dateLabel}`, html, [{ filename: `patrol-${dateLabel}.pdf`, content: pdf }], SECURITY_FROM_ADDRESS)
       if (res.ok) mailed++

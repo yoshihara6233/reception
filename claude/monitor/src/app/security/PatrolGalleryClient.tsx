@@ -9,8 +9,8 @@
  */
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Camera, Play, Flag, Check } from 'lucide-react'
-import { triggerManualPatrol, updateFindingStatus } from './actions'
+import { Camera, Play, Flag, Check, FileText } from 'lucide-react'
+import { triggerManualPatrol, updateFindingStatus, generateRunReportPdf } from './actions'
 
 export interface GalleryFinding {
   id: string
@@ -131,6 +131,35 @@ function Thumb({ f }: { f: GalleryFinding }) {
   )
 }
 
+/** このサイクルのレポート PDF を即時生成して開く。 */
+function RunReportButton({ runId, disabled }: { runId: string; disabled: boolean }) {
+  const [pending, startTransition] = useTransition()
+  const [err, setErr] = useState<string | null>(null)
+
+  function make() {
+    setErr(null)
+    startTransition(async () => {
+      const res = await generateRunReportPdf(runId)
+      if (res.ok && res.url) window.open(res.url, '_blank', 'noopener')
+      else setErr(res.error ?? 'PDF 生成に失敗しました')
+    })
+  }
+
+  return (
+    <span className="inline-flex items-center gap-2">
+      {err && <span className="text-[11px] text-red-600 dark:text-[#E87D74]">{err}</span>}
+      <button
+        onClick={make}
+        disabled={pending || disabled}
+        title={disabled ? '撮影待ち' : 'このサイクルのPDFを作成'}
+        className="inline-flex items-center gap-1 rounded border border-slate-300 px-2 py-0.5 text-[11px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-gedline dark:text-gedink2 dark:hover:bg-gedbg3"
+      >
+        <FileText size={12} strokeWidth={2} aria-hidden /> {pending ? '作成中…' : 'PDF'}
+      </button>
+    </span>
+  )
+}
+
 export function PatrolGalleryClient({ runs, stores }: { runs: RunCard[]; stores: StoreOption[] }) {
   return (
     <div className="space-y-4">
@@ -158,9 +187,12 @@ export function PatrolGalleryClient({ runs, stores }: { runs: RunCard[]; stores:
                   {TRIGGER_LABEL[run.trigger] ?? run.trigger}
                 </span>
               </div>
-              <span className="inline-flex items-center gap-1 text-[11px] text-slate-500 dark:text-gedink3">
-                <Check size={12} strokeWidth={2} aria-hidden /> {run.findings.length} 枚
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="inline-flex items-center gap-1 text-[11px] text-slate-500 dark:text-gedink3">
+                  <Check size={12} strokeWidth={2} aria-hidden /> {run.findings.length} 枚
+                </span>
+                <RunReportButton runId={run.id} disabled={run.findings.length === 0} />
+              </div>
             </div>
             {run.findings.length === 0 ? (
               <p className="px-3 py-4 text-[12px] text-slate-500 dark:text-gedink3">撮影待ち…（エッジが処理中）</p>
