@@ -38,6 +38,24 @@ export function AppHeader({
     return () => mq.removeEventListener?.('change', update)
   }, [])
 
+  // 未完了（未対応/対応中）の発報があれば ALARM タブを赤字にする。軽量ポーリング（45秒）＋
+  // 画面遷移時に再取得。RLS 越しなので閲覧可能店舗の発報のみ数える。
+  const [openAlarms, setOpenAlarms] = useState(0)
+  useEffect(() => {
+    let active = true
+    const load = async () => {
+      try {
+        const r = await fetch('/api/alarms/open-count', { cache: 'no-store' })
+        if (!r.ok) return
+        const j = await r.json()
+        if (active) setOpenAlarms(Number(j.count) || 0)
+      } catch { /* オフライン等は無視 */ }
+    }
+    load()
+    const timer = setInterval(load, 45_000)
+    return () => { active = false; clearInterval(timer) }
+  }, [pathname])
+
   const TABS = [
     { href: '/stores',   label: t.nav.monitor  },
     { href: '/bcp',      label: t.nav.bcp      },
@@ -92,18 +110,19 @@ export function AppHeader({
       <nav className="hidden gap-1 text-xs md:flex">
         {TABS.map((tab) => {
           const active = pathname === tab.href || pathname.startsWith(tab.href + '/')
+          // 未完了の発報がある時、ALARM タブは赤字で注意喚起（active/inactive とも赤を優先）。
+          const alarmOpen = tab.href === '/alarms' && openAlarms > 0
+          const cls = active
+            ? (alarmOpen ? 'bg-slate-800 text-red-400 font-semibold' : 'bg-slate-800 text-white font-semibold')
+            : (alarmOpen ? 'text-red-400 font-semibold hover:bg-slate-800/60' : 'text-slate-300 hover:bg-slate-800/60')
           return (
             <Link
               key={tab.href}
               href={tab.href}
-              className={
-                'rounded px-3 py-1 ' +
-                (active
-                  ? 'bg-slate-800 text-white font-semibold'
-                  : 'text-slate-300 hover:bg-slate-800/60')
-              }
+              className={'rounded px-3 py-1 ' + cls}
             >
               {tab.label}
+              {alarmOpen && <span className="ml-1 tabular-nums">({openAlarms})</span>}
             </Link>
           )
         })}

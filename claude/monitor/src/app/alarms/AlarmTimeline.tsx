@@ -132,7 +132,6 @@ export function AlarmTimeline({ events, stores }: { events: AlarmEventVM[]; stor
                 <th className="px-3 py-2 text-left">種別</th>
                 <th className="px-3 py-2 text-left">発報時刻</th>
                 <th className="px-3 py-2 text-left">店舗</th>
-                <th className="px-3 py-2 text-left">カメラ</th>
                 <th className="px-3 py-2 text-left">状態</th>
                 <th className="px-3 py-2 text-left">通知</th>
                 <th className="px-3 py-2"></th>
@@ -148,7 +147,6 @@ export function AlarmTimeline({ events, stores }: { events: AlarmEventVM[]; stor
                     </td>
                     <td className="px-3 py-2 font-mono text-[11px] tabular-nums text-slate-600 dark:text-gedink2">{fmtJst(r.occurredAt)}</td>
                     <td className="px-3 py-2 font-medium text-slate-800 dark:text-gedink">{r.storeName}</td>
-                    <td className="px-3 py-2 text-slate-600 dark:text-gedink2">{r.cameraName ?? '—'}</td>
                     <td className="px-3 py-2">
                       <span className={'inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ' + st.cls}>{st.label}</span>
                     </td>
