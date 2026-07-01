@@ -52,8 +52,8 @@ export default async function AlarmsPage() {
   const stores: AlarmStoreOption[] = ((storesRes.data ?? []) as StoreRow[]).map((s) => ({ id: s.id, name: s.name }))
 
   return (
-    <AdminShell pathname="/alarms" nav={ALARM_NAV} navTitle="発報">
-      <PageHeader title="発報タイムライン" crumb={[{ href: '/alarms', label: '発報' }]} />
+    <AdminShell pathname="/alarms" nav={ALARM_NAV} navTitle="ALARM">
+      <PageHeader title="発報タイムライン" crumb={[{ href: '/alarms', label: 'ALARM' }]} />
       <div className="px-5 py-4">
         <AlarmTimeline events={events} stores={stores} />
       </div>

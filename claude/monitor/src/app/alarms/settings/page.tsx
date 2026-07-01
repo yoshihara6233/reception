@@ -46,11 +46,11 @@ export default async function AlarmSettingsPage() {
   })
 
   return (
-    <AdminShell pathname="/alarms/settings" nav={ALARM_NAV} navTitle="発報">
+    <AdminShell pathname="/alarms/settings" nav={ALARM_NAV} navTitle="ALARM">
       <PageHeader
         title="発報設定"
         crumb={[
-          { href: '/alarms', label: '発報' },
+          { href: '/alarms', label: 'ALARM' },
           { href: '/alarms/settings', label: '発報設定' },
         ]}
       />
