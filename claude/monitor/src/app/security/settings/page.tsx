@@ -1,31 +1,21 @@
 /**
- * /security/settings — 店舗別 巡回設定
+ * /security/settings — 巡回設定（店舗別・一覧＋一括変更）
  *
- * 店舗ごとに巡回間隔・AI有効化・日次上限・通知先・有効化を編集。
+ * 固定時刻モード: 1日最大4回の巡回時刻を店舗毎に指定（全曜日実施・曜日指定なし）。
+ * /admin/bcp と同形の一覧UI（絞り込み・複数選択・一括設定）。
  */
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
-import { SettingsCard, type StoreSetting } from './SettingsForm'
+import { SecuritySettingsTable, type SecuritySetting } from './SecuritySettingsTable'
 import { getT } from '@/lib/i18n/server'
 
-interface StoreRow {
-  id: string
-  name: string
-  area_code: string | null
-}
-
+interface StoreRow { id: string; name: string; area_code: string | null }
 interface SettingRow {
   store_id: string
-  schedule_mode: string
-  patrol_interval_min: number
-  active_from: string
-  active_to: string
-  active_days: number[] | null
+  enabled: boolean
   patrol_times: string[] | null
   notify_emails: string[] | null
-  report_show_verification: boolean
-  enabled: boolean
 }
 
 export default async function SecuritySettingsPage() {
@@ -34,29 +24,23 @@ export default async function SecuritySettingsPage() {
   const ts = t.securitySettings
 
   const [storesRes, settingsRes] = await Promise.all([
-    supa.from('stores').select('id, name, area_code').order('area_code', { ascending: true, nullsFirst: false }).order('name').limit(10_000),
-    supa.from('security_settings').select('store_id, schedule_mode, patrol_interval_min, active_from, active_to, active_days, patrol_times, notify_emails, report_show_verification, enabled').limit(10_000),
+    supa.from('stores').select('id, name, area_code').eq('is_active', true)
+      .order('area_code', { ascending: true, nullsFirst: false }).order('name').limit(10_000),
+    supa.from('security_settings').select('store_id, enabled, patrol_times, notify_emails').limit(10_000),
   ])
 
   const stores = (storesRes.data ?? []) as StoreRow[]
-  const settings = (settingsRes.data ?? []) as SettingRow[]
-  const byStore = new Map(settings.map((s) => [s.store_id, s]))
+  const byStore = new Map(((settingsRes.data ?? []) as SettingRow[]).map((s) => [s.store_id, s]))
 
-  const rows: StoreSetting[] = stores.map((st) => {
+  const rows: SecuritySetting[] = stores.map((st) => {
     const cfg = byStore.get(st.id)
     return {
       storeId: st.id,
       storeName: st.name,
       areaCode: st.area_code,
-      scheduleMode: (cfg?.schedule_mode === 'fixed' ? 'fixed' : 'interval'),
-      patrolIntervalMin: cfg?.patrol_interval_min ?? 240,
-      activeFrom: cfg?.active_from ?? '00:00',
-      activeTo: cfg?.active_to ?? '24:00',
-      activeDays: cfg?.active_days ?? [0, 1, 2, 3, 4, 5, 6],
+      enabled: cfg?.enabled ?? false,
       patrolTimes: cfg?.patrol_times ?? [],
       notifyEmails: cfg?.notify_emails ?? [],
-      reportShowVerification: cfg?.report_show_verification ?? true,
-      enabled: cfg?.enabled ?? false,
     }
   })
 
@@ -64,14 +48,20 @@ export default async function SecuritySettingsPage() {
     <AdminShell pathname="/security/settings" section="security">
       <PageHeader
         title={ts.title}
-        crumb={[{ href: '/security', label: t.breadcrumb.security }, { href: '/security/settings', label: ts.title }]}
+        crumb={[
+          { href: '/security', label: t.breadcrumb.security },
+          { href: '/security/settings', label: ts.title },
+        ]}
       />
-      <div className="px-5 py-4 space-y-3">
-        {rows.map((r) => (
-          <SettingsCard key={r.storeId} row={r} />
-        ))}
-        {rows.length === 0 && (
-          <p className="text-xs text-slate-500 dark:text-gedink3">{ts.empty}</p>
+      <div className="space-y-3 px-5 py-4">
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-xs leading-relaxed text-blue-800/90 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200/80">
+          店舗ごとに<b>1日最大4回の巡回時刻</b>を指定します（全曜日実施）。有効の店舗は指定時刻に自動巡回します。
+          絞り込み・複数選択して<b>一括設定</b>も可能です。巡回結果は<b>巡回レポート</b>で確認できます。
+        </div>
+        {rows.length === 0 ? (
+          <p className="text-xs text-slate-500 dark:text-gedink3">店舗がありません。</p>
+        ) : (
+          <SecuritySettingsTable initialRows={rows} />
         )}
       </div>
     </AdminShell>
