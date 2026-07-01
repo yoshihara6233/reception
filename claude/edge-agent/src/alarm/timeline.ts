@@ -1,16 +1,17 @@
 /**
- * 発報前後スナップ（PB7）— 1 発報につき「店舗の全カメラ × 秒オフセット」の JPEG を
- * 録画から抽出し、cloud (/api/alarms/frames/ingest) へ 1 枚ずつ中継する。
+ * 発報前後スナップ（PB7）— 1 発報につき「店舗の全カメラ × 秒オフセット」の JPEG を取得し、
+ * cloud (/api/alarms/frames/ingest) へ 1 枚ずつ中継する。
  *
- * BCP のタイムライン撮影（modes/bcp.ts）を秒粒度・発報単位に再構成したもの。抽出の下請け
- * （Frigate 録画 / i-PRO NVR 録画 → ffmpeg 先頭フレーム）は recording-frame.ts を共有。
+ * 取得方式（軽さ・低遅延のためハイブリッド）:
+ *   - 発報前（offset < 0, 例 -5秒）… 過去なので**録画から抽出**（時間は遡れない）。
+ *       Frigate 録画 / i-PRO NVR 録画 → ffmpeg 先頭フレーム（recording-frame.ts を BCP と共有）。
+ *       録画フラッシュ猶予として target+SETTLE まで待ってから抽出する。
+ *   - 発生時以降（offset >= 0）… その瞬間に**ライブ JPEG を 1 枚取得**（captureCameraJpeg＝
+ *       巡回と同経路: Frigate latest.jpg / ONVIF 直接 / go2rtc）。ffmpeg も NVR MP4 も不要で軽く、
+ *       録画フラッシュ待ちが無いので +5秒の画像は実際に発報+5秒で得られる。
  *
- * タイミング: 各オフセット target=occurred+offset を「録画がフラッシュされてから」抽出したい。
- *   → target + SETTLE まで待ってから抽出する（BCP と同じ理由。NVR が該当秒を VOD 化する猶予
- *     ＋ isPast を確実に成立させ録画経路を使う）。負オフセット(-5s)も含め全点に適用するため、
- *     最初のフレームは概ね occurred+SETTLE、最後(+3分)は occurred+180s+SETTLE で揃う。
- *   発生時の即時ライブスナップは ingest 側（/api/alarms/ingest）が別途 1 枚保存済みなので、
- *     利用者はまず即時スナップを見つつ、前後タイムラインが数分かけて埋まる UX になる。
+ * つまり録画抽出は各カメラ「-5秒の 1 枚」だけ、残りは軽量ライブ取得。全体は最後(+3分)＝occurred+180s
+ * 付近で揃う（-5秒だけは録画フラッシュ待ちのため occurred+SETTLE で埋まる）。
  *
  * エッジのコマンドループをブロックしないよう、index.ts からは await せず detached 起動する。
  */
@@ -40,8 +41,21 @@ export interface AlarmTimelineCommand {
   ingestUrl:  string
 }
 
-/** 指定 target 時刻の録画フレームを 1 枚取得する（BCP の source 選択と同ロジック）。 */
-async function captureFrameAt(
+/** その瞬間のライブ JPEG を 1 枚取得する（発生時以降・軽量経路）。失敗時 null。 */
+async function captureLiveFrame(
+  camera: CameraDescriptor,
+  signal: AbortSignal,
+): Promise<{ buf: Buffer; source: string } | null> {
+  try {
+    const { bytes, via } = await captureCameraJpeg(camera, signal)
+    return { buf: Buffer.from(bytes), source: `live-${via}` }
+  } catch {
+    return null
+  }
+}
+
+/** 指定 target 時刻の録画フレームを 1 枚取得する（発報前・BCP の source 選択と同ロジック）。 */
+async function captureRecordingFrame(
   camera:   CameraDescriptor,
   targetMs: number,
   signal:   AbortSignal,
@@ -159,15 +173,19 @@ export async function runAlarmTimelineCapture(
   await Promise.allSettled(cameras.map(async (camera) => {
     for (const offsetSec of offsets) {
       const targetMs = occurredMs + offsetSec * 1_000
-      // 録画フラッシュ猶予: target を過ぎてから抽出（負オフセットも含め全点に適用）。
-      await waitUntil(targetMs + settleMs)
+      const isPre = offsetSec < 0
+      // 発報前(録画): フラッシュ猶予として target+SETTLE まで待つ。
+      // 発生時以降(ライブ): その瞬間 target で軽量ライブ取得（フラッシュ待ち不要）。
+      await waitUntil(isPre ? targetMs + settleMs : targetMs)
 
       total++
       const ac = new AbortController()
       const timer = setTimeout(() => ac.abort(), CAPTURE_TIMEOUT_MS)
       const t0 = Date.now()
       try {
-        const frame = await sem.run(() => captureFrameAt(camera, targetMs, ac.signal))
+        const frame = await sem.run(() => isPre
+          ? captureRecordingFrame(camera, targetMs, ac.signal)
+          : captureLiveFrame(camera, ac.signal))
         if (!frame) {
           logger.warn({ alarmId: cmd.alarmId, cam_id: camera.id, offsetSec }, 'alarm-timeline: no frame')
           continue

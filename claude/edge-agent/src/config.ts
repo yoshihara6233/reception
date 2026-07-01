@@ -79,9 +79,10 @@ const Env = z.object({
   // 受信時に該当カメラを撮影して cloud /api/alarms/ingest へ中継する（要 MONITOR_URL）。
   ALARM_LISTEN_PORT: z.coerce.number().default(0),
 
-  // 発報前後スナップ（PB7）の録画フラッシュ猶予（ms）。各オフセット target を過ぎてから
-  // この時間だけ待って抽出する（NVR が該当秒を VOD 化する猶予＋ isPast 成立）。BCP 実機で
-  // 60s 必要だったため踏襲。小さくすると未フラッシュで latest フォールバックしやすくなる。
+  // 発報前後スナップ（PB7）の録画フラッシュ猶予（ms）。**発報前（-5秒）の録画抽出のみ**に適用し、
+  // target+この時間だけ待ってから抽出する（NVR が該当秒を VOD 化する猶予）。BCP 実機で 60s
+  // 必要だったため踏襲。小さくすると未フラッシュで latest フォールバックしやすくなる。
+  // 発生時以降はライブ即時取得のためこの猶予は掛からない。
   ALARM_FRAME_SETTLE_MS: z.coerce.number().default(60_000),
 })
 

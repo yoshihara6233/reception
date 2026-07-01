@@ -117,11 +117,11 @@ export default async function AlarmDetailPage({ params }: { params: Promise<{ id
         <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-gedline dark:bg-gedbg2">
           <div className="mb-3 flex items-center justify-between">
             <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-gedink3">
-              発報前後スナップ（録画抽出）
+              発報前後スナップ（−5秒=録画 / 発生時以降=ライブ）
             </div>
             <div className="text-[11px] text-slate-400 dark:text-gedink3">
               {capturedCount} / {totalExpected} 枚
-              {capturedCount < totalExpected && <span className="ml-1">・収集中（最大約 4 分）</span>}
+              {capturedCount < totalExpected && <span className="ml-1">・収集中（最大約 3 分）</span>}
             </div>
           </div>
 
