@@ -89,9 +89,13 @@ export async function POST(req: NextRequest) {
   const diffScore = rawDiff != null && rawDiff !== '' ? Number(rawDiff) : null
   let status: string
   if (diffScore == null || Number.isNaN(diffScore)) {
-    status = 'review'                                  // 差分不明 → 人手トリアージ
+    // Phase A（証跡型巡回・比較なし）: 差分が無ければ「撮影済み(normal)」として記録する。
+    // 以前は 'review'（人手キュー）にしていたが、比較しない運用では全件が
+    // review に溜まりノイズになるため normal に倒す。担当者は証跡ギャラリーを閲覧し、
+    // 気になる画像だけ updateFindingStatus で 'review'/'confirmed' に手動フラグする。
+    status = 'normal'
   } else if (diffScore >= sensitivity) {
-    status = 'anomaly'                                 // しきい値超え → 異常候補
+    status = 'anomaly'                                 // しきい値超え → 異常候補（エッジ差分提供時のみ）
   } else {
     status = 'normal'                                  // 正常（キューに出さない）
   }
