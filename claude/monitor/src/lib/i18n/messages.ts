@@ -451,7 +451,7 @@ const ja: Msg = {
     settings: '設定',
     infra:    '死活監視',
     bcp:      'BCP',
-    security: '警備OP',
+    security: 'SECURITY',
     logout:   'ログアウト',
   },
   kpi: {
@@ -572,7 +572,7 @@ const ja: Msg = {
     crumb: '用語説明',
   },
   infraNav: { dashboard: 'ダッシュボード', incidents: 'インシデント', checks: 'チェック設定', reports: '稼働率レポート', settings: '監視設定', glossary: '用語説明' },
-  navTitle: { admin: '設定', security: '警備OP', bcp: 'BCP', infra: '死活監視' },
+  navTitle: { admin: '設定', security: 'SECURITY', bcp: 'BCP', infra: '死活監視' },
   common: { open: '開く', notGenerated: '未生成', dash: '—' },
   infraIncidents: {
     title: 'インシデント',
@@ -608,7 +608,7 @@ const ja: Msg = {
     colStore: '店舗', colPeriod: '対象期間', colGenerated: '生成時刻', colRuns: '巡回', colDone: '完了', colAnomalies: '異常', colReviews: '要確認', colPdf: 'PDF', colEmails: '送信先',
   },
   breadcrumb: {
-    admin: '設定', security: '警備OP', bcp: 'BCP', infra: '死活監視',
+    admin: '設定', security: 'SECURITY', bcp: 'BCP', infra: '死活監視',
     infraIncidents: 'インシデント', infraChecks: 'チェック設定', infraReports: '稼働率レポート',
     securityReports: '巡回レポート',
   },
