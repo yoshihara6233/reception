@@ -256,8 +256,7 @@ function Row({
 
 /** 一括適用パネル: 適用する項目だけチェックして値を設定。 */
 function BulkPanel({ pending, onApply }: { pending: boolean; onApply: (patch: { enabled?: boolean; patrolTimes?: string[]; notifyEmails?: string[] }) => void }) {
-  const [useEnabled, setUseEnabled] = useState(false)
-  const [enabled, setEnabled] = useState(true)
+  const [enabledSel, setEnabledSel] = useState<'' | 'on' | 'off'>('')
   const [useTimes, setUseTimes] = useState(false)
   const [times, setTimes] = useState<string[]>(['', '', '', ''])
   const [useNotify, setUseNotify] = useState(false)
@@ -267,7 +266,7 @@ function BulkPanel({ pending, onApply }: { pending: boolean; onApply: (patch: { 
 
   function apply() {
     const patch: { enabled?: boolean; patrolTimes?: string[]; notifyEmails?: string[] } = {}
-    if (useEnabled) patch.enabled = enabled
+    if (enabledSel) patch.enabled = enabledSel === 'on'
     if (useTimes) patch.patrolTimes = times.filter(Boolean)
     if (useNotify) patch.notifyEmails = emails.split(',').map((e) => e.trim()).filter(Boolean)
     onApply(patch)
@@ -275,13 +274,14 @@ function BulkPanel({ pending, onApply }: { pending: boolean; onApply: (patch: { 
 
   return (
     <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 text-xs dark:border-gedline dark:bg-gedbg2">
-      <p className="text-[11px] text-slate-500 dark:text-gedink3">適用したい項目だけチェックを入れ、値を設定して「選択店舗に適用」を押してください。</p>
+      <p className="text-[11px] text-slate-500 dark:text-gedink3">変更する項目だけ設定して「選択店舗に適用」を押してください（「変更しない」の項目は現状のまま）。</p>
 
       <div className="flex flex-wrap items-center gap-2">
-        <label className="flex w-40 items-center gap-1.5"><input type="checkbox" checked={useEnabled} onChange={(e) => setUseEnabled(e.target.checked)} />有効／無効</label>
-        <select disabled={!useEnabled} value={enabled ? '1' : '0'} onChange={(e) => setEnabled(e.target.value === '1')} className={ctrl}>
-          <option value="1">有効にする</option>
-          <option value="0">無効にする</option>
+        <span className="w-40 text-slate-600 dark:text-gedink2">有効／無効</span>
+        <select value={enabledSel} onChange={(e) => setEnabledSel(e.target.value as '' | 'on' | 'off')} className={ctrl}>
+          <option value="">変更しない</option>
+          <option value="on">有効にする</option>
+          <option value="off">無効にする</option>
         </select>
       </div>
 
