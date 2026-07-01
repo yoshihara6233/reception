@@ -99,38 +99,34 @@ export async function updateFindingStatus(
  * その店舗にアクセスできるユーザだけが edge を取得できる。取得できたら service client で
  * patrol_runs 起票 + pending_command 書込（cron と同じ transport・trigger='manual'）。
  */
-export async function triggerManualPatrol(
+/** 1店舗へ手動巡回を発火する内部処理（authz は呼び出し側で getUser 済み前提）。 */
+async function dispatchManualPatrol(
+  supa: Awaited<ReturnType<typeof createSupabaseServer>>,
+  service: ReturnType<typeof createSupabaseService>,
   storeId: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const supa = await createSupabaseServer()
-  const { data: { user } } = await supa.auth.getUser()
-  if (!user) return { ok: false, error: 'unauthorized' }
-
   // 認可ゲート: 店舗のエッジをセッション RLS 越しに読む。見えなければアクセス権なし。
   const { data: edge } = await supa
     .from('edge_devices')
     .select('id, pending_command, last_seen_at')
     .eq('store_id', storeId)
     .maybeSingle()
-  if (!edge) return { ok: false, error: 'この店舗のエッジが見つからないか、権限がありません' }
+  if (!edge) return { ok: false, error: 'エッジ未登録／権限なし' }
 
   const staleMs = MONITOR_STALE_SECONDS * 1000
   const fresh = edge.last_seen_at && (Date.now() - new Date(edge.last_seen_at).getTime()) < staleMs
-  if (!fresh) return { ok: false, error: 'エッジが応答していません（オフライン）' }
-  if (edge.pending_command != null) {
-    return { ok: false, error: 'エッジが処理中です。少し待って再実行してください' }
-  }
+  if (!fresh) return { ok: false, error: 'オフライン' }
+  if (edge.pending_command != null) return { ok: false, error: '処理中' }
 
-  const service = createSupabaseService()
   const camIds = await listPatrolCameraIds(service, edge.id)
-  if (!camIds.length) return { ok: false, error: '巡回対象カメラがありません' }
+  if (!camIds.length) return { ok: false, error: '巡回対象カメラなし' }
 
   const { data: run, error: runErr } = await service
     .from('patrol_runs')
     .insert({ store_id: storeId, trigger: 'manual', status: 'capturing' })
     .select('id')
     .maybeSingle()
-  if (runErr || !run) return { ok: false, error: runErr?.message ?? '巡回の起票に失敗しました' }
+  if (runErr || !run) return { ok: false, error: runErr?.message ?? '起票失敗' }
 
   const command = buildCaptureCommand(run.id as string, camIds)
   const { error: cmdErr } = await service
@@ -138,9 +134,38 @@ export async function triggerManualPatrol(
     .update({ pending_command: command, pending_command_at: new Date().toISOString() })
     .eq('id', edge.id)
   if (cmdErr) return { ok: false, error: cmdErr.message }
-
-  revalidatePath('/security')
   return { ok: true }
+}
+
+export async function triggerManualPatrol(
+  storeId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const supa = await createSupabaseServer()
+  const { data: { user } } = await supa.auth.getUser()
+  if (!user) return { ok: false, error: 'unauthorized' }
+  const res = await dispatchManualPatrol(supa, createSupabaseService(), storeId)
+  if (res.ok) revalidatePath('/security')
+  return res
+}
+
+/**
+ * 複数店舗へ一括で「今すぐ巡回」を発火する（巡回ランチャー用）。
+ * 店舗ごとに成否を返す（オフライン/処理中/カメラなし等は個別にエラー）。
+ */
+export async function triggerManualPatrols(
+  storeIds: string[],
+): Promise<{ ok: boolean; results?: Array<{ storeId: string; ok: boolean; error?: string }>; error?: string }> {
+  const supa = await createSupabaseServer()
+  const { data: { user } } = await supa.auth.getUser()
+  if (!user) return { ok: false, error: 'unauthorized' }
+  const service = createSupabaseService()
+  const results: Array<{ storeId: string; ok: boolean; error?: string }> = []
+  for (const id of storeIds) {
+    const r = await dispatchManualPatrol(supa, service, id)
+    results.push({ storeId: id, ...r })
+  }
+  revalidatePath('/security')
+  return { ok: true, results }
 }
 
 /**
