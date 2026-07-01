@@ -136,9 +136,15 @@ export async function pointKnownGood(paths: OtaPaths, target: string): Promise<v
   await fs.rename(tmp, paths.knownGood)
 }
 
-/** systemd ユニットを再起動（sudoers NOPASSWD 前提）。 */
+/**
+ * systemd ユニットを再起動（sudoers NOPASSWD 前提）。
+ * **--no-block 必須**: agent が自ユニットを再起動すると、restart 完了を待つ間に
+ * systemd が自プロセスを SIGTERM で停止し、`systemctl` クライアントが殺されて
+ * 非ゼロ終了＝誤失敗になる。--no-block はジョブ投入で即 return するため、
+ * 自プロセスが殺される前に exec が正常終了する（restart 自体は systemd が実行）。
+ */
 export async function restartService(unit: string): Promise<void> {
-  await run('sudo', ['systemctl', 'restart', unit])
+  await run('sudo', ['systemctl', 'restart', '--no-block', unit])
 }
 
 export interface RunnerDeps {
@@ -166,16 +172,13 @@ export async function applyDesired(deps: RunnerDeps, desired: DesiredVersions): 
   }
   const target = desired.agent as string
   logger.info({ from: running, to: target }, 'ota: starting agent self-update')
+
+  // (1) ステージだけを try で囲む。ここで失敗＝current 未切替なので現行版のまま安全に
+  //     rolled_back（失敗版を cooldown 登録）。典型例: typecheck プリフライト不合格。
   try {
     await stageRelease(paths, target)
-    const next = beginUpdate(state, target, ISO())
-    await writeState(paths, next)
-    await pointCurrent(paths, releaseDir(paths, target))
-    // 再起動 → 新版で起動 → verifyOnBoot が健全性を判定。
-    await restartService(deps.agentUnit)
   } catch (err) {
-    logger.error({ err: (err as Error).message, target }, 'ota: stage/swap failed → abort (current unchanged)')
-    // ステージ段階の失敗は current 未切替なので現行版のまま。失敗版をクールダウン登録。
+    logger.error({ err: (err as Error).message, target }, 'ota: stage failed → abort (current unchanged)')
     await writeState(paths, {
       ...state,
       status: 'rolled_back',
@@ -183,6 +186,20 @@ export async function applyDesired(deps: RunnerDeps, desired: DesiredVersions): 
       last_error: `stage_failed: ${(err as Error).message}`,
       updated_at: ISO(),
     })
+    return
+  }
+
+  // (2) 切替＋再起動。pending_verify を先に永続化してから current を切替える。
+  //     restart は自ユニット対象なので --no-block（restartService 内）。自プロセスが
+  //     SIGTERM で殺される前に exec が返るため誤失敗にならない。仮に restart 要求が
+  //     失敗しても pending_verify は残るので、次回起動時に verifyOnBoot が検証/復帰する。
+  const next = beginUpdate(state, target, ISO())
+  await writeState(paths, next)
+  await pointCurrent(paths, releaseDir(paths, target))
+  try {
+    await restartService(deps.agentUnit)
+  } catch (err) {
+    logger.warn({ err: (err as Error).message }, 'ota: restart request errored (pending_verify persisted; verify on next boot)')
   }
 }
 
