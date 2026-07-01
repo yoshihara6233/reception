@@ -24,10 +24,6 @@
  *   bcp_clips row per snapshot. offset_min column added by migration
  *   20260531_001. clip_url and thumbnail_url both point at the same JPEG.
  */
-import { spawn } from 'child_process'
-import { mkdir, unlink, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { type SupabaseClient } from '@supabase/supabase-js'
 import { getSupabase } from '../supabase.js'
 import { config } from '../config.js'
@@ -35,7 +31,10 @@ import { logger } from '../logger.js'
 import { snapshotUrl } from '../rtsp/url.js'
 import { Semaphore } from '../util/semaphore.js'
 import { fetchBcpSnapshot } from '../bcp-fetchers/index.js'
-import { downloadIproNvrMp4 } from '../adapters/i-pro/nvr-vod.js'
+import {
+  fetchFrigateHistoricalFrame,
+  fetchIproNvrHistoricalFrame,
+} from '../security/recording-frame.js'
 import { captureAtMs, normalizeOffsets } from './bcp-timing.js'
 import type { CameraDescriptor } from '../types.js'
 
@@ -102,143 +101,6 @@ function waitUntil(targetMs: number): Promise<void> {
   const delay = Math.max(0, targetMs - Date.now())
   if (delay === 0) return Promise.resolve()
   return new Promise((res) => setTimeout(res, delay))
-}
-
-/**
- * F70: Try to fetch a single frame from Frigate's recorded video at a
- * specific past timestamp, so T-5/T+0/etc. show the actual moment instead
- * of "whatever Frigate has now" (which previously gave 4 identical frames).
- *
- * Strategy:
- *   1. Pull a 1-second mp4 clip from Frigate's recording endpoint covering
- *      the target instant.
- *   2. Pipe the clip into `ffmpeg -frames:v 1 -f mjpeg pipe:1` to extract
- *      the first frame as a JPEG buffer.
- *
- * Returns null on any failure so callers can fall back to `latest.jpg`.
- *
- * Only meaningful for Frigate. Other vendors don't expose this endpoint.
- */
-async function fetchFrigateHistoricalFrame(
-  frigateHost:    string,
-  frigateApiPort: number,
-  frigateCamera:  string,
-  targetMs:       number,
-): Promise<Buffer | null> {
-  const tsSec = Math.floor(targetMs / 1000)
-  const clipUrl =
-    `http://${frigateHost}:${frigateApiPort}` +
-    `/api/${encodeURIComponent(frigateCamera)}/start/${tsSec}/end/${tsSec + 1}/clip.mp4`
-
-  let mp4: Buffer
-  try {
-    const r = await fetch(clipUrl)
-    if (!r.ok) return null
-    const ab = await r.arrayBuffer()
-    if (ab.byteLength < 1024) return null  // Frigate returns ~0 bytes if no recording
-    mp4 = Buffer.from(ab)
-  } catch {
-    return null
-  }
-
-  return extractFirstFrame(mp4)
-}
-
-/**
- * Extract the first frame of an MP4 buffer as a JPEG. Returns null on failure.
- * Shared by the Frigate and i-PRO NVR historical-frame paths.
- *
- * We write the MP4 to a temp FILE and let ffmpeg read it with `-i <file>`
- * (seekable) instead of piping via stdin. i-PRO NVR (NU-100) recordings are
- * standard MP4 with the `moov` atom at the END, which a non-seekable stdin
- * pipe cannot demux ("partial file / Invalid data found"). A real file lets
- * ffmpeg seek to the moov. Frigate's fragmented MP4 also reads fine from a file.
- */
-async function extractFirstFrame(mp4: Buffer): Promise<Buffer | null> {
-  const dir    = join(tmpdir(), 'intereco-edge-bcp')
-  const inPath = join(dir, `${crypto.randomUUID()}.mp4`)
-  try {
-    await mkdir(dir, { recursive: true })
-    await writeFile(inPath, mp4)
-
-    return await new Promise<Buffer | null>((resolve) => {
-      const ff = spawn(config.FFMPEG_BIN, [
-        '-hide_banner',
-        '-loglevel', 'error',
-        '-i', inPath,
-        '-frames:v', '1',
-        '-q:v', '3',          // JPEG quality (2-31, lower is better)
-        '-f', 'image2',
-        '-c:v', 'mjpeg',
-        'pipe:1',
-      ])
-
-      const chunks: Buffer[] = []
-      let stderrBuf = ''
-      let resolved = false
-
-      ff.stdout.on('data', (c: Buffer) => chunks.push(c))
-      ff.stderr.on('data', (c: Buffer) => { stderrBuf += c.toString('utf8') })
-
-      ff.on('error', () => {
-        if (resolved) return
-        resolved = true
-        resolve(null)
-      })
-      ff.on('close', (code) => {
-        if (resolved) return
-        resolved = true
-        if (code !== 0) {
-          logger.debug({ code, stderr: stderrBuf.slice(0, 200) }, 'bcp: ffmpeg frame extract failed')
-          return resolve(null)
-        }
-        const out = Buffer.concat(chunks)
-        // Validate: minimum JPEG SOI marker (0xFFD8)
-        if (out.length < 2 || out[0] !== 0xff || out[1] !== 0xd8) {
-          return resolve(null)
-        }
-        resolve(out)
-      })
-    })
-  } catch (e) {
-    logger.debug({ err: (e as Error).message }, 'bcp: extractFirstFrame temp write failed')
-    return null
-  } finally {
-    await unlink(inPath).catch(() => {})
-  }
-}
-
-/**
- * i-PRO NVR (NU-100 等) の録画から、指定時刻のフレームを 1 枚取り出す。
- *
- * VOD と同じ httpdl.cgi 経路（downloadIproNvrMp4）で対象時刻±数秒の録画 MP4 を取得し、
- * ffmpeg で先頭フレームを JPEG 化する。これにより onvif-generic（カメラ直ライブ）でも
- * NU-100 に録画がある店舗では BCP の過去フレームを取得できる。
- *
- * 失敗時（録画なし・到達不可・抽出失敗）は null を返し、呼び出し側がフォールバックする。
- */
-async function fetchIproNvrHistoricalFrame(
-  nvr:      { endpoint: string; username: string; password: string },
-  channel:  number,
-  targetMs: number,
-): Promise<Buffer | null> {
-  try {
-    // 対象時刻から約10秒の窓。短すぎる(±数秒)と完全なGOPが入らず demux 不可になるため、
-    // 先頭フレーム(≒対象時刻)を確実に取れるよう少し広めに取る。差は1時間以内（NVR制約）。
-    const from = new Date(targetMs - 1_000)
-    const to   = new Date(targetMs + 10_000)
-    const mp4  = await downloadIproNvrMp4(
-      { endpoint: nvr.endpoint, username: nvr.username, password: nvr.password, timeoutMs: 30_000 },
-      channel,
-      from,
-      to,
-    )
-    if (!mp4 || mp4.length < 1024) return null
-    return await extractFirstFrame(mp4)
-  } catch (e) {
-    logger.debug({ err: (e as Error).message, channel }, 'bcp: i-PRO NVR historical frame failed')
-    return null
-  }
 }
 
 async function captureOneSnapshot(

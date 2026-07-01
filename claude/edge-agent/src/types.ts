@@ -21,6 +21,9 @@ export type EdgeCommand =
   // （index.ts の switch に case 無し → 受信しても無音で読み飛ばす no-op）。
   // 実装は別タスク化（ffmpeg 静止画取得 + ingest_url への POST）。
   | { action: 'capture_snapshot'; request_id: string; run_id: string; camera_ids: string[]; ingest_url: string }
+  // 発報前後スナップ（PB7）: 1 発報につき全カメラ×秒オフセットの録画フレームを抽出し ingest_url へ POST。
+  // ハンドラは detached 起動（数分かかるためコマンドループをブロックしない）。
+  | { action: 'capture_alarm_timeline'; request_id: string; alarm_id: string; occurred_at: string; offsets_sec: number[]; ingest_url: string }
 
 export type EdgeState = 'idle' | 'grid' | 'live' | 'vod' | 'bcp' | 'error'
 
