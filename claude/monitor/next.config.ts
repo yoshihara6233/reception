@@ -16,6 +16,8 @@ const config: NextConfig = {
   // serverless バンドルにフォントを含める（未指定だと本番で ENOENT）。
   outputFileTracingIncludes: {
     '/api/cron/security-report': ['./fonts/**'],
+    // /security の server action generateRunReportPdf も同梱フォントを読む。
+    '/security': ['./fonts/**'],
   },
   images: {
     remotePatterns: [

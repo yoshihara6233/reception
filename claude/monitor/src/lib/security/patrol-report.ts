@@ -11,6 +11,7 @@
  * PDF Buffer を返すだけ。フォントは同梱 OTF（Noto Sans JP）を process.cwd() から読む。
  */
 import PDFDocument from 'pdfkit'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Buffer } from 'node:buffer'
@@ -40,6 +41,56 @@ export interface PatrolReportInput {
   findings: ReportFinding[]
   /** findingId → JPEG/PNG バッファ（取得失敗は null）。 */
   images: Map<string, Buffer | null>
+}
+
+interface FindingRow {
+  id: string
+  run_id: string
+  camera_id: string
+  status: string
+  recorder_cameras: { name: string } | null
+}
+
+/**
+ * 巡回 run 群の findings を取得し、スナップショットを Storage から download して
+ * レポート PDF を生成する（日次 cron と 単一サイクルの手動PDFで共有）。
+ * 返り値に撮影枚数を含める（cron のメール本文で使う）。
+ */
+export async function renderReportForRuns(
+  service: SupabaseClient,
+  input: { storeName: string; runs: ReportRun[]; periodFrom: string; periodTo: string; sentTo: string[]; generatedAt: string },
+): Promise<{ pdf: Buffer; findingCount: number }> {
+  const runIds = input.runs.map((r) => r.id)
+  let findings: ReportFinding[] = []
+  const images = new Map<string, Buffer | null>()
+
+  if (runIds.length) {
+    const { data: fRows } = await service
+      .from('patrol_findings')
+      .select('id, run_id, camera_id, status, recorder_cameras ( name )')
+      .in('run_id', runIds)
+      .order('created_at', { ascending: true })
+    const fr = (fRows ?? []) as unknown as FindingRow[]
+    findings = fr.map((f) => ({ id: f.id, run_id: f.run_id, cameraName: f.recorder_cameras?.name ?? '—', status: f.status }))
+
+    let downloaded = 0
+    for (const f of fr) {
+      if (downloaded >= MAX_THUMBS) { images.set(f.id, null); continue }
+      let buf: Buffer | null = null
+      for (const ext of ['jpg', 'png']) {
+        const { data: blob } = await service.storage.from('security-snapshots').download(`${f.run_id}/${f.camera_id}.${ext}`)
+        if (blob) { buf = Buffer.from(await blob.arrayBuffer()); break }
+      }
+      if (buf) downloaded++
+      images.set(f.id, buf)
+    }
+  }
+
+  const pdf = await buildPatrolReportPdf({
+    storeName: input.storeName, periodFrom: input.periodFrom, periodTo: input.periodTo,
+    generatedAt: input.generatedAt, sentTo: input.sentTo, runs: input.runs, findings, images,
+  })
+  return { pdf, findingCount: findings.length }
 }
 
 const fmtDate = (iso: string) =>

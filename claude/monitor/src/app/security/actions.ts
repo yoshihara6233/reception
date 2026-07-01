@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { MONITOR_STALE_SECONDS } from '@intereco/shared'
 import { listPatrolCameraIds, buildCaptureCommand } from '@/lib/security/patrol-dispatch'
+import { renderReportForRuns, type ReportRun } from '@/lib/security/patrol-report'
 
 /**
  * 監視員が finding をトリアージする（現認→異常確定 / 誤検知）。
@@ -91,6 +92,57 @@ export async function triggerManualPatrol(
   return { ok: true }
 }
 
+/**
+ * 単一巡回サイクルのレポート PDF をその場で生成し、公開 URL を返す（A4拡張）。
+ * 「今すぐ巡回」を含む任意のサイクルを、日次を待たず即 PDF 化する。
+ *
+ * 認可: patrol_runs をセッション RLS 越しに読む（store-scoped）。見えれば権限あり。
+ * 生成は service client（Storage download / reports バケット書込）。
+ */
+export async function generateRunReportPdf(
+  runId: string,
+): Promise<{ ok: boolean; url?: string; error?: string }> {
+  const supa = await createSupabaseServer()
+  const { data: { user } } = await supa.auth.getUser()
+  if (!user) return { ok: false, error: 'unauthorized' }
+
+  const { data: run } = await supa
+    .from('patrol_runs')
+    .select('id, started_at, trigger, status, stores ( name )')
+    .eq('id', runId)
+    .maybeSingle()
+  if (!run) return { ok: false, error: '巡回が見つからないか、権限がありません' }
+
+  const st = (run as unknown as { stores?: { name: string } | { name: string }[] | null }).stores
+  const storeName = (Array.isArray(st) ? st[0]?.name : st?.name) ?? '—'
+  const service = createSupabaseService()
+  const nowIso = new Date().toISOString()
+
+  let pdf: Buffer
+  try {
+    const r = await renderReportForRuns(service, {
+      storeName,
+      runs: [{ id: run.id, started_at: run.started_at, trigger: run.trigger, status: run.status } as ReportRun],
+      periodFrom: run.started_at,
+      periodTo: nowIso,
+      sentTo: [],
+      generatedAt: nowIso,
+    })
+    pdf = r.pdf
+  } catch (e) {
+    return { ok: false, error: `PDF 生成に失敗しました: ${(e as Error).message}` }
+  }
+
+  const key = `security/run-${runId}.pdf`
+  const { error: upErr } = await service.storage
+    .from('reports')
+    .upload(key, pdf, { contentType: 'application/pdf', upsert: true })
+  if (upErr) return { ok: false, error: `保存に失敗しました: ${upErr.message}` }
+
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+  return { ok: true, url: `${base}/storage/v1/object/public/reports/${key}` }
+}
+
 /** 店舗の警備設定を upsert（スケジュール・AI・通知先・有効化）。 */
 export async function upsertSecuritySettings(input: {
   storeId: string
@@ -100,8 +152,6 @@ export async function upsertSecuritySettings(input: {
   activeTo: string
   activeDays: number[]
   patrolTimes: string[]
-  aiEnabled: boolean
-  aiDailyCap: number
   notifyEmails: string[]
   reportShowVerification: boolean
   enabled: boolean
@@ -136,8 +186,6 @@ export async function upsertSecuritySettings(input: {
         active_to:                input.activeTo,
         active_days:              input.activeDays,
         patrol_times:             input.patrolTimes,
-        ai_enabled:               input.aiEnabled,
-        ai_daily_cap:             input.aiDailyCap,
         notify_emails:            input.notifyEmails,
         report_show_verification: input.reportShowVerification,
         enabled:                  input.enabled,
@@ -148,37 +196,5 @@ export async function upsertSecuritySettings(input: {
   if (error) return { ok: false, error: error.message }
   revalidatePath('/security/settings')
   revalidatePath('/security')
-  return { ok: true }
-}
-
-/** カメラの巡回設定を upsert（プロンプト・感度・ベースライン・有効化）。 */
-export async function upsertCameraConfig(input: {
-  cameraId: string
-  aiPrompt: string
-  sensitivity: number
-  patrolEnabled: boolean
-  baselineDayUrl?: string | null
-  baselineNightUrl?: string | null
-}): Promise<{ ok: boolean; error?: string }> {
-  const supa = await createSupabaseServer()
-  const { data: { user } } = await supa.auth.getUser()
-  if (!user) return { ok: false, error: 'unauthorized' }
-
-  const { error } = await supa
-    .from('security_camera_config')
-    .upsert(
-      {
-        camera_id:          input.cameraId,
-        ai_prompt:          input.aiPrompt,
-        sensitivity:        input.sensitivity,
-        patrol_enabled:     input.patrolEnabled,
-        baseline_day_url:   input.baselineDayUrl ?? null,
-        baseline_night_url: input.baselineNightUrl ?? null,
-      },
-      { onConflict: 'camera_id' },
-    )
-
-  if (error) return { ok: false, error: error.message }
-  revalidatePath('/security/cameras')
   return { ok: true }
 }
