@@ -41,6 +41,15 @@ export interface OnvifDeviceInfo {
 const NS_S    = 'http://www.w3.org/2003/05/soap-envelope'
 const NS_TDS  = 'http://www.onvif.org/ver10/device/wsdl'
 const NS_TRT  = 'http://www.onvif.org/ver10/media/wsdl'
+const NS_TEV  = 'http://www.onvif.org/ver10/events/wsdl'
+const NS_WSA  = 'http://www.w3.org/2005/08/addressing'
+
+/** ONVIF Event（PullPoint）から取り出した1通知。 */
+export interface OnvifEvent {
+  topic: string                       // 例 tns1:VideoSource/MotionAlarm
+  time?: string                       // UtcTime
+  items: Record<string, string>       // Source/Data の SimpleItem（例 State: true）
+}
 
 export class OnvifSoapClient {
   private readonly endpoint: string
@@ -135,6 +144,64 @@ export class OnvifSoapClient {
     return this.extractTag(xml, 'Uri')
   }
 
+  // ─── Events（PullPoint 購読）─────────────────────────────────────────────
+
+  private eventUrl: string | null = null
+
+  /** Event サービス URL を解決（GetCapabilities Events XAddr → フォールバック）。 */
+  private async resolveEventUrl(): Promise<string> {
+    if (this.eventUrl) return this.eventUrl
+    try {
+      const xml = await this.callDevice(`<tds:GetCapabilities><tds:Category>Events</tds:Category></tds:GetCapabilities>`)
+      const m = xml.match(/<(?:[a-z0-9]+:)?Events\b[\s\S]*?<(?:[a-z0-9]+:)?XAddr>([^<]+)<\/(?:[a-z0-9]+:)?XAddr>/i)
+      if (m?.[1]) { this.eventUrl = m[1].trim(); return this.eventUrl }
+    } catch { /* フォールバックへ */ }
+    this.eventUrl = `${this.endpoint}/onvif/event_service`
+    return this.eventUrl
+  }
+
+  /**
+   * PullPoint 購読を作成し、pull 用の SubscriptionReference アドレスを返す。
+   * 一部機種は SubscriptionReference を返さず、Event サービス URL をそのまま
+   * pull 先にできるので、取れなければ Event URL にフォールバックする。
+   */
+  async createPullPointSubscription(termSec = 120): Promise<string> {
+    const url = await this.resolveEventUrl()
+    const xml = await this.doCall(
+      url,
+      `<tev:CreatePullPointSubscription><tev:InitialTerminationTime>PT${termSec}S</tev:InitialTerminationTime></tev:CreatePullPointSubscription>`,
+      { tev: NS_TEV, wsa: NS_WSA },
+      { to: url, action: `${NS_TEV}/EventPortType/CreatePullPointSubscriptionRequest` },
+    )
+    const ref = xml.match(/<(?:[a-z0-9]+:)?SubscriptionReference>([\s\S]*?)<\/(?:[a-z0-9]+:)?SubscriptionReference>/i)?.[1] ?? ''
+    const addr = ref.match(/<(?:[a-z0-9]+:)?Address>([^<]+)<\/(?:[a-z0-9]+:)?Address>/i)?.[1]
+    return (addr && addr.trim()) || url
+  }
+
+  /** PullMessages で通知を取り出す（timeout 秒待つ・最大 limit 件）。 */
+  async pullMessages(subAddr: string, timeoutSec = 10, limit = 10): Promise<OnvifEvent[]> {
+    const xml = await this.doCall(
+      subAddr,
+      `<tev:PullMessages><tev:Timeout>PT${timeoutSec}S</tev:Timeout><tev:MessageLimit>${limit}</tev:MessageLimit></tev:PullMessages>`,
+      { tev: NS_TEV, wsa: NS_WSA },
+      { to: subAddr, action: `${NS_TEV}/PullPointSubscription/PullMessagesRequest` },
+    )
+    const events: OnvifEvent[] = []
+    const re = /<(?:[a-z0-9]+:)?NotificationMessage>([\s\S]*?)<\/(?:[a-z0-9]+:)?NotificationMessage>/gi
+    let m: RegExpExecArray | null
+    while ((m = re.exec(xml))) {
+      const block = m[1]
+      const topic = (block.match(/<(?:[a-z0-9]+:)?Topic[^>]*>([\s\S]*?)<\/(?:[a-z0-9]+:)?Topic>/i)?.[1] ?? '').replace(/<[^>]*>/g, '').trim()
+      const time = block.match(/UtcTime="([^"]+)"/i)?.[1]
+      const items: Record<string, string> = {}
+      const si = /<(?:[a-z0-9]+:)?SimpleItem\s+[^>]*Name="([^"]+)"[^>]*Value="([^"]*)"/gi
+      let s: RegExpExecArray | null
+      while ((s = si.exec(block))) items[s[1]] = s[2]
+      events.push({ topic, time, items })
+    }
+    return events
+  }
+
   // ─── 内部 ───────────────────────────────────────────────────────────────
 
   private async callDevice(body: string): Promise<string> {
@@ -170,16 +237,27 @@ export class OnvifSoapClient {
     return this.mediaUrl
   }
 
-  /** 認証付き SOAP 呼び出し (時刻同期 → WS-Security 付与) */
+  /** 認証付き SOAP 呼び出し (時刻同期 → WS-Security 付与、任意で WS-Addressing) */
   private async doCall(
     url:  string,
     body: string,
     ns:   Record<string, string>,
+    wsa?: { to: string; action: string },
   ): Promise<string> {
     await this.ensureTimeSynced()
     const nsAttrs = Object.entries(ns).map(([k, v]) => `xmlns:${k}="${v}"`).join(' ')
-    const envelope = this.buildEnvelope(body, nsAttrs, this.buildWsseHeader())
+    const header = (wsa ? this.buildWsaHeader(wsa.to, wsa.action) : '') + this.buildWsseHeader()
+    const envelope = this.buildEnvelope(body, nsAttrs, header)
     return this.rawPost(url, envelope)
+  }
+
+  /** WS-Addressing ヘッダ（Events の PullPoint で必要な機種向け）。 */
+  private buildWsaHeader(to: string, action: string): string {
+    const uuid = randomBytes(16).toString('hex').replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, '$1-$2-$3-$4-$5')
+    return `<wsa:To s:mustUnderstand="1">${this.escape(to)}</wsa:To>`
+      + `<wsa:Action s:mustUnderstand="1">${action}</wsa:Action>`
+      + `<wsa:MessageID>urn:uuid:${uuid}</wsa:MessageID>`
+      + `<wsa:ReplyTo><wsa:Address>http://www.w3.org/2005/08/addressing/anonymous</wsa:Address></wsa:ReplyTo>`
   }
 
   /** 機器時刻とのオフセットを一度だけ測る (失敗してもオフセット 0 で続行) */
