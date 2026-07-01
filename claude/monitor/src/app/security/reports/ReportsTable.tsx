@@ -14,7 +14,6 @@ export interface ReportRowVM {
   dateLabel: string       // 対象日（日付のみ）
   generatedLabel: string  // 生成時刻
   runs: number
-  done: number
   pdfUrl: string | null
   emails: string
   count: number           // 証跡枚数（画像ビューアの有効/無効）
@@ -69,7 +68,6 @@ export function ReportsTable({ rows }: { rows: ReportRowVM[] }) {
               <th className="px-3 py-1.5">対象日{filterInput('dateLabel')}</th>
               <th className="px-3 py-1.5">生成時刻{filterInput('generatedLabel')}</th>
               <th className="px-3 py-1.5 text-center">巡回</th>
-              <th className="px-3 py-1.5 text-center">完了</th>
               <th className="px-3 py-1.5">PDF</th>
               <th className="px-3 py-1.5">画像</th>
               <th className="px-3 py-1.5">送信先{filterInput('emails')}</th>
@@ -85,7 +83,6 @@ export function ReportsTable({ rows }: { rows: ReportRowVM[] }) {
                 <td className="px-3 py-1.5 font-mono tabular-nums">{r.dateLabel}</td>
                 <td className="px-3 py-1.5 font-mono tabular-nums">{r.generatedLabel}</td>
                 <td className="px-3 py-1.5 text-center font-mono tabular-nums">{r.runs}</td>
-                <td className="px-3 py-1.5 text-center font-mono tabular-nums">{r.done}</td>
                 <td className="px-3 py-1.5">
                   {r.pdfUrl ? (
                     <a href={r.pdfUrl} target="_blank" rel="noopener noreferrer"
@@ -103,7 +100,7 @@ export function ReportsTable({ rows }: { rows: ReportRowVM[] }) {
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={9} className="px-3 py-6 text-center text-slate-400 dark:text-gedink3">条件に一致するレポートがありません</td></tr>
+              <tr><td colSpan={8} className="px-3 py-6 text-center text-slate-400 dark:text-gedink3">条件に一致するレポートがありません</td></tr>
             )}
           </tbody>
         </table>

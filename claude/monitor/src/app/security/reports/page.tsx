@@ -111,7 +111,6 @@ export default async function SecurityReportsPage() {
       dateLabel: fmtDay(r.period_from),
       generatedLabel: fmtJst(r.generated_at),
       runs: s.runs,
-      done: s.doneRuns,
       pdfUrl: r.pdf_url,
       emails: (r.sent_to_emails ?? []).join(', '),
       count: s.total,
