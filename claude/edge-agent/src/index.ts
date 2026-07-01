@@ -123,15 +123,20 @@ async function main() {
           break
         }
         case 'capture_snapshot': {
-          // SECURITY 巡回: 指定カメラの latest.jpg を Frigate API から取って
-          // ingest_url (= /api/security/patrol/ingest) に multipart で POST。
-          // ライブ/Grid と同じ JPEG ポーリング系の単発フェッチ。
+          // SECURITY 巡回: 指定カメラのスナップを取り ingest_url
+          // (= /api/security/patrol/ingest) に multipart で POST。
+          //
+          // 並列＋タイムアウト: go2rtc 経由の H.265 カメラは オンデマンド変換の
+          // コールドスタートで 1 台あたり数秒かかる。逐次だと合算で遅く、遅い 1 台が
+          // 全体を止めるので、カメラ毎に並列化し各撮影を CAPTURE_TIMEOUT_MS で打ち切る
+          // （遅い/不通の 1 台が他のカメラをブロックしない）。
           const cams = await loadCameras()
-          for (const camId of cmd.camera_ids) {
+          const CAPTURE_TIMEOUT_MS = 25_000
+          await Promise.all(cmd.camera_ids.map(async (camId) => {
             const cam = cams.find((c) => c.id === camId)
             if (!cam) {
               logger.warn({ cam_id: camId }, 'capture_snapshot: unknown camera')
-              continue
+              return
             }
             // Frigate は latest.jpg を直取り。それ以外で go2rtc に載っている
             // (onvif-generic / live_rtsp override) カメラは go2rtc の現フレーム
@@ -152,10 +157,13 @@ async function main() {
                 { cam_id: camId, vendor: cam.recorder.vendor },
                 'capture_snapshot: no snapshot source (frigate/go2rtc 以外は未対応)',
               )
-              continue
+              return
             }
+            const ac = new AbortController()
+            const timer = setTimeout(() => ac.abort(), CAPTURE_TIMEOUT_MS)
+            const t0 = Date.now()
             try {
-              const r = await fetch(url)
+              const r = await fetch(url, { signal: ac.signal })
               if (!r.ok) throw new Error(`fetch ${r.status}`)
               const buf = await r.arrayBuffer()
               const form = new FormData()
@@ -166,6 +174,7 @@ async function main() {
                 method: 'POST',
                 headers: { Authorization: 'Bearer ' + config.EDGE_DEVICE_TOKEN },
                 body: form,
+                signal: ac.signal,
               })
               if (!ingestRes.ok) {
                 logger.warn(
@@ -173,12 +182,15 @@ async function main() {
                   'capture_snapshot: ingest rejected',
                 )
               } else {
-                logger.info({ cam_id: camId, bytes: buf.byteLength }, 'capture_snapshot: ingest ok')
+                logger.info({ cam_id: camId, bytes: buf.byteLength, ms: Date.now() - t0 }, 'capture_snapshot: ingest ok')
               }
             } catch (e) {
-              logger.warn({ err: String(e), cam_id: camId }, 'capture_snapshot: failed')
+              const aborted = ac.signal.aborted
+              logger.warn({ err: String(e), cam_id: camId, ms: Date.now() - t0, aborted }, 'capture_snapshot: failed')
+            } finally {
+              clearTimeout(timer)
             }
-          }
+          }))
           break
         }
         case 'start_bcp_capture': {
