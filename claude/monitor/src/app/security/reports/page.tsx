@@ -18,7 +18,7 @@ interface ReportRow {
   created_at: string
 }
 interface StoreRow { id: string; name: string }
-interface RunRow      { id: string; store_id: string; started_at: string; status: string }
+interface RunRow      { id: string; store_id: string; started_at: string; status: string; trigger: string }
 interface FindingRow  { run_id: string; status: string }
 
 function fmtDay(iso: string): string {
@@ -73,7 +73,7 @@ export default async function SecurityReportsPage() {
       .order('period_from', { ascending: false })
       .limit(500),
     supa.from('stores').select('id, name').limit(10_000),
-    supa.from('patrol_runs').select('id, store_id, started_at, status').limit(5_000),
+    supa.from('patrol_runs').select('id, store_id, started_at, status, trigger').limit(5_000),
     supa.from('patrol_findings').select('run_id, status').limit(20_000),
   ])
 
@@ -90,11 +90,24 @@ export default async function SecurityReportsPage() {
     else findingsByRun.set(f.run_id, [f])
   }
 
+  // 種別判定用: run を (store_id|開始msの) で引けるようにする。
+  const runByKey = new Map<string, RunRow>()
+  for (const r of runs) runByKey.set(`${r.store_id}|${new Date(r.started_at).getTime()}`, r)
+  const TRIGGER_LABEL: Record<string, string> = { manual: '手動', scheduled: '定時', emergency: '緊急' }
+
+  function kindLabel(rep: ReportRow): string {
+    // 期間が span（日次ロールアップ）→ 定例。点（period_from==period_to）→ 該当 run の trigger。
+    if (new Date(rep.period_from).getTime() !== new Date(rep.period_to).getTime()) return '定例'
+    const run = rep.store_id ? runByKey.get(`${rep.store_id}|${new Date(rep.period_from).getTime()}`) : undefined
+    return TRIGGER_LABEL[run?.trigger ?? ''] ?? '個別'
+  }
+
   const rows: ReportRowVM[] = reports.map((r) => {
     const s = statsForReport(r, runs, findingsByRun)
     return {
       id: r.id,
       storeName: r.store_id ? (storeMap.get(r.store_id) ?? t.common.dash) : t.common.dash,
+      kind: kindLabel(r),
       dateLabel: fmtDay(r.period_from),
       generatedLabel: fmtJst(r.generated_at),
       runs: s.runs,
