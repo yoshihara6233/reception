@@ -549,7 +549,7 @@ const ja: Msg = {
     retry: '再試行',
   },
   adminNav: { dashboard: 'ダッシュボード', stores: '店舗', edges: 'エッジサーバ', recorders: 'レコーダ', users: 'ユーザ', csvImport: 'CSV 一括投入', audit: '監査ログ' },
-  securityNav: { triage: 'トリアージ', reports: '巡回レポート', settings: '巡回設定', cameras: 'カメラ設定', glossary: '用語説明' },
+  securityNav: { triage: '即時巡回', reports: '巡回レポート', settings: '巡回設定', cameras: 'カメラ設定', glossary: '用語説明' },
   securityHelp: {
     title: 'AI 警備トリアージ',
     body: '各店舗のカメラを定期巡回 (デフォルト 30 分間隔) し、ベースライン画像との差分を AI が解析して「異常 / 要確認 / 正常」に振り分けます。このページは全店舗の未確認・異常 finding を 1 つのキューに集約し、警備員が横断的に判断・対応できる「人の目」専用の画面です。AI が誤検知しがちな夜間や逆光時も、確認 SLA 内に人手で最終判断する設計です。',
@@ -633,7 +633,7 @@ const ja: Msg = {
     footerNote: 'P1: エッジ死活は last_seen_at から判定。レコーダ/カメラの能動チェック（ping/映像受信確認）は P2 で有効化されます。',
   },
   securityTriage: {
-    title: '警備トリアージ',
+    title: '即時巡回',
     statTotalStores: '監視拠点',
     statAlerting: '異常検知中',
     statAllNormal: '全拠点正常',
@@ -954,7 +954,7 @@ const en: Msg = {
     retry: 'Retry',
   },
   adminNav: { dashboard: 'Dashboard', stores: 'Stores', edges: 'Edge Servers', recorders: 'Recorders', users: 'Users', csvImport: 'CSV Bulk Import', audit: 'Audit Log' },
-  securityNav: { triage: 'Triage', reports: 'Patrol Reports', settings: 'Patrol Settings', cameras: 'Camera Config', glossary: 'Glossary' },
+  securityNav: { triage: 'Patrol Now', reports: 'Patrol Reports', settings: 'Patrol Settings', cameras: 'Camera Config', glossary: 'Glossary' },
   securityHelp: {
     title: 'AI security triage',
     body: 'Cameras at each store are patrolled on a fixed interval (default 30 min). AI compares each snapshot against a baseline image and classifies findings as anomaly / review / normal. This page consolidates all unconfirmed/anomaly findings across stores into a single queue so security staff can triage cross-store with a human-in-the-loop. AI errs on the side of false positives at night / backlit conditions — humans make the final call within a review SLA.',
@@ -1038,7 +1038,7 @@ const en: Msg = {
     footerNote: 'P1: Edge liveness is derived from last_seen_at. Active checks for recorders/cameras (ping/frame verification) are enabled in P2.',
   },
   securityTriage: {
-    title: 'Security Triage',
+    title: 'Patrol Now',
     statTotalStores: 'Monitored',
     statAlerting: 'Alerting',
     statAllNormal: 'All normal',
@@ -1359,7 +1359,7 @@ const zh: Msg = {
     retry: '重试',
   },
   adminNav: { dashboard: '仪表盘', stores: '门店', edges: '边缘服务器', recorders: '录像机', users: '用户', csvImport: 'CSV 批量导入', audit: '审计日志' },
-  securityNav: { triage: '分诊', reports: '巡逻报告', settings: '巡逻设置', cameras: '摄像机配置', glossary: '术语说明' },
+  securityNav: { triage: '即时巡逻', reports: '巡逻报告', settings: '巡逻设置', cameras: '摄像机配置', glossary: '术语说明' },
   securityHelp: {
     title: 'AI 安全分诊',
     body: '系统按固定间隔（默认 30 分钟）巡逻每个门店的摄像头，AI 将快照与基线图像比较，并将结果分类为「异常 / 待确认 / 正常」。本页面将所有门店的未确认/异常检出聚合为单一队列，便于安全人员跨门店统一分诊。AI 在夜间/逆光时倾向误检出，最终判断由人工在确认 SLA 内完成。',
@@ -1443,7 +1443,7 @@ const zh: Msg = {
     footerNote: 'P1: 边缘死活基于 last_seen_at 判定。录像机/摄像头的主动检查（ping/收帧验证）在 P2 启用。',
   },
   securityTriage: {
-    title: '安全分诊',
+    title: '即时巡逻',
     statTotalStores: '监控站点',
     statAlerting: '异常检测中',
     statAllNormal: '全部正常',
@@ -1764,7 +1764,7 @@ const ko: Msg = {
     retry: '다시 시도',
   },
   adminNav: { dashboard: '대시보드', stores: '매장', edges: '엣지 서버', recorders: '레코더', users: '사용자', csvImport: 'CSV 일괄 등록', audit: '감사 로그' },
-  securityNav: { triage: '트리아지', reports: '순찰 보고서', settings: '순찰 설정', cameras: '카메라 설정', glossary: '용어 설명' },
+  securityNav: { triage: '즉시 순찰', reports: '순찰 보고서', settings: '순찰 설정', cameras: '카메라 설정', glossary: '용어 설명' },
   securityHelp: {
     title: 'AI 경비 트리아지',
     body: '각 매장의 카메라를 정해진 간격(기본 30분)으로 순찰하고, AI 가 베이스라인 이미지와 비교하여「이상 / 확인 필요 / 정상」으로 분류합니다. 본 페이지는 모든 매장의 미확인 · 이상 검출을 하나의 큐로 집약해, 경비 담당자가 매장을 가로질러 판단할 수 있는「사람의 눈」 전용 화면입니다. AI 가 야간 · 역광에서 오검출하기 쉬운 부분은 확인 SLA 내에 사람이 최종 판단합니다.',
@@ -1848,7 +1848,7 @@ const ko: Msg = {
     footerNote: 'P1: 엣지 사활은 last_seen_at 기반으로 판정. 레코더/카메라의 능동 체크(ping/영상 수신 확인)는 P2에서 활성화됩니다.',
   },
   securityTriage: {
-    title: '경비 트리아지',
+    title: '즉시 순찰',
     statTotalStores: '모니터링 거점',
     statAlerting: '이상 감지 중',
     statAllNormal: '전부 정상',

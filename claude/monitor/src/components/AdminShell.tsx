@@ -35,8 +35,8 @@ export function getAdminNav(t: Msg): NavItem[] {
 }
 export function getSecurityNav(t: Msg): NavItem[] {
   return [
-    { href: '/security',          label: t.securityNav.triage,   icon: '🛡', exact: true },
     { href: '/security/reports',  label: t.securityNav.reports,  icon: '📋' },
+    { href: '/security',          label: t.securityNav.triage,   icon: '🛡', exact: true },
     { href: '/security/settings', label: t.securityNav.settings, icon: '⏱' },
     { href: '/security/glossary', label: t.securityNav.glossary, icon: '?' },
   ]
@@ -85,8 +85,8 @@ export const ADMIN_NAV: NavItem[] = [
 
 // 警備
 export const SECURITY_NAV: NavItem[] = [
-  { href: '/security',          label: 'トリアージ',   icon: '🛡', exact: true },
   { href: '/security/reports',  label: '巡回レポート', icon: '📋' },
+  { href: '/security',          label: '即時巡回',     icon: '🛡', exact: true },
   { href: '/security/settings', label: '巡回設定',     icon: '⏱' },
 ]
 
