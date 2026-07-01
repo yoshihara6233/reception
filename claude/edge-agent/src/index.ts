@@ -17,8 +17,7 @@ import { startEdgeJobWorker } from './workers/edge-jobs.js'
 import { StateMachine } from './state-machine.js'
 import { heartbeat } from './upload/storage.js'
 import { startWhipProxy, wrapWhip } from './whip-proxy.js'
-import { snapshotUrl } from './rtsp/url.js'
-import { go2rtcStreamName } from './go2rtc/sync.js'
+import { captureCameraJpeg } from './security/snapshot.js'
 import { verifyOnBoot, type RunnerDeps } from './ota/runner.js'
 import { healthProbe } from './ota/signal.js'
 
@@ -123,62 +122,50 @@ async function main() {
           break
         }
         case 'capture_snapshot': {
-          // SECURITY 巡回: 指定カメラの latest.jpg を Frigate API から取って
-          // ingest_url (= /api/security/patrol/ingest) に multipart で POST。
-          // ライブ/Grid と同じ JPEG ポーリング系の単発フェッチ。
+          // SECURITY 巡回: 指定カメラのスナップを取り ingest_url
+          // (= /api/security/patrol/ingest) に multipart で POST。
+          //
+          // 取得は captureCameraJpeg が「Frigate → ONVIF直接 → go2rtc」の順で最速経路を選ぶ。
+          // 並列＋タイムアウト: カメラ毎に並列化し各撮影を CAPTURE_TIMEOUT_MS で打ち切る
+          // （遅い/不通の 1 台が他のカメラをブロックしない）。
           const cams = await loadCameras()
-          for (const camId of cmd.camera_ids) {
+          const CAPTURE_TIMEOUT_MS = 25_000
+          await Promise.all(cmd.camera_ids.map(async (camId) => {
             const cam = cams.find((c) => c.id === camId)
             if (!cam) {
               logger.warn({ cam_id: camId }, 'capture_snapshot: unknown camera')
-              continue
+              return
             }
-            // Frigate は latest.jpg を直取り。それ以外で go2rtc に載っている
-            // (onvif-generic / live_rtsp override) カメラは go2rtc の現フレーム
-            // JPEG(/api/frame.jpeg?src=cam_<id>)を使う。grid/live と同じ映像源。
-            const isGo2rtc = cam.recorder.vendor === 'onvif-generic' || !!cam.live_rtsp
-            const url = snapshotUrl({
-              vendor:         cam.recorder.vendor,
-              host:           cam.recorder.host,
-              port:           cam.recorder.rtsp_port,
-              username:       cam.recorder.username,
-              password:       cam.recorder.password,
-              channel:         cam.channel,
-              frigateCamera:  cam.frigate_camera ?? undefined,
-              frigateApiPort: config.FRIGATE_API_PORT,
-            }) ?? (isGo2rtc ? `${config.GO2RTC_API}/api/frame.jpeg?src=${go2rtcStreamName(camId)}` : null)
-            if (!url) {
-              logger.warn(
-                { cam_id: camId, vendor: cam.recorder.vendor },
-                'capture_snapshot: no snapshot source (frigate/go2rtc 以外は未対応)',
-              )
-              continue
-            }
+            const ac = new AbortController()
+            const timer = setTimeout(() => ac.abort(), CAPTURE_TIMEOUT_MS)
+            const t0 = Date.now()
             try {
-              const r = await fetch(url)
-              if (!r.ok) throw new Error(`fetch ${r.status}`)
-              const buf = await r.arrayBuffer()
+              const { bytes, via } = await captureCameraJpeg(cam, ac.signal)
               const form = new FormData()
               form.set('run_id',    cmd.run_id)
               form.set('camera_id', camId)
-              form.set('image', new Blob([buf], { type: 'image/jpeg' }), 'snapshot.jpg')
+              form.set('image', new Blob([bytes], { type: 'image/jpeg' }), 'snapshot.jpg')
               const ingestRes = await fetch(cmd.ingest_url, {
                 method: 'POST',
                 headers: { Authorization: 'Bearer ' + config.EDGE_DEVICE_TOKEN },
                 body: form,
+                signal: ac.signal,
               })
               if (!ingestRes.ok) {
                 logger.warn(
-                  { cam_id: camId, status: ingestRes.status },
+                  { cam_id: camId, status: ingestRes.status, via },
                   'capture_snapshot: ingest rejected',
                 )
               } else {
-                logger.info({ cam_id: camId, bytes: buf.byteLength }, 'capture_snapshot: ingest ok')
+                logger.info({ cam_id: camId, bytes: bytes.byteLength, ms: Date.now() - t0, via }, 'capture_snapshot: ingest ok')
               }
             } catch (e) {
-              logger.warn({ err: String(e), cam_id: camId }, 'capture_snapshot: failed')
+              const aborted = ac.signal.aborted
+              logger.warn({ err: String(e), cam_id: camId, ms: Date.now() - t0, aborted }, 'capture_snapshot: failed')
+            } finally {
+              clearTimeout(timer)
             }
-          }
+          }))
           break
         }
         case 'start_bcp_capture': {
