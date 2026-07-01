@@ -137,14 +137,19 @@ export async function pointKnownGood(paths: OtaPaths, target: string): Promise<v
 }
 
 /**
- * systemd ユニットを再起動（sudoers NOPASSWD 前提）。
- * **--no-block 必須**: agent が自ユニットを再起動すると、restart 完了を待つ間に
- * systemd が自プロセスを SIGTERM で停止し、`systemctl` クライアントが殺されて
- * 非ゼロ終了＝誤失敗になる。--no-block はジョブ投入で即 return するため、
- * 自プロセスが殺される前に exec が正常終了する（restart 自体は systemd が実行）。
+ * 自プロセスを終了して systemd の Restart=always に再起動を任せる。
+ *
+ * 自ユニットへ `systemctl restart` を撃つ方式は実機ドライランで2つの罠を露呈した:
+ *   (1) 自死: restart 完了待ちの間に systemd が自プロセスを SIGTERM で停止し、
+ *       `systemctl` クライアントが殺されて非ゼロ終了＝誤失敗になる。
+ *   (2) sudoers 引数整合: `--no-block` を足すと NOPASSWD の完全一致が崩れ認証要求。
+ * exit(0) なら sudo 不要・確実。新 current は WorkingDirectory=current 経由で反映され、
+ * Restart=always（RestartSec=5）が新版で立て直す。current 切替と pending_verify は
+ * exit の前に永続化済みなので、再起動後に verifyOnBoot が検証/復帰する。
  */
-export async function restartService(unit: string): Promise<void> {
-  await run('sudo', ['systemctl', 'restart', '--no-block', unit])
+function requestSelfRestart(): never {
+  logger.info('ota: exiting for systemd restart (Restart=always) onto current')
+  process.exit(0)
 }
 
 export interface RunnerDeps {
@@ -189,18 +194,12 @@ export async function applyDesired(deps: RunnerDeps, desired: DesiredVersions): 
     return
   }
 
-  // (2) 切替＋再起動。pending_verify を先に永続化してから current を切替える。
-  //     restart は自ユニット対象なので --no-block（restartService 内）。自プロセスが
-  //     SIGTERM で殺される前に exec が返るため誤失敗にならない。仮に restart 要求が
-  //     失敗しても pending_verify は残るので、次回起動時に verifyOnBoot が検証/復帰する。
+  // (2) 切替＋再起動。pending_verify を先に永続化 → current を切替え → 自プロセス終了。
+  //     systemd(Restart=always) が新 current で立て直し、起動後に verifyOnBoot が検証する。
   const next = beginUpdate(state, target, ISO())
   await writeState(paths, next)
   await pointCurrent(paths, releaseDir(paths, target))
-  try {
-    await restartService(deps.agentUnit)
-  } catch (err) {
-    logger.warn({ err: (err as Error).message }, 'ota: restart request errored (pending_verify persisted; verify on next boot)')
-  }
+  requestSelfRestart()
 }
 
 /**
@@ -239,8 +238,7 @@ export async function verifyOnBoot(
       await pointCurrent(paths, paths.knownGood) // current を known-good へ戻す
       await writeState(paths, state)
       logger.warn({ reason: step.reason, back_to: state.known_good_version }, 'ota: rolling back')
-      await restartService(deps.agentUnit) // 旧版で立て直す
-      return
+      requestSelfRestart() // 旧版で立て直す（systemd Restart=always）
     }
     if (Date.now() > deadline) {
       // 念のための保険（probe が永遠に pending を返す異常系）。
@@ -251,8 +249,7 @@ export async function verifyOnBoot(
       ).state
       await pointCurrent(paths, paths.knownGood)
       await writeState(paths, state)
-      await restartService(deps.agentUnit)
-      return
+      requestSelfRestart()
     }
     await new Promise((r) => setTimeout(r, 5_000))
   }
