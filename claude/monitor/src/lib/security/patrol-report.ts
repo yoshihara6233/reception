@@ -93,6 +93,59 @@ export async function renderReportForRuns(
   return { pdf, findingCount: findings.length }
 }
 
+/**
+ * 単一巡回 run のレポート PDF を生成し、reports バケットへ保存＋security_reports 行を
+ * upsert する（/security/reports 一覧に載せるため）。冪等キー = (store_id, period_from=started_at)。
+ * 手動「今すぐ巡回」の自動レポート化と、ギャラリーの手動PDFボタンで共有。
+ */
+export async function generateAndStoreRunReport(
+  service: SupabaseClient,
+  runId: string,
+): Promise<{ url: string }> {
+  const { data: run } = await service
+    .from('patrol_runs')
+    .select('id, started_at, trigger, status, store_id, stores ( name )')
+    .eq('id', runId)
+    .maybeSingle()
+  if (!run) throw new Error('run not found')
+
+  const st = (run as unknown as { stores?: { name: string } | { name: string }[] | null }).stores
+  const storeName = (Array.isArray(st) ? st[0]?.name : st?.name) ?? '—'
+  const nowIso = new Date().toISOString()
+
+  const { pdf } = await renderReportForRuns(service, {
+    storeName,
+    runs: [{ id: run.id, started_at: run.started_at, trigger: run.trigger, status: run.status }],
+    periodFrom: run.started_at,
+    periodTo: run.started_at,
+    sentTo: [],
+    generatedAt: nowIso,
+  })
+
+  const key = `security/run-${runId}.pdf`
+  const { error: upErr } = await service.storage.from('reports').upload(key, pdf, { contentType: 'application/pdf', upsert: true })
+  if (upErr) throw new Error(`upload: ${upErr.message}`)
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+  const url = `${base}/storage/v1/object/public/reports/${key}`
+
+  // security_reports を upsert（run 1件 = period_from/to = started_at の点レポート）。
+  const { data: existing } = await service
+    .from('security_reports')
+    .select('id')
+    .eq('store_id', run.store_id)
+    .eq('period_from', run.started_at)
+    .maybeSingle()
+  if (existing) {
+    await service.from('security_reports').update({ pdf_url: url, generated_at: nowIso }).eq('id', existing.id)
+  } else {
+    await service.from('security_reports').insert({
+      store_id: run.store_id, period_from: run.started_at, period_to: run.started_at,
+      pdf_url: url, generated_at: nowIso, sent_to_emails: [],
+    })
+  }
+  return { url }
+}
+
 const fmtDate = (iso: string) =>
   new Date(iso).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' })
 const fmtDateTime = (iso: string) =>
