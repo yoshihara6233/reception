@@ -107,22 +107,24 @@ export function AlarmTimeline({ events, stores }: { events: AlarmEventVM[]; stor
             const st = STATUS[r.status]
             return (
               <li key={r.id} className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-gedline dark:bg-gedbg2">
-                <div className="flex h-12 w-16 flex-none items-center justify-center overflow-hidden rounded bg-slate-100 text-slate-400 dark:bg-gedbg3 dark:text-gedink3">
-                  {r.snapshotUrl
-                    // eslint-disable-next-line @next/next/no-img-element
-                    ? <img src={r.snapshotUrl} alt="" className="h-full w-full object-cover" />
-                    : <Camera size={18} strokeWidth={1.5} aria-hidden />}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2 text-[13px] font-semibold text-slate-800 dark:text-gedink">
-                    <span className="truncate">{r.storeName}{r.cameraName ? ` ／ ${r.cameraName}` : ''}</span>
-                    <span className="rounded bg-slate-100 px-1.5 py-px text-[10px] font-bold text-slate-500 dark:bg-gedbg3 dark:text-gedink3">{r.eventType || r.source}</span>
-                    <span className={'rounded-full px-2 py-px text-[10px] font-bold ' + st.cls}>{st.label}</span>
+                <Link href={`/alarms/${r.id}`} className="flex min-w-0 flex-1 items-center gap-3">
+                  <div className="flex h-12 w-16 flex-none items-center justify-center overflow-hidden rounded bg-slate-100 text-slate-400 dark:bg-gedbg3 dark:text-gedink3">
+                    {r.snapshotUrl
+                      // eslint-disable-next-line @next/next/no-img-element
+                      ? <img src={r.snapshotUrl} alt="" className="h-full w-full object-cover" />
+                      : <Camera size={18} strokeWidth={1.5} aria-hidden />}
                   </div>
-                  <div className="text-[11px] text-slate-500 dark:text-gedink3">
-                    {fmtJst(r.occurredAt)} ・ 源: {r.source}{r.notified ? ' ・ 通知済' : ''}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2 text-[13px] font-semibold text-slate-800 dark:text-gedink">
+                      <span className="truncate">{r.storeName}{r.cameraName ? ` ／ ${r.cameraName}` : ''}</span>
+                      <span className="rounded bg-slate-100 px-1.5 py-px text-[10px] font-bold text-slate-500 dark:bg-gedbg3 dark:text-gedink3">{r.eventType || r.source}</span>
+                      <span className={'rounded-full px-2 py-px text-[10px] font-bold ' + st.cls}>{st.label}</span>
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-gedink3">
+                      {fmtJst(r.occurredAt)} ・ 源: {r.source}{r.notified ? ' ・ 通知済' : ''}
+                    </div>
                   </div>
-                </div>
+                </Link>
                 <div className="flex flex-none gap-1">
                   {r.status !== 'closed' ? (
                     <>
