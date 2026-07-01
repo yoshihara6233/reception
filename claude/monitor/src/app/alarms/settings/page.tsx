@@ -5,7 +5,7 @@
  * エッジ ONVIF Event 購読（PB5）導入時に拡張する。
  */
 import { createSupabaseServer } from '@/lib/supabase/server'
-import { AdminShell } from '@/components/AdminShell'
+import { AdminShell, ALARM_NAV } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
 import { AlarmSettingsTable, type AlarmSetting } from './AlarmSettingsTable'
 
@@ -46,13 +46,12 @@ export default async function AlarmSettingsPage() {
   })
 
   return (
-    <AdminShell pathname="/security/alarms/settings" section="security">
+    <AdminShell pathname="/alarms/settings" nav={ALARM_NAV} navTitle="発報">
       <PageHeader
         title="発報設定"
         crumb={[
-          { href: '/security', label: '警備' },
-          { href: '/security/alarms', label: '発報' },
-          { href: '/security/alarms/settings', label: '発報設定' },
+          { href: '/alarms', label: '発報' },
+          { href: '/alarms/settings', label: '発報設定' },
         ]}
       />
       <div className="space-y-3 px-5 py-4">
