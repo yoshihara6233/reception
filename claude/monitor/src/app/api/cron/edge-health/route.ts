@@ -18,6 +18,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { sendEmail, edgeOfflineAlertEmail, edgeRecoveredEmail, SECURITY_FROM_ADDRESS } from '@/lib/email/send'
+import { sendOpsWebhook, opsWebhookConfigured } from '@/lib/ops/webhook'
 import { recordMetric } from '@/lib/metrics'
 import { MONITOR_STALE_SECONDS } from '@intereco/shared'
 
@@ -82,6 +83,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         })
         await sendEmail(recipients, mail.subject, mail.html, undefined, SECURITY_FROM_ADDRESS)
       }
+      // 第2経路（是正5）: メール未設定/見落とし対策の運用 Webhook（設定時のみ）。
+      await sendOpsWebhook(
+        `🔴 エッジ無応答: ${e.stores?.name ?? '(不明な店舗)'} / ${e.name ?? e.id.slice(0, 8)}`
+        + `（最終応答 ${jst(e.last_seen_at)}・${staleMin}分超）\n${monitorUrl}/admin/edges`,
+      )
     } else if (!isStale && e.alerted_at) {
       // 復旧 → alerted_at クリア + 復旧通知
       await supa.from('edge_devices').update({ alerted_at: null }).eq('id', e.id)
@@ -97,6 +103,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         })
         await sendEmail(recipients, mail.subject, mail.html, undefined, SECURITY_FROM_ADDRESS)
       }
+      await sendOpsWebhook(
+        `🟢 エッジ復旧: ${e.stores?.name ?? '(不明な店舗)'} / ${e.name ?? e.id.slice(0, 8)}（最終応答 ${jst(e.last_seen_at)}）`,
+      )
     }
   }
 
@@ -116,5 +125,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     recovered,
     staleSec,
     recipients: recipients.length,
+    webhook: opsWebhookConfigured(),
+    // 通知経路ゼロでダウンを検知した場合の警告（ログ/監視で拾えるように明示）。
+    unnotified: wentDown > 0 && recipients.length === 0 && !opsWebhookConfigured(),
   })
 }
