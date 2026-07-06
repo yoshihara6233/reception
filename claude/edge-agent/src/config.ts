@@ -79,6 +79,11 @@ const Env = z.object({
   // 受信時に該当カメラを撮影して cloud /api/alarms/ingest へ中継する（要 MONITOR_URL）。
   ALARM_LISTEN_PORT: z.coerce.number().default(0),
 
+  // 発報受け口の共有トークン。設定すると /alarm は ?token=<値>（または X-Alarm-Token ヘッダ）の
+  // 一致を必須にし、不一致は 401 で破棄する（LAN 内のなりすまし発報対策）。カメラ/NVR の
+  // HTTP 通知先 URL に &token=... を含めて配布する。未設定＝検証なし（従来互換・起動時 warn）。
+  ALARM_SHARED_TOKEN: z.string().trim().default(''),
+
   // 発報前後スナップ（PB7）の録画フラッシュ猶予（ms）。**発報前（-5秒）の録画抽出のみ**に適用し、
   // target+この時間だけ待ってから抽出する（NVR が該当秒を VOD 化する猶予）。BCP 実機で 60s
   // 必要だったため踏襲。小さくすると未フラッシュで latest フォールバックしやすくなる。
