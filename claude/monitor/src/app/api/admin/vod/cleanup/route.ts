@@ -32,12 +32,102 @@
  *   - Storage 削除失敗時も DB 行は残す → 次回再試行可能
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { createSupabaseServer } from '@/lib/supabase/server'
 
 const BUCKET                = 'vod-clips'
+const SNAPSHOT_BUCKET       = 'security-snapshots'
 const DEFAULT_TTL_DAYS      = 30
 const MAX_DELETE_PER_RUN    = 500
+
+interface AlarmPruneResult {
+  frames_scanned:   number
+  frames_deleted:   number
+  snapshots_pruned: number
+  failed:           number
+}
+
+/**
+ * 発報系の保存物を pruning する（是正4）。
+ *  - alarm_frames（PB7 前後スナップ・全カメラ×8点/発報）: cutoff より古い行を
+ *    Storage(security-snapshots) + DB 行ごと削除。1発報=最大 カメラ数×8 枚のため
+ *    放置すると Storage が無限成長する。
+ *  - alarm_events の発報時スナップ（alarms/<id>.jpg|png）: 画像のみ削除し
+ *    snapshot_url を NULL に。行は監査証跡として残す。
+ * 失敗は failed に計上して次回再試行（DB 行は Storage 削除成功後にのみ消す）。
+ */
+async function pruneAlarmArtifacts(
+  admin: SupabaseClient,
+  cutoffIso: string,
+  dryRun: boolean,
+): Promise<AlarmPruneResult> {
+  const out: AlarmPruneResult = { frames_scanned: 0, frames_deleted: 0, snapshots_pruned: 0, failed: 0 }
+
+  // ── alarm_frames ──
+  const { data: frames } = await admin
+    .from('alarm_frames')
+    .select('id, storage_path')
+    .lt('created_at', cutoffIso)
+    .limit(MAX_DELETE_PER_RUN)
+  const frameRows = frames ?? []
+  out.frames_scanned = frameRows.length
+
+  if (!dryRun && frameRows.length > 0) {
+    const paths = frameRows.filter((r) => r.storage_path).map((r) => r.storage_path as string)
+    let storageOk = true
+    if (paths.length > 0) {
+      const { error } = await admin.storage.from(SNAPSHOT_BUCKET).remove(paths)
+      if (error) {
+        console.error('[vod/cleanup] alarm_frames storage remove failed:', error.message)
+        out.failed += paths.length
+        storageOk = false
+      }
+    }
+    if (storageOk) {
+      const { error } = await admin.from('alarm_frames').delete().in('id', frameRows.map((r) => r.id))
+      if (error) {
+        console.error('[vod/cleanup] alarm_frames db delete failed:', error.message)
+        out.failed += frameRows.length
+      } else {
+        out.frames_deleted = frameRows.length
+      }
+    }
+  }
+
+  // ── 発報時スナップ（行は残し画像のみ）──
+  const { data: evs } = await admin
+    .from('alarm_events')
+    .select('id')
+    .lt('occurred_at', cutoffIso)
+    .not('snapshot_url', 'is', null)
+    .limit(MAX_DELETE_PER_RUN)
+  const evRows = evs ?? []
+
+  if (dryRun) {
+    out.snapshots_pruned = evRows.length // dry_run では対象件数を返す
+  } else if (evRows.length > 0) {
+    // 拡張子は jpg/png のどちらか（upload時に決定）。存在しない方の remove は無害。
+    const paths = evRows.flatMap((e) => [`alarms/${e.id}.jpg`, `alarms/${e.id}.png`])
+    const { error } = await admin.storage.from(SNAPSHOT_BUCKET).remove(paths)
+    if (error) {
+      console.error('[vod/cleanup] alarm snapshot storage remove failed:', error.message)
+      out.failed += evRows.length
+    } else {
+      const { error: upErr } = await admin
+        .from('alarm_events')
+        .update({ snapshot_url: null })
+        .in('id', evRows.map((e) => e.id))
+      if (upErr) {
+        console.error('[vod/cleanup] alarm snapshot_url clear failed:', upErr.message)
+        out.failed += evRows.length
+      } else {
+        out.snapshots_pruned = evRows.length
+      }
+    }
+  }
+
+  return out
+}
 
 interface Body {
   dry_run?:        boolean
@@ -52,6 +142,7 @@ interface DeleteResult {
   dry_run:        boolean
   cutoff_iso:     string
   paths:          string[]
+  alarms?:        AlarmPruneResult
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -127,6 +218,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     cutoff_iso:     cutoffIso,
     paths:          [],
   }
+
+  // ── 発報系（alarm_frames / 発報スナップ）の pruning（是正4・VOD と同じ TTL）──
+  result.alarms = await pruneAlarmArtifacts(admin, cutoffIso, dryRun)
 
   if (dryRun || rows.length === 0) {
     result.paths = rows
