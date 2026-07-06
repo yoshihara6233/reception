@@ -30,8 +30,8 @@ const STATUS = {
   ack:    { label: '対応中', cls: 'bg-amber-100 text-amber-700 dark:bg-[#B5761A]/20 dark:text-[#E2A55A]' },
   closed: { label: '完了',   cls: 'bg-slate-100 text-slate-500 dark:bg-gedbg3 dark:text-gedink3' },
 }
-/** 発報受け口（現地エッジのローカルHTTP）を直接叩く参考URL。<IP>/<カメラID> は置換して使用。 */
-const RECEIVER_URL = 'http://<BeelinkのLAN_IP>:9080/alarm?cam=<カメラID>&src=ipro&type=input'
+/** 発報受け口（現地エッジのローカルHTTP）を直接叩く参考URL。<IP>/<カメラID>/<共有トークン> は置換して使用。 */
+const RECEIVER_URL = 'http://<BeelinkのLAN_IP>:9080/alarm?cam=<カメラID>&src=ipro&type=input&token=<共有トークン>'
 
 export function AlarmTimeline({ events }: { events: AlarmEventVM[] }) {
   const [rows, setRows] = useState(events)
@@ -95,7 +95,7 @@ export function AlarmTimeline({ events }: { events: AlarmEventVM[] }) {
           </Link>
         </div>
         <p className="mt-2 text-[11px] text-slate-400 dark:text-gedink3">
-          現地エッジ(Beelink)と同一LAN内のブラウザで上記URLを開くと発報を投入できます（<code className="font-mono">&lt;IP&gt;</code>・<code className="font-mono">&lt;カメラID&gt;</code> は実値に置換）。実運用ではカメラ/NVRの接点通知先も同じURLに向けます。
+          現地エッジ(Beelink)と同一LAN内のブラウザで上記URLを開くと発報を投入できます（<code className="font-mono">&lt;IP&gt;</code>・<code className="font-mono">&lt;カメラID&gt;</code>・<code className="font-mono">&lt;共有トークン&gt;</code> は実値に置換）。実運用ではカメラ/NVRの接点通知先も同じURLに向けます。共有トークンはエッジ .env の <code className="font-mono">ALARM_SHARED_TOKEN</code> の値です（未設定のエッジでは <code className="font-mono">&amp;token=</code> は不要）。
         </p>
       </div>
 

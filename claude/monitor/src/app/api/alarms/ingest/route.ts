@@ -17,11 +17,9 @@
  * 通知（メール等）は別（PB3）。ここは「全記録」に徹する。
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { randomUUID } from 'node:crypto'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { notifyAlarm } from '@/lib/alarms/notify'
-import type { EdgeCommand } from '@/lib/edge/commands'
-import { ALARM_TIMELINE_OFFSETS_SEC, alarmFramesIngestUrl } from '@/lib/alarms/timeline'
+import { dispatchAlarmTimeline } from '@/lib/alarms/dispatch'
 
 export const runtime = 'nodejs'
 
@@ -34,7 +32,7 @@ export async function POST(req: NextRequest) {
   const supa = createSupabaseService()
   const { data: edge } = await supa
     .from('edge_devices')
-    .select('id, store_id, pending_command')
+    .select('id, store_id')
     .eq('device_token', token)
     .maybeSingle()
   if (!edge || !edge.store_id) return NextResponse.json({ error: 'invalid device token' }, { status: 401 })
@@ -103,22 +101,11 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // 6. 発報前後スナップ（PB7）: 店舗全カメラ×秒オフセットの録画フレーム抽出をエッジへ依頼。
-  //    数分かかる録画抽出はエッジが detached 実行。pending_command が空いている時だけ発火する
-  //    （巡回/BCP と単一スロットを共有するため。埋まっていても即時スナップは記録済み）。
-  const timelineCmd: EdgeCommand = {
-    action:      'capture_alarm_timeline',
-    request_id:  randomUUID(),
-    alarm_id:    ev.id,
-    occurred_at: occurredAt,
-    offsets_sec: [...ALARM_TIMELINE_OFFSETS_SEC],
-    ingest_url:  alarmFramesIngestUrl(),
-  }
-  await supa
-    .from('edge_devices')
-    .update({ pending_command: timelineCmd, pending_command_at: new Date().toISOString() })
-    .eq('id', edge.id)
-    .is('pending_command', null)  // レース保護: 埋まっていたら書かない
+  // 6. 発報前後スナップ（PB7）: 店舗全カメラ×秒オフセットの取得をエッジへ依頼。
+  //    pending_command（巡回/BCP と共有の単一スロット）が空いている時だけ投入され、
+  //    埋まっていた場合は timeline_dispatched_at が NULL のまま残り
+  //    /api/cron/alarm-dispatch-retry が直近分を再送する（是正3）。即時スナップは記録済み。
+  await dispatchAlarmTimeline(supa, edge.id, ev.id, occurredAt)
 
   // 7. 通知（enabled/quiet hours は notify 内で判定・best-effort）
   const notify = await notifyAlarm(supa, ev.id).catch(() => ({ notified: false, reason: 'error' }))
