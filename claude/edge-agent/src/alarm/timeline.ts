@@ -178,12 +178,17 @@ export async function runAlarmTimelineCapture(
       // 発生時以降(ライブ): その瞬間 target で軽量ライブ取得（フラッシュ待ち不要）。
       await waitUntil(isPre ? targetMs + settleMs : targetMs)
 
+      // 再送・遅延ディスパッチ等で target を大きく過ぎている場合、「今のライブ」を
+      // その時刻として保存すると嘘になる。過去は録画抽出経路（latest フォールバック付き）へ。
+      const staleLive = !isPre && targetMs < Date.now() - 15_000
+      const fromRecording = isPre || staleLive
+
       total++
       const ac = new AbortController()
       const timer = setTimeout(() => ac.abort(), CAPTURE_TIMEOUT_MS)
       const t0 = Date.now()
       try {
-        const frame = await sem.run(() => isPre
+        const frame = await sem.run(() => fromRecording
           ? captureRecordingFrame(camera, targetMs, ac.signal)
           : captureLiveFrame(camera, ac.signal))
         if (!frame) {

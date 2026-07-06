@@ -10,6 +10,10 @@
       "schedule": "*/2 * * * *"
     },
     {
+      "path": "/api/cron/alarm-dispatch-retry",
+      "schedule": "*/2 * * * *"
+    },
+    {
       "path": "/api/cron/security-patrol",
       "schedule": "*/10 * * * *"
     },
