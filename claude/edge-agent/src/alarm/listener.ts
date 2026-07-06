@@ -5,17 +5,22 @@
  * スナップを撮って cloud /api/alarms/ingest へ中継する。動体検知は使わず、接点/通知のみ。
  *
  * 受信 URL 例（カメラ/NVR の HTTP 通知先に設定）:
- *   http://<beelink-lan-ip>:<ALARM_LISTEN_PORT>/alarm?cam=<camera_id>&src=ipro&type=input
- *   - cam  : recorder_cameras.id（省略時は送信元IP＝recorder.host で解決を試みる）
- *   - src  : ipro | nvr | webhook（既定 ipro）
- *   - type : input | tamper | ...（既定 input）
- *   - key  : dedup_key（省略時は cam+type で自動＝接点バウンス抑制）
+ *   http://<beelink-lan-ip>:<ALARM_LISTEN_PORT>/alarm?cam=<camera_id>&src=ipro&type=input&token=<共有トークン>
+ *   - cam   : recorder_cameras.id（省略時は送信元IP＝recorder.host で解決を試みる）
+ *   - src   : ipro | nvr | webhook（既定 ipro）
+ *   - type  : input | tamper | ...（既定 input）
+ *   - key   : dedup_key（省略時は cam+type で自動＝接点バウンス抑制）
+ *   - token : ALARM_SHARED_TOKEN 設定時は必須（X-Alarm-Token ヘッダでも可）。不一致は 401。
  * GET/POST どちらも可。即 200 を返し、撮影・中継は非同期。
  */
+import { Buffer } from 'node:buffer'
 import { createServer, type Server } from 'node:http'
 import { config } from '../config.js'
 import { logger } from '../logger.js'
 import { captureCameraJpeg } from '../security/snapshot.js'
+import { isAlarmTokenValid } from './token.js'
+import { spoolAlarm, startAlarmSpoolRetry } from './spool.js'
+import { classifySendResult, type SendOutcome, type SpooledAlarm } from './spool-core.js'
 import type { CameraDescriptor } from '../types.js'
 
 const CAPTURE_TIMEOUT_MS = 25_000
@@ -25,16 +30,46 @@ function normalizeIp(ip: string | undefined): string {
   return ip.replace(/^::ffff:/, '')
 }
 
-/** 受信した発報を撮影して ingest へ中継（best-effort）。 */
+/**
+ * 発報 1 件を cloud /api/alarms/ingest へ送信し、結果を分類して返す。
+ * occurred_at を必ず送る（スプール再送時に受信時刻を保存するため）。
+ */
+async function sendAlarmToCloud(entry: SpooledAlarm): Promise<SendOutcome> {
+  const ingestUrl = `${config.MONITOR_URL}/api/alarms/ingest`
+  const form = new FormData()
+  form.set('source', entry.source)
+  form.set('event_type', entry.event_type)
+  form.set('dedup_key', entry.dedup_key)
+  form.set('occurred_at', entry.occurred_at)
+  if (entry.camera_id) form.set('camera_id', entry.camera_id)
+  if (entry.image_b64) {
+    form.set('image', new Blob([Buffer.from(entry.image_b64, 'base64')], { type: 'image/jpeg' }), 'alarm.jpg')
+  }
+  let status: number | null
+  try {
+    const res = await fetch(ingestUrl, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + config.EDGE_DEVICE_TOKEN },
+      body: form,
+    })
+    status = res.status
+  } catch {
+    status = null // ネットワーク断
+  }
+  return classifySendResult(status)
+}
+
+/** 受信した発報を撮影して ingest へ中継。失敗（transient）はスプールへ退避＝発報を失わない。 */
 async function forwardAlarm(
   loadCameras: () => Promise<CameraDescriptor[]>,
   q: URLSearchParams,
   remoteIp: string,
 ): Promise<void> {
-  const source    = (q.get('src') || 'ipro').trim()
-  const eventType = (q.get('type') || 'input').trim()
-  const camId     = (q.get('cam') || '').trim()
-  const dedupKey  = (q.get('key') || '').trim()
+  const source     = (q.get('src') || 'ipro').trim()
+  const eventType  = (q.get('type') || 'input').trim()
+  const camId      = (q.get('cam') || '').trim()
+  const dedupKey   = (q.get('key') || '').trim()
+  const occurredAt = new Date().toISOString() // 受信時刻＝発報時刻（再送時もこの値で記録）
 
   const cams = await loadCameras()
   let cam: CameraDescriptor | undefined
@@ -42,21 +77,15 @@ async function forwardAlarm(
   if (!cam && remoteIp) cam = cams.find((c) => c.recorder.host === remoteIp)
 
   const key = dedupKey || `${cam?.id ?? (remoteIp || source)}:${eventType}`
-  const ingestUrl = `${config.MONITOR_URL}/api/alarms/ingest`
-
-  const form = new FormData()
-  form.set('source', source)
-  form.set('event_type', eventType)
-  form.set('dedup_key', key)
-  if (cam) form.set('camera_id', cam.id)
 
   // カメラが解決できれば発報スナップを添付（失敗しても発報自体は記録する）。
+  let imageB64: string | null = null
   if (cam) {
     const ac = new AbortController()
     const timer = setTimeout(() => ac.abort(), CAPTURE_TIMEOUT_MS)
     try {
       const { bytes, via } = await captureCameraJpeg(cam, ac.signal)
-      form.set('image', new Blob([bytes], { type: 'image/jpeg' }), 'alarm.jpg')
+      imageB64 = Buffer.from(bytes).toString('base64')
       logger.info({ cam_id: cam.id, via, source, eventType }, 'alarm: captured snapshot')
     } catch (e) {
       logger.warn({ cam_id: cam.id, err: String(e) }, 'alarm: snapshot failed → 画像なしで記録')
@@ -67,16 +96,17 @@ async function forwardAlarm(
     logger.warn({ camId, remoteIp }, 'alarm: カメラ未解決（画像なしで記録）')
   }
 
-  try {
-    const res = await fetch(ingestUrl, {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + config.EDGE_DEVICE_TOKEN },
-      body: form,
-    })
-    if (!res.ok) logger.warn({ status: res.status }, 'alarm: ingest rejected')
-    else logger.info({ source, eventType, cam_id: cam?.id }, 'alarm: ingest ok')
-  } catch (e) {
-    logger.warn({ err: String(e) }, 'alarm: ingest 送信失敗')
+  const entry: SpooledAlarm = {
+    source, event_type: eventType, camera_id: cam?.id ?? null,
+    dedup_key: key, occurred_at: occurredAt, image_b64: imageB64, attempts: 0,
+  }
+  const outcome = await sendAlarmToCloud(entry)
+  if (outcome === 'ok') {
+    logger.info({ source, eventType, cam_id: cam?.id }, 'alarm: ingest ok')
+  } else if (outcome === 'transient') {
+    spoolAlarm(entry) // クラウド断/5xx → 退避して後で再送
+  } else {
+    logger.error({ source, eventType, cam_id: cam?.id }, 'alarm: ingest が恒久エラー応答（トークン/設定を確認）')
   }
 }
 
@@ -95,14 +125,26 @@ export function startAlarmListener(loadCameras: () => Promise<CameraDescriptor[]
     }
     if (url.pathname !== '/alarm') { res.writeHead(404); res.end('not found'); return }
 
+    const remoteIp = normalizeIp(req.socket.remoteAddress ?? undefined)
+    if (!isAlarmTokenValid(config.ALARM_SHARED_TOKEN, url.searchParams, req.headers['x-alarm-token'])) {
+      logger.warn({ remoteIp }, 'alarm: 共有トークン不一致 → 破棄（LAN内なりすましの可能性）')
+      res.writeHead(401, { 'content-type': 'text/plain' }); res.end('unauthorized'); return
+    }
+
     // 即 200（i-PRO 通知がタイムアウトしないよう）。撮影・中継は非同期。
     res.writeHead(200, { 'content-type': 'text/plain' }); res.end('accepted')
-    const remoteIp = normalizeIp(req.socket.remoteAddress ?? undefined)
     void forwardAlarm(loadCameras, url.searchParams, remoteIp)
       .catch((e) => logger.warn({ err: String(e) }, 'alarm: forward failed'))
   })
 
   server.on('error', (e) => logger.error({ err: String(e), port }, 'alarm: listener error'))
-  server.listen(port, '0.0.0.0', () => logger.info({ port }, 'alarm: 発報受け口を起動（0.0.0.0）'))
-  return { close: () => server.close() }
+  if (!config.ALARM_SHARED_TOKEN) {
+    logger.warn('alarm: ALARM_SHARED_TOKEN 未設定 → 受け口は無認証で稼働（LAN内から偽発報が可能）。設定を推奨')
+  }
+  server.listen(port, '0.0.0.0', () => logger.info({ port, tokenRequired: !!config.ALARM_SHARED_TOKEN }, 'alarm: 発報受け口を起動（0.0.0.0）'))
+
+  // クラウド断で退避した発報の再送ループ（受け口とライフサイクルを揃える）。
+  const spoolRetry = startAlarmSpoolRetry(sendAlarmToCloud)
+
+  return { close: () => { server.close(); spoolRetry.close() } }
 }
