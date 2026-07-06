@@ -45,7 +45,7 @@ async function sendAlarmToCloud(entry: SpooledAlarm): Promise<SendOutcome> {
   if (entry.image_b64) {
     form.set('image', new Blob([Buffer.from(entry.image_b64, 'base64')], { type: 'image/jpeg' }), 'alarm.jpg')
   }
-  let status: number | null = null
+  let status: number | null
   try {
     const res = await fetch(ingestUrl, {
       method: 'POST',
