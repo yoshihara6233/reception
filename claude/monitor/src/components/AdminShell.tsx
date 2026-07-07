@@ -30,6 +30,7 @@ export function getAdminNav(t: Msg): NavItem[] {
     { href: '/admin/bcp',        label: 'BCP発動条件',         icon: '🚨' },
     { href: '/admin/users',      label: t.adminNav.users,     icon: '⚇' },
     { href: '/admin/import',     label: t.adminNav.csvImport, icon: '⇪' },
+    { href: '/admin/limits',     label: t.adminNav.limits,    icon: '⏱' },
     { href: '/admin/audit',      label: t.adminNav.audit,     icon: '☰' },
   ]
 }
@@ -80,6 +81,7 @@ export const ADMIN_NAV: NavItem[] = [
   { href: '/admin/bcp',        label: 'BCP発動条件',     icon: '🚨' },
   { href: '/admin/users',      label: 'ユーザ',         icon: '⚇' },
   { href: '/admin/import',     label: 'CSV 一括投入',   icon: '⇪' },
+  { href: '/admin/limits',     label: '視聴上限',       icon: '⏱' },
   { href: '/admin/audit',      label: 'アクセスログ',   icon: '☰' },
 ]
 
