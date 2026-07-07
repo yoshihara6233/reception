@@ -5,6 +5,7 @@ import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/serv
 import { MONITOR_STALE_SECONDS } from '@intereco/shared'
 import { listPatrolCameraIds, buildCaptureCommand } from '@/lib/security/patrol-dispatch'
 import { generateAndStoreRunReport } from '@/lib/security/patrol-report'
+import { recordFootageAccess } from '@/lib/audit/footage-access'
 
 export interface ReportSnapshot { url: string; camera: string; at: string }
 
@@ -27,6 +28,12 @@ export async function listReportSnapshots(
     .eq('id', reportId)
     .maybeSingle()
   if (!report) return { ok: false, error: 'レポートが見つからないか、権限がありません' }
+
+  // G3: 巡回レポートの画像閲覧（モーダルを開いた時点）を記録（ページ単位・5分dedup）。
+  await recordFootageAccess({
+    actorUserId: user.id, storeId: report.store_id as string | null,
+    accessType: 'patrol_view', resourceId: reportId,
+  })
 
   const { data: runs } = await supa
     .from('patrol_runs')

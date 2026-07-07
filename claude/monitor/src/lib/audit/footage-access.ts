@@ -17,6 +17,8 @@ export type FootageAccessType =
   | 'alarm_frame'
   | 'patrol_snapshot'
   | 'bcp_export'
+  | 'patrol_view'
+  | 'bcp_view'
 
 export interface FootageAccessEntry {
   actorUserId: string
