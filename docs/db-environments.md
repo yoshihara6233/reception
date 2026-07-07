@@ -59,33 +59,43 @@ supabase link --project-ref jmlviywilxzavjbmlpnf # DB パスワードを聞か�
 > リンク後、`SHOW server_version;` を本番 SQL Editor で実行し、`supabase/config.toml` の
 > `major_version` を一致させる（既定 17。15 なら 15 に変更）。
 
-### 2-2. baseline 取得（ベース表問題の解消）
+### 2-2. 履歴の突合わせ（2026-07-07 実施の実手順）
+本番は SQL Editor 手貼りで適用してきたため、**日付付き46ファイルは CLI の migration
+履歴テーブルに未登録**。さらに Remote 履歴には monitor 以前の**亡霊エントリ `0000〜0012`**
+（ローカルにファイル無し）が残っていた。`supabase migration list` はこの不一致を表示する。
+
+まず**亡霊を履歴から除去**（メタデータのみ・スキーマは無変更）:
+```bash
+supabase migration repair --status reverted 0000 0001 0002 0003 0004 0005 0006 0007 0008 0009 0010 0011 0012
+supabase migration list   # 上段 0000〜0012 が消えたことを確認
+```
+
+> ⚠ `db pull` は「ローカル(空)→本番の差分」を migra で取る方式で、このケースだと
+> **「No schema changes found」で空振り**した。baseline は次の `db dump` で確実に作る。
+
+### 2-3. baseline を db dump で取得（ベース表問題の解消）
 このリポの `supabase/migrations/*.sql` は **monitor 由来の差分のみ**で、ベース表
-（tenants/stores/admin_users 等＝reception 由来）を含まない。そのままでは `db reset` が
-ローカルで失敗する。→ **本番の現行スキーマ全体を baseline として取り込む**:
+（tenants/stores/admin_users 等＝reception 由来）を含まない。→ **本番の現行スキーマ全体を
+1本の baseline** に取り込む。`YYYYMMDD_NNN` 命名は同日複数で版が衝突するため、個別登録では
+なく baseline 方式を採る:
 
 ```bash
-supabase db pull                 # → supabase/migrations/<ts>_remote_schema.sql (本番の全スキーマ)
-```
-
-この baseline には既存の日付付き migration の結果も**畳み込まれている**ため、既存ファイルと
-二重になる。次のように整理する:
-
-```bash
+# 46ファイルを退避（baseline に内包されるため）
 mkdir -p supabase/migrations_archive
-git mv supabase/migrations/2026*.sql supabase/migrations_archive/   # baseline 以前の履歴を退避
-# ↑ remote_schema(baseline) だけ migrations/ に残す
+git mv supabase/migrations/2026*.sql supabase/migrations_archive/
+
+# 本番スキーマを直接 pg_dump（Docker影DB不要・auth/storage等の管理スキーマは自動除外）
+supabase db dump --linked -f supabase/migrations/<14桁ts>_remote_baseline.sql
 ```
 
-> 退避したファイルは履歴として保存（authz schema.sql 同期の参照元）。`db reset` では
-> 再生しない（baseline に含まれるため）。
+> 退避ファイルは履歴として保存（`migrations_archive/README.md` 参照）。`db reset`/`db push`
+> では再生しない（baseline に内包）。authz は `tests/authz/schema.sql` を独立管理。
 
-### 2-3. 本番の migration 履歴を「適用済み」に整える
+### 2-4. baseline を「適用済み」に登録
 本番にはすでに全部適用済みなので、baseline を **再実行させない**:
-
 ```bash
-supabase migration list                          # local と remote の差分を確認
-supabase migration repair --status applied <baseline-ts>  # baseline を適用済みとして記録
+supabase migration repair --status applied <14桁ts>   # baseline の版を applied 登録
+supabase migration list                               # Local と Remote が一致することを確認
 ```
 
 以降、本番への変更は **`bun run db:push`** だけで完結（SQL Editor 手貼り卒業）。
