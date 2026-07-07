@@ -1,0 +1,19 @@
+# intereco-live-gate — Frigate ライブ(/api/*)を短TTL署名で通す Cloudflare Worker。
+# デプロイ手順は README.md を参照。
+
+name = "intereco-live-gate"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+
+# ルート: 店舗トンネルの /api/* のみをゲートする。
+#  - Frigate MJPEG(<img>) と go2rtc HLS(サーバ側)が /api/* を使う → 両方を Worker で捌く。
+#  - VOD-HLS は /vod/* でこのルート外（monitor プロキシ＋service token のまま・無影響）。
+# 複数店舗トンネルがある場合はホストごとに routes を追加する。
+routes = [
+  { pattern = "poc-beelink.genesis-edge.com/api/*", zone_name = "genesis-edge.com" },
+]
+
+# Secrets は wrangler secret put で設定（このファイルには書かない）:
+#   wrangler secret put LIVE_SIGNING_SECRET
+#   wrangler secret put SERVICE_TOKEN_CLIENT_ID
+#   wrangler secret put SERVICE_TOKEN_CLIENT_SECRET
