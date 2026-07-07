@@ -130,7 +130,7 @@ export interface Msg {
     retry:  string
   }
   // ── F22: per-section left-sidebar nav labels ──
-  adminNav: { dashboard: string; stores: string; edges: string; recorders: string; users: string; csvImport: string; audit: string }
+  adminNav: { dashboard: string; stores: string; edges: string; recorders: string; users: string; csvImport: string; audit: string; limits: string }
   securityNav: { triage: string; reports: string; settings: string; cameras: string; glossary: string }
   // F38: /security 上部解説バナー
   securityHelp: {
@@ -548,7 +548,7 @@ const ja: Msg = {
     body:  'ネットワーク接続がありません。\n接続が回復したら自動的に再開します。',
     retry: '再試行',
   },
-  adminNav: { dashboard: 'ダッシュボード', stores: '店舗', edges: 'エッジサーバ', recorders: 'レコーダ', users: 'ユーザ', csvImport: 'CSV 一括投入', audit: 'アクセスログ' },
+  adminNav: { dashboard: 'ダッシュボード', stores: '店舗', edges: 'エッジサーバ', recorders: 'レコーダ', users: 'ユーザ', csvImport: 'CSV 一括投入', audit: 'アクセスログ', limits: '視聴上限' },
   securityNav: { triage: '即時巡回', reports: '巡回レポート', settings: '巡回設定', cameras: 'カメラ設定', glossary: '用語説明' },
   securityHelp: {
     title: 'AI 警備トリアージ',
@@ -953,7 +953,7 @@ const en: Msg = {
     body:  'No network connection.\nWill resume automatically when connected.',
     retry: 'Retry',
   },
-  adminNav: { dashboard: 'Dashboard', stores: 'Stores', edges: 'Edge Servers', recorders: 'Recorders', users: 'Users', csvImport: 'CSV Bulk Import', audit: 'Access Log' },
+  adminNav: { dashboard: 'Dashboard', stores: 'Stores', edges: 'Edge Servers', recorders: 'Recorders', users: 'Users', csvImport: 'CSV Bulk Import', audit: 'Access Log', limits: 'Session Limits' },
   securityNav: { triage: 'Patrol Now', reports: 'Patrol Reports', settings: 'Patrol Settings', cameras: 'Camera Config', glossary: 'Glossary' },
   securityHelp: {
     title: 'AI security triage',
@@ -1358,7 +1358,7 @@ const zh: Msg = {
     body:  '无网络连接。\n恢复连接后将自动继续。',
     retry: '重试',
   },
-  adminNav: { dashboard: '仪表盘', stores: '门店', edges: '边缘服务器', recorders: '录像机', users: '用户', csvImport: 'CSV 批量导入', audit: '访问日志' },
+  adminNav: { dashboard: '仪表盘', stores: '门店', edges: '边缘服务器', recorders: '录像机', users: '用户', csvImport: 'CSV 批量导入', audit: '访问日志', limits: '观看上限' },
   securityNav: { triage: '即时巡逻', reports: '巡逻报告', settings: '巡逻设置', cameras: '摄像机配置', glossary: '术语说明' },
   securityHelp: {
     title: 'AI 安全分诊',
@@ -1763,7 +1763,7 @@ const ko: Msg = {
     body:  '네트워크 연결이 없습니다.\n연결이 복구되면 자동으로 재개됩니다.',
     retry: '다시 시도',
   },
-  adminNav: { dashboard: '대시보드', stores: '매장', edges: '엣지 서버', recorders: '레코더', users: '사용자', csvImport: 'CSV 일괄 등록', audit: '액세스 로그' },
+  adminNav: { dashboard: '대시보드', stores: '매장', edges: '엣지 서버', recorders: '레코더', users: '사용자', csvImport: 'CSV 일괄 등록', audit: '액세스 로그', limits: '세션 제한' },
   securityNav: { triage: '즉시 순찰', reports: '순찰 보고서', settings: '순찰 설정', cameras: '카메라 설정', glossary: '용어 설명' },
   securityHelp: {
     title: 'AI 경비 트리아지',

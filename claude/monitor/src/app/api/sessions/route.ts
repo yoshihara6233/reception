@@ -22,6 +22,8 @@ import { recordMetric } from '@/lib/metrics'
 
 // 同時視聴上限（F-10）。session_limits.max_concurrent 未設定時の既定。
 const DEFAULT_MAX_CONCURRENT = 5
+// R1: 1視聴セッションの最大継続分数。session_limits.max_session_min 未設定時の既定。
+const DEFAULT_MAX_SESSION_MIN = 120
 // これより古い未終了セッションは「閉じ忘れ(孤児)」とみなしカウント外（恒久ロックアウト防止）。
 const ACTIVE_WINDOW_MS = 6 * 60 * 60 * 1000
 // 上限の対象は帯域コストの高い live / vod のみ。grid(スナップ合成)は安価なので対象外。
@@ -60,18 +62,26 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'missing_fields' }, { status: 400 })
     }
 
-    // ── 同時視聴上限の強制（F-10・live/vod のみ）──────────────────────────
+    // ── 上限の解決＋同時視聴上限の強制（F-10 / R1・live/vod のみ）───────────
     // テナント横断の同時数を正確に数えるため service client(RLSバイパス)で集計。
     // セッションの開始本人は自分のしか見えない(RLS)ので、ここはサーバ権限で数える。
+    // あわせて max_session_min（1セッションの最大継続分数）を解決し、クライアントに返す。
+    let maxSessionMin: number | null = null
     if (LIMITED_MODES.includes(body.mode)) {
+      maxSessionMin = DEFAULT_MAX_SESSION_MIN
       const svc = createSupabaseService()
       const { data: store } = await svc
         .from('stores').select('tenant_id').eq('id', body.storeId).single()
       const tenantId = (store as { tenant_id?: string } | null)?.tenant_id ?? null
       if (tenantId) {
         const { data: lim } = await svc
-          .from('session_limits').select('max_concurrent').eq('tenant_id', tenantId).maybeSingle()
-        const max = (lim as { max_concurrent?: number } | null)?.max_concurrent ?? DEFAULT_MAX_CONCURRENT
+          .from('session_limits')
+          .select('max_concurrent, max_session_min')
+          .eq('tenant_id', tenantId)
+          .maybeSingle()
+        const limit = lim as { max_concurrent?: number; max_session_min?: number } | null
+        const max = limit?.max_concurrent ?? DEFAULT_MAX_CONCURRENT
+        maxSessionMin = limit?.max_session_min ?? DEFAULT_MAX_SESSION_MIN
         const sinceIso = new Date(Date.now() - ACTIVE_WINDOW_MS).toISOString()
         const { count } = await svc
           .from('live_sessions')
@@ -110,7 +120,8 @@ export async function POST(req: Request) {
       console.error('[sessions/start] insert failed:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
-    return NextResponse.json({ id: data.id })
+    // maxSessionMin は live/vod のみ非 null（grid は上限対象外）。
+    return NextResponse.json({ id: data.id, maxSessionMin })
   }
 
   if (body.action === 'end') {

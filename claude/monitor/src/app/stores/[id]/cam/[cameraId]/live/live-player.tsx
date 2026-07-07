@@ -31,6 +31,8 @@ import { useEffect, useRef, useState } from 'react'
 import Hls from 'hls.js'
 import { cancelPendingStop, scheduleStop } from '@/lib/edge-stop-registry'
 import { SaveJpegButton } from '@/components/SaveJpegButton'
+import { useSessionCountdown } from '@/lib/useSessionCountdown'
+import { RemainingBadge, SessionCapOverlay } from '@/components/SessionCap'
 
 // Floor between snapshot frames. Polling is onLoad-driven (the next fetch
 // starts only after the current frame settles), so this is just a small gap
@@ -114,10 +116,27 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
     setMode(resolveMode(prefer, !!hqUrl, !!liveIframeUrl))
   }, [cameraId, defaultMode, liveIframeUrl, hqUrl])
 
-  // ライブ視聴セッション(audit + 同時上限 F-10)を全モード共通で1本管理する。
-  // モード切替(hq/iframe/jpeg)を跨いで1セッション。429=上限到達で視聴をブロック。
+  // ライブ視聴セッション(audit + 同時上限 F-10 + 時間上限 R1)を全モード共通で1本管理する。
+  // モード切替(hq/iframe/jpeg)を跨いで1セッション。429=同時上限で視聴をブロック。
   const sessionId = useRef<string | null>(null)
-  const [limitReached, setLimitReached] = useState(false)
+  const [limitReached, setLimitReached]   = useState(false)
+  // R1: サーバが返す max_session_min と開始時刻からカウントダウンし、上限到達で視聴停止。
+  const [maxSessionMin, setMaxSessionMin] = useState<number | null>(null)
+  const [startedAtMs, setStartedAtMs]     = useState<number | null>(null)
+
+  // セッション終了記録（多重発火を防ぐため sessionId.current を消費）。
+  function endSession() {
+    const sid = sessionId.current
+    if (!sid) return
+    sessionId.current = null
+    void fetch('/api/sessions', {
+      method:    'POST',
+      headers:   { 'Content-Type': 'application/json' },
+      body:      JSON.stringify({ action: 'end', id: sid }),
+      keepalive: true,
+    }).catch(() => {})
+  }
+
   useEffect(() => {
     let cancelled = false
     void (async () => {
@@ -130,25 +149,29 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
         if (cancelled) return
         if (res.status === 429) { setLimitReached(true); return }
         if (res.ok) {
-          const j = await res.json().catch(() => null) as { id?: string } | null
-          if (!cancelled && j?.id) sessionId.current = j.id
+          const j = await res.json().catch(() => null) as { id?: string; maxSessionMin?: number | null } | null
+          if (!cancelled && j?.id) {
+            sessionId.current = j.id
+            setMaxSessionMin(j.maxSessionMin ?? null)
+            setStartedAtMs(Date.now())
+          }
         }
       } catch { /* 上限チェックの一時失敗では視聴を止めない(可用性優先) */ }
     })()
     return () => {
       cancelled = true
-      const sid = sessionId.current
-      if (sid) {
-        sessionId.current = null
-        void fetch('/api/sessions', {
-          method:    'POST',
-          headers:   { 'Content-Type': 'application/json' },
-          body:      JSON.stringify({ action: 'end', id: sid }),
-          keepalive: true,
-        }).catch(() => {})
-      }
+      endSession()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storeId, cameraId])
+
+  // R1: 時間上限のカウントダウン。到達したらセッションを終了し、映像を停止（下の描画で
+  // SessionCapOverlay に差し替える＝各モードが unmount → stop_stream を送る）。
+  const { remainingSec, expired } = useSessionCountdown(startedAtMs, maxSessionMin)
+  useEffect(() => {
+    if (expired) endSession()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expired])
 
   function switchMode(next: Mode): void {
     setIframeFailed(false)
@@ -164,10 +187,13 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
         iframeSupported={!!liveIframeUrl}
         iframeFailed={iframeFailed}
         onSwitch={switchMode}
+        remainingSec={expired ? null : remainingSec}
       />
       <div className="relative flex-1">
         {limitReached ? (
           <LiveLimitOverlay />
+        ) : expired ? (
+          <SessionCapOverlay maxSessionMin={maxSessionMin} />
         ) : mode === 'hq' && hqUrl ? (
           <Go2rtcMode url={hqUrl} storeId={storeId} cameraId={cameraId} />
         ) : mode === 'iframe' && liveIframeUrl ? (
@@ -222,13 +248,14 @@ function LiveLimitOverlay() {
 // ─── Mode toolbar ───────────────────────────────────────────────────────────
 
 function ModeToolbar({
-  mode, hqSupported, iframeSupported, iframeFailed, onSwitch,
+  mode, hqSupported, iframeSupported, iframeFailed, onSwitch, remainingSec,
 }: {
   mode:            Mode
   hqSupported:     boolean
   iframeSupported: boolean
   iframeFailed:    boolean
   onSwitch:        (m: Mode) => void
+  remainingSec:    number | null
 }) {
   const label =
     mode === 'hq'     ? '高画質ライブ (go2rtc H.264変換)'
@@ -281,11 +308,14 @@ function ModeToolbar({
           📡 軽量 (BCP用)
         </button>
       </div>
-      <div className="text-[10px] text-slate-400">
-        {label}
-        {iframeFailed && (
-          <span className="ml-2 text-amber-400">⚠ 高画質モード接続失敗 — 軽量モードへ自動切替</span>
-        )}
+      <div className="flex items-center gap-2 text-[10px] text-slate-400">
+        <RemainingBadge remainingSec={remainingSec} />
+        <span>
+          {label}
+          {iframeFailed && (
+            <span className="ml-2 text-amber-400">⚠ 高画質モード接続失敗 — 軽量モードへ自動切替</span>
+          )}
+        </span>
       </div>
     </div>
   )

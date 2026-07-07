@@ -27,6 +27,8 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useSessionCountdown } from '@/lib/useSessionCountdown'
+import { RemainingBadge, SessionCapOverlay } from '@/components/SessionCap'
 
 const POLL_INTERVAL_MS  = 1_000
 const UPLOAD_TIMEOUT_MS = 90_000   // Frigate can take 30-60s to assemble a 5-min clip
@@ -89,6 +91,21 @@ export default function VodPlayer({
   // F81: surface reuse so the user sees "再利用" instead of "アップロード中" on cache hit.
   const [reused, setReused] = useState(false)
   const sessionIdRef = useRef<string | null>(null)
+  // R1: 視聴セッション時間上限（デフォルト120分・テナント毎）。
+  const [maxSessionMin, setMaxSessionMin] = useState<number | null>(null)
+  const [startedAtMs, setStartedAtMs]     = useState<number | null>(null)
+
+  function endSession() {
+    const sid = sessionIdRef.current
+    if (!sid) return
+    sessionIdRef.current = null
+    void fetch('/api/sessions', {
+      method:    'POST',
+      headers:   { 'Content-Type': 'application/json' },
+      body:      JSON.stringify({ action: 'end', id: sid }),
+      keepalive: true,
+    }).catch(() => {})
+  }
 
   // 1. Create clip + start audit session on mount.
   useEffect(() => {
@@ -116,8 +133,12 @@ export default function VodPlayer({
             return
           }
           if (sres.ok) {
-            const sj = await sres.json().catch(() => null) as { id?: string } | null
-            if (!cancelled && sj?.id) sessionIdRef.current = sj.id
+            const sj = await sres.json().catch(() => null) as { id?: string; maxSessionMin?: number | null } | null
+            if (!cancelled && sj?.id) {
+              sessionIdRef.current = sj.id
+              setMaxSessionMin(sj.maxSessionMin ?? null)
+              setStartedAtMs(Date.now())
+            }
           }
         } catch { /* 上限チェック一時失敗は無視して続行 */ }
         if (cancelled) return
@@ -154,18 +175,17 @@ export default function VodPlayer({
       // edge — the user is leaving the page. The edge finishes the upload
       // regardless (it doesn't need a stop_stream for VOD; the upload runs
       // to completion or to its own AbortController).
-      const sid = sessionIdRef.current
-      if (sid) {
-        sessionIdRef.current = null
-        void fetch('/api/sessions', {
-          method:    'POST',
-          headers:   { 'Content-Type': 'application/json' },
-          body:      JSON.stringify({ action: 'end', id: sid }),
-          keepalive: true,
-        }).catch(() => {})
-      }
+      endSession()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cameraId, storeId, fromIso, toIso])
+
+  // R1: 視聴セッション時間上限のカウントダウン。到達でセッション終了＋再生停止。
+  const { remainingSec, expired } = useSessionCountdown(startedAtMs, maxSessionMin)
+  useEffect(() => {
+    if (expired) endSession()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expired])
 
   // 2. Poll status until ready/failed/timeout.
   useEffect(() => {
@@ -222,6 +242,7 @@ export default function VodPlayer({
           <div className="text-slate-400">{rangeLabel}</div>
         </div>
         <div className="flex items-center gap-2 text-slate-400">
+          <RemainingBadge remainingSec={expired ? null : remainingSec} />
           {/* F81: reuse badge — surfaced when /api/vod returned an existing clip
               instead of triggering a fresh Frigate generation + upload. */}
           {reused && (
@@ -239,7 +260,9 @@ export default function VodPlayer({
       </div>
 
       <div className="relative flex-1 overflow-hidden">
-        {status === 'ready' && clipId ? (
+        {expired ? (
+          <SessionCapOverlay maxSessionMin={maxSessionMin} />
+        ) : status === 'ready' && clipId ? (
           <video
             key={clipId}
             src={`/api/vod/${clipId}`}
