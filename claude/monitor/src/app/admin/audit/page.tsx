@@ -11,9 +11,10 @@
  */
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { createSupabaseServer } from '@/lib/supabase/server'
+import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
+import { FootageAccessTable } from './FootageAccessTable'
 import { getT } from '@/lib/i18n/server'
 import type { Msg } from '@/lib/i18n/messages'
 
@@ -39,25 +40,16 @@ const MODE_STYLE: Record<string, string> = {
   vod:  'bg-violet-100 text-violet-700',
 }
 
-// 証跡静止画アクセス（footage_access_log）— ライブ/VOD(live_sessions)と同一ページに統合表示。
+// 証跡静止画アクセス（footage_access_log）— 表示/絞込/CSV は FootageAccessTable(client)。
 interface FootageRow {
   id: string
   actor_user_id: string
+  store_id: string | null
+  camera_id: string | null
   access_type: 'alarm_snapshot' | 'alarm_frame' | 'patrol_snapshot' | 'bcp_export'
   resource_id: string | null
   accessed_at: string
   stores: { name: string | null } | null
-}
-const FOOTAGE_LABEL: Record<FootageRow['access_type'], string> = {
-  alarm_snapshot: '発報スナップ', alarm_frame: '発報フレーム',
-  patrol_snapshot: '巡回スナップ', bcp_export: 'BCPエクスポート',
-}
-const FOOTAGE_STYLE: Record<FootageRow['access_type'], string> = {
-  alarm_snapshot: 'bg-red-100 text-red-700', alarm_frame: 'bg-amber-100 text-amber-700',
-  patrol_snapshot: 'bg-blue-100 text-blue-700', bcp_export: 'bg-violet-100 text-violet-700',
-}
-function fmtJstFull(iso: string) {
-  return new Date(iso).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
 }
 
 function modeLabel(m: string, a: Msg['adminAudit']): string {
@@ -131,13 +123,36 @@ export default async function AuditPage({
   const rows = (data ?? []) as unknown as AuditRow[]
   const totalPages = Math.ceil((count ?? 0) / PAGE_SIZE)
 
-  // 証跡静止画アクセス（ライブ/VOD の下に併記）。RLS で admin ロールのみ。
+  // 証跡静止画アクセス（ライブ/VOD の下に併記）。RLS で admin ロールのみ可視。
   const { data: footageData } = await supa
     .from('footage_access_log')
-    .select('id, actor_user_id, access_type, resource_id, accessed_at, stores ( name )')
+    .select('id, actor_user_id, store_id, camera_id, access_type, resource_id, accessed_at, stores ( name )')
     .order('accessed_at', { ascending: false })
-    .limit(100)
-  const footageRows = (footageData ?? []) as unknown as FootageRow[]
+    .limit(300)
+  const footageRaw = (footageData ?? []) as unknown as FootageRow[]
+
+  // 操作者メール・カメラ名を解決（admin_users は self-only RLS のため service client で参照。
+  // 表示対象の行は上の RLS で既に絞られているので越権にはならない）。
+  const svc = createSupabaseService()
+  const actorIds  = [...new Set(footageRaw.map((r) => r.actor_user_id).filter(Boolean))]
+  const cameraIds = [...new Set(footageRaw.map((r) => r.camera_id).filter((v): v is string => !!v))]
+  const [{ data: admins }, { data: cams }] = await Promise.all([
+    actorIds.length  ? svc.from('admin_users').select('auth_user_id, email').in('auth_user_id', actorIds)
+                     : Promise.resolve({ data: [] as { auth_user_id: string; email: string | null }[] }),
+    cameraIds.length ? svc.from('recorder_cameras').select('id, name').in('id', cameraIds)
+                     : Promise.resolve({ data: [] as { id: string; name: string | null }[] }),
+  ])
+  const emailBy  = new Map((admins ?? []).map((a) => [a.auth_user_id as string, (a.email as string | null) ?? '']))
+  const cameraBy = new Map((cams ?? []).map((c) => [c.id as string, (c.name as string | null) ?? '']))
+  const footageRows = footageRaw.map((r) => ({
+    id: r.id,
+    accessedAt: r.accessed_at,
+    accessType: r.access_type,
+    storeName: r.stores?.name ?? '',
+    actorEmail: emailBy.get(r.actor_user_id) || (r.actor_user_id ? r.actor_user_id.slice(0, 8) + '…' : ''),
+    cameraName: (r.camera_id && cameraBy.get(r.camera_id)) || '',
+    resourceId: r.resource_id ?? '',
+  }))
 
   const MODES = [
     { key: '',     label: ta.modeAll },
@@ -281,38 +296,11 @@ export default async function AuditPage({
           </div>
         )}
 
-        {/* 証跡静止画アクセス（footage_access_log）— ライブ/VOD の下に併記 */}
+        {/* 証跡静止画アクセス（footage_access_log）— 表示/絞込/CSV は client */}
         <div className="pt-2">
-          <h2 className="mb-2 text-sm font-bold text-slate-700">証跡静止画アクセス</h2>
-          <p className="mb-2 text-[11px] text-slate-500">発報スナップ・発報フレーム・巡回スナップ・BCPエクスポートの閲覧を記録（5分単位で集約・保持180日）。ライブ/グリッド/VOD は上のセッション一覧に表示。</p>
-          {footageRows.length === 0 ? (
-            <div className="rounded-lg border border-slate-200 bg-white p-6 text-center text-xs text-slate-500">記録はまだありません（証跡映像を閲覧すると記録されます）。</div>
-          ) : (
-            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-              <table className="w-full text-xs">
-                <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                  <tr>
-                    <th className="px-3 py-2 text-left">アクセス日時</th>
-                    <th className="px-3 py-2 text-left">種別</th>
-                    <th className="px-3 py-2 text-left">店舗</th>
-                    <th className="px-3 py-2 text-left">操作者</th>
-                    <th className="px-3 py-2 text-left">対象</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {footageRows.map((f) => (
-                    <tr key={f.id} className="border-t border-slate-100 hover:bg-slate-50">
-                      <td className="px-3 py-2 tabular-nums text-slate-700">{fmtJstFull(f.accessed_at)}</td>
-                      <td className="px-3 py-2"><span className={'rounded px-1.5 py-px text-[10px] font-bold ' + FOOTAGE_STYLE[f.access_type]}>{FOOTAGE_LABEL[f.access_type]}</span></td>
-                      <td className="px-3 py-2 text-slate-700">{f.stores?.name ?? '—'}</td>
-                      <td className="px-3 py-2 font-mono text-[11px] text-slate-500">{shortUuid(f.actor_user_id)}</td>
-                      <td className="px-3 py-2 font-mono text-[11px] text-slate-500">{f.resource_id ?? '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <h2 className="mb-2 text-sm font-bold text-slate-700 dark:text-gedink">証跡静止画アクセス</h2>
+          <p className="mb-2 text-[11px] text-slate-500 dark:text-gedink3">発報スナップ・発報フレーム・巡回スナップ・BCPエクスポートの閲覧を記録（5分単位で集約・保持180日）。ライブ/グリッド/VOD は上のセッション一覧に表示。</p>
+          <FootageAccessTable rows={footageRows} />
         </div>
       </div>
     </AdminShell>
