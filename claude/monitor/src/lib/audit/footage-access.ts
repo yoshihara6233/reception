@@ -27,7 +27,6 @@ export interface FootageAccessEntry {
 }
 
 export async function recordFootageAccess(e: FootageAccessEntry): Promise<void> {
-  console.log('[footage-access] enter:', e.accessType, e.resourceId, 'store=', e.storeId ?? 'null')
   try {
     const bucket = new Date(Math.floor(Date.now() / BUCKET_MS) * BUCKET_MS).toISOString()
     const svc = createSupabaseService()
@@ -42,9 +41,8 @@ export async function recordFootageAccess(e: FootageAccessEntry): Promise<void> 
       },
       { onConflict: 'actor_user_id,access_type,resource_id,bucket', ignoreDuplicates: true },
     )
-    // best-effort: 閲覧は妨げないが、成否をログに残す（本番の記録追跡・原因調査用）。
+    // best-effort: 閲覧は妨げないが、失敗は原因調査のためログに残す。
     if (error) console.error('[footage-access] upsert error:', error.message)
-    else console.log('[footage-access] recorded ok:', e.accessType, e.resourceId)
   } catch (e2) {
     console.error('[footage-access] record failed:', (e2 as Error)?.message ?? e2)
   }
