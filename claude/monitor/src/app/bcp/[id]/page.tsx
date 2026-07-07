@@ -9,6 +9,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createSupabaseServer } from '@/lib/supabase/server'
+import { recordFootageAccess } from '@/lib/audit/footage-access'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
 import { GenerateReportButton } from './GenerateReportButton'
@@ -129,6 +130,15 @@ export default async function BcpEventDetailPage({
   }
 
   const event = eventData as unknown as BcpEvent
+
+  // G3: BCP詳細（証跡映像）を開いた閲覧アクセスを記録（ページ単位・5分dedup）。
+  const { data: { user } } = await supa.auth.getUser()
+  if (user) {
+    await recordFootageAccess({
+      actorUserId: user.id, storeId: event.stores?.id ?? null,
+      accessType: 'bcp_view', resourceId: id,
+    })
+  }
 
   // Fetch clips (= snapshots) with camera names
   const { data: clipsData } = await supa

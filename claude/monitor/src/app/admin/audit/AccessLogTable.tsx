@@ -11,6 +11,7 @@ import { Download } from 'lucide-react'
 export type AccessType =
   | 'grid' | 'live' | 'vod'
   | 'alarm_snapshot' | 'alarm_frame' | 'patrol_snapshot' | 'bcp_export'
+  | 'patrol_view' | 'bcp_view'
 
 export interface AccessRowVM {
   id: string
@@ -26,13 +27,15 @@ const TYPE_LABEL: Record<AccessType, string> = {
   grid: '16分割監視', live: 'LIVE', vod: 'VOD再生',
   alarm_snapshot: '発報スナップ', alarm_frame: '発報フレーム',
   patrol_snapshot: '巡回スナップ', bcp_export: 'BCPエクスポート',
+  patrol_view: '巡回レポート閲覧', bcp_view: 'BCP詳細閲覧',
 }
 const TYPE_STYLE: Record<AccessType, string> = {
   grid: 'bg-blue-100 text-blue-700', live: 'bg-red-100 text-red-700', vod: 'bg-violet-100 text-violet-700',
   alarm_snapshot: 'bg-red-100 text-red-700', alarm_frame: 'bg-amber-100 text-amber-700',
   patrol_snapshot: 'bg-sky-100 text-sky-700', bcp_export: 'bg-fuchsia-100 text-fuchsia-700',
+  patrol_view: 'bg-sky-100 text-sky-700', bcp_view: 'bg-fuchsia-100 text-fuchsia-700',
 }
-const TYPE_ORDER: AccessType[] = ['grid', 'live', 'vod', 'alarm_snapshot', 'alarm_frame', 'patrol_snapshot', 'bcp_export']
+const TYPE_ORDER: AccessType[] = ['grid', 'live', 'vod', 'alarm_snapshot', 'alarm_frame', 'patrol_snapshot', 'patrol_view', 'bcp_export', 'bcp_view']
 
 function fmtJst(iso: string) {
   return new Date(iso).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
