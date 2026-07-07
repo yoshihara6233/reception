@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { IngressClient, IngressInput } from 'livekit-server-sdk'
+import { livekitEnabled } from '@/lib/livekit'
 
 /**
  * Create a one-shot WHIP ingress for the edge to publish into.
@@ -22,6 +23,13 @@ import { IngressClient, IngressInput } from 'livekit-server-sdk'
  * we don't track ids here. Cleanup-on-stop is a future optimisation.
  */
 export async function POST(req: NextRequest) {
+  // SFUベータ機能フラグ。既定OFFでこの publish 経路を無効化しておく。
+  if (!livekitEnabled()) {
+    return NextResponse.json({ error: 'livekit_disabled' }, { status: 404 })
+  }
+  // TODO(SFU S1・edge publish): 認可を「任意ログインユーザ」から **edge device_token**
+  //   （または admin ロール）へ差し替える。ingress 作成は配信の起点であり、視聴者ユーザに
+  //   開けてはならない。有効化(S0.1)前に必ず対応すること。現状はフラグOFF既定で無効。
   const supa = await createSupabaseServer()
   const { data: { user } } = await supa.auth.getUser()
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })

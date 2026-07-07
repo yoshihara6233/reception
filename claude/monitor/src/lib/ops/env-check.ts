@@ -28,6 +28,10 @@ export function checkCriticalEnv(): EnvCheckItem[] {
     { key: 'ALERT_EMAILS',                  required: false, set: has('ALERT_EMAILS'),                  purpose: '未設定だとエッジ死活アラートがログのみ（誰にも届かない）' },
     { key: 'ALERT_WEBHOOK_URL',             required: false, set: has('ALERT_WEBHOOK_URL'),             purpose: '運用アラートの第2経路（Slack/Discord 等）。メール見落とし対策に推奨' },
     { key: 'NEXT_PUBLIC_SITE_URL',          required: false, set: has('NEXT_PUBLIC_SITE_URL'),          purpose: '通知メール内リンク・エッジ ingest URL の基点（未設定は既定URLで動作）' },
+    // SFU（LiveKit Cloud）ベータ。LIVEKIT_ENABLED='true'＋以下3点が揃うと高画質SFUライブが有効。
+    { key: 'LIVEKIT_URL',                   required: false, set: has('LIVEKIT_URL'),                   purpose: 'SFUベータ: LiveKit プロジェクトURL（wss://…）。LIVEKIT_ENABLED=true 時に必須' },
+    { key: 'LIVEKIT_API_KEY',               required: false, set: has('LIVEKIT_API_KEY'),               purpose: 'SFUベータ: LiveKit APIキー。token/ingress 発行に必須' },
+    { key: 'LIVEKIT_API_SECRET',            required: false, set: has('LIVEKIT_API_SECRET'),            purpose: 'SFUベータ: LiveKit APIシークレット。token/ingress 発行に必須' },
   ]
 }
 
