@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { AppShell } from '@/components/AppShell'
+import { signLiveUrl } from '@/lib/live-sign'
 import LivePlayer from './live-player'
 
 export default async function LivePage(
@@ -60,6 +61,12 @@ export default async function LivePage(
           ? `${liveOrigin}/api/${c.frigate_camera}?fps=5&height=720`
           : `${liveOrigin}/cameras/${c.frigate_camera}`)
       : null
+  // 案2: リモート MJPEG（Cloudflare Tunnel）は、カメラ側 CF Access ログインの代わりに
+  // 短TTL HMAC 署名で通す（Worker live-gate が検証）。LIVE_SIGNING_SECRET 未設定なら
+  // signLiveUrl は null を返し、従来の生URL（CFログイン方式）へフォールバックする。
+  const signedMjpeg = liveIframeUrl && isRemoteHost ? signLiveUrl(liveIframeUrl) : null
+  const effectiveLiveUrl = signedMjpeg ?? liveIframeUrl
+  const liveSigned = !!signedMjpeg
   // go2rtc 高画質: エッジに go2rtc_host が設定済み（または カメラ単位の hls_url
   // 上書きあり）なら配信対象。ストリーム名はエッジ登録と同じ規則 `cam_<cameraId>`
   // （手動命名不要）。monitor の認証付きプロキシ越しに HLS を再生し、プロキシが
@@ -92,8 +99,9 @@ export default async function LivePage(
             cameraId={cameraId}
             storeId={storeId}
             room={room}
-            liveIframeUrl={liveIframeUrl}
+            liveIframeUrl={effectiveLiveUrl}
             liveIsImageStream={isRemoteHost}
+            liveSigned={liveSigned}
             hqUrl={hqUrl}
           />
         </div>

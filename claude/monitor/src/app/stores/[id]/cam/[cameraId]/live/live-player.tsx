@@ -87,6 +87,10 @@ interface Props {
   // <iframe> (a multipart/x-mixed-replace response never fires the iframe load
   // event, which would trip the 8s fallback watchdog).
   liveIsImageStream?: boolean
+  // 案2: liveIframeUrl が短TTL署名済み（Cloudflare Worker live-gate 検証）なら true。
+  // この時カメラ側 CF Access ログインは不要 → ImageStreamMode はログイン導線を出さず、
+  // 失敗時は /api/live-sign で署名URLを取り直す。
+  liveSigned?: boolean
   // go2rtc high-quality URL (stream.html, via Cloudflare Tunnel). When set, the
   // camera gets a 高画質(go2rtc) mode that embeds go2rtc's own player. This is
   // how onvif-generic / i-PRO H.265 cameras get high-quality live (edge go2rtc
@@ -103,7 +107,7 @@ function resolveMode(prefer: Mode, hasHq: boolean, hasIframe: boolean): Mode {
   return hasHq ? 'hq' : hasIframe ? 'iframe' : 'jpeg'
 }
 
-export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, liveIsImageStream, hqUrl }: Props) {
+export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, liveIsImageStream, liveSigned, hqUrl }: Props) {
   // Default mode: go2rtc高画質 > Frigate iframe > jpeg. User pref overrides.
   const defaultMode: Mode = hqUrl ? 'hq' : liveIframeUrl ? 'iframe' : 'jpeg'
   const [mode, setMode]   = useState<Mode>(defaultMode)
@@ -202,7 +206,9 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
             // an Access-aware error overlay instead of auto-falling back to
             // jpeg: a failed load is usually "not yet authenticated to the
             // camera domain", so we offer a one-click login + retry.
-            <ImageStreamMode url={liveIframeUrl} />
+            // 案2: signed=true なら CF ログイン不要（Worker が短TTL署名を検証）→
+            // 失敗時はログイン導線を出さず /api/live-sign で署名URLを取り直す。
+            <ImageStreamMode url={liveIframeUrl} cameraId={cameraId} signed={!!liveSigned} />
           ) : (
             <IframeMode
               url={liveIframeUrl}
@@ -434,19 +440,37 @@ function Go2rtcMode({ url, storeId, cameraId }: { url: string; storeId?: string;
 
 // ─── remote MJPEG image stream (Cloudflare Tunnel) ───────────────────────────
 
-function ImageStreamMode({ url }: { url: string }) {
-  // Remote high-quality is a Frigate MJPEG stream behind Cloudflare Access.
-  // When the operator hasn't yet authenticated to the camera domain, the
-  // <img> request is 302'd to the Access login and the load fails. Rather than
-  // silently dropping to jpeg, surface a one-click "log in to the camera"
-  // action: the operator authenticates once (SameSite=None CF_Authorization
-  // cookie), then Retry re-requests the stream — now the cookie is present.
+function ImageStreamMode({ url, cameraId, signed }: { url: string; cameraId: string; signed: boolean }) {
+  // Remote high-quality is a Frigate MJPEG stream behind Cloudflare Tunnel.
+  //
+  // signed=false (従来): カメラドメインへ未認証だと <img> が CF Access ログインに 302 され
+  //   失敗する。ワンクリック「カメラにログイン」→ 再試行（SameSite=None cookie）で復帰。
+  //
+  // signed=true (案2): URL に短TTL HMAC 署名が付き、Worker live-gate が検証して通すため
+  //   CF ログインは不要。失敗（多くは TTL 切れ後の再接続）時は /api/live-sign で署名URLを
+  //   取り直して再試行する。ログイン導線は出さない。
   const [errored, setErrored] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
+  const [curUrl, setCurUrl] = useState(url)
+  // SSR から渡る署名URLが変わったら追従（カメラ切替等）。
+  useEffect(() => { setCurUrl(url) }, [url])
 
   let loginOrigin: string | null = null
-  try { loginOrigin = new URL(url).origin } catch { loginOrigin = null }
-  const src = `${url}${url.includes('?') ? '&' : '?'}_r=${reloadKey}`
+  try { loginOrigin = new URL(curUrl).origin } catch { loginOrigin = null }
+  const src = `${curUrl}${curUrl.includes('?') ? '&' : '?'}_r=${reloadKey}`
+
+  // 署名モードの再試行: 新しい署名URLを取得してから再読込（TTL切れの復帰）。
+  async function retrySigned() {
+    try {
+      const r = await fetch(`/api/live-sign/${cameraId}`, { cache: 'no-store' })
+      if (r.ok) {
+        const j = await r.json().catch(() => null) as { url?: string } | null
+        if (j?.url) setCurUrl(j.url)
+      }
+    } catch { /* 取得失敗でも既存URLで再試行する */ }
+    setErrored(false)
+    setReloadKey((k) => k + 1)
+  }
 
   return (
     <div className="relative h-full w-full bg-black">
@@ -463,11 +487,10 @@ function ImageStreamMode({ url }: { url: string }) {
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/75 px-6 text-center text-sm text-slate-200">
           <div>
             高画質映像を表示できません。
-            <br />
-            カメラ側の認証が必要な場合があります。
+            {!signed && (<><br />カメラ側の認証が必要な場合があります。</>)}
           </div>
           <div className="flex gap-2">
-            {loginOrigin && (
+            {!signed && loginOrigin && (
               <button
                 type="button"
                 onClick={() => window.open(loginOrigin!, '_blank', 'noopener,noreferrer')}
@@ -478,15 +501,17 @@ function ImageStreamMode({ url }: { url: string }) {
             )}
             <button
               type="button"
-              onClick={() => { setErrored(false); setReloadKey((k) => k + 1) }}
+              onClick={() => { if (signed) void retrySigned(); else { setErrored(false); setReloadKey((k) => k + 1) } }}
               className="rounded bg-slate-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-600"
             >
               🔄 再試行
             </button>
           </div>
-          <div className="text-[11px] text-slate-400">
-            別タブでログイン後、「再試行」を押してください
-          </div>
+          {!signed && (
+            <div className="text-[11px] text-slate-400">
+              別タブでログイン後、「再試行」を押してください
+            </div>
+          )}
         </div>
       )}
     </div>
