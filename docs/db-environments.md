@@ -113,12 +113,17 @@ bun run db:status         # API URL / anon key / service_role key を確認
 
 cp .env.local.example .env.local
 #  .env.local に db:status の値(URL/anon/service_role)を貼る
-bun run dev               # http://127.0.0.1:3100
+bun run dev               # http://127.0.0.1:3200（3100 は Loki が使用するため回避）
 ```
 
 ### seed（ローカル用テストデータ）
 `supabase/seed.sql`（gitignore 済）に**ローカル専用**の最小データを置くと `db reset` 時に投入される。
-本番 schema 確定後に、開発用 super_admin（auth.users + admin_users）+ サンプル tenant/store を作る。
+2026-07-07 に作成済み — **開発用 super_admin（auth.users + auth.identities + admin_users）+ サンプル tenant/store**。
+
+> **ローカルの既定ログイン**: `admin@local.dev` / `LocalDev!2026`（**ローカル専用の使い捨て**・本番とは無関係）。
+> パスワードは pgcrypto の bcrypt でハッシュ化（`extensions.crypt(... , extensions.gen_salt('bf'))` — Supabase では
+> pgcrypto は `extensions` スキーマにあるため要スキーマ修飾）。`tenants.plan` は `starter/standard/enterprise` のみ許可
+> （列 DEFAULT の `trial` は check に無いので seed では明示）。`seed.sql` は gitignore のため各自の端末にのみ存在する。
 > ⚠ seed はローカル専用。本番認証情報・実データは置かない。
 
 ---

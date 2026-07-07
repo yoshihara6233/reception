@@ -112,7 +112,7 @@ export default function LoginPage() {
               <TriangleAlert size={13} strokeWidth={1.5} className="mt-px flex-shrink-0 text-amber-700" aria-hidden />
               <p className="text-[10px] leading-relaxed text-amber-900">
                 <b>localhost</b> はスマホからアクセスできません。
-                Mac の LAN IP (例: <code className="font-mono">http://192.168.0.2:3100/login</code>) に
+                Mac の LAN IP (例: <code className="font-mono">http://192.168.0.2:3200/login</code>) に
                 ブラウザで一度アクセスし直してから QR コードを表示してください。
               </p>
             </div>
