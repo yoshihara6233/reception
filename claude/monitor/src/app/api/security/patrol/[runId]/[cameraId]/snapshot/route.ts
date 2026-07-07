@@ -20,6 +20,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
+import { recordFootageAccess } from '@/lib/audit/footage-access'
 
 const BUCKET     = 'security-snapshots'
 const SIGNED_TTL = 60   // seconds — outlives the single redirect fetch
@@ -42,7 +43,7 @@ export async function GET(
   //    ingested for this run+camera.
   const { data: finding, error: findErr } = await supa
     .from('patrol_findings')
-    .select('id')
+    .select('id, patrol_runs ( store_id )')
     .eq('run_id', runId)
     .eq('camera_id', cameraId)
     .maybeSingle()
@@ -50,6 +51,14 @@ export async function GET(
   if (findErr || !finding) {
     return new NextResponse('Not Found', { status: 404 })
   }
+
+  // G3: 証跡静止画の閲覧アクセスを記録（best-effort・5分dedup）。
+  const run = (finding as { patrol_runs?: { store_id?: string | null } | { store_id?: string | null }[] }).patrol_runs
+  const storeId = (Array.isArray(run) ? run[0]?.store_id : run?.store_id) ?? null
+  void recordFootageAccess({
+    actorUserId: user.id, storeId, accessType: 'patrol_snapshot',
+    resourceId: `${runId}:${cameraId}`, cameraId,
+  })
 
   // 3. Sign via Service Role (bypasses Storage RLS; authz already done above).
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL

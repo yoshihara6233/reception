@@ -19,6 +19,7 @@ import { NextResponse } from 'next/server'
 import JSZip from 'jszip'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
+import { recordFootageAccess } from '@/lib/audit/footage-access'
 
 interface ClipRow {
   id:            string
@@ -65,6 +66,12 @@ export async function GET(
     .single()
   if (!eventData) return new NextResponse('Not Found', { status: 404 })
   const event = eventData as unknown as EventRow
+
+  // G3: 証跡エクスポート（ZIPダウンロード）の閲覧アクセスを記録（best-effort・5分dedup）。
+  void recordFootageAccess({
+    actorUserId: user.id, storeId: event.stores?.id ?? null,
+    accessType: 'bcp_export', resourceId: id,
+  })
 
   // Fetch snapshots only (offset_min IS NOT NULL)
   const { data: clipData } = await supa
