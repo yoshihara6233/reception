@@ -80,7 +80,7 @@ export const ADMIN_NAV: NavItem[] = [
   { href: '/admin/bcp',        label: 'BCP発動条件',     icon: '🚨' },
   { href: '/admin/users',      label: 'ユーザ',         icon: '⚇' },
   { href: '/admin/import',     label: 'CSV 一括投入',   icon: '⇪' },
-  { href: '/admin/audit',      label: '監査ログ',       icon: '☰' },
+  { href: '/admin/audit',      label: 'アクセスログ',   icon: '☰' },
 ]
 
 // 警備
