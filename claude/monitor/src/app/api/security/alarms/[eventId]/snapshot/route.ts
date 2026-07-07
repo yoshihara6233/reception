@@ -35,7 +35,7 @@ export async function GET(
   if (error || !ev) return new NextResponse('Not Found', { status: 404 })
 
   // G3: 証跡静止画の閲覧アクセスを記録（best-effort・5分dedup）。
-  void recordFootageAccess({
+  await recordFootageAccess({
     actorUserId: user.id, storeId: ev.store_id as string | null, accessType: 'alarm_snapshot',
     resourceId: eventId, cameraId: ev.camera_id as string | null,
   })

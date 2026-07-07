@@ -37,7 +37,7 @@ export async function GET(
   // G3: 証跡静止画の閲覧アクセスを記録（best-effort・5分dedup）。
   const parent = (frame as { alarm_events?: { store_id?: string | null } | { store_id?: string | null }[] }).alarm_events
   const storeId = (Array.isArray(parent) ? parent[0]?.store_id : parent?.store_id) ?? null
-  void recordFootageAccess({
+  await recordFootageAccess({
     actorUserId: user.id, storeId, accessType: 'alarm_frame',
     resourceId: frameId, cameraId: (frame as { camera_id?: string | null }).camera_id ?? null,
   })
