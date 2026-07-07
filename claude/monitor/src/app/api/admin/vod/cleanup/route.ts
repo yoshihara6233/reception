@@ -8,7 +8,7 @@
  *   `vod_clips.created_at` が `older_than_days` 日より古い行を対象に、
  *   Storage オブジェクト + DB 行を両方削除する。
  *
- *   - `older_than_days` 既定値: 30
+ *   - `older_than_days` 既定値: 31（データガバナンス方針: 保持31日）
  *   - `dry_run`: true なら削除せず、対象件数のみ返す
  *
  * 認証
@@ -37,7 +37,7 @@ import { createSupabaseServer } from '@/lib/supabase/server'
 
 const BUCKET                = 'vod-clips'
 const SNAPSHOT_BUCKET       = 'security-snapshots'
-const DEFAULT_TTL_DAYS      = 30
+const DEFAULT_TTL_DAYS      = 31   // データガバナンス方針: 保持31日（docs/data-governance-sla.md）
 const MAX_DELETE_PER_RUN    = 500
 
 interface AlarmPruneResult {

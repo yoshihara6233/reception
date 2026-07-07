@@ -9,8 +9,8 @@
  *   3. security_settings.last_run_at を更新
  * を行う。判定・比較・AI は挟まない（撮影と記録のみ＝証跡型巡回）。
  *
- * 保持 30 日: 起点 30 日より古い patrol_runs / patrol_findings / スナップショットを
- * purge する（毎時1回だけ実行。security_reports は証跡として残す）。
+ * 保持 31 日: 起点 31 日より古い patrol_runs / patrol_findings / スナップショットを
+ * purge する（毎時1回だけ実行。security_reports は証跡として残す）。データガバナンス方針=保持31日。
  *
  * 認証: edge-health cron と同じ CRON_SECRET（Bearer or x-cron-secret）。未設定なら 503。
  *
@@ -29,7 +29,7 @@ import { generateAndStoreRunReport } from '@/lib/security/patrol-report'
 export const runtime = 'nodejs'
 export const maxDuration = 120
 
-const PURGE_DAYS = 30
+const PURGE_DAYS = 31   // データガバナンス方針: 保持31日（docs/data-governance-sla.md）
 const PURGE_RUN_LIMIT = 500 // 1 tick あたりの purge 上限（タイムアウト回避）
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
