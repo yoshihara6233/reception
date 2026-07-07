@@ -87,7 +87,7 @@ export function EdgeDetail({ edge }: { edge: EdgePayload }) {
           <Row k="店舗"        v={`${edge.stores.area_code ? `[${edge.stores.area_code}] ` : ''}${edge.stores.name}`} />
           <Row k="状態"        v={edge.status} />
           <Row k="バージョン"  v={edge.agent_version ?? '—'} />
-          <Row k="最終接続"    v={edge.last_seen_at ? new Date(edge.last_seen_at).toLocaleString('ja-JP') : '—'} />
+          <Row k="最終接続"    v={edge.last_seen_at ? new Date(edge.last_seen_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : '—'} />
         </dl>
 
         {/* go2rtc 公開オリジン（高画質ライブ・従来はSQL直編集） */}
@@ -195,7 +195,7 @@ function OtaPanel({ edge }: { edge: EdgePayload }) {
       <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs md:grid-cols-3">
         <Row k="現行 agent"   v={<span className="font-mono">{edge.agent_version ?? '—'}</span>} />
         <Row k="現行 cloudflared" v={<span className="font-mono">{edge.cloudflared_version ?? '—'}</span>} />
-        <Row k="最終OTA"      v={edge.ota_updated_at ? new Date(edge.ota_updated_at).toLocaleString('ja-JP') : '—'} />
+        <Row k="最終OTA"      v={edge.ota_updated_at ? new Date(edge.ota_updated_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : '—'} />
       </dl>
       {edge.ota_last_error && (
         <p className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] text-red-700">

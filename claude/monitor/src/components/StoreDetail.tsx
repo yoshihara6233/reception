@@ -88,7 +88,7 @@ export async function StoreDetail({ storeId }: { storeId: string }) {
         </Kv>
         <Kv
           label="最終接続"
-          value={edge?.last_seen_at ? new Date(edge.last_seen_at).toLocaleString('ja-JP') : '—'}
+          value={edge?.last_seen_at ? new Date(edge.last_seen_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : '—'}
         />
       </Section>
 

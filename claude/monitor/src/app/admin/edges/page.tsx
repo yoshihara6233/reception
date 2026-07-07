@@ -103,7 +103,7 @@ export default async function EdgesAdmin({
                   <td className="px-3 py-2 font-mono">{e.agent_version ?? t.common.dash}</td>
                   <td className="px-3 py-2">{e.recorders?.length ?? 0}</td>
                   <td className="px-3 py-2 text-slate-500">
-                    {e.last_seen_at ? new Date(e.last_seen_at).toLocaleString('ja-JP') : t.common.dash}
+                    {e.last_seen_at ? new Date(e.last_seen_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : t.common.dash}
                   </td>
                   <td className="px-3 py-2 text-right">
                     <Link href={`/admin/edges/${e.id}`} className="text-blue-600 hover:underline">{te.editLink}</Link>
