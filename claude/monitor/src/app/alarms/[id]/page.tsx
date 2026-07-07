@@ -13,6 +13,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { Video, Grid2x2, Film, Camera, ArrowLeft } from 'lucide-react'
 import { createSupabaseServer } from '@/lib/supabase/server'
+import { recordFootageAccess } from '@/lib/audit/footage-access'
 import { AdminShell, ALARM_NAV } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
 import { isVodVendor, type RecorderVendor } from '@/lib/types/db'
@@ -50,6 +51,15 @@ export default async function AlarmDetailPage({ params }: { params: Promise<{ id
     .eq('id', id)
     .maybeSingle()
   if (!ev) notFound()
+
+  // G3: 発報詳細（証跡映像）を開いた閲覧アクセスを記録（ページ表示時＝画像キャッシュに依存せず確実）。
+  const { data: { user } } = await supa.auth.getUser()
+  if (user) {
+    await recordFootageAccess({
+      actorUserId: user.id, storeId: ev.store_id as string | null,
+      accessType: 'alarm_frame', resourceId: id, cameraId: ev.camera_id as string | null,
+    })
+  }
 
   const storeName = nameOf((ev as { stores?: unknown }).stores as never) ?? '—'
   const st = STATUS[ev.status as 'new' | 'ack' | 'closed'] ?? STATUS.new
