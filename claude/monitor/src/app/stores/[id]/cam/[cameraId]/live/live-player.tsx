@@ -28,11 +28,15 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
 import Hls from 'hls.js'
 import { cancelPendingStop, scheduleStop } from '@/lib/edge-stop-registry'
 import { SaveJpegButton } from '@/components/SaveJpegButton'
 import { useSessionCountdown } from '@/lib/useSessionCountdown'
 import { RemainingBadge, SessionCapOverlay } from '@/components/SessionCap'
+
+// SFU(LiveKit)購読モードは遅延読込（未使用時 livekit-client をバンドルに載せない・SSR不可）。
+const LiveKitMode = dynamic(() => import('./live-livekit-mode'), { ssr: false })
 
 // Floor between snapshot frames. Polling is onLoad-driven (the next fetch
 // starts only after the current frame settles), so this is just a small gap
@@ -49,8 +53,9 @@ const ADAPTIVE_GAPS_MS = [FRAME_GAP_MS, 1000, 2500, 5000]
 const SLOW_FRAME_MS = 1200   // 1フレーム取得がこれ超で「回線細」と判定→劣化
 const FAST_FRAME_MS = 600    // これ未満が続けば回復→1段戻す
 
-// 'hq' = go2rtc 高画質(H.265→H.264 変換ライブ・Cloudflare Tunnel経由 stream.html iframe)
-type Mode = 'hq' | 'iframe' | 'jpeg'
+// 'sfu' = LiveKit(SFU)購読・H.264サブ秒 / 'hq' = go2rtc 高画質(H.265→H.264変換・Tunnel) /
+// 'iframe' = Frigate直/MJPEG / 'jpeg' = 軽量スナップ
+type Mode = 'sfu' | 'hq' | 'iframe' | 'jpeg'
 
 // F80.1: key bumped to v2. The v1 auto-fallback persisted 'jpeg' on a
 // transient iframe timeout (see onError below), which permanently stuck
@@ -65,7 +70,7 @@ function loadMode(cameraId: string, defaultMode: Mode): Mode {
   if (typeof window === 'undefined') return defaultMode
   try {
     const v = window.localStorage.getItem(modePrefKey(cameraId))
-    return v === 'hq' || v === 'iframe' || v === 'jpeg' ? v : defaultMode
+    return v === 'sfu' || v === 'hq' || v === 'iframe' || v === 'jpeg' ? v : defaultMode
   } catch {
     return defaultMode
   }
@@ -96,19 +101,24 @@ interface Props {
   // how onvif-generic / i-PRO H.265 cameras get high-quality live (edge go2rtc
   // transcodes H.265→H.264). Independent of liveIframeUrl (Frigate).
   hqUrl?: string | null
+  // SFU(LiveKit)ベータが有効か（サーバ livekitEnabled()）。true のとき「🛰 SFU」モードを提供。
+  sfuEnabled?: boolean
 }
 
 // 利用可能なモードから、保存済み設定を尊重しつつ有効なモードを選ぶ。
-function resolveMode(prefer: Mode, hasHq: boolean, hasIframe: boolean): Mode {
+// SFU は「明示選択のみ」（egress抑制のため既定にはしない）。
+function resolveMode(prefer: Mode, hasSfu: boolean, hasHq: boolean, hasIframe: boolean): Mode {
+  if (prefer === 'sfu' && hasSfu) return 'sfu'
   if (prefer === 'hq' && hasHq) return 'hq'
   if (prefer === 'iframe' && hasIframe) return 'iframe'
   if (prefer === 'jpeg') return 'jpeg'
-  // 設定が今のカメラで使えない → 高画質を優先(go2rtc > Frigate)、無ければ軽量。
+  // 設定が今のカメラで使えない → 高画質(go2rtc > Frigate) > 軽量。SFUは自動選択しない。
   return hasHq ? 'hq' : hasIframe ? 'iframe' : 'jpeg'
 }
 
-export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, liveIsImageStream, liveSigned, hqUrl }: Props) {
+export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, liveIsImageStream, liveSigned, hqUrl, sfuEnabled }: Props) {
   // Default mode: go2rtc高画質 > Frigate iframe > jpeg. User pref overrides.
+  // SFU は既定にしない（利用者が明示選択したときだけ・egress有界化）。
   const defaultMode: Mode = hqUrl ? 'hq' : liveIframeUrl ? 'iframe' : 'jpeg'
   const [mode, setMode]   = useState<Mode>(defaultMode)
   // Auto-fallback banner when iframe fails to load.
@@ -117,8 +127,8 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
   // Hydrate pref from localStorage on mount (avoids SSR mismatch).
   useEffect(() => {
     const prefer = loadMode(cameraId, defaultMode)
-    setMode(resolveMode(prefer, !!hqUrl, !!liveIframeUrl))
-  }, [cameraId, defaultMode, liveIframeUrl, hqUrl])
+    setMode(resolveMode(prefer, !!sfuEnabled, !!hqUrl, !!liveIframeUrl))
+  }, [cameraId, defaultMode, liveIframeUrl, hqUrl, sfuEnabled])
 
   // ライブ視聴セッション(audit + 同時上限 F-10 + 時間上限 R1)を全モード共通で1本管理する。
   // モード切替(hq/iframe/jpeg)を跨いで1セッション。429=同時上限で視聴をブロック。
@@ -187,6 +197,7 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
     <div className="relative flex h-[calc(100vh-44px)] flex-col bg-black">
       <ModeToolbar
         mode={mode}
+        sfuSupported={!!sfuEnabled}
         hqSupported={!!hqUrl}
         iframeSupported={!!liveIframeUrl}
         iframeFailed={iframeFailed}
@@ -198,6 +209,8 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
           <LiveLimitOverlay />
         ) : expired ? (
           <SessionCapOverlay maxSessionMin={maxSessionMin} />
+        ) : mode === 'sfu' && sfuEnabled ? (
+          <LiveKitMode cameraId={cameraId} />
         ) : mode === 'hq' && hqUrl ? (
           <Go2rtcMode url={hqUrl} storeId={storeId} cameraId={cameraId} />
         ) : mode === 'iframe' && liveIframeUrl ? (
@@ -254,9 +267,10 @@ function LiveLimitOverlay() {
 // ─── Mode toolbar ───────────────────────────────────────────────────────────
 
 function ModeToolbar({
-  mode, hqSupported, iframeSupported, iframeFailed, onSwitch, remainingSec,
+  mode, sfuSupported, hqSupported, iframeSupported, iframeFailed, onSwitch, remainingSec,
 }: {
   mode:            Mode
+  sfuSupported:    boolean
   hqSupported:     boolean
   iframeSupported: boolean
   iframeFailed:    boolean
@@ -264,12 +278,28 @@ function ModeToolbar({
   remainingSec:    number | null
 }) {
   const label =
-    mode === 'hq'     ? '高画質ライブ (go2rtc H.264変換)'
+    mode === 'sfu'    ? '高画質ライブ (SFU / LiveKit・H.264サブ秒)'
+    : mode === 'hq'     ? '高画質ライブ (go2rtc H.264変換)'
     : mode === 'iframe' ? '高画質ライブ (NVR直接)'
     : '軽量モード (1秒スナップ)'
   return (
     <div className="flex items-center justify-between gap-2 border-b border-slate-800 bg-slate-900 px-3 py-1.5 text-[11px]">
       <div className="flex items-center gap-1.5">
+        {sfuSupported && (
+          <button
+            type="button"
+            onClick={() => onSwitch('sfu')}
+            className={
+              'rounded px-2 py-0.5 ' +
+              (mode === 'sfu'
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-700 text-slate-200 hover:bg-slate-600')
+            }
+            title="SFU (LiveKit・遠隔でも H.264 サブ秒・ベータ)"
+          >
+            🛰 SFU
+          </button>
+        )}
         {hqSupported && (
           <button
             type="button"

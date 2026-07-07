@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { AppShell } from '@/components/AppShell'
 import { signLiveUrl } from '@/lib/live-sign'
+import { livekitEnabled } from '@/lib/livekit'
 import LivePlayer from './live-player'
 
 export default async function LivePage(
@@ -103,6 +104,7 @@ export default async function LivePage(
             liveIsImageStream={isRemoteHost}
             liveSigned={liveSigned}
             hqUrl={hqUrl}
+            sfuEnabled={livekitEnabled()}
           />
         </div>
       </main>
