@@ -30,7 +30,7 @@ export async function recordFootageAccess(e: FootageAccessEntry): Promise<void> 
   try {
     const bucket = new Date(Math.floor(Date.now() / BUCKET_MS) * BUCKET_MS).toISOString()
     const svc = createSupabaseService()
-    await svc.from('footage_access_log').upsert(
+    const { error } = await svc.from('footage_access_log').upsert(
       {
         actor_user_id: e.actorUserId,
         store_id:      e.storeId ?? null,
@@ -41,7 +41,9 @@ export async function recordFootageAccess(e: FootageAccessEntry): Promise<void> 
       },
       { onConflict: 'actor_user_id,access_type,resource_id,bucket', ignoreDuplicates: true },
     )
-  } catch {
-    /* best-effort: 閲覧を妨げない */
+    // best-effort: 閲覧は妨げないが、失敗は原因調査のためログに残す（PostgRESTスキーマ未反映等）。
+    if (error) console.error('[footage-access] upsert error:', error.message)
+  } catch (e2) {
+    console.error('[footage-access] record failed:', (e2 as Error)?.message ?? e2)
   }
 }
