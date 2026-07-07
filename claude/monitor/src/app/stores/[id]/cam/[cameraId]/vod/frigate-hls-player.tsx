@@ -13,9 +13,12 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import Hls from 'hls.js'
+import { useSessionCountdown } from '@/lib/useSessionCountdown'
+import { RemainingBadge, SessionCapOverlay } from '@/components/SessionCap'
 
 interface Props {
   cameraId:      string
+  storeId:       string
   frigateCamera: string
   fromIso:       string      // 開始時刻（この「時」を読み込む）
   name:          string
@@ -37,10 +40,62 @@ function toLocalInput(d: Date): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
-export default function FrigateHlsPlayer({ cameraId, frigateCamera, fromIso, name, channel }: Props) {
+export default function FrigateHlsPlayer({ cameraId, storeId, frigateCamera, fromIso, name, channel }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [base, setBase] = useState<Date>(() => new Date(fromIso))
   const [status, setStatus] = useState<'loading' | 'playing' | 'failed'>('loading')
+
+  // ── 視聴セッション（アクセスログ + 同時上限 F-10 + 時間上限 R1）─────────────
+  // vod-player と同じ統制を HLS 経路にも適用する（無いと Frigate HLS 再生だけが
+  // ログ/上限をバイパスしてしまう）。時単位ナビゲーションを跨いでも 1 セッション。
+  const sessionId = useRef<string | null>(null)
+  const [limitReached, setLimitReached]   = useState(false)
+  const [maxSessionMin, setMaxSessionMin] = useState<number | null>(null)
+  const [startedAtMs, setStartedAtMs]     = useState<number | null>(null)
+
+  function endSession() {
+    const sid = sessionId.current
+    if (!sid) return
+    sessionId.current = null
+    void fetch('/api/sessions', {
+      method:    'POST',
+      headers:   { 'Content-Type': 'application/json' },
+      body:      JSON.stringify({ action: 'end', id: sid }),
+      keepalive: true,
+    }).catch(() => {})
+  }
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch('/api/sessions', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ action: 'start', mode: 'vod', storeId, cameraId, vodFrom: fromIso }),
+        })
+        if (cancelled) return
+        if (res.status === 429) { setLimitReached(true); return }
+        if (res.ok) {
+          const j = await res.json().catch(() => null) as { id?: string; maxSessionMin?: number | null } | null
+          if (!cancelled && j?.id) {
+            sessionId.current = j.id
+            setMaxSessionMin(j.maxSessionMin ?? null)
+            setStartedAtMs(Date.now())
+          }
+        }
+      } catch { /* 上限チェックの一時失敗では再生を止めない(可用性優先) */ }
+    })()
+    return () => { cancelled = true; endSession() }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storeId, cameraId])
+
+  // R1: 時間上限到達でセッション終了＋再生停止（video を SessionCapOverlay に差し替え）。
+  const { remainingSec, expired } = useSessionCountdown(startedAtMs, maxSessionMin)
+  useEffect(() => {
+    if (expired) endSession()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expired])
 
   useEffect(() => {
     const video = videoRef.current
@@ -78,7 +133,9 @@ export default function FrigateHlsPlayer({ cameraId, frigateCamera, fromIso, nam
       video.removeEventListener('playing', onPlaying)
       if (hls) hls.destroy()
     }
-  }, [cameraId, frigateCamera, base])
+    // expired を deps に含める: 上限到達で video が unmount された際に cleanup で
+    // hls を destroy し、バッファリングを確実に止める（次回実行は video=null で早期 return）。
+  }, [cameraId, frigateCamera, base, expired])
 
   const shiftHour = (delta: number) =>
     setBase((prev) => new Date(prev.getTime() + delta * 3_600_000))
@@ -98,20 +155,38 @@ export default function FrigateHlsPlayer({ cameraId, frigateCamera, fromIso, nam
         <span className="ml-1 text-slate-500">
           録画再生(HLS) — ch{String(channel).padStart(2, '0')} {name}
         </span>
-        <span className="ml-auto text-[10px] text-slate-400">Frigate ネイティブHLS・シーク可</span>
+        <span className="ml-auto flex items-center gap-2">
+          <RemainingBadge remainingSec={expired ? null : remainingSec} />
+          <span className="text-[10px] text-slate-400">Frigate ネイティブHLS・シーク可</span>
+        </span>
       </div>
       <div className="relative flex-1 bg-black">
-        <video ref={videoRef} controls playsInline className="h-full w-full bg-black object-contain" />
-        {status === 'loading' && (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-white/70">
-            読み込み中…
+        {limitReached ? (
+          <div className="absolute inset-0 flex items-center justify-center p-4">
+            <div className="max-w-md rounded-lg bg-amber-950/90 px-5 py-4 text-center text-sm text-amber-100 ring-1 ring-amber-700">
+              <div className="text-base font-semibold">同時視聴の上限に達しました</div>
+              <p className="mt-2 text-xs text-amber-200">
+                他の端末・タブの視聴を終了してから、もう一度開いてください。
+              </p>
+            </div>
           </div>
-        )}
-        {status === 'failed' && (
-          <div className="absolute inset-0 flex items-center justify-center p-6 text-center text-sm text-white/80">
-            この時間帯の録画が見つかりません。別の時間を選んでください。<br />
-            ※初回はカメラ側（Cloudflare Access）の認可が必要な場合があります。
-          </div>
+        ) : expired ? (
+          <SessionCapOverlay maxSessionMin={maxSessionMin} />
+        ) : (
+          <>
+            <video ref={videoRef} controls playsInline className="h-full w-full bg-black object-contain" />
+            {status === 'loading' && (
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-white/70">
+                読み込み中…
+              </div>
+            )}
+            {status === 'failed' && (
+              <div className="absolute inset-0 flex items-center justify-center p-6 text-center text-sm text-white/80">
+                この時間帯の録画が見つかりません。別の時間を選んでください。<br />
+                ※録画保持期間外、またはこの時間帯にカメラがオフラインだった可能性があります。
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
