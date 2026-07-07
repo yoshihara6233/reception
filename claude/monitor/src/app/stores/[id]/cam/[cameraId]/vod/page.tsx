@@ -84,6 +84,7 @@ export default async function VodPage(
           ) : frigateHls ? (
             <FrigateHlsPlayer
               cameraId={cameraId}
+              storeId={storeId}
               frigateCamera={c.frigate_camera!}
               fromIso={from ?? new Date().toISOString()}
               name={c.name}
