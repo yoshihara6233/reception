@@ -39,6 +39,8 @@ const BUCKET                = 'vod-clips'
 const SNAPSHOT_BUCKET       = 'security-snapshots'
 const DEFAULT_TTL_DAYS      = 31   // データガバナンス方針: 保持31日（docs/data-governance-sla.md）
 const MAX_DELETE_PER_RUN    = 500
+// 映像閲覧アクセスログ(G3)は監査用途のため映像本体より長く保持する（180日）。
+const FOOTAGE_LOG_TTL_DAYS  = 180
 
 interface AlarmPruneResult {
   frames_scanned:   number
@@ -221,6 +223,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   // ── 発報系（alarm_frames / 発報スナップ）の pruning（是正4・VOD と同じ TTL）──
   result.alarms = await pruneAlarmArtifacts(admin, cutoffIso, dryRun)
+
+  // ── 映像閲覧アクセスログ(G3) の pruning（監査用途のため180日保持・DB行のみ）──
+  if (!dryRun) {
+    const footageCutoff = new Date(Date.now() - FOOTAGE_LOG_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString()
+    const { error: falErr } = await admin.from('footage_access_log').delete().lt('accessed_at', footageCutoff)
+    if (falErr) console.error('[vod/cleanup] footage_access_log prune failed:', falErr.message)
+  }
 
   if (dryRun || rows.length === 0) {
     result.paths = rows

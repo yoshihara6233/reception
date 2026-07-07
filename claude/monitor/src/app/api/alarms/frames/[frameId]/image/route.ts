@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
+import { recordFootageAccess } from '@/lib/audit/footage-access'
 
 const BUCKET     = 'security-snapshots'
 const SIGNED_TTL = 60
@@ -28,10 +29,18 @@ export async function GET(
   // RLS-gated: 見られる発報のフレームのみ行が返る。
   const { data: frame, error } = await supa
     .from('alarm_frames')
-    .select('storage_path')
+    .select('storage_path, camera_id, alarm_events ( store_id )')
     .eq('id', frameId)
     .maybeSingle()
   if (error || !frame?.storage_path) return new NextResponse('Not Found', { status: 404 })
+
+  // G3: 証跡静止画の閲覧アクセスを記録（best-effort・5分dedup）。
+  const parent = (frame as { alarm_events?: { store_id?: string | null } | { store_id?: string | null }[] }).alarm_events
+  const storeId = (Array.isArray(parent) ? parent[0]?.store_id : parent?.store_id) ?? null
+  void recordFootageAccess({
+    actorUserId: user.id, storeId, accessType: 'alarm_frame',
+    resourceId: frameId, cameraId: (frame as { camera_id?: string | null }).camera_id ?? null,
+  })
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY

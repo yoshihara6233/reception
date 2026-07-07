@@ -137,9 +137,14 @@ export default async function AuditPage({
               <span className="ml-1 text-slate-500">（{ta.filterPrefix} {modeLabel(mode, ta)}）</span>
             )}
           </div>
-          <Link href="/admin/audit/changes" className="shrink-0 rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100">
-            設定変更ログ →
-          </Link>
+          <div className="flex shrink-0 gap-2">
+            <Link href="/admin/audit/footage" className="rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100">
+              映像閲覧アクセスログ →
+            </Link>
+            <Link href="/admin/audit/changes" className="rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100">
+              設定変更ログ →
+            </Link>
+          </div>
         </div>
 
         {/* Mode filter */}
