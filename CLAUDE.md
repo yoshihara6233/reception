@@ -48,4 +48,4 @@ Key routing rules:
 2. 基盤(M0): CI・エッジ/トンネル死活監視+アラート・環境分離・鍵運用の同期自動化
 3. マルチグリッド16/32/48 / ユニット別ティア課金 / SFU(LiveKit Cloud)ベータ / エッジ量産
 
-**セキュリティ宿題**: service_role secret 鍵 と ログインPW `Intereco2026` が前チャットに残存 → 鍵再ローテ推奨（Vercel と **エッジ.env 両方**更新）。
+**セキュリティ宿題**: ~~service_role secret 鍵 と ログインPW `Intereco2026` が前チャットに残存~~ → **2026-07-07 再ローテ完了**（新secret鍵をSupabaseで発行→Vercel env更新+Redeploy→エッジ `shared/agent.env` 更新+restart→検証後に旧鍵失効。PWも変更済）。エッジ鍵はOTA稼働のため `/home/intereco/edge/shared/agent.env`（systemd EnvironmentFile）が正・旧パス `claude/edge-agent/.env` ではない点に注意。
