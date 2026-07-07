@@ -55,7 +55,7 @@ export async function GET(
   // G3: 証跡静止画の閲覧アクセスを記録（best-effort・5分dedup）。
   const run = (finding as { patrol_runs?: { store_id?: string | null } | { store_id?: string | null }[] }).patrol_runs
   const storeId = (Array.isArray(run) ? run[0]?.store_id : run?.store_id) ?? null
-  void recordFootageAccess({
+  await recordFootageAccess({
     actorUserId: user.id, storeId, accessType: 'patrol_snapshot',
     resourceId: `${runId}:${cameraId}`, cameraId,
   })

@@ -68,7 +68,7 @@ export async function GET(
   const event = eventData as unknown as EventRow
 
   // G3: 証跡エクスポート（ZIPダウンロード）の閲覧アクセスを記録（best-effort・5分dedup）。
-  void recordFootageAccess({
+  await recordFootageAccess({
     actorUserId: user.id, storeId: event.stores?.id ?? null,
     accessType: 'bcp_export', resourceId: id,
   })
