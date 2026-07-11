@@ -10,6 +10,7 @@ import { heartbeat } from './upload/storage.js'
 import { startGrid } from './modes/grid.js'
 import { startLive } from './modes/live.js'
 import { startVod  } from './modes/vod.js'
+import { startSfuPublish } from './modes/sfu-publish.js'
 import { runBcpCapture, type BcpCaptureCommand } from './modes/bcp.js'
 import type { CameraDescriptor, EdgeState } from './types.js'
 
@@ -70,6 +71,20 @@ export class StateMachine {
     this.state  = 'live'
     await heartbeat('live')
     logger.info({ camera_id: p.camera.id }, 'state: live')
+  }
+
+  // S1: SFU publish（go2rtc H.264 → WHIP → LiveKit）。live と排他の単一 active。
+  // 状態は 'live' を再利用（SFU も本部から見れば単一カメラのライブ配信）。
+  async toSfu(p: Parameters<typeof startSfuPublish>[0]): Promise<void> {
+    const gen = ++this.generation
+    await this.stopActive()
+    if (gen !== this.generation) return
+    const handle = await startSfuPublish(p)
+    if (gen !== this.generation) { await handle.stop().catch(() => {}); return }
+    this.active = handle
+    this.state  = 'live'
+    await heartbeat('live')
+    logger.info({ camera_id: p.camera.id, room: p.room }, 'state: sfu-publish')
   }
 
   async toVod(p: Parameters<typeof startVod>[0]): Promise<void> {

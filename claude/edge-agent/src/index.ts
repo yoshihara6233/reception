@@ -16,7 +16,7 @@ import { subscribeCommands } from './realtime.js'
 import { startEdgeJobWorker } from './workers/edge-jobs.js'
 import { StateMachine } from './state-machine.js'
 import { heartbeat } from './upload/storage.js'
-import { startWhipProxy, wrapWhip } from './whip-proxy.js'
+import { startWhipProxy } from './whip-proxy.js'
 import { captureCameraJpeg } from './security/snapshot.js'
 import { startAlarmListener } from './alarm/listener.js'
 import { runAlarmTimelineCapture } from './alarm/timeline.js'
@@ -80,6 +80,14 @@ async function main() {
           const cam = cams.find((c) => c.id === cmd.camera_id)
           if (!cam) return logger.warn({ camera_id: cmd.camera_id }, 'unknown camera')
           await fsm.toLive({ camera: cam })
+          break
+        }
+        case 'start_sfu': {
+          // S1: go2rtc の H.264 を LiveKit へ WHIP 配信。cloud が room/whip_url を発行。
+          const cams = await loadCameras()
+          const cam = cams.find((c) => c.id === cmd.camera_id)
+          if (!cam) return logger.warn({ camera_id: cmd.camera_id }, 'unknown camera')
+          await fsm.toSfu({ camera: cam, room: cmd.room, whipUrl: cmd.whip_url, whipProxyBase: whipProxy.baseUrl })
           break
         }
         case 'start_vod': {
