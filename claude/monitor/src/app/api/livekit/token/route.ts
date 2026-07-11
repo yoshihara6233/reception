@@ -15,7 +15,7 @@ import { livekitEnabled, roomForCamera, LIVEKIT_VIEWER_TTL_SEC } from '@/lib/liv
  *    ＝ 視聴者は他人の room への配信注入も、別人へのなりすましもできない。
  *  - 機能フラグ LIVEKIT_ENABLED='true'＋creds のときのみ有効（既定 404）。
  *
- * 配信(publish)は edge 側（/api/livekit/ingress を device_token 認証）で行う。視聴者トークンでは配信不可。
+ * 配信(publish)は monitor 起点（/api/livekit/publish が Ingress 発行＋start_sfu dispatch）。視聴者トークンでは配信不可。
  */
 export async function POST(req: NextRequest) {
   if (!livekitEnabled()) {

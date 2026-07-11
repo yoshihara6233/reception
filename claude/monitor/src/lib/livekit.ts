@@ -4,7 +4,7 @@
  * セキュリティ方針:
  *  - 視聴トークンは「カメラIDから導出した room・**購読専用**・可視性は RLS で検証」。
  *    クライアントに room / identity / canPublish を選ばせない（なりすまし・配信注入を防ぐ）。
- *  - publish（配信）は **edge 側のみ**（/api/livekit/ingress を device_token 認証で）。
+ *  - publish（配信）は **monitor が起点**（/api/livekit/publish が Ingress 発行＋start_sfu dispatch）。エッジに鍵は不要。
  *  - 機能フラグ LIVEKIT_ENABLED='true' ＋ 3つの必須env が揃うときだけ有効（既定 OFF）。
  */
 

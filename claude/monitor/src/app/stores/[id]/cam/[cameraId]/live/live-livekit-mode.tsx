@@ -26,6 +26,13 @@ export default function LiveKitMode({ cameraId }: { cameraId: string }) {
     let cancelled = false
     let mediaTimer: ReturnType<typeof setTimeout> | null = null
 
+    // オンデマンド配信: 視聴開始でエッジに publish を要求（Ingress発行＋start_sfu）。
+    // 離脱時に stop を要求してエッジを idle へ戻す（egress を止める）。best-effort。
+    void fetch('/api/livekit/publish', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cameraId, action: 'start' }),
+    }).catch(() => {})
+
     void (async () => {
       try {
         const res = await fetch('/api/livekit/token', {
@@ -61,6 +68,10 @@ export default function LiveKitMode({ cameraId }: { cameraId: string }) {
       cancelled = true
       if (mediaTimer) clearTimeout(mediaTimer)
       room?.disconnect()
+      void fetch('/api/livekit/publish', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cameraId, action: 'stop' }), keepalive: true,
+      }).catch(() => {})
     }
   }, [cameraId, reloadKey])
 
