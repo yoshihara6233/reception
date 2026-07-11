@@ -98,6 +98,10 @@ export default async function AlarmDetailPage({ params }: { params: Promise<{ id
   const to = new Date(new Date(ev.occurred_at).getTime() + win).toISOString()
   const vodQuery = `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&incident=${encodeURIComponent(ev.occurred_at)}`
 
+  // C-2-4 複数カメラ同期再生（Frigate録画のみ・最大4ch）。関連カメラを事案時刻に同期再生。
+  const frigateCamIds = cameras.filter((c) => c.vendor === 'frigate').map((c) => c.id).slice(0, 4)
+  const multiVodHref = `/stores/${ev.store_id}/multi-vod?cams=${frigateCamIds.join(',')}&from=${encodeURIComponent(from)}&incident=${encodeURIComponent(ev.occurred_at)}`
+
   const card = 'overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-gedline dark:bg-gedbg2'
   const cardHead = 'flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3 dark:border-gedline'
   const h2 = 'text-sm font-bold text-slate-900 dark:text-gedink'
@@ -204,9 +208,16 @@ export default async function AlarmDetailPage({ params }: { params: Promise<{ id
         <div className={card}>
           <div className={cardHead}>
             <h2 className={h2}>映像を確認</h2>
-            <Link href={`/stores/${ev.store_id}`} className="inline-flex items-center gap-1.5 rounded border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 dark:border-gedline dark:text-gedink">
-              <Grid2x2 size={14} strokeWidth={2} aria-hidden /> 16分割ライブ
-            </Link>
+            <div className="inline-flex gap-2">
+              {frigateCamIds.length >= 2 && (
+                <Link href={multiVodHref} className="inline-flex items-center gap-1.5 rounded border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 dark:border-gedline dark:text-gedink">
+                  <Film size={14} strokeWidth={2} aria-hidden /> 同期再生
+                </Link>
+              )}
+              <Link href={`/stores/${ev.store_id}`} className="inline-flex items-center gap-1.5 rounded border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 dark:border-gedline dark:text-gedink">
+                <Grid2x2 size={14} strokeWidth={2} aria-hidden /> 16分割ライブ
+              </Link>
+            </div>
           </div>
           {cameras.length === 0 ? (
             <div className="px-4 py-8 text-center text-xs text-slate-400 dark:text-gedink3">カメラ未登録のためライブ／録画は利用できません。</div>
