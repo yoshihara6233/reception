@@ -14,19 +14,20 @@ describe('go2rtcRtspUrl', () => {
 })
 
 describe('buildSfuFfmpegArgs', () => {
-  it('再エンコードしない（-c:v copy）', () => {
-    const a = buildSfuFfmpegArgs('rtsp://src', 'http://proxy/whip?upstream=x')
+  it('H.264 へ変換（-c:v libx264・zerolatency）', () => {
+    const a = buildSfuFfmpegArgs('rtsp://src', 'rtmp://ingress/x/key')
     const i = a.indexOf('-c:v')
-    expect(a[i + 1]).toBe('copy')
+    expect(a[i + 1]).toBe('libx264')
+    expect(a).toContain('zerolatency')
   })
-  it('WHIP muxer 出力（-f whip <target>）', () => {
-    const a = buildSfuFfmpegArgs('rtsp://src', 'http://proxy/whip?upstream=x')
+  it('RTMP(FLV) 出力（-f flv <publishUrl>）', () => {
+    const a = buildSfuFfmpegArgs('rtsp://src', 'rtmp://ingress/x/key')
     const i = a.indexOf('-f')
-    expect(a[i + 1]).toBe('whip')
-    expect(a[i + 2]).toBe('http://proxy/whip?upstream=x')
+    expect(a[i + 1]).toBe('flv')
+    expect(a[i + 2]).toBe('rtmp://ingress/x/key')
   })
   it('非単調DTS対策 +genpts と 音声なし -an を含む', () => {
-    const a = buildSfuFfmpegArgs('rtsp://src', 'http://t')
+    const a = buildSfuFfmpegArgs('rtsp://src', 'rtmp://t')
     expect(a).toContain('+genpts')
     expect(a).toContain('-an')
   })

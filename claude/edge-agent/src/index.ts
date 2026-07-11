@@ -87,7 +87,7 @@ async function main() {
           const cams = await loadCameras()
           const cam = cams.find((c) => c.id === cmd.camera_id)
           if (!cam) return logger.warn({ camera_id: cmd.camera_id }, 'unknown camera')
-          await fsm.toSfu({ camera: cam, room: cmd.room, whipUrl: cmd.whip_url, whipProxyBase: whipProxy.baseUrl })
+          await fsm.toSfu({ camera: cam, room: cmd.room, publishUrl: cmd.publish_url })
           break
         }
         case 'start_vod': {
