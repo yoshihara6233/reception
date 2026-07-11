@@ -1,36 +1,39 @@
 /**
- * SFU publish mode（S1）— go2rtc の映像を H.264 に変換して LiveKit へ **RTMP** 配信する。
+ * SFU publish mode（S1）— go2rtc の H.264 を無変換で LiveKit へ **WHIP** 配信する。
  *
  * 設計の要点:
- *   - transport は **RTMP**（LiveKit RTMP Ingress）。ffmpeg の WHIP muxer は 7.1+ 限定で
- *     現地エッジの ffmpeg には無い（"output format 'whip' is not known"）。RTMP/FLV は全ビルドに存在。
- *   - codec は **H.264 へ変換**（libx264 ultrafast）。i-PRO 等 H.265 カメラは go2rtc RTSP でも
- *     hevc のまま来るため、ここで確実に H.264 化する（WebRTC/LiveKit は H.264 必須）。
- *   - publish URL は cloud が発行した RTMP Ingress の `rtmp://…/streamKey`。
+ *   - transport は **WHIP**（LiveKit ネイティブ）。エッジには WHIP muxer 対応 ffmpeg（BtbN 等・
+ *     7.1+）を配置する。WHIP 先は whip-proxy 経由（TCP ICE 候補除去・whip-proxy.ts）。
+ *   - codec は **無変換 `-c:v copy`**。go2rtc が H.264 で RTSP 配信済み（H.265 カメラも go2rtc が
+ *     変換）＝再エンコード不要で最低遅延・最低CPU。
+ *   - whipUrl は cloud が発行した LiveKit WHIP Ingress の publish URL。
  *
  * ライフサイクル: stop() で ffmpeg を SIGTERM。state-machine の単一 active ハンドルとして扱う。
  */
 import { spawn, type ChildProcess } from 'node:child_process'
 import { config } from '../config.js'
 import { logger } from '../logger.js'
+import { wrapWhip } from '../whip-proxy.js'
 import { go2rtcRtspUrl, buildSfuFfmpegArgs } from './sfu-publish-core.js'
 import type { CameraDescriptor } from '../types.js'
 
 export interface StartSfuInput {
-  camera:     CameraDescriptor
-  room:       string
-  publishUrl: string   // cloud が発行した LiveKit RTMP Ingress の publish URL（rtmp://…/key）
+  camera:        CameraDescriptor
+  room:          string
+  whipUrl:       string   // cloud が発行した LiveKit WHIP Ingress の publish URL
+  whipProxyBase: string   // whip-proxy の baseUrl（TCP ICE 候補除去）
 }
 
 export interface SfuHandle { stop: () => Promise<void> }
 
 export async function startSfuPublish(input: StartSfuInput): Promise<SfuHandle> {
-  const src  = go2rtcRtspUrl(input.camera.id, config.GO2RTC_RTSP_LISTEN)
-  const args = buildSfuFfmpegArgs(src, input.publishUrl)
+  const src    = go2rtcRtspUrl(input.camera.id, config.GO2RTC_RTSP_LISTEN)
+  const target = wrapWhip(input.whipProxyBase, input.whipUrl)
+  const args   = buildSfuFfmpegArgs(src, target)
 
-  logger.info({ camera_id: input.camera.id, room: input.room, src }, 'sfu: publish start (go2rtc → H.264 → RTMP)')
+  logger.info({ camera_id: input.camera.id, room: input.room, src }, 'sfu: publish start (go2rtc H.264 → WHIP copy)')
 
-  // シェル不使用 spawn（配列引数）。src/publishUrl は単一 -i / -f 値でシェル展開されない。
+  // シェル不使用 spawn（配列引数）。src/target は単一 -i / -f 値でシェル展開されない。
   const proc: ChildProcess = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] })
   proc.stderr?.on('data', (b: Buffer) => {
     const s = b.toString().trim()
