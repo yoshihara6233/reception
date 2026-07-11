@@ -14,8 +14,8 @@ const INGRESS_INACTIVE = 0            // livekit-server-sdk: 0=INACTIVE
 const RETRY_BACKOFF_MS = 1500
 
 /**
- * 指定 room 向けの **RTMP** Ingress を1つ確保し publish 用 URL（rtmp://…/streamKey）を返す。
- * RTMP を使う理由: 現地エッジの ffmpeg に WHIP muxer が無い（RTMP/FLV は全ビルドに存在）。
+ * 指定 room 向けの **WHIP** Ingress を1つ確保し publish 用 URL（WHIP endpoint）を返す。
+ * エッジは WHIP muxer 対応 ffmpeg で無変換 publish する（最低遅延）。
  * quota 衛生: 同 room の ingress は貼り替え（削除）、他 room の INACTIVE も掃除。429 は1回リトライ。
  */
 export async function createSfuIngress(room: string, identity: string): Promise<string> {
@@ -31,11 +31,11 @@ export async function createSfuIngress(room: string, identity: string): Promise<
   const params = { name: `sfu-${identity}`, roomName: room, participantIdentity: identity, participantName: identity }
   let created
   try {
-    created = await ic.createIngress(IngressInput.RTMP_INPUT, params)
+    created = await ic.createIngress(IngressInput.WHIP_INPUT, params)
   } catch (e) {
     if ((e as { status?: number }).status === 429) {
       await new Promise((r) => setTimeout(r, RETRY_BACKOFF_MS))
-      created = await ic.createIngress(IngressInput.RTMP_INPUT, params)
+      created = await ic.createIngress(IngressInput.WHIP_INPUT, params)
     } else {
       throw e
     }
@@ -44,9 +44,9 @@ export async function createSfuIngress(room: string, identity: string): Promise<
   return `${created.url}/${created.streamKey}`
 }
 
-/** start_sfu コマンドを生成（request_id は毎回新規）。publishUrl は RTMP Ingress の URL。 */
-export function buildStartSfuCommand(cameraId: string, room: string, publishUrl: string): EdgeCommand {
-  return { action: 'start_sfu', request_id: randomUUID(), camera_id: cameraId, room, publish_url: publishUrl }
+/** start_sfu コマンドを生成（request_id は毎回新規）。whipUrl は WHIP Ingress の publish URL。 */
+export function buildStartSfuCommand(cameraId: string, room: string, whipUrl: string): EdgeCommand {
+  return { action: 'start_sfu', request_id: randomUUID(), camera_id: cameraId, room, whip_url: whipUrl }
 }
 
 /**

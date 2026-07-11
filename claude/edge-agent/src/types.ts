@@ -7,8 +7,8 @@ export type EdgeCommand =
   // start_live: edge polls the camera's HTTP snapshot endpoint and uploads
   // each JPEG to per-camera storage. No LiveKit, no WHIP — just `camera_id`.
   | { action: 'start_live';  request_id: string; camera_id: string }
-  // S1: SFU publish（go2rtc → H.264 → RTMP → LiveKit room）。room/publish_url は cloud が発行。
-  | { action: 'start_sfu';   request_id: string; camera_id: string; room: string; publish_url: string }
+  // S1: SFU publish（go2rtc H.264 → WHIP → LiveKit room）。room/whip_url は cloud が発行。
+  | { action: 'start_sfu';   request_id: string; camera_id: string; room: string; whip_url: string }
   // F77 / Phase 8.4-B — start_vod is now Storage Direct: edge fetches
   // Frigate clip.mp4 + uploads to vod-clips bucket. The cloud's POST /api/vod
   // creates the vod_clips row and forwards its id here. The legacy
