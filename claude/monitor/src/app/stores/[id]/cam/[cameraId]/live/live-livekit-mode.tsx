@@ -13,10 +13,11 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { Room, RoomEvent, Track, type RemoteTrack } from 'livekit-client'
+import { cancelPendingStop } from '@/lib/edge-stop-registry'
 
 type Status = 'connecting' | 'playing' | 'nomedia' | 'failed'
 
-export default function LiveKitMode({ cameraId }: { cameraId: string }) {
+export default function LiveKitMode({ cameraId, edgeId }: { cameraId: string; edgeId: string }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [status, setStatus] = useState<Status>('connecting')
   const [reloadKey, setReloadKey] = useState(0)
@@ -25,6 +26,11 @@ export default function LiveKitMode({ cameraId }: { cameraId: string }) {
     let room: Room | null = null
     let cancelled = false
     let mediaTimer: ReturnType<typeof setTimeout> | null = null
+
+    // F75: 直前モード(軽量/高画質)の cleanup が予約した stop_stream を打ち消す。
+    // これをしないと SFU 起動直後に stop_stream が飛び ffmpeg が即殺される
+    // （"Immediate exit requested"）。他モードと同じ対処。
+    cancelPendingStop(edgeId)
 
     // オンデマンド配信: 視聴開始でエッジに publish を要求（Ingress発行＋start_sfu）。
     // 離脱時に stop を要求してエッジを idle へ戻す（egress を止める）。best-effort。
@@ -73,7 +79,7 @@ export default function LiveKitMode({ cameraId }: { cameraId: string }) {
         body: JSON.stringify({ cameraId, action: 'stop' }), keepalive: true,
       }).catch(() => {})
     }
-  }, [cameraId, reloadKey])
+  }, [cameraId, edgeId, reloadKey])
 
   return (
     <div className="relative h-full w-full bg-black">
