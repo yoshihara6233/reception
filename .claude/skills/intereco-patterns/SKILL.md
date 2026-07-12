@@ -67,7 +67,22 @@ description: >-
 5. **切替時の即死**（`Immediate exit requested`）。軽量/高画質→SFU切替で**前モードのcleanupが~300ms後にstop_streamを予約(F75)**し、SFU起動直後のffmpegを殺す。**LiveKitMode も mount時に `cancelPendingStop(edgeId)`** を呼ぶ（他モードと同じ）。
 6. **視聴者トークンの認可**（旧 `/api/livekit/token` は任意room/can_publish/identity を許可＝穴）。cameraId由来room・RLS可視性・canPublish=false・identity=user.id に是正。publish起点は monitor サーバ（`/api/livekit/publish` が Ingress発行＋`start_sfu` dispatch）＝エッジに鍵不要。
 
-構成: monitor `/api/livekit/{token,publish}` + `lib/livekit-server.ts`（WHIP_INPUT Ingress）/ edge `modes/sfu-publish.ts`（go2rtc RTSP `cam_<id>` @ `:18554` → libx264 baseline → whip-proxy → WHIP）。機能フラグ **`LIVEKIT_ENABLED='true'`**（既定OFF）。**残**: S3オンデマンド/フォールバック・S4計測(遅延実測)・VAAPI最適化。
+構成: monitor `/api/livekit/{token,publish}` + `lib/livekit-server.ts`（WHIP_INPUT Ingress）/ edge `modes/sfu-publish.ts`（go2rtc RTSP `cam_<id>` @ `:18554` → **h264_vaapi**（起動10秒以内失敗で libx264 へ自動フォールバック・sticky）→ whip-proxy → WHIP）。機能フラグ **`LIVEKIT_ENABLED='true'`**（既定OFF）。
+
+ベータ完了後の運用形（2026-07-12・PR#148〜153）:
+
+7. **OTA自己再起動は ffmpeg を道連れにする**（最重要の運用地雷）。旧agentが `process.exit(0)` すると
+   アクティブモードの ffmpeg が cgroup に残存 → WHIP の ffmpeg は SIGTERM 後のセッション終了処理で
+   **ハング** → systemd stop-sigterm 90秒タイムアウト → unit 'failed' → **OnFailure ロールバック誤発火**
+   （新版は無実なのに `last_failed_version` cooldown 入り。復旧＝新しいSHAを desired に指定するだけ）。
+   恒久対策: `ota/pre-restart.ts`（exit前に `fsm.toIdle()`・上限8秒）＋ SFU stop() の SIGTERM→3秒→SIGKILL。
+8. **VAAPI**: `-hwaccel vaapi -hwaccel_output_format vaapi` + `scale_vaapi` + `h264_vaapi -profile:v
+   constrained_baseline -bf 0`（**WebRTCはB-frame不可**・h264_vaapi既定はbf>0なので明示必須）。実機成立。
+9. **低遅延**: 入力側 `-fflags +genpts+nobuffer -flags low_delay` でグラスtoグラス**約1秒**（旧トンネルMJPEG 2〜3秒）。
+10. **コールドスタート短縮（キープウォーム）**: 視聴終了で即 stop せず **sfu-reaper cron**（5分毎・視聴者0
+   ＝publisher(identity=edge_id)のみ→stop_stream・生成120秒猶予）に委譲。publish start は配信中なら
+   fast-path（`isPublishing` → subscribeのみ ≒1秒）、Ingress は同room再利用。初回コールドは ~9秒
+   （ttff計測は transport タグ付きで `/infra/slo` に p50/p95 表示・目標はコールドスタート用 sfu≤15s/hls≤10s）。
 
 ## 5. Vercel monorepo（bun workspace）デプロイ
 
