@@ -28,13 +28,17 @@ export function go2rtcRtspUrl(cameraId: string, listen: string): string {
  * WHIP muxer の "UDP send blocked" 対策:
  *   - `-ts_buffer_size` を拡大（muxer 自身の推奨。UDP送信バッファ溢れ EAGAIN を回避）。
  *   - 720p ダウンスケール＋ビットレート上限で I-frame バーストを縮小（監視用途に十分）。
+ * 低遅延（実測1〜2秒→サブ秒狙い・2026-07-12）:
+ *   - `+nobuffer` / `-flags low_delay`: ffmpeg 既定の入力バッファリング（数百ms〜1秒）を
+ *     無効化。ライブ視聴なので入力側で溜める理由がない。
  * `-fflags +genpts` は go2rtc の非単調DTS対策。音声なし。
  */
 export function buildSfuFfmpegArgs(src: string, whipTarget: string): string[] {
   return [
     '-hide_banner', '-loglevel', 'warning',
     '-rtsp_transport', 'tcp',
-    '-fflags', '+genpts',
+    '-fflags', '+genpts+nobuffer',
+    '-flags', 'low_delay',
     '-i', src,
     '-an',                          // 音声なし
     '-vf', 'scale=1280:720',        // 720p へ縮小（バースト縮小・監視に十分）
@@ -64,7 +68,8 @@ export function buildSfuFfmpegArgsVaapi(src: string, whipTarget: string, device:
   return [
     '-hide_banner', '-loglevel', 'warning',
     '-rtsp_transport', 'tcp',
-    '-fflags', '+genpts',
+    '-fflags', '+genpts+nobuffer',   // 低遅延: 入力バッファリング無効（libx264 版と同じ）
+    '-flags', 'low_delay',
     // 入力オプション: GPU デコード（出力も VAAPI サーフェスのまま scale/encode へ渡す）
     '-hwaccel', 'vaapi',
     '-hwaccel_device', device,
