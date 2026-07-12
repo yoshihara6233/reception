@@ -25,6 +25,7 @@ import {
   summarizeTtff,
   normalizeTransport,
   estimateEgressGiB,
+  TTFF_COLDSTART_TARGET_MS,
   type TtffSample,
   type TransportStat,
 } from '@/lib/latency-stats'
@@ -141,7 +142,10 @@ export default async function SloDashboard() {
   } catch { /* metric_events 未設定 */ }
 
   // ── 5. 同時視聴数 と 推定 egress (SFU コスト予測) ─────────────────────────
-  let liveNow = 0            // いま視聴中（ended_at NULL・帯域あり mode）
+  // 同時視聴は「end が飛ばなかった」古い行の混入を避けるため直近2hに限定（R1 の
+  // 既定上限120分 → それより古い未終了行はほぼ死んだセッション）。
+  const since2h = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+  let liveNow = 0            // いま視聴中とみなす行（ended_at NULL・帯域あり mode・直近2h）
   let sfuMinutes24h = 0      // 過去24hの SFU 視聴 session-分（egress 概算の母数）
   try {
     const { data: openRows } = await supa
@@ -149,7 +153,7 @@ export default async function SloDashboard() {
       .select('id')
       .is('ended_at', null)
       .in('mode', ['live', 'vod'])
-      .gte('started_at', since24h)
+      .gte('started_at', since2h)
     liveNow = openRows?.length ?? 0
 
     const { data: sfuRows } = await supa
@@ -161,7 +165,8 @@ export default async function SloDashboard() {
       const now = Date.now()
       for (const r of sfuRows as Array<{ started_at: string; ended_at: string | null }>) {
         const start = new Date(r.started_at).getTime()
-        const end = r.ended_at ? new Date(r.ended_at).getTime() : now
+        // end 未記録（endが飛ばなかった）行は R1 既定上限の120分でクランプ（過大計上防止）。
+        const end = r.ended_at ? new Date(r.ended_at).getTime() : Math.min(now, start + 120 * 60000)
         sfuMinutes24h += Math.max(0, (end - start) / 60000)
       }
     }
@@ -258,12 +263,13 @@ export default async function SloDashboard() {
                   <th className="text-right">p50 (初フレーム)</th>
                   <th className="text-right">p95</th>
                   <th className="text-right">最大</th>
-                  <th className="text-left pl-3">目標 p95 ≤ 2.0 s</th>
+                  <th className="text-left pl-3">目標 (コールドスタート)</th>
                 </tr>
               </thead>
               <tbody>
                 {ttffStats.map((s) => {
-                  const ok = s.p95 !== null && s.p95 <= 2000
+                  const target = TTFF_COLDSTART_TARGET_MS[s.transport]
+                  const ok = s.p95 !== null && s.p95 <= target
                   return (
                     <tr key={s.transport} className="border-t border-slate-100 dark:border-slate-700">
                       <td className="py-1.5 font-medium text-slate-700 dark:text-slate-200">{TRANSPORT_LABEL[s.transport]}</td>
@@ -278,6 +284,7 @@ export default async function SloDashboard() {
                         }>
                           {s.p95 === null ? 'データなし' : ok ? '達成' : '違反'}
                         </span>
+                        <span className="ml-1.5 text-[10px] text-slate-400">≤ {(target / 1000).toFixed(0)} s</span>
                       </td>
                     </tr>
                   )
@@ -286,7 +293,8 @@ export default async function SloDashboard() {
             </table>
           )}
           <p className="mt-3 text-[10px] leading-relaxed text-slate-400 dark:text-slate-500">
-            ttff＝視聴操作から初フレーム描画までの端末実測（配信待ち・エッジ起動を含む）。SFU は WebRTC サブ秒、HLS はセグメント長ぶん遅い。
+            ttff＝視聴操作から初フレーム描画までの<b>コールドスタート</b>実測。SFU はオンデマンド配信のため
+            「Ingress発行→エッジ起動→WebRTC確立」を全部含む（起動後のグラスtoグラス遅延はサブ秒＝別指標。体感で確認）。
             推定 egress は SFU 視聴 session-分 × 2.5 Mbps 上限での概算（実課金値ではない）。
           </p>
         </div>

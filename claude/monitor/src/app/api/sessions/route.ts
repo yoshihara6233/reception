@@ -41,7 +41,16 @@ interface EndBody {
   action: 'end'
   id:     string
 }
-type Body = StartBody | EndBody
+/**
+ * S4: SFU 視聴のマーキング。SFU モードに入った時点で livekit_room を記録し、
+ * /infra/slo の egress 概算（SFU session-分）の母数にする。room 名はクライアント値を
+ * 信用せず、行の camera_id から**サーバが導出**する（roomForCamera と同規則）。
+ */
+interface MarkSfuBody {
+  action: 'mark_sfu'
+  id:     string
+}
+type Body = StartBody | EndBody | MarkSfuBody
 
 export async function POST(req: Request) {
   const supa = await createSupabaseServer()
@@ -152,6 +161,35 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
     return NextResponse.json({ ok: true, duration_sec: duration })
+  }
+
+  if (body.action === 'mark_sfu') {
+    if (!body.id) {
+      return NextResponse.json({ error: 'missing_id' }, { status: 400 })
+    }
+    // RLS セッションクライアント: 自分のセッション行しか読めない/更新できない
+    // （sessions_select / sessions_update とも user_id = auth.uid()）。
+    const { data: row, error: readErr } = await supa
+      .from('live_sessions')
+      .select('camera_id')
+      .eq('id', body.id)
+      .single()
+    if (readErr || !row) {
+      return NextResponse.json({ error: 'not_found' }, { status: 404 })
+    }
+    const cameraId = (row as { camera_id: string | null }).camera_id
+    if (!cameraId) {
+      return NextResponse.json({ error: 'no_camera' }, { status: 400 })
+    }
+    const { error } = await supa
+      .from('live_sessions')
+      .update({ livekit_room: `cam_${cameraId}` })
+      .eq('id', body.id)
+    if (error) {
+      console.error('[sessions/mark_sfu] update failed:', error)
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+    return NextResponse.json({ ok: true })
   }
 
   return NextResponse.json({ error: 'unknown_action' }, { status: 400 })

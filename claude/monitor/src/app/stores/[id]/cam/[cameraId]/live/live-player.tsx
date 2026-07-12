@@ -140,6 +140,22 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
   const [maxSessionMin, setMaxSessionMin] = useState<number | null>(null)
   const [startedAtMs, setStartedAtMs]     = useState<number | null>(null)
 
+  // S4: SFU 視聴のマーキング（egress 概算の母数）。mode は非同期クロージャから
+  // 参照するため ref で最新値を持つ。
+  const modeRef = useRef(mode)
+  modeRef.current = mode
+  function markSfu(sid: string) {
+    void fetch('/api/sessions', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ action: 'mark_sfu', id: sid }),
+    }).catch(() => {})
+  }
+  // SFU モードに入った時点でセッションへ livekit_room を記録（既に session 開始済の場合）。
+  useEffect(() => {
+    if (mode === 'sfu' && sessionId.current) markSfu(sessionId.current)
+  }, [mode])
+
   // セッション終了記録（多重発火を防ぐため sessionId.current を消費）。
   function endSession() {
     const sid = sessionId.current
@@ -170,6 +186,8 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
             sessionId.current = j.id
             setMaxSessionMin(j.maxSessionMin ?? null)
             setStartedAtMs(Date.now())
+            // セッション開始前に SFU モードへ入っていた場合（保存設定が sfu）はここで拾う。
+            if (modeRef.current === 'sfu') markSfu(j.id)
           }
         }
       } catch { /* 上限チェックの一時失敗では視聴を止めない(可用性優先) */ }
