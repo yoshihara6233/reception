@@ -14,10 +14,12 @@ describe('go2rtcRtspUrl', () => {
 })
 
 describe('buildSfuFfmpegArgs', () => {
-  it('無変換（-c:v copy）', () => {
+  it('WebRTC互換の baseline H.264 へ変換', () => {
     const a = buildSfuFfmpegArgs('rtsp://src', 'http://proxy/whip?upstream=x')
     const i = a.indexOf('-c:v')
-    expect(a[i + 1]).toBe('copy')
+    expect(a[i + 1]).toBe('libx264')
+    const p = a.indexOf('-profile:v')
+    expect(a[p + 1]).toBe('baseline')
   })
   it('WHIP 出力（-f whip <target>）', () => {
     const a = buildSfuFfmpegArgs('rtsp://src', 'http://proxy/whip?upstream=x')

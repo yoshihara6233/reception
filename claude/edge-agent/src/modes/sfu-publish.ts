@@ -4,8 +4,8 @@
  * 設計の要点:
  *   - transport は **WHIP**（LiveKit ネイティブ）。エッジには WHIP muxer 対応 ffmpeg（BtbN 等・
  *     7.1+）を配置する。WHIP 先は whip-proxy 経由（TCP ICE 候補除去・whip-proxy.ts）。
- *   - codec は **無変換 `-c:v copy`**。go2rtc が H.264 で RTSP 配信済み（H.265 カメラも go2rtc が
- *     変換）＝再エンコード不要で最低遅延・最低CPU。
+ *   - codec は **baseline H.264 へ変換**。WHIP(WebRTC) ingress は素通しのためブラウザ互換
+ *     profile が必須（High profile は再生不可）。libx264 ultrafast で低負荷。
  *   - whipUrl は cloud が発行した LiveKit WHIP Ingress の publish URL。
  *
  * ライフサイクル: stop() で ffmpeg を SIGTERM。state-machine の単一 active ハンドルとして扱う。
@@ -31,7 +31,7 @@ export async function startSfuPublish(input: StartSfuInput): Promise<SfuHandle> 
   const target = wrapWhip(input.whipProxyBase, input.whipUrl)
   const args   = buildSfuFfmpegArgs(src, target)
 
-  logger.info({ camera_id: input.camera.id, room: input.room, src }, 'sfu: publish start (go2rtc H.264 → WHIP copy)')
+  logger.info({ camera_id: input.camera.id, room: input.room, src }, 'sfu: publish start (go2rtc → baseline H.264 → WHIP)')
 
   // シェル不使用 spawn（配列引数）。src/target は単一 -i / -f 値でシェル展開されない。
   const proc: ChildProcess = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] })
