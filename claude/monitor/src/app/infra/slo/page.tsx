@@ -17,10 +17,28 @@
  * Phase 3: 後で Prometheus + Grafana に統合する想定だが、それまでは
  * Supabase に書き溜めたメトリクスから直接計算する。
  */
-import { BarChart3 } from 'lucide-react'
+import { BarChart3, Gauge } from 'lucide-react'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
+import {
+  summarizeTtff,
+  normalizeTransport,
+  estimateEgressGiB,
+  type TtffSample,
+  type TransportStat,
+} from '@/lib/latency-stats'
+
+const TRANSPORT_LABEL: Record<TransportStat['transport'], string> = {
+  sfu:   'SFU (LiveKit)',
+  hls:   'HLS (同一オリジン)',
+  other: 'その他',
+}
+
+function fmtMs(n: number | null): string {
+  if (n === null) return '—'
+  return n >= 1000 ? `${(n / 1000).toFixed(2)} s` : `${Math.round(n)} ms`
+}
 
 interface SloMetric {
   name:       string
@@ -102,6 +120,54 @@ export default async function SloDashboard() {
     }
   } catch { /* central_nodes 未設定 */ }
 
+  // ── 4. ライブ配信レイテンシ (ttff・過去 24h・transport別 p50/p95) ─────────
+  // S4: metric_events の ttff_ms をブラウザ実測から集計。SFU と HLS を比較する。
+  let ttffStats: TransportStat[] = []
+  try {
+    const { data } = await supa
+      .from('metric_events')
+      .select('value, meta')
+      .eq('kind', 'ttff_ms')
+      .gte('ts', since24h)
+      .not('value', 'is', null)
+      .limit(5000)
+    if (data) {
+      const samples: TtffSample[] = (data as Array<{ value: number; meta: { transport?: unknown } | null }>).map((r) => ({
+        value:     r.value,
+        transport: normalizeTransport(r.meta?.transport),
+      }))
+      ttffStats = summarizeTtff(samples)
+    }
+  } catch { /* metric_events 未設定 */ }
+
+  // ── 5. 同時視聴数 と 推定 egress (SFU コスト予測) ─────────────────────────
+  let liveNow = 0            // いま視聴中（ended_at NULL・帯域あり mode）
+  let sfuMinutes24h = 0      // 過去24hの SFU 視聴 session-分（egress 概算の母数）
+  try {
+    const { data: openRows } = await supa
+      .from('live_sessions')
+      .select('id')
+      .is('ended_at', null)
+      .in('mode', ['live', 'vod'])
+      .gte('started_at', since24h)
+    liveNow = openRows?.length ?? 0
+
+    const { data: sfuRows } = await supa
+      .from('live_sessions')
+      .select('started_at, ended_at')
+      .not('livekit_room', 'is', null)
+      .gte('started_at', since24h)
+    if (sfuRows) {
+      const now = Date.now()
+      for (const r of sfuRows as Array<{ started_at: string; ended_at: string | null }>) {
+        const start = new Date(r.started_at).getTime()
+        const end = r.ended_at ? new Date(r.ended_at).getTime() : now
+        sfuMinutes24h += Math.max(0, (end - start) / 60000)
+      }
+    }
+  } catch { /* live_sessions 未設定 */ }
+  const estEgressGiB = estimateEgressGiB(sfuMinutes24h)
+
   // ── SLO リスト ──────────────────────────────────────────────────────────
   const slos: SloMetric[] = [
     {
@@ -165,6 +231,64 @@ export default async function SloDashboard() {
               </div>
             )
           })}
+        </div>
+
+        {/* ライブ配信レイテンシ実測 (S4) */}
+        <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
+          <div className="mb-3 flex items-center justify-between">
+            <h4 className="flex items-center gap-1.5 text-sm font-semibold text-slate-800 dark:text-slate-100">
+              <Gauge size={15} strokeWidth={1.5} aria-hidden />ライブ配信レイテンシ（直近 24h・ブラウザ実測）
+            </h4>
+            <div className="flex items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400">
+              <span>同時視聴 <span className="font-semibold tabular-nums text-slate-800 dark:text-slate-100">{liveNow}</span> 件</span>
+              <span>推定 egress <span className="font-semibold tabular-nums text-slate-800 dark:text-slate-100">{estEgressGiB.toFixed(2)} GiB</span></span>
+            </div>
+          </div>
+
+          {ttffStats.length === 0 ? (
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              まだ計測データがありません。ライブを視聴すると初フレーム到達時間 (ttff) が記録されます。
+            </p>
+          ) : (
+            <table className="w-full text-xs">
+              <thead className="text-[10px] uppercase tracking-wider text-slate-500">
+                <tr>
+                  <th className="text-left">経路</th>
+                  <th className="text-right">サンプル</th>
+                  <th className="text-right">p50 (初フレーム)</th>
+                  <th className="text-right">p95</th>
+                  <th className="text-right">最大</th>
+                  <th className="text-left pl-3">目標 p95 ≤ 2.0 s</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ttffStats.map((s) => {
+                  const ok = s.p95 !== null && s.p95 <= 2000
+                  return (
+                    <tr key={s.transport} className="border-t border-slate-100 dark:border-slate-700">
+                      <td className="py-1.5 font-medium text-slate-700 dark:text-slate-200">{TRANSPORT_LABEL[s.transport]}</td>
+                      <td className="text-right tabular-nums text-slate-600 dark:text-slate-300">{s.count}</td>
+                      <td className="text-right tabular-nums text-slate-800 dark:text-slate-100">{fmtMs(s.p50)}</td>
+                      <td className="text-right tabular-nums text-slate-800 dark:text-slate-100">{fmtMs(s.p95)}</td>
+                      <td className="text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtMs(s.max)}</td>
+                      <td className="pl-3">
+                        <span className={
+                          'rounded px-2 py-0.5 text-[11px] font-semibold ' +
+                          (s.p95 === null ? 'bg-slate-200 text-slate-600' : ok ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700')
+                        }>
+                          {s.p95 === null ? 'データなし' : ok ? '達成' : '違反'}
+                        </span>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+          <p className="mt-3 text-[10px] leading-relaxed text-slate-400 dark:text-slate-500">
+            ttff＝視聴操作から初フレーム描画までの端末実測（配信待ち・エッジ起動を含む）。SFU は WebRTC サブ秒、HLS はセグメント長ぶん遅い。
+            推定 egress は SFU 視聴 session-分 × 2.5 Mbps 上限での概算（実課金値ではない）。
+          </p>
         </div>
 
         {/* メトリクスエンドポイント案内 */}

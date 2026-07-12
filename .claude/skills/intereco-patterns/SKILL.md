@@ -25,7 +25,8 @@ description: >-
   ```
   該当: `monitor/src/app/api/edges/[id]/grid/route.ts`, `.../cam/[cameraId]/snapshot/route.ts`。
 - **env名**: `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`(=publishable) / `SUPABASE_SERVICE_ROLE_KEY`(=secret)。
-- `live_host` 等はadmin UIに編集欄が無い → **Supabase SQL Editor で直接UPDATE**。
+- ~~`live_host` 等はadmin UIに編集欄が無い → Supabase SQL Editor で直接UPDATE~~ → **R2で解消済（2026-07-07）**：
+  `live_host`/`vod_host`/`vod_username`/`vod_password`/`vod_channel` は `/admin/edges/[id]` の RecorderCard「詳細(ライブ/VOD/go2rtc)」パネルで編集可（API `/api/admin/recorders/[id]` PUT・PWはVault暗号化・監査ログ記録）。SQL直編集は不要。
 
 ## 2. service_role 鍵ローテはエッジ.envも同期（でないと全停止）
 
@@ -53,6 +54,20 @@ description: >-
   ログイン後は乗る。未認証は302→`<img>`失敗。**ワンクリック「カメラにログイン」導線**(`ImageStreamMode`)で解消。
 - 固定URL `poc-beelink.genesis-edge.com`、systemd `cloudflared-intereco`（再起動自動復帰）。
 - 多店舗スケールはトンネルでなく **SFU(LiveKit Cloud)** に集約する方針（decision済み）。
+
+## 4.5 SFU(LiveKit)ライブ配信 — ベータで実機成立（2026-07-12・6段の落とし穴）
+
+エッジ→LiveKit publish は「go2rtc の H.264 を WHIP で流す」。**PoC期のコードは無く新規実装**。
+実機で順に踏んだ地雷（全部ログ根拠で潰した・再発防止）:
+
+1. **ffmpeg に WHIP muxer 必須**。現地の johnvansickle 静的ビルドは **WHIP 非対応**（`output format 'whip' is not known`）。**BtbN の master ビルド**（`ffmpeg-master-latest-linux64-gpl`）に差し替える（`ffmpeg -muxers | grep whip` で確認）。エッジは PATH の `/usr/local/bin/ffmpeg` を spawn。
+2. **RTMP Ingress は避ける**。johnvansickle の RTMP 実装は **SIGSEGV**（ファイル出力mp4/flvは通るのにRTMPネットワークだけ落ちる）。WHIP が正。
+3. **WHIP は素通し（transcodeしない）→ profile 互換必須**。go2rtc ソースは `h264 High` で、`-c copy` だとブラウザが復号できず「配信待ち→黒画面」。**`-c:v libx264 -profile:v baseline -pix_fmt yuv420p`** に変換。（RTMP Ingress は逆に transcode するのでcopyでも良いが、上記2でRTMP不可）
+4. **WHIP muxer の UDP 送信バッファ溢れ**（`UDP send blocked ... -ts_buffer_size` / `ret=-11`）。**`-ts_buffer_size 8000000`＋720pダウンスケール＋`-b:v/-maxrate/-bufsize`** でI-frameバースト縮小。
+5. **切替時の即死**（`Immediate exit requested`）。軽量/高画質→SFU切替で**前モードのcleanupが~300ms後にstop_streamを予約(F75)**し、SFU起動直後のffmpegを殺す。**LiveKitMode も mount時に `cancelPendingStop(edgeId)`** を呼ぶ（他モードと同じ）。
+6. **視聴者トークンの認可**（旧 `/api/livekit/token` は任意room/can_publish/identity を許可＝穴）。cameraId由来room・RLS可視性・canPublish=false・identity=user.id に是正。publish起点は monitor サーバ（`/api/livekit/publish` が Ingress発行＋`start_sfu` dispatch）＝エッジに鍵不要。
+
+構成: monitor `/api/livekit/{token,publish}` + `lib/livekit-server.ts`（WHIP_INPUT Ingress）/ edge `modes/sfu-publish.ts`（go2rtc RTSP `cam_<id>` @ `:18554` → libx264 baseline → whip-proxy → WHIP）。機能フラグ **`LIVEKIT_ENABLED='true'`**（既定OFF）。**残**: S3オンデマンド/フォールバック・S4計測(遅延実測)・VAAPI最適化。
 
 ## 5. Vercel monorepo（bun workspace）デプロイ
 

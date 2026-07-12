@@ -27,6 +27,30 @@ export default function LiveKitMode({ cameraId, edgeId }: { cameraId: string; ed
     let cancelled = false
     let mediaTimer: ReturnType<typeof setTimeout> | null = null
 
+    // S4 計測: 視聴開始（＝publish要求）から初フレーム描画までの ttff を1回だけ記録する。
+    // transport='sfu' タグで HLS/MJPEG と区別し /infra/slo で p50/p95 を比較する。
+    // start は「配信待ち」を含む端末→初フレームの実体感遅延。
+    const startTs = Date.now()
+    let ttffReported = false
+    const reportTtff = () => {
+      if (ttffReported || cancelled) return
+      ttffReported = true
+      void fetch('/api/metrics', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ kind: 'ttff_ms', cameraId, value: Date.now() - startTs, meta: { transport: 'sfu' } }),
+        keepalive: true,
+      }).catch(() => {})
+    }
+    const reportError = (reason: string) => {
+      void fetch('/api/metrics', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ kind: 'live_error', cameraId, meta: { transport: 'sfu', reason } }),
+        keepalive: true,
+      }).catch(() => {})
+    }
+
     // F75: 直前モード(軽量/高画質)の cleanup が予約した stop_stream を打ち消す。
     // これをしないと SFU 起動直後に stop_stream が飛び ffmpeg が即殺される
     // （"Immediate exit requested"）。他モードと同じ対処。
@@ -46,18 +70,22 @@ export default function LiveKitMode({ cameraId, edgeId }: { cameraId: string; ed
           headers: { 'Content-Type': 'application/json' },
           body:    JSON.stringify({ cameraId }),
         })
-        if (!res.ok) { if (!cancelled) setStatus('failed'); return }
+        if (!res.ok) { if (!cancelled) { setStatus('failed'); reportError('token') } return }
         const { url, token } = (await res.json()) as { url?: string; token?: string }
-        if (!url || !token) { if (!cancelled) setStatus('failed'); return }
+        if (!url || !token) { if (!cancelled) { setStatus('failed'); reportError('token') } return }
 
         room = new Room({ adaptiveStream: true })
         room.on(RoomEvent.TrackSubscribed, (track: RemoteTrack) => {
           if (track.kind === Track.Kind.Video && videoRef.current) {
-            track.attach(videoRef.current)
+            const el = videoRef.current
+            track.attach(el)
+            // ttff は実描画（playing）で確定。attach 直後に発火済みなら onLoadedData も保険。
+            el.addEventListener('playing', reportTtff, { once: true })
+            el.addEventListener('loadeddata', reportTtff, { once: true })
             if (!cancelled) { setStatus('playing'); if (mediaTimer) clearTimeout(mediaTimer) }
           }
         })
-        room.on(RoomEvent.Disconnected, () => { if (!cancelled) setStatus('failed') })
+        room.on(RoomEvent.Disconnected, () => { if (!cancelled) { setStatus('failed'); reportError('disconnected') } })
 
         await room.connect(url, token)
         if (cancelled) { room.disconnect(); return }
