@@ -33,6 +33,9 @@ export interface SfuHandle { stop: () => Promise<void> }
 /** VAAPI 起動プローブ窓。この時間内の異常終了は「VAAPI 不成立」とみなし libx264 へ。 */
 const VAAPI_PROBE_MS = 10_000
 
+/** stop() の SIGTERM→SIGKILL 猶予。systemd の停止タイムアウトより十分短く。 */
+const KILL_ESCALATION_MS = 3_000
+
 /** プロセス生存中の VAAPI 健全性。一度失敗したら以後の start は libx264 直行。 */
 let vaapiHealthy = true
 
@@ -84,7 +87,19 @@ export async function startSfuPublish(input: StartSfuInput): Promise<SfuHandle> 
     async stop() {
       if (stopped) return
       stopped = true
-      try { current.kill('SIGTERM') } catch { /* already gone */ }
+      const proc = current
+      if (proc.exitCode !== null || proc.signalCode !== null) return   // 既に死んでいる
+      try { proc.kill('SIGTERM') } catch { /* already gone */ }
+      // WHIP の ffmpeg は SIGTERM 後のセッション終了処理（WHIP DELETE 等）でハングし得る。
+      // 取り残すと systemd 停止タイムアウト → OTA の OnFailure ロールバック誤発火の原因に
+      // なる（2026-07-12 実機障害）ため、猶予後に SIGKILL へエスカレーションする。
+      await new Promise<void>((resolve) => {
+        const t = setTimeout(() => {
+          try { proc.kill('SIGKILL') } catch { /* already gone */ }
+          resolve()
+        }, KILL_ESCALATION_MS)
+        proc.once('exit', () => { clearTimeout(t); resolve() })
+      })
     },
   }
 }

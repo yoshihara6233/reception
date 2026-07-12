@@ -21,6 +21,7 @@ import { captureCameraJpeg } from './security/snapshot.js'
 import { startAlarmListener } from './alarm/listener.js'
 import { runAlarmTimelineCapture } from './alarm/timeline.js'
 import { verifyOnBoot, type RunnerDeps } from './ota/runner.js'
+import { onPreRestart } from './ota/pre-restart.js'
 import { healthProbe } from './ota/signal.js'
 
 const fsm = new StateMachine()
@@ -43,6 +44,10 @@ async function main() {
   }
   void verifyOnBoot(otaDeps, async () => healthProbe(config.OTA_MIN_STABLE_MS))
     .catch((e) => logger.warn({ err: String(e) }, 'ota: verifyOnBoot failed'))
+
+  // OTA 自己再起動の exit 前にアクティブモードを停止（ffmpeg 子プロセスを道連れにしない）。
+  // 取り残すと systemd stop-sigterm タイムアウト → OnFailure ロールバック誤発火（2026-07-12）。
+  onPreRestart(async () => { await fsm.toIdle() })
 
   // F3+: localhost WHIP proxy. Strips TCP ICE candidates from LiveKit Cloud's
   // SDP answer so ffmpeg 8.1's WHIP muxer (which errors on the first TCP
