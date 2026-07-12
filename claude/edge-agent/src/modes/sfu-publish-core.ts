@@ -23,8 +23,12 @@ export function go2rtcRtspUrl(cameraId: string, listen: string): string {
 }
 
 /**
- * ffmpeg 引数（go2rtc RTSP → baseline H.264 変換 → WHIP publish）。
- * `-fflags +genpts` は go2rtc の非単調DTS対策。音声なし（監視用途）。
+ * ffmpeg 引数（go2rtc RTSP → 720p baseline H.264 変換 → WHIP publish）。
+ *
+ * WHIP muxer の "UDP send blocked" 対策:
+ *   - `-ts_buffer_size` を拡大（muxer 自身の推奨。UDP送信バッファ溢れ EAGAIN を回避）。
+ *   - 720p ダウンスケール＋ビットレート上限で I-frame バーストを縮小（監視用途に十分）。
+ * `-fflags +genpts` は go2rtc の非単調DTS対策。音声なし。
  */
 export function buildSfuFfmpegArgs(src: string, whipTarget: string): string[] {
   return [
@@ -32,13 +36,16 @@ export function buildSfuFfmpegArgs(src: string, whipTarget: string): string[] {
     '-rtsp_transport', 'tcp',
     '-fflags', '+genpts',
     '-i', src,
-    '-an',                     // 音声なし
+    '-an',                          // 音声なし
+    '-vf', 'scale=1280:720',        // 720p へ縮小（バースト縮小・監視に十分）
     '-c:v', 'libx264',
-    '-profile:v', 'baseline',  // WebRTC/ブラウザ互換（High profile は WHIP 素通しで再生不可）
+    '-profile:v', 'baseline',       // WebRTC/ブラウザ互換（High は WHIP 素通しで再生不可）
     '-pix_fmt', 'yuv420p',
     '-preset', 'ultrafast',
     '-tune', 'zerolatency',
+    '-b:v', '2000k', '-maxrate', '2500k', '-bufsize', '3000k',
     '-g', '30',
+    '-ts_buffer_size', '8000000',   // WHIP UDP送信バッファ拡大（muxer 推奨・EAGAIN回避）
     '-f', 'whip', whipTarget,
   ]
 }
