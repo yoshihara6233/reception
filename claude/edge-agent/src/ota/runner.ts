@@ -12,6 +12,7 @@ import { join } from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { logger } from '../logger.js'
+import { runPreRestart } from './pre-restart.js'
 import {
   type OtaState,
   type DesiredVersions,
@@ -146,8 +147,13 @@ export async function pointKnownGood(paths: OtaPaths, target: string): Promise<v
  * exit(0) なら sudo 不要・確実。新 current は WorkingDirectory=current 経由で反映され、
  * Restart=always（RestartSec=5）が新版で立て直す。current 切替と pending_verify は
  * exit の前に永続化済みなので、再起動後に verifyOnBoot が検証/復帰する。
+ *
+ * exit 前に **pre-restart クリーンアップ**（アクティブモードの ffmpeg 子プロセス停止）を
+ * 必ず実行する。取り残すと systemd の stop-sigterm がタイムアウトし unit が
+ * 'failed/timeout' → OnFailure のロールバックが誤発火する（2026-07-12 実機障害）。
  */
-function requestSelfRestart(): never {
+async function requestSelfRestart(): Promise<never> {
+  await runPreRestart()
   logger.info('ota: exiting for systemd restart (Restart=always) onto current')
   process.exit(0)
 }
@@ -199,7 +205,7 @@ export async function applyDesired(deps: RunnerDeps, desired: DesiredVersions): 
   const next = beginUpdate(state, target, ISO())
   await writeState(paths, next)
   await pointCurrent(paths, releaseDir(paths, target))
-  requestSelfRestart()
+  await requestSelfRestart()
 }
 
 /**
@@ -238,7 +244,7 @@ export async function verifyOnBoot(
       await pointCurrent(paths, paths.knownGood) // current を known-good へ戻す
       await writeState(paths, state)
       logger.warn({ reason: step.reason, back_to: state.known_good_version }, 'ota: rolling back')
-      requestSelfRestart() // 旧版で立て直す（systemd Restart=always）
+      await requestSelfRestart() // 旧版で立て直す（systemd Restart=always）
     }
     if (Date.now() > deadline) {
       // 念のための保険（probe が永遠に pending を返す異常系）。
@@ -249,7 +255,7 @@ export async function verifyOnBoot(
       ).state
       await pointCurrent(paths, paths.knownGood)
       await writeState(paths, state)
-      requestSelfRestart()
+      await requestSelfRestart()
     }
     await new Promise((r) => setTimeout(r, 5_000))
   }
