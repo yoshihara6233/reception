@@ -4,6 +4,7 @@ import {
   normalizeTransport,
   summarizeTtff,
   estimateEgressGiB,
+  TTFF_COLDSTART_TARGET_MS,
   type TtffSample,
 } from './latency-stats'
 
@@ -54,6 +55,17 @@ describe('summarizeTtff', () => {
   })
   it('サンプル無しは空配列', () => {
     expect(summarizeTtff([])).toEqual([])
+  })
+})
+
+describe('TTFF_COLDSTART_TARGET_MS', () => {
+  it('SFU はオンデマンド起動込みなので HLS より緩い目標', () => {
+    expect(TTFF_COLDSTART_TARGET_MS.sfu).toBeGreaterThan(TTFF_COLDSTART_TARGET_MS.hls)
+  })
+  it('全 transport に目標が定義されている', () => {
+    expect(TTFF_COLDSTART_TARGET_MS.sfu).toBeGreaterThan(0)
+    expect(TTFF_COLDSTART_TARGET_MS.hls).toBeGreaterThan(0)
+    expect(TTFF_COLDSTART_TARGET_MS.other).toBeGreaterThan(0)
   })
 })
 
