@@ -51,13 +51,12 @@ export function getBcpNav(t: Msg): NavItem[] {
   ]
 }
 export function getInfraNav(t: Msg): NavItem[] {
+  // メニュー整理（2026-07-12）: インシデントはダッシュボードの未対応一覧と重複、
+  // 中央ノード(F49.G Tier3)は未稼働のためメニューから除外（ページ自体は残置・直URLは有効）。
   return [
     { href: '/infra',           label: t.infraNav.dashboard, icon: '🩺', exact: true },
-    { href: '/infra/incidents', label: t.infraNav.incidents, icon: '⚠' },
     { href: '/infra/checks',    label: t.infraNav.checks,    icon: '⌬' },
     { href: '/infra/reports',   label: t.infraNav.reports,   icon: '☰' },
-    // F49.G: 中央集約モード時のノード状況 (Phase 2 で稼働開始)
-    { href: '/infra/nodes',     label: '中央ノード',          icon: '🛰' },
     // F50.E: SLO ダッシュボード (Phase 3)
     { href: '/infra/slo',       label: 'SLO',                icon: '📈' },
     { href: '/infra/settings',  label: t.infraNav.settings,  icon: '⚙' },
@@ -104,12 +103,12 @@ export const ALARM_NAV: NavItem[] = [
   { href: '/alarms/settings', label: '発報設定',         icon: '⚙' },
 ]
 
-// インフラ管理（機器ヘルス監視）
+// インフラ管理（機器ヘルス監視）— getInfraNav と同期を保つこと
 export const INFRA_NAV: NavItem[] = [
   { href: '/infra',           label: 'ダッシュボード', icon: '🩺', exact: true },
-  { href: '/infra/incidents', label: 'インシデント',   icon: '⚠' },
   { href: '/infra/checks',    label: 'チェック設定',   icon: '⌬' },
   { href: '/infra/reports',   label: '稼働率レポート', icon: '☰' },
+  { href: '/infra/slo',       label: 'SLO',            icon: '📈' },
   { href: '/infra/settings',  label: '監視設定',       icon: '⚙' },
   { href: '/infra/glossary',  label: '用語説明',       icon: '?' },
 ]
