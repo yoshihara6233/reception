@@ -210,7 +210,7 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
         ) : expired ? (
           <SessionCapOverlay maxSessionMin={maxSessionMin} />
         ) : mode === 'sfu' && sfuEnabled ? (
-          <LiveKitMode cameraId={cameraId} />
+          <LiveKitMode cameraId={cameraId} edgeId={edgeId} />
         ) : mode === 'hq' && hqUrl ? (
           <Go2rtcMode url={hqUrl} storeId={storeId} cameraId={cameraId} />
         ) : mode === 'iframe' && liveIframeUrl ? (
