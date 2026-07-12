@@ -7,8 +7,10 @@
  *     ビルドは WHIP 非対応なので不可（"output format 'whip' is not known" になる）。
  *   - WHIP 先は whip-proxy 経由で渡す（ffmpeg WHIP muxer が SDP の TCP ICE 候補で失敗する
  *     既知問題を回避・whip-proxy.ts）。
- * codec は **無変換 `-c:v copy`**。go2rtc が RTSP で H.264 を配信済み（H.265 カメラも go2rtc が
- *   変換）＝再エンコード不要で最低遅延・最低CPU。
+ * codec は **H.264 constrained baseline へ変換**。WHIP(WebRTC)ingress は素通し（RTMPと違い
+ *   transcode しない）ため、ブラウザ互換 profile が必須。go2rtc ソースは High profile なので
+ *   `-c copy` だと復号されず「配信待ち→黒画面」になる。baseline+yuv420p で確実に再生される。
+ *   （変換は libx264 ultrafast・1080p10fpsで低負荷。映れば VAAPI 最適化も可）
  */
 
 /**
@@ -21,7 +23,7 @@ export function go2rtcRtspUrl(cameraId: string, listen: string): string {
 }
 
 /**
- * ffmpeg 引数（go2rtc RTSP → 無変換 → WHIP publish）。
+ * ffmpeg 引数（go2rtc RTSP → baseline H.264 変換 → WHIP publish）。
  * `-fflags +genpts` は go2rtc の非単調DTS対策。音声なし（監視用途）。
  */
 export function buildSfuFfmpegArgs(src: string, whipTarget: string): string[] {
@@ -31,7 +33,12 @@ export function buildSfuFfmpegArgs(src: string, whipTarget: string): string[] {
     '-fflags', '+genpts',
     '-i', src,
     '-an',                     // 音声なし
-    '-c:v', 'copy',            // go2rtc が H.264 配信済み → 再エンコードしない
+    '-c:v', 'libx264',
+    '-profile:v', 'baseline',  // WebRTC/ブラウザ互換（High profile は WHIP 素通しで再生不可）
+    '-pix_fmt', 'yuv420p',
+    '-preset', 'ultrafast',
+    '-tune', 'zerolatency',
+    '-g', '30',
     '-f', 'whip', whipTarget,
   ]
 }
