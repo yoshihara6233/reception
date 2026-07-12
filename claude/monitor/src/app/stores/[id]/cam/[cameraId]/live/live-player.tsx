@@ -413,7 +413,7 @@ function Go2rtcMode({ url, storeId, cameraId }: { url: string; storeId?: string;
       void fetch('/api/metrics', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kind: 'ttff_ms', storeId, cameraId, value: ttff }),
+        body: JSON.stringify({ kind: 'ttff_ms', storeId, cameraId, value: ttff, meta: { transport: 'hls' } }),
         keepalive: true,
       }).catch(() => {})
     }
