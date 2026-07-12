@@ -25,6 +25,8 @@ export type EdgeCommand =
   // the Zod parse — they're ignored by the new vod.ts.
   | { action: 'start_vod';   request_id: string; camera_id: string; clip_id: string; from_iso: string; to_iso: string; livekit_room?: string; livekit_whip_url?: string }
   | { action: 'stop_stream'; request_id: string }
+  // SFU 並行ワーカー専用の停止（stop_stream は active モード専用で SFU に触れない）
+  | { action: 'stop_sfu';    request_id: string }
   | { action: 'reboot';      request_id: string }
   // 警備: 巡回スナップショット取得。指定カメラの静止画を撮り、ingest API に POST する。
   | { action: 'capture_snapshot'; request_id: string; run_id: string; camera_ids: string[]; ingest_url: string }

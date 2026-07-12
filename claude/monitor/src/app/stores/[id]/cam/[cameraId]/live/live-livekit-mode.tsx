@@ -13,7 +13,6 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { Room, RoomEvent, Track, type RemoteTrack } from 'livekit-client'
-import { cancelPendingStop } from '@/lib/edge-stop-registry'
 
 type Status = 'connecting' | 'playing' | 'nomedia' | 'failed'
 
@@ -73,10 +72,10 @@ export default function LiveKitMode({ cameraId, edgeId, onFallback }: {
       setStatus('failed')
     }
 
-    // F75: 直前モード(軽量/高画質)の cleanup が予約した stop_stream を打ち消す。
-    // これをしないと SFU 起動直後に stop_stream が飛び ffmpeg が即殺される
-    // （"Immediate exit requested"）。他モードと同じ対処。
-    cancelPendingStop(edgeId)
+    // 直前モード(軽量等)が予約した stop_stream は**打ち消さない**（旧F75対策は不要）。
+    // エッジ側で SFU は並行ワーカー化され stop_stream は active モード専用 —
+    // 前モードのスナップ配信を正しく止めるため、むしろ通すのが正しい。
+    // start_sfu とのコマンドスロット競合はサーバ側 dispatchStartSfu のリトライが吸収する。
 
     // オンデマンド配信: 視聴開始でエッジに publish を要求。配信中なら fast-path
     // （warm=Ingress発行/dispatchなし・subscribeのみ ≒ 1秒）、未配信ならコールド起動。

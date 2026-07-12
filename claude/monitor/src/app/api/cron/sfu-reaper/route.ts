@@ -14,14 +14,14 @@
  *     → identity !== edge_id の参加者 = 視聴者。
  *   - 生成直後の room は視聴者接続前の可能性があるため GRACE_SEC 以内はスキップ。
  *
- * pending_command 占有中は dispatchStopStream が no-op（次回 tick で再試行）。
+ * pending_command 占有中は dispatchStopSfu が no-op（次回 tick で再試行）。
  * 認証: edge-health と同じ CRON_SECRET（Bearer / x-cron-secret）。
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { RoomServiceClient } from 'livekit-server-sdk'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { livekitEnabled } from '@/lib/livekit'
-import { dispatchStopStream } from '@/lib/livekit-server'
+import { dispatchStopSfu } from '@/lib/livekit-server'
 
 const ROOM_PREFIX = 'cam_'
 const GRACE_SEC   = 120   // room 生成からの猶予（start 直後の視聴者接続待ち）
@@ -79,7 +79,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const viewers = participants.filter((p) => p.identity !== edgeId).length
     if (viewers > 0) { active.push(`${room.name}:${viewers}`); continue }
 
-    await dispatchStopStream(svc, edgeId)
+    await dispatchStopSfu(svc, edgeId)
     reaped.push(room.name)
   }
 

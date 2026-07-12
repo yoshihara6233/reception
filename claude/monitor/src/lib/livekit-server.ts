@@ -73,25 +73,35 @@ export function buildStartSfuCommand(cameraId: string, room: string, whipUrl: st
 
 /**
  * pending_command が空いていれば SFU 配信コマンドを投入する（レース保護）。
- * 戻り値 true=投入成功 / false=スロット占有（クライアントは再試行）。
+ * スロット占有時（例: 直前モードの予約 stop_stream）は短間隔で数回リトライする —
+ * エッジは 500ms ポーリングでスロットを消費するので、~2秒待てばほぼ確実に空く。
+ * 戻り値 true=投入成功 / false=リトライ超過（クライアントは再試行 UI）。
  */
 export async function dispatchStartSfu(
   service: SupabaseClient,
   edgeId: string,
   cmd: EdgeCommand,
 ): Promise<boolean> {
-  const { data } = await service
-    .from('edge_devices')
-    .update({ pending_command: cmd, pending_command_at: new Date().toISOString() })
-    .eq('id', edgeId)
-    .is('pending_command', null)
-    .select('id')
-  return (data ?? []).length > 0
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, 700))
+    const { data } = await service
+      .from('edge_devices')
+      .update({ pending_command: cmd, pending_command_at: new Date().toISOString() })
+      .eq('id', edgeId)
+      .is('pending_command', null)
+      .select('id')
+    if ((data ?? []).length > 0) return true
+  }
+  return false
 }
 
-/** stop_stream を投入し SFU 配信を止める（エッジを idle へ戻す）。 */
-export async function dispatchStopStream(service: SupabaseClient, edgeId: string): Promise<void> {
-  const cmd: EdgeCommand = { action: 'stop_stream', request_id: randomUUID() }
+/**
+ * stop_sfu を投入し SFU 並行ワーカーを止める（sfu-reaper / publish stop）。
+ * active モード（grid/軽量/vod）には触れない。スロット占有時は投入せず終了
+ * （reaper は次 tick で再試行するため best-effort でよい）。
+ */
+export async function dispatchStopSfu(service: SupabaseClient, edgeId: string): Promise<void> {
+  const cmd: EdgeCommand = { action: 'stop_sfu', request_id: randomUUID() }
   await service
     .from('edge_devices')
     .update({ pending_command: cmd, pending_command_at: new Date().toISOString() })
