@@ -81,7 +81,9 @@ description: >-
 9. **低遅延**: 入力側 `-fflags +genpts+nobuffer -flags low_delay` でグラスtoグラス**約1秒**（旧トンネルMJPEG 2〜3秒）。
 10. **コールドスタート短縮（キープウォーム）**: 視聴終了で即 stop せず **sfu-reaper cron**（5分毎・視聴者0
    ＝publisher(identity=edge_id)のみ→`stop_sfu`・生成120秒猶予）に委譲。publish start は配信中なら
-   fast-path（`isPublishing` → subscribeのみ）、Ingress は同room再利用。**再視聴 ~3秒（実測）**・
+   fast-path（`isPublishing` → subscribeのみ）、Ingress は同room再利用。さらに **GOP短縮 g=10**
+   （WebRTC途中参加は次のキーフレームまで映像が出ない・WHIP muxer は PLI/FIR 非対応のため
+   GOP=1秒間隔が効く・PR#157）で **再視聴 ~1秒（実測）**・
    初回コールドは ~9秒（ttff計測は transport タグ付きで `/infra/slo` に p50/p95 表示・目標は sfu≤15s/hls≤10s）。
 11. **SFU は並行ワーカー**（キープウォーム成立の前提・PR#155）。エッジの状態機械は単一 active 設計の
    ため、当初 SFU を state='live' に載せたら **store画面へ戻った時の start_live/start_grid が
