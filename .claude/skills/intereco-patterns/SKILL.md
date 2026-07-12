@@ -94,6 +94,24 @@ description: >-
    （LiveKitMode の cancelPendingStop は撤去済み）。start_sfu のスロット競合は
    dispatchStartSfu のリトライ（700ms×4）が吸収。
 
+## 4.6 認証プロキシ越し HLS は「毎リクエスト認証」だと構造的に死ぬ（2026-07-12）
+
+高画質(go2rtc HLS)を `/api/live-proxy/*` 経由にした構成は**導入時から遠隔で全滅**していた。
+症状「高画質映像を表示できません」/ Vercelログ: `stream.m3u8`・`playlist`・`init`=200 なのに
+**`segment.m4s` だけ 404**。ローカル直叩きは 200＝go2rtc は健全。
+
+- 根因: go2rtc の HLS は**セグメント0.5秒刻み・ライブバッファ数秒**。proxy が毎リクエストで
+  Supabase 認証（`getUser`+RLS照会 ≒1〜2秒）すると、セグメント要求が届く頃には**バッファから
+  追い出されて 404** → hls.js 致命エラー。認証遅延がライブバッファ寿命を超えたら終わり。
+- 対策（PR#159）: `stream.m3u8` だけフル認証し **HMAC署名クッキー**（camera・origin・exp 封入・
+  TTL10分・`LIVE_SIGNING_SECRET` 流用・`Path=/api/live-proxy/<cameraId>` 限定）を発行。
+  `api/hls/*` は**クッキー検証のみ（DB往復ゼロ）**。無効時はフル認証へフォールバック。
+  純ロジック: `lib/live-proxy-session.ts`（テスト付）。
+- 教訓: **短寿命リソース（ライブHLSセグメント）を認証プロキシに通すなら、認可は
+  セッション開始点で1回だけ行い、以降は暗号学的トークンで通す**。診断は
+  「ローカル直叩き→Vercelログのパス別ステータス→リクエスト間隔」の順が最短。
+  `vercel logs <url> --json` はローカルCLIで本番ランタイムログを流し見できる。
+
 ## 5. Vercel monorepo（bun workspace）デプロイ
 
 - リポジトリは home配下(`/Users/junji.y`)、remote `yoshihara6233/reception`。monitorは `claude/monitor`。
