@@ -311,9 +311,9 @@ function ModeToolbar({
 }) {
   const label =
     mode === 'sfu'    ? '高画質ライブ (SFU / LiveKit・H.264サブ秒)'
-    : mode === 'hq'     ? '高画質ライブ (go2rtc H.264変換)'
+    : mode === 'hq'     ? '高画質ライブ (HLS・go2rtc H.264変換)'
     : mode === 'iframe' ? '高画質ライブ (NVR直接)'
-    : '軽量モード (1秒スナップ)'
+    : '軽量モード (JPEG・1秒スナップ)'
   return (
     <div className="flex items-center justify-between gap-2 border-b border-slate-800 bg-slate-900 px-3 py-1.5 text-[11px]">
       <div className="flex items-center gap-1.5">
@@ -342,9 +342,9 @@ function ModeToolbar({
                 ? 'bg-blue-600 text-white'
                 : 'bg-slate-700 text-slate-200 hover:bg-slate-600')
             }
-            title="高画質 (go2rtcでH.265→H.264変換, ~1-3s 遅延)"
+            title="高画質 (HLS・go2rtcでH.265→H.264変換, ~1-3s 遅延)"
           >
-            🎬 高画質
+            🎬 高画質 (HLS)
           </button>
         )}
         {iframeSupported && (
@@ -371,9 +371,9 @@ function ModeToolbar({
               ? 'bg-blue-600 text-white'
               : 'bg-slate-700 text-slate-200 hover:bg-slate-600')
           }
-          title="軽量モード — BCP / 回線混雑時推奨 (1fps, 低帯域)"
+          title="軽量モード (JPEG 1fps・低帯域) — BCP / 回線混雑時推奨"
         >
-          📡 軽量 (BCP用)
+          📡 軽量 (JPEG)
         </button>
       </div>
       <div className="flex items-center gap-2 text-[10px] text-slate-400">
