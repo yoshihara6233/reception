@@ -123,6 +123,8 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
   const [mode, setMode]   = useState<Mode>(defaultMode)
   // Auto-fallback banner when iframe fails to load.
   const [iframeFailed, setIframeFailed] = useState(false)
+  // S3.2: SFU 接続不能→現行経路への自動退避バナー（F80.1 と同じくセッション限り・永続化しない）。
+  const [sfuFailed, setSfuFailed] = useState(false)
 
   // Hydrate pref from localStorage on mount (avoids SSR mismatch).
   useEffect(() => {
@@ -189,6 +191,7 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
 
   function switchMode(next: Mode): void {
     setIframeFailed(false)
+    setSfuFailed(false)
     setMode(next)
     saveMode(cameraId, next)
   }
@@ -201,6 +204,7 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
         hqSupported={!!hqUrl}
         iframeSupported={!!liveIframeUrl}
         iframeFailed={iframeFailed}
+        sfuFailed={sfuFailed}
         onSwitch={switchMode}
         remainingSec={expired ? null : remainingSec}
       />
@@ -210,7 +214,16 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
         ) : expired ? (
           <SessionCapOverlay maxSessionMin={maxSessionMin} />
         ) : mode === 'sfu' && sfuEnabled ? (
-          <LiveKitMode cameraId={cameraId} edgeId={edgeId} />
+          <LiveKitMode
+            cameraId={cameraId}
+            edgeId={edgeId}
+            // S3.2: 退避先（hq > iframe > jpeg は常に可）がある前提で自動退避。
+            // F80.1 と同じくセッション限り — saveMode しない（一時障害で SFU 選好を消さない）。
+            onFallback={() => {
+              setSfuFailed(true)
+              setMode(hqUrl ? 'hq' : liveIframeUrl ? 'iframe' : 'jpeg')
+            }}
+          />
         ) : mode === 'hq' && hqUrl ? (
           <Go2rtcMode url={hqUrl} storeId={storeId} cameraId={cameraId} />
         ) : mode === 'iframe' && liveIframeUrl ? (
@@ -267,13 +280,14 @@ function LiveLimitOverlay() {
 // ─── Mode toolbar ───────────────────────────────────────────────────────────
 
 function ModeToolbar({
-  mode, sfuSupported, hqSupported, iframeSupported, iframeFailed, onSwitch, remainingSec,
+  mode, sfuSupported, hqSupported, iframeSupported, iframeFailed, sfuFailed, onSwitch, remainingSec,
 }: {
   mode:            Mode
   sfuSupported:    boolean
   hqSupported:     boolean
   iframeSupported: boolean
   iframeFailed:    boolean
+  sfuFailed:       boolean
   onSwitch:        (m: Mode) => void
   remainingSec:    number | null
 }) {
@@ -350,6 +364,9 @@ function ModeToolbar({
           {label}
           {iframeFailed && (
             <span className="ml-2 text-amber-400">⚠ 高画質モード接続失敗 — 軽量モードへ自動切替</span>
+          )}
+          {sfuFailed && (
+            <span className="ml-2 text-amber-400">⚠ SFU 接続不可 — 通常経路へ自動切替</span>
           )}
         </span>
       </div>

@@ -20,6 +20,10 @@
     {
       "path": "/api/cron/security-report",
       "schedule": "0 20 * * *"
+    },
+    {
+      "path": "/api/cron/sfu-reaper",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

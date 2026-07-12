@@ -17,10 +17,22 @@ import { cancelPendingStop } from '@/lib/edge-stop-registry'
 
 type Status = 'connecting' | 'playing' | 'nomedia' | 'failed'
 
-export default function LiveKitMode({ cameraId, edgeId }: { cameraId: string; edgeId: string }) {
+export default function LiveKitMode({ cameraId, edgeId, onFallback }: {
+  cameraId: string
+  edgeId: string
+  /**
+   * S3.2: SFU が使えない（token失敗・接続不能・切断）ときに親へ通知し、
+   * 現行経路（トンネル/HLS/軽量）へ自動退避する。未指定なら従来どおり
+   * リトライ UI を出して留まる（退避先が無いカメラ向け）。
+   */
+  onFallback?: () => void
+}) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [status, setStatus] = useState<Status>('connecting')
   const [reloadKey, setReloadKey] = useState(0)
+  // 親のインライン関数でも effect を再実行させない（切断→再接続ループ防止）。
+  const onFallbackRef = useRef(onFallback)
+  onFallbackRef.current = onFallback
 
   useEffect(() => {
     let room: Room | null = null
@@ -50,6 +62,16 @@ export default function LiveKitMode({ cameraId, edgeId }: { cameraId: string; ed
         keepalive: true,
       }).catch(() => {})
     }
+    // S3.2: 失敗の一元処理。onFallback があれば親がモードを切替え（本コンポーネントは
+    // unmount → cleanup で publish stop も飛ぶ）、無ければリトライ UI に留まる。1回だけ。
+    let fellBack = false
+    const fail = (reason: string) => {
+      if (cancelled) return
+      reportError(reason)
+      const fb = onFallbackRef.current
+      if (fb && !fellBack) { fellBack = true; fb(); return }
+      setStatus('failed')
+    }
 
     // F75: 直前モード(軽量/高画質)の cleanup が予約した stop_stream を打ち消す。
     // これをしないと SFU 起動直後に stop_stream が飛び ffmpeg が即殺される
@@ -70,9 +92,9 @@ export default function LiveKitMode({ cameraId, edgeId }: { cameraId: string; ed
           headers: { 'Content-Type': 'application/json' },
           body:    JSON.stringify({ cameraId }),
         })
-        if (!res.ok) { if (!cancelled) { setStatus('failed'); reportError('token') } return }
+        if (!res.ok) { fail('token'); return }
         const { url, token } = (await res.json()) as { url?: string; token?: string }
-        if (!url || !token) { if (!cancelled) { setStatus('failed'); reportError('token') } return }
+        if (!url || !token) { fail('token'); return }
 
         room = new Room({ adaptiveStream: true })
         room.on(RoomEvent.TrackSubscribed, (track: RemoteTrack) => {
@@ -85,7 +107,7 @@ export default function LiveKitMode({ cameraId, edgeId }: { cameraId: string; ed
             if (!cancelled) { setStatus('playing'); if (mediaTimer) clearTimeout(mediaTimer) }
           }
         })
-        room.on(RoomEvent.Disconnected, () => { if (!cancelled) { setStatus('failed'); reportError('disconnected') } })
+        room.on(RoomEvent.Disconnected, () => fail('disconnected'))
 
         await room.connect(url, token)
         if (cancelled) { room.disconnect(); return }
@@ -94,7 +116,7 @@ export default function LiveKitMode({ cameraId, edgeId }: { cameraId: string; ed
           if (!cancelled) setStatus((s) => (s === 'playing' ? s : 'nomedia'))
         }, 8000)
       } catch {
-        if (!cancelled) setStatus('failed')
+        fail('connect')
       }
     })()
 

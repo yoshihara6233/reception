@@ -49,3 +49,35 @@ export function buildSfuFfmpegArgs(src: string, whipTarget: string): string[] {
     '-f', 'whip', whipTarget,
   ]
 }
+
+/**
+ * VAAPI 版 ffmpeg 引数（GPUデコード → scale_vaapi → h264_vaapi encode → WHIP）。
+ *
+ * libx264 ultrafast の CPU 負荷を GPU へ逃がす（go2rtc の H.265→H.264 変換も同じ
+ * VAAPI デバイスで実績あり）。WebRTC 互換の要件は libx264 版と同じ:
+ *   - `-profile:v constrained_baseline`（High はブラウザで再生不可）
+ *   - `-bf 0`（h264_vaapi は既定で B-frame を入れるが WebRTC は B-frame 不可）
+ * ドライバが constrained_baseline 非対応の個体もあるため、実行側（sfu-publish.ts）は
+ * 早期異常終了を検知して libx264 へ自動フォールバックする。
+ */
+export function buildSfuFfmpegArgsVaapi(src: string, whipTarget: string, device: string): string[] {
+  return [
+    '-hide_banner', '-loglevel', 'warning',
+    '-rtsp_transport', 'tcp',
+    '-fflags', '+genpts',
+    // 入力オプション: GPU デコード（出力も VAAPI サーフェスのまま scale/encode へ渡す）
+    '-hwaccel', 'vaapi',
+    '-hwaccel_device', device,
+    '-hwaccel_output_format', 'vaapi',
+    '-i', src,
+    '-an',
+    '-vf', 'scale_vaapi=w=1280:h=720',   // GPU 上で 720p 縮小（CPU コピー往復なし）
+    '-c:v', 'h264_vaapi',
+    '-profile:v', 'constrained_baseline',
+    '-bf', '0',                          // WebRTC は B-frame 不可（h264_vaapi 既定は bf>0）
+    '-b:v', '2000k', '-maxrate', '2500k', '-bufsize', '3000k',
+    '-g', '30',
+    '-ts_buffer_size', '8000000',
+    '-f', 'whip', whipTarget,
+  ]
+}
