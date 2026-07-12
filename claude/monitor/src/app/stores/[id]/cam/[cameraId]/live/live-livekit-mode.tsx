@@ -30,9 +30,9 @@ export default function LiveKitMode({ cameraId, edgeId, onFallback }: {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [status, setStatus] = useState<Status>('connecting')
   const [reloadKey, setReloadKey] = useState(0)
-  // 親のインライン関数でも effect を再実行させない（切断→再接続ループ防止）。
+  // 親のインライン関数でも接続 effect を再実行させない（切断→再接続ループ防止）。
   const onFallbackRef = useRef(onFallback)
-  onFallbackRef.current = onFallback
+  useEffect(() => { onFallbackRef.current = onFallback })
 
   useEffect(() => {
     let room: Room | null = null
@@ -78,8 +78,8 @@ export default function LiveKitMode({ cameraId, edgeId, onFallback }: {
     // （"Immediate exit requested"）。他モードと同じ対処。
     cancelPendingStop(edgeId)
 
-    // オンデマンド配信: 視聴開始でエッジに publish を要求（Ingress発行＋start_sfu）。
-    // 離脱時に stop を要求してエッジを idle へ戻す（egress を止める）。best-effort。
+    // オンデマンド配信: 視聴開始でエッジに publish を要求。配信中なら fast-path
+    // （warm=Ingress発行/dispatchなし・subscribeのみ ≒ 1秒）、未配信ならコールド起動。
     void fetch('/api/livekit/publish', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ cameraId, action: 'start' }),
@@ -124,16 +124,14 @@ export default function LiveKitMode({ cameraId, edgeId, onFallback }: {
       cancelled = true
       if (mediaTimer) clearTimeout(mediaTimer)
       room?.disconnect()
-      void fetch('/api/livekit/publish', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cameraId, action: 'stop' }), keepalive: true,
-      }).catch(() => {})
+      // キープウォーム: 離脱時に即 stop を送らない。数分内の再視聴を fast-path（≒1秒）に
+      // するため配信は残し、視聴者0の刈り取りは sfu-reaper cron（S3.1・≤5分＋猶予）に任せる。
+      // 残存コストはエッジ上り(≒2.5Mbps)と LiveKit 参加者分のみ（購読者0なら egress は出ない）。
     }
   }, [cameraId, edgeId, reloadKey])
 
   return (
     <div className="relative h-full w-full bg-black">
-      {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
       <video ref={videoRef} autoPlay muted playsInline className="h-full w-full bg-black object-contain" />
       {status !== 'playing' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/70 px-6 text-center text-sm text-slate-200">
