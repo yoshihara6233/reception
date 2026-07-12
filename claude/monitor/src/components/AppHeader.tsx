@@ -56,10 +56,11 @@ export function AppHeader({
     return () => { active = false; clearInterval(timer) }
   }, [pathname])
 
-  const TABS = [
+  const TABS: Array<{ href: string; label: string; base?: string }> = [
     { href: '/stores',   label: t.nav.monitor  },
     { href: '/bcp',      label: t.nav.bcp      },
-    { href: '/security', label: t.nav.security },
+    // PATROL の着地は巡回レポート（利用頻度が最も高い）。ハイライトは /security 配下全体。
+    { href: '/security/reports', label: t.nav.security, base: '/security' },
     { href: '/alarms',   label: 'ALARM'         },
     { href: '/infra',    label: t.nav.infra    },
     // F23: /logs タブは削除（マスタ内の監査ログと重複していたため）
@@ -109,7 +110,8 @@ export function AppHeader({
       {/* Center: tab nav — desktop only */}
       <nav className="hidden gap-1 text-xs md:flex">
         {TABS.map((tab) => {
-          const active = pathname === tab.href || pathname.startsWith(tab.href + '/')
+          const base   = tab.base ?? tab.href
+          const active = pathname === base || pathname.startsWith(base + '/')
           // 未完了の発報がある時、ALARM タブは赤字で注意喚起（active/inactive とも赤を優先）。
           const alarmOpen = tab.href === '/alarms' && openAlarms > 0
           const cls = active
