@@ -2,8 +2,10 @@
  * POST /api/livekit/publish — SFU 配信のオンデマンド発停（S1）。
  *
  * Body: { cameraId, action: 'start' | 'stop' }
- *   start: room 向け Ingress(WHIP) を発行し、start_sfu をエッジへ dispatch（go2rtc H.264 を配信）。
+ *   start: 配信中なら fast-path（warm・何もしない）。未配信なら Ingress(WHIP) を確保し
+ *          start_sfu をエッジへ dispatch（go2rtc H.264 を配信）。
  *   stop:  stop_stream を dispatch（エッジを idle に戻す＝配信停止）。
+ *          ※通常の視聴終了では呼ばれない（キープウォーム）。停止は sfu-reaper cron が担う。
  *
  * 認可: LIVEKIT_ENABLED＋ログイン必須。カメラは **RLS 可視性**で検証し、そこから edge_id を解決。
  * pending_command 書込は service client（レース保護 .is('pending_command', null)）。
@@ -11,7 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { livekitEnabled, roomForCamera } from '@/lib/livekit'
-import { createSfuIngress, buildStartSfuCommand, dispatchStartSfu, dispatchStopStream } from '@/lib/livekit-server'
+import { createSfuIngress, buildStartSfuCommand, dispatchStartSfu, dispatchStopStream, isPublishing } from '@/lib/livekit-server'
 
 export async function POST(req: NextRequest) {
   if (!livekitEnabled()) return NextResponse.json({ error: 'livekit_disabled' }, { status: 404 })
@@ -43,8 +45,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
-  // start: Ingress 発行 → start_sfu dispatch。
+  // start fast-path（コールドスタート短縮）: エッジが既にこの room へ配信中なら
+  // Ingress 発行も dispatch も不要 — 視聴者は subscribe するだけ（≒1秒）。
+  // キープウォーム（視聴終了で即 stop せず sfu-reaper に任せる）と対で効く。
   const room = roomForCamera(cameraId)
+  if (await isPublishing(room, edgeId)) {
+    return NextResponse.json({ ok: true, warm: true })
+  }
+
+  // cold: Ingress 確保（同 room は再利用） → start_sfu dispatch。
   let whipUrl: string
   try {
     whipUrl = await createSfuIngress(room, edgeId)
