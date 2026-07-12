@@ -32,6 +32,12 @@ describe('buildSfuFfmpegArgs', () => {
     expect(a).toContain('+genpts+nobuffer')
     expect(a).toContain('-an')
   })
+  it('GOP≒1秒 (-g 10・再視聴の途中参加を速く)', () => {
+    for (const a of [buildSfuFfmpegArgs('rtsp://s', 'http://t'), buildSfuFfmpegArgsVaapi('rtsp://s', 'http://t', '/dev/dri/renderD128')]) {
+      const g = a.indexOf('-g')
+      expect(a[g + 1]).toBe('10')
+    }
+  })
   it('低遅延: 入力バッファ無効 (+nobuffer / low_delay)', () => {
     const a = buildSfuFfmpegArgs('rtsp://src', 'http://t')
     expect(a).toContain('+genpts+nobuffer')

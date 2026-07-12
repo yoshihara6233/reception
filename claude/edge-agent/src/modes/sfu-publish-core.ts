@@ -31,6 +31,11 @@ export function go2rtcRtspUrl(cameraId: string, listen: string): string {
  * 低遅延（実測1〜2秒→サブ秒狙い・2026-07-12）:
  *   - `+nobuffer` / `-flags low_delay`: ffmpeg 既定の入力バッファリング（数百ms〜1秒）を
  *     無効化。ライブ視聴なので入力側で溜める理由がない。
+ * GOP（`-g 10`・ソース10fpsで≒1秒間隔）:
+ *   - WebRTC の途中参加者は次のキーフレームまで映像が出ない（ffmpeg の WHIP muxer は
+ *     PLI/FIR による即時キーフレーム挿入に応じない）。g=30 だと再視聴で最大3秒待ち
+ *     だったため 1秒間隔へ短縮（実測: 再視聴 ~3秒 → ~1秒台狙い。ビットレート効率は
+ *     微減だが maxrate 上限内）。
  * `-fflags +genpts` は go2rtc の非単調DTS対策。音声なし。
  */
 export function buildSfuFfmpegArgs(src: string, whipTarget: string): string[] {
@@ -48,7 +53,7 @@ export function buildSfuFfmpegArgs(src: string, whipTarget: string): string[] {
     '-preset', 'ultrafast',
     '-tune', 'zerolatency',
     '-b:v', '2000k', '-maxrate', '2500k', '-bufsize', '3000k',
-    '-g', '30',
+    '-g', '10',   // キーフレーム≒1秒間隔（10fps・再視聴の途中参加を速く）
     '-ts_buffer_size', '8000000',   // WHIP UDP送信バッファ拡大（muxer 推奨・EAGAIN回避）
     '-f', 'whip', whipTarget,
   ]
@@ -81,7 +86,7 @@ export function buildSfuFfmpegArgsVaapi(src: string, whipTarget: string, device:
     '-profile:v', 'constrained_baseline',
     '-bf', '0',                          // WebRTC は B-frame 不可（h264_vaapi 既定は bf>0）
     '-b:v', '2000k', '-maxrate', '2500k', '-bufsize', '3000k',
-    '-g', '30',
+    '-g', '10',   // キーフレーム≒1秒間隔（10fps・再視聴の途中参加を速く）
     '-ts_buffer_size', '8000000',
     '-f', 'whip', whipTarget,
   ]
