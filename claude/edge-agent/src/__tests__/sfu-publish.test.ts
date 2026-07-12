@@ -29,8 +29,16 @@ describe('buildSfuFfmpegArgs', () => {
   })
   it('非単調DTS対策 +genpts と 音声なし -an を含む', () => {
     const a = buildSfuFfmpegArgs('rtsp://src', 'http://t')
-    expect(a).toContain('+genpts')
+    expect(a).toContain('+genpts+nobuffer')
     expect(a).toContain('-an')
+  })
+  it('低遅延: 入力バッファ無効 (+nobuffer / low_delay)', () => {
+    const a = buildSfuFfmpegArgs('rtsp://src', 'http://t')
+    expect(a).toContain('+genpts+nobuffer')
+    const f = a.indexOf('-flags')
+    expect(a[f + 1]).toBe('low_delay')
+    // 入力オプションなので -i より前
+    expect(f).toBeLessThan(a.indexOf('-i'))
   })
 })
 
@@ -56,5 +64,11 @@ describe('buildSfuFfmpegArgsVaapi', () => {
     expect(a[f + 1]).toBe('whip')
     expect(a).toContain('-ts_buffer_size')
     expect(a).toContain('scale_vaapi=w=1280:h=720')
+  })
+  it('低遅延フラグも libx264 版と同じ', () => {
+    const a = buildSfuFfmpegArgsVaapi('rtsp://src', 'http://t', '/dev/dri/renderD128')
+    expect(a).toContain('+genpts+nobuffer')
+    const f = a.indexOf('-flags')
+    expect(a[f + 1]).toBe('low_delay')
   })
 })
