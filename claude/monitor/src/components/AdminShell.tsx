@@ -51,12 +51,13 @@ export function getBcpNav(t: Msg): NavItem[] {
   ]
 }
 export function getInfraNav(t: Msg): NavItem[] {
-  // メニュー整理（2026-07-12）: インシデントはダッシュボードの未対応一覧と重複、
-  // 中央ノード(F49.G Tier3)は未稼働のためメニューから除外（ページ自体は残置・直URLは有効）。
+  // メニュー整理（2026-07-12）: 機能しているページのみ表示。以下は除外（残置・直URL有効）:
+  //   インシデント …… ダッシュボードの未対応一覧と重複
+  //   中央ノード ……… F49.G Tier3 集約モード未稼働
+  //   チェック設定 …… monitor_checks への書き込み元が未実装（P2 能動チェック）＝常に空
+  //   稼働率レポート … monitor_reports の生成が未実装（P3）＝常に空。実装時に戻す
   return [
     { href: '/infra',           label: t.infraNav.dashboard, icon: '🩺', exact: true },
-    { href: '/infra/checks',    label: t.infraNav.checks,    icon: '⌬' },
-    { href: '/infra/reports',   label: t.infraNav.reports,   icon: '☰' },
     // F50.E: SLO ダッシュボード (Phase 3)
     { href: '/infra/slo',       label: 'SLO',                icon: '📈' },
     { href: '/infra/settings',  label: t.infraNav.settings,  icon: '⚙' },
@@ -106,8 +107,6 @@ export const ALARM_NAV: NavItem[] = [
 // インフラ管理（機器ヘルス監視）— getInfraNav と同期を保つこと
 export const INFRA_NAV: NavItem[] = [
   { href: '/infra',           label: 'ダッシュボード', icon: '🩺', exact: true },
-  { href: '/infra/checks',    label: 'チェック設定',   icon: '⌬' },
-  { href: '/infra/reports',   label: '稼働率レポート', icon: '☰' },
   { href: '/infra/slo',       label: 'SLO',            icon: '📈' },
   { href: '/infra/settings',  label: '監視設定',       icon: '⚙' },
   { href: '/infra/glossary',  label: '用語説明',       icon: '?' },
