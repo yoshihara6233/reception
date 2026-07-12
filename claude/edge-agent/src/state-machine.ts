@@ -73,19 +73,31 @@ export class StateMachine {
     logger.info({ camera_id: p.camera.id }, 'state: live')
   }
 
-  // S1: SFU publish（go2rtc H.264 → WHIP → LiveKit）。live と排他の単一 active。
-  // 状態は 'live' を再利用（SFU も本部から見れば単一カメラのライブ配信）。
-  async toSfu(p: Parameters<typeof startSfuPublish>[0]): Promise<void> {
-    const gen = ++this.generation
-    await this.stopActive()
-    if (gen !== this.generation) return
+  // ── SFU publish は単一 active モードの**外**で並行実行する（BCPワーカーと同じ考え方）──
+  // 旧実装（state='live' の単一 active）は、グリッド/軽量ライブ等の start_* が
+  // キープウォーム中の SFU 配信を毎回置き換えて殺していた（2026-07-12 実機:
+  // store画面へ戻る→start_live→SFU死亡→再視聴が常にコールド）。
+  // grid/live/vod と SFU（上り ~2.5Mbps）は帯域的に共存可能。停止は stop_sfu コマンド
+  // （reaper / publish stop）のみ。stop_stream は active モード専用で SFU に触れない
+  // ＝F75 の「予約 stop_stream が SFU を殺す」ハザードも構造的に消える。
+  private sfu: { cameraId: string; handle: ActiveMode } | null = null
+
+  async startSfu(p: Parameters<typeof startSfuPublish>[0]): Promise<void> {
+    await this.stopSfu()   // 同時に持てる publish は1本（カメラ切替は貼り替え）
     const handle = await startSfuPublish(p)
-    if (gen !== this.generation) { await handle.stop().catch(() => {}); return }
-    this.active = handle
-    this.state  = 'live'
-    await heartbeat('live')
-    logger.info({ camera_id: p.camera.id, room: p.room }, 'state: sfu-publish')
+    this.sfu = { cameraId: p.camera.id, handle }
+    logger.info({ camera_id: p.camera.id, room: p.room }, 'sfu: publishing (parallel worker)')
   }
+
+  async stopSfu(): Promise<void> {
+    if (!this.sfu) return
+    const s = this.sfu
+    this.sfu = null
+    await s.handle.stop().catch((e) => logger.error({ err: e }, 'sfu stop failed'))
+  }
+
+  /** SFU 配信中か（テスト・診断用）。 */
+  sfuActive(): boolean { return this.sfu !== null }
 
   async toVod(p: Parameters<typeof startVod>[0]): Promise<void> {
     const gen = ++this.generation

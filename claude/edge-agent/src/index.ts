@@ -45,9 +45,10 @@ async function main() {
   void verifyOnBoot(otaDeps, async () => healthProbe(config.OTA_MIN_STABLE_MS))
     .catch((e) => logger.warn({ err: String(e) }, 'ota: verifyOnBoot failed'))
 
-  // OTA 自己再起動の exit 前にアクティブモードを停止（ffmpeg 子プロセスを道連れにしない）。
-  // 取り残すと systemd stop-sigterm タイムアウト → OnFailure ロールバック誤発火（2026-07-12）。
-  onPreRestart(async () => { await fsm.toIdle() })
+  // OTA 自己再起動の exit 前にアクティブモード＋SFUワーカーを停止（ffmpeg 子プロセスを
+  // 道連れにしない）。取り残すと systemd stop-sigterm タイムアウト → OnFailure ロールバック
+  // 誤発火（2026-07-12）。
+  onPreRestart(async () => { await Promise.all([fsm.toIdle(), fsm.stopSfu()]) })
 
   // F3+: localhost WHIP proxy. Strips TCP ICE candidates from LiveKit Cloud's
   // SDP answer so ffmpeg 8.1's WHIP muxer (which errors on the first TCP
@@ -89,10 +90,16 @@ async function main() {
         }
         case 'start_sfu': {
           // S1: go2rtc の H.264 を LiveKit へ WHIP 配信。cloud が room/whip_url を発行。
+          // 並行ワーカーとして起動（grid/live/vod と共存・active モードを止めない）。
           const cams = await loadCameras()
           const cam = cams.find((c) => c.id === cmd.camera_id)
           if (!cam) return logger.warn({ camera_id: cmd.camera_id }, 'unknown camera')
-          await fsm.toSfu({ camera: cam, room: cmd.room, whipUrl: cmd.whip_url, whipProxyBase: whipProxy.baseUrl })
+          await fsm.startSfu({ camera: cam, room: cmd.room, whipUrl: cmd.whip_url, whipProxyBase: whipProxy.baseUrl })
+          break
+        }
+        case 'stop_sfu': {
+          // SFU 並行ワーカーの停止（sfu-reaper / publish stop）。active モードは無関係。
+          await fsm.stopSfu()
           break
         }
         case 'start_vod': {
@@ -234,6 +241,7 @@ async function main() {
     jobs.close()
     alarmListener.close()
     await fsm.toIdle()
+    await fsm.stopSfu()
     await whipProxy.stop().catch(() => {})
     await heartbeat('offline')
     process.exit(0)

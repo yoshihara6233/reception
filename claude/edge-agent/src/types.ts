@@ -17,6 +17,8 @@ export type EdgeCommand =
   // are NOT used by the new vod.ts. Remove after the central is on F77.
   | { action: 'start_vod';   request_id: string; camera_id: string; clip_id: string; from_iso: string; to_iso: string; livekit_room?: string; livekit_whip_url?: string }
   | { action: 'stop_stream'; request_id: string }
+  // SFU 並行ワーカー専用の停止（stop_stream は active モード専用で SFU に触れない）
+  | { action: 'stop_sfu';    request_id: string }
   | { action: 'reboot';      request_id: string }
   | { action: 'start_bcp_capture'; request_id: string; eventId: string; clips: Array<{ clipId: string; cameraId: string }>; clipFrom: string; clipTo: string; offsets?: number[] }
   // 警備: 巡回スナップショット。型契約はクラウドと一致させるが、本Phaseではエッジ側ハンドラ未実装

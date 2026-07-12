@@ -13,7 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { livekitEnabled, roomForCamera } from '@/lib/livekit'
-import { createSfuIngress, buildStartSfuCommand, dispatchStartSfu, dispatchStopStream, isPublishing } from '@/lib/livekit-server'
+import { createSfuIngress, buildStartSfuCommand, dispatchStartSfu, dispatchStopSfu, isPublishing } from '@/lib/livekit-server'
 
 export async function POST(req: NextRequest) {
   if (!livekitEnabled()) return NextResponse.json({ error: 'livekit_disabled' }, { status: 404 })
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
   const svc = createSupabaseService()
 
   if (action === 'stop') {
-    await dispatchStopStream(svc, edgeId)
+    await dispatchStopSfu(svc, edgeId)
     return NextResponse.json({ ok: true })
   }
 
