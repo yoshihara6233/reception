@@ -50,7 +50,9 @@ export async function POST(
     return NextResponse.json({ error: 'already_retrieving', message: '録画を取得中です。完了までお待ちください。' }, { status: 409 })
   }
 
-  // 2. 録画ウィンドウ（発令時刻 ± pre/post 分）。設定が無ければ既定 3/5 分。
+  // 2. スナップ地点（/admin/bcp の店舗設定）。無ければ既定の {-5,+5} の2点。
+  //    pre/post はプレースホルダ行の表示用ウィンドウにのみ使う（スナップ方式では
+  //    取得時刻は offsets が決める）。
   const { data: settings } = await svc
     .from('bcp_settings')
     .select('pre_minutes, post_minutes, snapshot_offsets')
@@ -59,7 +61,8 @@ export async function POST(
   const preMin  = settings?.pre_minutes  ?? 3
   const postMin = settings?.post_minutes ?? 5
   const offsets = (settings?.snapshot_offsets as number[] | null) ?? [-5, 5]
-  const alertTs  = new Date(event.alert_issued_at)
+  const alertTs       = new Date(event.alert_issued_at)
+  const alertIssuedAt = alertTs.toISOString()
   const clipFrom = new Date(alertTs.getTime() - preMin  * 60_000).toISOString()
   const clipTo   = new Date(alertTs.getTime() + postMin * 60_000).toISOString()
 
@@ -115,7 +118,10 @@ export async function POST(
       request_id: crypto.randomUUID(),
       eventId,
       clips,
-      clipFrom,
+      // エッジは clipFrom を T+0（発令時刻）として各オフセットの取得時刻を計算する。
+      // 旧VOD方式の「発令 − pre分」を渡すと全コマが pre 分だけ過去にずれ、タイルの
+      // ラベル時刻と実画像が一致しなくなる（2026-07-13 是正）。
+      clipFrom: alertIssuedAt,
       clipTo,
       offsets,
     }
