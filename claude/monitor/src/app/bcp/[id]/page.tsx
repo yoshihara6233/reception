@@ -158,14 +158,30 @@ export default async function BcpEventDetailPage({
   // F40: group snapshots by camera; one card per camera with 8-thumbnail timeline.
   // Legacy video clips (offset_min IS NULL) are grouped under a "legacy" bucket
   // and rendered at the bottom with a smaller card.
+  //
+  // bcp_clips には (event, camera, offset) のユニーク制約が無く、「再取得」の
+  // たびに同一オフセットの行が増える。同一スロットに複数行ある場合は
+  // 「completed を優先し、同格なら created_at が新しい方」を表示する
+  // （再取得で古いコマが勝ち続けるのを防ぐ）。
+  function betterClip(a: BcpClip, b: BcpClip): BcpClip {
+    const aDone = a.upload_status === 'completed'
+    const bDone = b.upload_status === 'completed'
+    if (aDone !== bDone) return aDone ? a : b
+    return new Date(a.created_at) >= new Date(b.created_at) ? a : b
+  }
   const byCamera = new Map<string, { name: string; snapshots: BcpClip[]; legacy: BcpClip[] }>()
   for (const c of clips) {
     const camId   = c.camera_id
     const camName = c.recorder_cameras?.name ?? '(unknown camera)'
     let g = byCamera.get(camId)
     if (!g) { g = { name: camName, snapshots: [], legacy: [] }; byCamera.set(camId, g) }
-    if (c.offset_min == null) g.legacy.push(c)
-    else                       g.snapshots.push(c)
+    if (c.offset_min == null) {
+      g.legacy.push(c)
+    } else {
+      const i = g.snapshots.findIndex((s) => s.offset_min === c.offset_min)
+      if (i === -1) g.snapshots.push(c)
+      else          g.snapshots[i] = betterClip(g.snapshots[i], c)
+    }
   }
   const cameraGroups = [...byCamera.entries()].map(([camId, g]) => ({ camId, ...g }))
 
