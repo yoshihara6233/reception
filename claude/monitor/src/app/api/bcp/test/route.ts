@@ -52,6 +52,7 @@ async function activateStore(
   alertIssuedAt: string,
   clipFrom: string,
   clipTo: string,
+  offsets: number[],
 ): Promise<{ storeId: string; storeName: string; eventId: string }> {
 
   // 1. Insert bcp_events
@@ -123,8 +124,11 @@ async function activateStore(
         request_id: crypto.randomUUID(),
         eventId,
         clips:      edgeClips.map((c) => ({ clipId: c.clipId, cameraId: c.cameraId })),
-        clipFrom,
+        // エッジは clipFrom を T+0（発令時刻）として扱う。旧VOD方式の
+        // 「発令 − pre分」を渡すと全コマが pre 分過去にずれる（2026-07-13 是正）。
+        clipFrom:   alertIssuedAt,
         clipTo,
+        offsets,
       },
       pending_command_at: new Date().toISOString(),
     }).eq('id', edge.id)
@@ -183,22 +187,22 @@ export async function POST(req: NextRequest) {
   // Resolve clip window per store (use its own bcp_settings or defaults)
   const { data: allSettings } = await supa
     .from('bcp_settings')
-    .select('store_id, pre_minutes, post_minutes')
+    .select('store_id, pre_minutes, post_minutes, snapshot_offsets')
     .in('store_id', targetStores.map((s) => s.id))
 
-  const settingsMap = new Map<string, { pre: number; post: number }>(
-    ((allSettings ?? []) as { store_id: string; pre_minutes: number; post_minutes: number }[])
-      .map((s) => [s.store_id, { pre: s.pre_minutes, post: s.post_minutes }])
+  const settingsMap = new Map<string, { pre: number; post: number; offsets: number[] }>(
+    ((allSettings ?? []) as { store_id: string; pre_minutes: number; post_minutes: number; snapshot_offsets: number[] | null }[])
+      .map((s) => [s.store_id, { pre: s.pre_minutes, post: s.post_minutes, offsets: s.snapshot_offsets ?? [-5, 5] }])
   )
 
   const alertTs = new Date(alertIssuedAt)
 
   const results = await Promise.allSettled(
     targetStores.map((store) => {
-      const cfg = settingsMap.get(store.id) ?? { pre: 3, post: 5 }
+      const cfg = settingsMap.get(store.id) ?? { pre: 3, post: 5, offsets: [-5, 5] }
       const clipFrom = new Date(alertTs.getTime() - cfg.pre  * 60_000).toISOString()
       const clipTo   = new Date(alertTs.getTime() + cfg.post * 60_000).toISOString()
-      return activateStore(supa, store, alertType, alertIssuedAt, clipFrom, clipTo)
+      return activateStore(supa, store, alertType, alertIssuedAt, clipFrom, clipTo, cfg.offsets)
     })
   )
 

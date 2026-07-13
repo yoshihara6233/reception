@@ -183,6 +183,18 @@ export default async function BcpEventDetailPage({
 
   const report = reportData as BcpReport | null
 
+  // 店舗のスナップ地点設定（/admin/bcp）。無ければ既定の {-5,+5} の2点。
+  // 再取得ボタンの説明とタイムライン見出しに「実際に取得される点数」を出すために読む。
+  let snapshotOffsets: number[] = [-5, 5]
+  if (event.stores?.id) {
+    const { data: bcpSettings } = await supa
+      .from('bcp_settings')
+      .select('snapshot_offsets')
+      .eq('store_id', event.stores.id)
+      .maybeSingle()
+    snapshotOffsets = (bcpSettings?.snapshot_offsets as number[] | null) ?? [-5, 5]
+  }
+
   const alertTypeLabel = ALERT_TYPE_LABEL[event.alert_type] ?? event.alert_type
 
   return (
@@ -253,7 +265,7 @@ export default async function BcpEventDetailPage({
             <h2 className="text-sm font-bold text-slate-900">現地レコーダ 録画取得（手動・再取得用）</h2>
           </div>
           <div className="px-4 py-4">
-            <RetrieveRecordingButton eventId={event.id} alreadyHasClips={clips.length > 0} />
+            <RetrieveRecordingButton eventId={event.id} alreadyHasClips={clips.length > 0} offsets={snapshotOffsets} />
           </div>
         </div>
 
@@ -263,7 +275,7 @@ export default async function BcpEventDetailPage({
             <h2 className="text-sm font-bold text-slate-900">
               スナップショット タイムライン
               <span className="ml-2 text-xs font-normal text-slate-500">
-                ({cameraGroups.length} カメラ × 8 枚)
+                ({cameraGroups.length} カメラ × 8 地点・取得対象は設定の {snapshotOffsets.length} 点)
               </span>
             </h2>
             {/* Bulk download — opens each public URL in a new tab. The user can
