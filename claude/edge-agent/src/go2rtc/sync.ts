@@ -28,6 +28,7 @@ import { config } from '../config.js'
 import { logger } from '../logger.js'
 import { injectRtspCreds } from '../rtsp/keyframe.js'
 import { OnvifSoapClient } from '../adapters/onvif/onvif-soap-client.js'
+import { buildSource } from './source.js'
 import type { CameraDescriptor } from '../types.js'
 
 /** go2rtc ストリーム名（monitor 側 `src=cam_<id>` と一致させる）。 */
@@ -107,19 +108,9 @@ async function resolveCameraSource(cam: CameraDescriptor): Promise<{ rtsp: strin
   }
 }
 
-/** go2rtc の source 文字列を決める（H.265→H.264変換 or 素通し）。 */
-function buildSource(rtsp: string, codec: string | null): string {
-  const isHevc = codec === 'hevc' || codec === 'h265'
-  if (!isHevc) return rtsp   // H.264 等は素通し（変換不要）
-  const dev = config.GO2RTC_VAAPI_DEVICE.trim()
-  if (dev) {
-    return `exec:${config.FFMPEG_BIN} -hide_banner -loglevel error`
-      + ` -init_hw_device vaapi=va:${dev} -hwaccel vaapi -hwaccel_device va -hwaccel_output_format vaapi`
-      + ` -rtsp_transport tcp -i ${rtsp} -an -c:v h264_vaapi -g 30 -bf 0`
-      + ` -f rtsp -rtsp_transport tcp {output}`
-  }
-  return `ffmpeg:${rtsp}#video=h264`   // ソフト変換フォールバック
-}
+// source 文字列の決定は純ロジック側（./source.ts）に集約。
+// h264 確定のみ素通し（音声は #media=video で除去）、hevc/判定不能は VAAPI 変換。
+// 経緯は source.ts 冒頭コメント（2026-07-17 実障害）を参照。
 
 /** YAML 値として安全に二重引用符でくくる。 */
 function yamlQuote(s: string): string {
@@ -145,7 +136,9 @@ async function buildYaml(cameras: CameraDescriptor[]): Promise<{ yaml: string; c
   for (const cam of cameras) {
     const resolved = await resolveCameraSource(cam)
     if (!resolved) continue   // 解決できないカメラは設定に含めない
-    const src = buildSource(resolved.rtsp, resolved.codec)
+    const src = buildSource(resolved.rtsp, resolved.codec, {
+      ffmpegBin: config.FFMPEG_BIN, vaapiDevice: config.GO2RTC_VAAPI_DEVICE,
+    })
     lines.push(`  ${go2rtcStreamName(cam.id)}: ${yamlQuote(src)}`)
     count++
     logger.info({ name: go2rtcStreamName(cam.id), codec: resolved.codec, hw: src.startsWith('exec:') }, 'go2rtc: stream planned')
