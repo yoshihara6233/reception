@@ -112,6 +112,27 @@ description: >-
   「ローカル直叩き→Vercelログのパス別ステータス→リクエスト間隔」の順が最短。
   `vercel logs <url> --json` はローカルCLIで本番ランタイムログを流し見できる。
 
+### 4.6.1 高画質(HLS)不達の症状別切り分け（2026-07-17 追補）
+
+「高画質が映らない」は Vercel ログのパターンで3系統に分かれる。上の segment 404 とは別に:
+
+- **live-proxy へのリクエストが1件も無い** → クラウド/エッジ障害ではなく **hqUrl が null**。
+  高画質(HLS)ボタンは `edge_devices.go2rtc_host` か `recorder_cameras.hls_url` が
+  ある時だけ描画される（`live/page.tsx` の `hasGo2rtc`）。ボタン自体が消えて既定JPEGに
+  落ちるので、利用者は「映らない」と表現する。→ /admin/edges で go2rtc_host を確認。
+- **playlist も segment も全部 200 なのに真っ黒** → **go2rtc ストリーム定義が H.265 素通し**。
+  go2rtc は素通し定義だと H.265 を fMP4 に平気で詰めて返し（HTTPは全部成功）、ブラウザが
+  復号できず無音で真っ黒になる。確認: エッジで `curl -s localhost:1984/api/streams` →
+  該当 `cam_<id>` の producer が `exec:...h264_vaapi...{output}` か素の `rtsp://` か。
+  素通しなら `~/go2rtc.yaml` の該当行を VAAPI 変換 exec 定義（他カメラの行が雛形）に
+  置換して `systemctl restart intereco-go2rtc`（2026-07-17 実障害: WV-SW158 だけ素通しで
+  真っ黒、変換定義追加で復旧）。
+- **stream.m3u8 が 404/502** → go2rtc に `cam_<カメラID>` の登録が無い（新カメラ追加時の
+  登録漏れ）か go2rtc/トンネル停止。streams 一覧に無ければ go2rtc.yaml に1行追加。
+
+モニタが要求するストリーム名は常に `cam_<recorder_cameras.id>`。go2rtc 側を cam101 等の
+手動命名にすると UI から永遠に 404 になる点にも注意。
+
 ## 5. Vercel monorepo（bun workspace）デプロイ
 
 - リポジトリは home配下(`/Users/junji.y`)、remote `yoshihara6233/reception`。monitorは `claude/monitor`。
