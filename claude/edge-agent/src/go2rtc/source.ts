@@ -32,3 +32,33 @@ export function buildSource(rtsp: string, codec: string | null, opts: SourceOpti
   }
   return `ffmpeg:${rtsp}#video=h264`   // ソフト変換フォールバック
 }
+
+/**
+ * 既存 go2rtc.yaml から「自分の担当外」のストリーム行を抽出する。
+ *
+ * 1台の箱で複数エッジエージェントが同居する構成（PoC: intereco-edge と
+ * intereco-edge-demo）や手動登録があると、「自分の担当カメラだけでフル再生成」は
+ * 他者の定義を消してしまう（2026-07-17 実障害: 手動登録した cam_ が5分毎の同期で
+ * 消えた）。担当外の `cam_*` 行は原文のまま保持してマージする。
+ *
+ * トレードオフ: 担当外の行は誰も掃除しない（DBから消えたカメラの定義が残る）。
+ * 気づいたら手動で行を削除する運用（消してもエージェントは再生成しない）。
+ */
+export function extractForeignStreamLines(currentYaml: string, ownNames: ReadonlySet<string>): string[] {
+  const out: string[] = []
+  for (const line of currentYaml.split('\n')) {
+    const m = /^ {2}(cam_[A-Za-z0-9-]+):\s/.exec(line)
+    if (m && !ownNames.has(m[1])) out.push(line)
+  }
+  return out
+}
+
+/**
+ * ストリーム行（自分の生成分＋保持する担当外分）を決定的な順序に並べる。
+ * 複数エージェントが同じファイルを書く場合、順序が定まらないと互いに
+ * 「差分あり」と判定して書き込み→go2rtc再起動の往復（ピンポン）が起きる。
+ * 行文字列は `  cam_<id>: ...` で始まるため、単純な文字列ソートで名前順になる。
+ */
+export function sortStreamLines(lines: string[]): string[] {
+  return [...lines].sort()
+}
