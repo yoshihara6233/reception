@@ -133,6 +133,23 @@ description: >-
 モニタが要求するストリーム名は常に `cam_<recorder_cameras.id>`。go2rtc 側を cam101 等の
 手動命名にすると UI から永遠に 404 になる点にも注意。
 
+2026-07-17 の追加知見（同日の実障害の続き）:
+
+- **go2rtc.yaml はエージェントが自動生成**（`edge-agent/src/go2rtc/sync.ts`・5分毎）。
+  手動編集はかつて全消しされたが、70a1e612e 以降は**担当外の `cam_*` 行を保持して
+  マージ生成**（PR#169）— 手動登録・複数エージェント同居OK。担当外行の掃除は手動。
+- **MINI-S には2エージェントが同居**: `intereco-edge`（17f0cd0b・OTA対応・WV 2カメラ・
+  店舗「PoC Beelink Store」）と `intereco-edge-demo`（28fee1ec・OTA非対応・Hview・
+  店舗「デモ店(Frigate/Hview)」）。**OTAパネルで「現行 agent が −」の行は版を報告しない
+  エッジ＝目標を入れても適用されない**（設定先を間違えた実例あり）。
+- **Frigate 内蔵 go2rtc の RTSP(8554) はコンテナ内ポート**。ホストの go2rtc から
+  `rtsp://127.0.0.1:8554/...` は Connection refused になる。frigate-demo は 8554 未公開
+  のため**コンテナIP直（`rtsp://172.17.0.2:8554/hview_main`）**で接続。コンテナ再作成で
+  IP が変わり得るので、恒久化は compose に `ports: "127.0.0.1:8556:8554"` を足す。
+- トンネル ingress は `~/.cloudflared/config.yml`（`poc-beelink`→localhost:5000=Frigate UI／
+  `go2rtc-poc`→localhost:1984=go2rtc）。**go2rtc_host に poc-beelink を入れると Frigate UI に
+  プロキシされて高画質は不成立**（Hview がこの状態だった→ go2rtc-poc へ UPDATE で解消）。
+
 ## 5. Vercel monorepo（bun workspace）デプロイ
 
 - リポジトリは home配下(`/Users/junji.y`)、remote `yoshihara6233/reception`。monitorは `claude/monitor`。
