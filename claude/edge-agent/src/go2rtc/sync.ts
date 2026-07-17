@@ -28,7 +28,7 @@ import { config } from '../config.js'
 import { logger } from '../logger.js'
 import { injectRtspCreds } from '../rtsp/keyframe.js'
 import { OnvifSoapClient } from '../adapters/onvif/onvif-soap-client.js'
-import { buildSource } from './source.js'
+import { buildSource, extractForeignStreamLines, sortStreamLines } from './source.js'
 import type { CameraDescriptor } from '../types.js'
 
 /** go2rtc ストリーム名（monitor 側 `src=cam_<id>` と一致させる）。 */
@@ -118,12 +118,17 @@ function yamlQuote(s: string): string {
 }
 
 /**
- * 担当カメラから go2rtc.yaml の内容を生成する。毎回フル生成するため、DB から
- * 消えた/解決できないカメラは自動的に設定から落ちる（= stale stream 掃除）。
- * 返り値 count は実際に書けたストリーム数（0 なら呼び出し側で書き込みを抑止）。
+ * 担当カメラ＋既存設定から go2rtc.yaml の内容を生成する。
+ *
+ * 自分の担当カメラは毎回再生成（DBから消えた/解決不能な担当カメラは落ちる）。
+ * **担当外の `cam_*` 行は原文のまま保持**する — 1箱に複数エージェントが同居する
+ * PoC 構成（intereco-edge / intereco-edge-demo）や手動登録を消さないため
+ * （2026-07-17 実障害）。全ストリーム行は名前順ソートで決定的にし、複数書き手の
+ * 書き込みピンポン（互いに差分ありと判定→restartの往復）を防ぐ。
+ * 返り値 count は自分の担当分の数（0 なら呼び出し側で書き込みを抑止）。
  */
-async function buildYaml(cameras: CameraDescriptor[]): Promise<{ yaml: string; count: number }> {
-  const lines = [
+async function buildYaml(cameras: CameraDescriptor[], currentYaml: string): Promise<{ yaml: string; count: number }> {
+  const header = [
     'log:',
     '  level: info',
     'rtsp:',
@@ -132,6 +137,8 @@ async function buildYaml(cameras: CameraDescriptor[]): Promise<{ yaml: string; c
     `  bin: ${config.FFMPEG_BIN}`,
     'streams:',
   ]
+  const ownNames = new Set<string>()
+  const streamLines: string[] = []
   let count = 0
   for (const cam of cameras) {
     const resolved = await resolveCameraSource(cam)
@@ -139,10 +146,17 @@ async function buildYaml(cameras: CameraDescriptor[]): Promise<{ yaml: string; c
     const src = buildSource(resolved.rtsp, resolved.codec, {
       ffmpegBin: config.FFMPEG_BIN, vaapiDevice: config.GO2RTC_VAAPI_DEVICE,
     })
-    lines.push(`  ${go2rtcStreamName(cam.id)}: ${yamlQuote(src)}`)
+    const name = go2rtcStreamName(cam.id)
+    ownNames.add(name)
+    streamLines.push(`  ${name}: ${yamlQuote(src)}`)
     count++
-    logger.info({ name: go2rtcStreamName(cam.id), codec: resolved.codec, hw: src.startsWith('exec:') }, 'go2rtc: stream planned')
+    logger.info({ name, codec: resolved.codec, hw: src.startsWith('exec:') }, 'go2rtc: stream planned')
   }
+  const foreign = extractForeignStreamLines(currentYaml, ownNames)
+  if (foreign.length > 0) {
+    logger.info({ preserved: foreign.length }, 'go2rtc: preserving streams not owned by this agent')
+  }
+  const lines = [...header, ...sortStreamLines([...streamLines, ...foreign])]
   return { yaml: lines.join('\n') + '\n', count }
 }
 
@@ -169,9 +183,9 @@ async function restartGo2rtc(): Promise<void> {
 export async function syncGo2rtcStreams(cameras: CameraDescriptor[]): Promise<void> {
   const targets = cameras.filter((c) => c.recorder.vendor === 'onvif-generic' || !!c.live_rtsp)
   if (targets.length === 0) return
-  const { yaml, count } = await buildYaml(targets)
-  if (count === 0) { logger.warn('go2rtc: no streamable cameras resolved; keeping current config'); return }
   const current = await readFile(config.GO2RTC_CONFIG, 'utf8').catch(() => '')
+  const { yaml, count } = await buildYaml(targets, current)
+  if (count === 0) { logger.warn('go2rtc: no streamable cameras resolved; keeping current config'); return }
   if (yaml === current) { logger.info({ streams: count }, 'go2rtc: config unchanged'); return }
   await writeFile(config.GO2RTC_CONFIG, yaml, 'utf8')
   logger.info({ streams: count, path: config.GO2RTC_CONFIG }, 'go2rtc: config written')

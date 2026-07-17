@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { buildSource } from './source.js'
+import { buildSource, extractForeignStreamLines, sortStreamLines } from './source.js'
 
 const OPTS = { ffmpegBin: '/usr/bin/ffmpeg', vaapiDevice: '/dev/dri/renderD128' }
 const RTSP = 'rtsp://user:pw@192.168.0.102/ONVIF/MediaInput?profile=2_def_profile6'
@@ -29,5 +29,45 @@ describe('buildSource', () => {
   test('VAAPI デバイス未設定はソフト変換フォールバック', () => {
     expect(buildSource(RTSP, 'hevc', { ffmpegBin: '/usr/bin/ffmpeg', vaapiDevice: '' }))
       .toBe(`ffmpeg:${RTSP}#video=h264`)
+  })
+})
+
+const CURRENT_YAML = [
+  'log:',
+  '  level: info',
+  'streams:',
+  '  cam_aaaa1111-0000-0000-0000-000000000001: "rtsp://a/1"',
+  '  cam_bbbb2222-0000-0000-0000-000000000002: "exec:/usr/bin/ffmpeg -i rtsp://b/2 {output}"',
+  '',
+].join('\n')
+
+describe('extractForeignStreamLines', () => {
+  test('自分の担当外の cam_ 行だけを原文のまま保持する', () => {
+    const own = new Set(['cam_aaaa1111-0000-0000-0000-000000000001'])
+    expect(extractForeignStreamLines(CURRENT_YAML, own)).toEqual([
+      '  cam_bbbb2222-0000-0000-0000-000000000002: "exec:/usr/bin/ffmpeg -i rtsp://b/2 {output}"',
+    ])
+  })
+
+  test('全部担当なら何も保持しない / 空ファイルは空', () => {
+    const own = new Set([
+      'cam_aaaa1111-0000-0000-0000-000000000001',
+      'cam_bbbb2222-0000-0000-0000-000000000002',
+    ])
+    expect(extractForeignStreamLines(CURRENT_YAML, own)).toEqual([])
+    expect(extractForeignStreamLines('', new Set())).toEqual([])
+  })
+
+  test('streams 以外の行（log/rtsp等）は拾わない', () => {
+    expect(extractForeignStreamLines(CURRENT_YAML, new Set())).toHaveLength(2)
+  })
+})
+
+describe('sortStreamLines', () => {
+  test('名前順で決定的（複数エージェントの書き込みピンポン防止）', () => {
+    const a = '  cam_aaaa: "rtsp://a"'
+    const b = '  cam_bbbb: "rtsp://b"'
+    expect(sortStreamLines([b, a])).toEqual([a, b])
+    expect(sortStreamLines([a, b])).toEqual([a, b])
   })
 })
