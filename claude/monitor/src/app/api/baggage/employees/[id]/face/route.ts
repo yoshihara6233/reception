@@ -16,7 +16,12 @@ import {
   deleteFaceInCollection, employeeCollectionId, indexFaceInCollection,
 } from '@/lib/aws/rekognition'
 
-const Body = z.object({ image: z.string().min(32).max(15_000_000) })   // JPEG/PNG/WebP dataURL（~10MB画像まで）
+const Body = z.object({
+  image: z.string().min(32).max(15_000_000),   // JPEG/PNG/WebP dataURL（~10MB画像まで）
+  // キオスクのセルフ登録用: 既に顔が登録済みなら 409（共有端末での上書きなりすまし防止）。
+  // 管理画面からの差し替えは false/未指定のまま。
+  onlyIfUnregistered: z.boolean().optional(),
+})
 
 function dataUrlToBuffer(dataUrl: string): { buf: Buffer; mime: string; ext: string } | null {
   const m = /^data:image\/(jpeg|png|webp);base64,(.+)$/.exec(dataUrl)
@@ -46,6 +51,9 @@ export async function POST(
     .maybeSingle()
   if (!emp) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   if (emp.status !== 'active') return NextResponse.json({ error: 'employee_inactive' }, { status: 409 })
+  if (parsed.data.onlyIfUnregistered && emp.rekognition_face_id) {
+    return NextResponse.json({ error: 'already_registered' }, { status: 409 })
+  }
 
   const guard = await requireBaggageAccess(emp.store_id)
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status })
