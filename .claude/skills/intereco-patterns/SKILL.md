@@ -15,7 +15,7 @@ description: >-
 
 ## 1. Supabase 新APIキー形式（最重要の落とし穴）
 
-本番プロジェクト `jmlviywilxzavjbmlpnf` は **レガシーJWTキー(anon/service_role)を無効化**済み。新形式
+本番プロジェクト `vywvpcjbicrtcyvzmrwh`（**2026-07-19 に Mumbai→Tokyo 移行**。旧 `jmlviywilxzavjbmlpnf` は廃止・使用禁止）。キーは新形式のみ運用（旧プロジェクトではレガシーJWT無効化済みだった。新プロジェクトのレガシーJWT無効化は未実施→設定推奨）。新形式
 `sb_publishable_…`（=anon相当）/ `sb_secret_…`（=service_role相当）を使う。
 
 - **raw `fetch()` で Storage を叩く時は `apikey` ヘッダが必須**。`Authorization: Bearer <key>` だけだと
@@ -30,8 +30,11 @@ description: >-
 
 ## 2. service_role 鍵ローテはエッジ.envも同期（でないと全停止）
 
-鍵をローテ（旧失効）したら **エッジの `.env`（`/home/intereco/intereco/claude/edge-agent/.env` の
-`SUPABASE_SERVICE_ROLE_KEY`）も新キーに更新 → `sudo systemctl restart intereco-edge`**。
+鍵をローテ（旧失効）したら **エッジの env も新キーに更新 → restart**。env の正しい場所（2026-07-19確定）:
+- `intereco-edge`（OTA稼働）: **`/home/intereco/edge/shared/agent.env`**（systemd EnvironmentFile）
+- `intereco-edge-demo`: `/home/intereco/intereco/claude/edge-agent/.env.demo`
+- ⚠ 旧パス `/home/intereco/intereco/claude/edge-agent/.env` の編集は**無効**（OTA化で移動済み。Tokyo移行時もこれで長時間ハマった）
+更新後 `sudo systemctl restart intereco-edge`（demo は intereco-edge-demo）。
 旧キーのままだとエッジが `Unregistered API key` でheartbeat/grid/snapshotが全停止する。
 将来は「初回ブート登録(pull型)」で鍵配布を一元化する設計（docs参照）。
 
