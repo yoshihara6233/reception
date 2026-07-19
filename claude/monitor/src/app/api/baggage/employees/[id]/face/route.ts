@@ -16,6 +16,59 @@ import {
   deleteFaceInCollection, employeeCollectionId, indexFaceInCollection,
 } from '@/lib/aws/rekognition'
 
+/**
+ * DELETE /api/baggage/employees/[id]/face — 顔データのみ削除（再登録用）
+ *
+ * 登録抹消（従業員ごと inactive）とは別に、顔だけ消して active のまま残す。
+ * 消すとキオスクのセルフ顔登録の選択肢に再表示され、本人が撮り直せる。
+ * Rekognition 削除失敗時は DB をクリアしない（孤児Face防止・再試行可能に保つ）。
+ */
+export async function DELETE(
+  _req: NextRequest,
+  ctx: { params: Promise<{ id: string }> },
+) {
+  const { id } = await ctx.params
+  const auth = await requireAdmin()
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
+
+  const svc0 = createSupabaseService()
+  const { data: emp } = await svc0
+    .from('employees')
+    .select('id, store_id, rekognition_face_id, face_photo_path')
+    .eq('id', id)
+    .maybeSingle()
+  if (!emp) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+
+  const guard = await requireBaggageAccess(emp.store_id)
+  if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status })
+  const { svc, store } = guard
+
+  if (emp.rekognition_face_id) {
+    try {
+      await deleteFaceInCollection(employeeCollectionId(store.id), emp.rekognition_face_id)
+    } catch (e) {
+      return NextResponse.json(
+        { error: 'rekognition_delete_failed', detail: (e as Error).message },
+        { status: 502 },
+      )
+    }
+  }
+  if (emp.face_photo_path) {
+    await svc.storage.from('baggage-photos').remove([emp.face_photo_path])
+  }
+  const { error } = await svc
+    .from('employees')
+    .update({ face_photo_path: null, rekognition_face_id: null })
+    .eq('id', id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  await recordAudit(guard.supa, {
+    actorUserId: guard.user.id, action: 'baggage.employee.face_delete', targetType: 'employee',
+    targetId: id, storeId: store.id,
+  })
+  return NextResponse.json({ ok: true })
+}
+
 const Body = z.object({
   image: z.string().min(32).max(15_000_000),   // JPEG/PNG/WebP dataURL（~10MB画像まで）
   // キオスクのセルフ登録用: 既に顔が登録済みなら 409（共有端末での上書きなりすまし防止）。
