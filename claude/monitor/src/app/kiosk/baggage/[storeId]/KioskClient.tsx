@@ -401,8 +401,9 @@ export function KioskClient(props: Props) {
           {screen.employees === null && <div style={{ fontSize: 15, color: COL.ink3 }}>読み込んでいます…</div>}
           {screen.error && <div style={{ fontSize: 15, color: COL.warn }}>{screen.error}</div>}
           {screen.employees !== null && !screen.error && screen.employees.length === 0 && (
-            <div style={{ fontSize: 15, color: COL.ink3 }}>
-              顔登録が必要な従業員はいません。名前が出ない場合は管理者にマスタ登録を依頼してください。
+            <div style={{ fontSize: 15, color: COL.ink3, textAlign: 'center', lineHeight: 1.9 }}>
+              この端末の店舗（{storeName}）に顔登録が必要な従業員はいません。<br />
+              名前が出ない場合は、管理画面の従業員マスタで「{storeName}」に登録されているかご確認ください。
             </div>
           )}
           {screen.employees !== null && screen.employees.length > 0 && (
