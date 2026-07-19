@@ -92,6 +92,17 @@ export function EmployeesClient(
     } finally { setBusy(null) }
   }
 
+  // 顔データのみ削除（従業員は active のまま → キオスクのセルフ登録で撮り直せる）
+  const deleteFace = async (e: EmployeeRow) => {
+    if (!window.confirm(`${e.name} の顔データを削除します。キオスクの「はじめての方の顔登録」から再登録できます。よろしいですか？`)) return
+    setBusy(`delface:${e.id}`); setMsg(null)
+    try {
+      const res = await fetch(`/api/baggage/employees/${e.id}/face`, { method: 'DELETE' })
+      if (!res.ok) { await fail(res, '顔データの削除に失敗しました'); return }
+      router.refresh()
+    } finally { setBusy(null) }
+  }
+
   return (
     <div className="space-y-4">
       <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
@@ -117,6 +128,10 @@ export function EmployeesClient(
 
       {/* 追加フォーム */}
       <div className="flex flex-wrap items-end gap-2 rounded border border-slate-200 bg-white p-3 text-sm dark:border-gedline dark:bg-gedbg2">
+        <span className="w-full text-[12px] font-medium text-slate-700 dark:text-gedink2">
+          追加先: {storeOptions.find((s) => s.id === storeId)?.name ?? '—'}
+          <span className="ml-2 font-normal text-slate-500 dark:text-gedink3">（上の店舗選択に追加されます）</span>
+        </span>
         <label className="flex flex-col gap-1 text-[11px] text-slate-500 dark:text-gedink3">
           氏名（姓 名・スペース区切り）
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="田中 花子"
@@ -165,6 +180,12 @@ export function EmployeesClient(
                       className="rounded border border-slate-300 px-2.5 py-1 text-[12px] hover:bg-slate-50 disabled:opacity-40 dark:border-gedline dark:text-gedink dark:hover:bg-gedbg3">
                       {busy === `face:${e.id}` ? '登録中…' : e.rekognition_face_id ? '顔を差し替え' : '顔を登録'}
                     </button>
+                    {e.rekognition_face_id && (
+                      <button onClick={() => deleteFace(e)} disabled={busy !== null}
+                        className="rounded border border-slate-300 px-2.5 py-1 text-[12px] text-slate-600 hover:bg-slate-50 disabled:opacity-40 dark:border-gedline dark:text-gedink2 dark:hover:bg-gedbg3">
+                        {busy === `delface:${e.id}` ? '削除中…' : '顔を削除'}
+                      </button>
+                    )}
                     <button onClick={() => deactivate(e)} disabled={busy !== null}
                       className="rounded border border-red-300 px-2.5 py-1 text-[12px] text-red-700 hover:bg-red-50 disabled:opacity-40 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20">
                       {busy === `del:${e.id}` ? '抹消中…' : '登録抹消'}
