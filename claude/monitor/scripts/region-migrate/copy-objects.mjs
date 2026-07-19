@@ -17,6 +17,12 @@ import { readFileSync } from 'node:fs'
 const req = (k) => {
   const v = process.env[k]
   if (!v) { console.error(`missing env: ${k}`); process.exit(1) }
+  // キーに非ASCII（IME/プロンプト文字の混入）があると fetch ヘッダで ByteString エラーになるため即検知
+  const bad = [...v].findIndex((c) => c.charCodeAt(0) < 0x21 || c.charCodeAt(0) > 0x7e)
+  if (bad >= 0) {
+    console.error(`env ${k} contains invalid char at index ${bad} (U+${v.charCodeAt(bad).toString(16)}) — 貼り直してください`)
+    process.exit(1)
+  }
   return v
 }
 const listFile = process.argv[2]
