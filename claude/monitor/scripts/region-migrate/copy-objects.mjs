@@ -42,9 +42,14 @@ for (const line of lines) {
       `${OLD_URL}/storage/v1/object/authenticated/${bucket}/${encodeURIComponent(path).replaceAll('%2F', '/')}`,
       { headers: { apikey: OLD_KEY, Authorization: `Bearer ${OLD_KEY}` } },
     )
-    if (!res.ok) throw new Error(`download HTTP ${res.status}`)
+    if (!res.ok) {
+      const body = (await res.text()).slice(0, 120)
+      throw new Error(`download HTTP ${res.status}: ${body}`)
+    }
     const buf = Buffer.from(await res.arrayBuffer())
-    const contentType = res.headers.get('content-type') || 'application/octet-stream'
+    // content-type は ASCII のみ許可（非ASCII混入で fetch ヘッダが ByteString エラーになるため）
+    let contentType = (res.headers.get('content-type') || '').split(';')[0].trim()
+    if (!/^[\x20-\x7e]+\/[\x20-\x7e]+$/.test(contentType)) contentType = 'application/octet-stream'
 
     const { error } = await newc.storage.from(bucket).upload(path, buf, { upsert: true, contentType })
     if (error) throw new Error(`upload: ${error.message}`)
