@@ -49,6 +49,10 @@ type Screen =
   | { s: 'step'; phase: StepPhase; kind: PersonKind; ctx: FaceCtx; startedAt: string }
   | { s: 'recorded'; action: 'temp_exit' | 'temp_return'; lastName?: string }  // B
   | { s: 'complete'; label: string }                                 // E
+  // セルフ顔登録（顔未登録の従業員のみ選択可 — 上書きなりすまし防止・差し替えは管理画面）
+  | { s: 'regList'; employees: { id: string; name: string }[] | null; error?: string }
+  | { s: 'regCapture'; employee: { id: string; name: string }; captured?: string; busy?: boolean; error?: string }
+  | { s: 'regDone'; name: string }
 
 const ACTION_LABEL: Record<FlowAction, { t: string; sub: string; primary?: boolean }> = {
   entry:       { t: '入室', sub: '顔認証' },
@@ -108,9 +112,9 @@ export function KioskClient(props: Props) {
   }, [])
   const resetToIdle = useCallback(() => { stopCam(); setScreen({ s: 'idle' }) }, [stopCam])
 
-  // 完了=AUTO_IDLE_SEC(3秒) / 途中記録=2秒 でアイドルへ（B・E）
+  // 完了=AUTO_IDLE_SEC(3秒) / 途中記録=2秒 でアイドルへ（B・E・顔登録完了）
   useEffect(() => {
-    if (screen.s === 'complete' || screen.s === 'recorded') {
+    if (screen.s === 'complete' || screen.s === 'recorded' || screen.s === 'regDone') {
       const t = setTimeout(resetToIdle, screen.s === 'recorded' ? 2000 : AUTO_IDLE_SEC * 1000)
       return () => clearTimeout(t)
     }
@@ -254,6 +258,64 @@ export function KioskClient(props: Props) {
     return () => { cancelled = true; clearTimeout(guard) }
   }, [screen]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── セルフ顔登録（顔未登録の従業員が自分の名前を選んで登録・差し替えは管理画面） ──
+  const openRegList = useCallback(async () => {
+    setScreen({ s: 'regList', employees: null })
+    try {
+      const res = await fetch(`/api/baggage/kiosk/employees?storeId=${storeId}`)
+      if (!res.ok) throw new Error(String(res.status))
+      const j = await res.json() as { employees: { id: string; name: string }[] }
+      setScreen({ s: 'regList', employees: j.employees })
+    } catch {
+      setScreen({ s: 'regList', employees: [], error: '一覧を取得できませんでした。係員をお呼びください。' })
+    }
+  }, [storeId])
+
+  // regCapture: プレビュー中（未撮影）だけカメラを起動。撮影・画面遷移で停止。
+  useEffect(() => {
+    if (screen.s !== 'regCapture' || screen.captured) return
+    ;(async () => {
+      try {
+        if (videoRef.current) streamRef.current = await startCamera(videoRef.current, { facingMode: 'user' })
+      } catch { /* カメラ不可でも撮影ボタンでエラー表示になる */ }
+    })()
+    return () => { stopCam() }
+  }, [screen, stopCam])
+
+  const captureForReg = useCallback(async () => {
+    if (screen.s !== 'regCapture') return
+    const blob = videoRef.current ? captureFrame(videoRef.current, 2) : null
+    if (!blob) { setScreen({ ...screen, error: 'カメラを起動できませんでした。係員をお呼びください。' }); return }
+    const image = await blobToDataUrl(blob)
+    stopCam()
+    setScreen({ ...screen, captured: image, error: undefined })
+  }, [screen, stopCam])
+
+  const REG_ERR: Record<string, string> = {
+    already_registered: 'この方の顔は登録済みです。変更は管理者にご相談ください。',
+    face_not_detected: '顔を検出できませんでした。正面を向いて、もう一度撮影してください。',
+    rekognition_failed: '登録サービスに接続できませんでした。時間をおいてお試しください。',
+  }
+
+  const submitReg = useCallback(async () => {
+    if (screen.s !== 'regCapture' || !screen.captured || screen.busy) return
+    setScreen({ ...screen, busy: true, error: undefined })
+    try {
+      const res = await fetch(`/api/baggage/employees/${screen.employee.id}/face`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ image: screen.captured, onlyIfUnregistered: true }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => null) as { error?: string } | null
+        setScreen({ ...screen, busy: false, error: REG_ERR[j?.error ?? ''] ?? `登録に失敗しました（${j?.error ?? res.status}）` })
+        return
+      }
+      setScreen({ s: 'regDone', name: screen.employee.name })
+    } catch {
+      setScreen({ ...screen, busy: false, error: '通信に失敗しました。もう一度お試しください。' })
+    }
+  }, [screen]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── D: STEP 無操作タイムアウト（各STEP・満了で interrupted 記録） ─────────────
   // 0 で打ち止め（負値まで減らすと effect が毎秒再発火して退出POSTを連射してしまう）。
   useEffect(() => {
@@ -326,6 +388,89 @@ export function KioskClient(props: Props) {
           <div style={{ fontSize: 14, color: COL.ink3 }}>
             顔データ: 従業員=登録抹消まで / 来訪者=当日中に自動削除
           </div>
+          <button onClick={openRegList} style={{ ...ghostFullBtn, width: 'auto', minWidth: 260, height: 48, fontSize: 15 }}>
+            はじめての方の顔登録（従業員）
+          </button>
+        </div>
+      )}
+
+      {/* ── セルフ顔登録: 名前選択（顔未登録の従業員のみ） ── */}
+      {screen.s === 'regList' && (
+        <div style={centerBox(24)}>
+          <div style={{ fontSize: 28, fontWeight: 700 }}>お名前を選んでください</div>
+          {screen.employees === null && <div style={{ fontSize: 15, color: COL.ink3 }}>読み込んでいます…</div>}
+          {screen.error && <div style={{ fontSize: 15, color: COL.warn }}>{screen.error}</div>}
+          {screen.employees !== null && !screen.error && screen.employees.length === 0 && (
+            <div style={{ fontSize: 15, color: COL.ink3 }}>
+              顔登録が必要な従業員はいません。名前が出ない場合は管理者にマスタ登録を依頼してください。
+            </div>
+          )}
+          {screen.employees !== null && screen.employees.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center',
+              maxWidth: 780, maxHeight: 360, overflowY: 'auto', padding: 4 }}>
+              {screen.employees.map((e) => (
+                <button key={e.id} onClick={() => setScreen({ s: 'regCapture', employee: e })} style={{
+                  minWidth: 180, height: 72, background: '#fff', border: `1px solid ${COL.line}`,
+                  borderRadius: 6, fontSize: 20, fontWeight: 700, fontFamily: 'inherit',
+                  color: COL.ink, cursor: 'pointer', padding: '0 20px' }}>
+                  {e.name}
+                </button>
+              ))}
+            </div>
+          )}
+          <div style={{ fontSize: 13, color: COL.ink3 }}>
+            登録済みの方はここに表示されません。顔の変更は管理者が行います。
+          </div>
+          <button onClick={resetToIdle} style={ghostFullBtn}>最初の画面に戻る</button>
+        </div>
+      )}
+
+      {/* ── セルフ顔登録: 撮影 → 確認 → 登録 ── */}
+      {screen.s === 'regCapture' && (
+        <div style={centerBox(20)}>
+          <div style={{ fontSize: 26, fontWeight: 700 }}>{lastNameOfClient(screen.employee.name)}さんの顔を登録します</div>
+          <div style={{ width: 520, height: 390, background: '#1a1c1f', borderRadius: 6, position: 'relative',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+            {screen.captured
+              // eslint-disable-next-line @next/next/no-img-element
+              ? <img src={screen.captured} alt="撮影した写真" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : <>
+                  <video ref={videoRef} autoPlay playsInline muted
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <div style={{ position: 'absolute', width: 230, height: 300, border: '2px dashed #8a8f96',
+                    borderRadius: '50%/46%' }} />
+                </>}
+          </div>
+          {screen.error && <div style={{ fontSize: 15, color: COL.warn }}>{screen.error}</div>}
+          <div style={{ display: 'flex', gap: 12 }}>
+            {screen.captured ? (
+              <>
+                <button disabled={screen.busy}
+                  onClick={() => setScreen({ s: 'regCapture', employee: screen.employee })}
+                  style={{ ...ghostFullBtn, width: 'auto', minWidth: 180 }}>撮り直す</button>
+                <button disabled={screen.busy} onClick={submitReg}
+                  style={{ ...primaryFullBtn, width: 'auto', minWidth: 260, height: 64, fontSize: 20 }}>
+                  {screen.busy ? '登録しています…' : 'この写真で登録'}
+                </button>
+              </>
+            ) : (
+              <>
+                <button onClick={openRegList} style={{ ...ghostFullBtn, width: 'auto', minWidth: 180 }}>名前を選び直す</button>
+                <button onClick={captureForReg}
+                  style={{ ...primaryFullBtn, width: 'auto', minWidth: 260, height: 64, fontSize: 20 }}>撮影する</button>
+              </>
+            )}
+          </div>
+          <div style={{ fontSize: 13, color: COL.ink3 }}>正面を向いて、枠に顔を合わせてから撮影してください</div>
+        </div>
+      )}
+
+      {/* ── セルフ顔登録: 完了（3秒→idle） ── */}
+      {screen.s === 'regDone' && (
+        <div style={centerBox(36)}>
+          <CheckMark />
+          <div style={{ fontSize: 40, fontWeight: 700 }}>{lastNameOfClient(screen.name)}さんの顔を登録しました</div>
+          <div style={{ fontSize: 14, color: COL.ink3 }}>次回から顔認証で入退室できます。3秒後に最初の画面に戻ります</div>
         </div>
       )}
 
@@ -447,6 +592,11 @@ const primaryFullBtn: React.CSSProperties = { height: 80, width: '100%', backgro
   border: 'none', borderRadius: 4, fontSize: 26, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer' }
 const ghostFullBtn: React.CSSProperties = { height: 56, width: '100%', background: 'none', color: '#2A2A2C',
   border: '1px solid #D6CFC1', borderRadius: 4, fontSize: 16, fontFamily: 'inherit', cursor: 'pointer' }
+
+/** 「田中 花子」→「田中」（表示用・サーバ側 lastNameOf と同義のクライアント簡易版）。 */
+function lastNameOfClient(name: string): string {
+  return name.trim().split(/[\s　]+/)[0] ?? name
+}
 
 function CheckMark() {
   return (
