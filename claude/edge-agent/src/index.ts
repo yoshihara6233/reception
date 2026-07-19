@@ -14,6 +14,7 @@ import { startGo2rtcSync } from './go2rtc/sync.js'
 import { refreshSupabaseKey, startKeySync } from './supabase.js'
 import { subscribeCommands } from './realtime.js'
 import { startEdgeJobWorker } from './workers/edge-jobs.js'
+import { startClipJobWorker } from './workers/clip-jobs.js'
 import { StateMachine } from './state-machine.js'
 import { heartbeat } from './upload/storage.js'
 import { startWhipProxy } from './whip-proxy.js'
@@ -62,6 +63,10 @@ async function main() {
 
   // 登録ウィザード支援: 本部からの ONVIF探索 / 接続テスト ジョブを処理（pending をポーリング）。
   const jobs = startEdgeJobWorker()
+
+  // 手荷物検査（M5）: inspection_clip_jobs をポーリングし、検査窓を NVR から切り出して
+  // baggage-clips へアップ。自エッジ担当カメラ・切り出し可能 vendor のジョブのみ処理。
+  const clipJobs = startClipJobWorker()
 
   // 発報受け口: i-PRO/NVR の HTTP アラーム通知・外部 Webhook を LAN で受けて中継する
   // （ALARM_LISTEN_PORT>0 かつ MONITOR_URL 設定時のみ起動。それ以外は no-op）。
@@ -239,6 +244,7 @@ async function main() {
     clearInterval(hb)
     await rt.close()
     jobs.close()
+    clipJobs.close()
     alarmListener.close()
     await fsm.toIdle()
     await fsm.stopSfu()

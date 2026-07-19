@@ -62,6 +62,8 @@ export function AppHeader({
     // PATROL の着地は巡回レポート（利用頻度が最も高い）。ハイライトは /security 配下全体。
     { href: '/security/reports', label: t.nav.security, base: '/security' },
     { href: '/alarms',   label: 'ALARM'         },
+    // 手荷物検査モジュール（M4）。ラベルは ALARM と同様に固定表記。
+    { href: '/baggage',  label: '検査'          },
     { href: '/infra',    label: t.nav.infra    },
     // F23: /logs タブは削除（マスタ内の監査ログと重複していたため）
     // F24: /admin（設定）は中央タブから外し、右側のアイコンに移動

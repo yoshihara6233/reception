@@ -21,6 +21,7 @@
     "db:push": "supabase db push"
   },
   "dependencies": {
+    "@aws-sdk/client-rekognition": "^3.1090.0",
     "@fontsource/ibm-plex-mono": "^5.2.7",
     "@fontsource/inter-tight": "^5.2.7",
     "@fontsource/noto-sans-jp": "^5.2.9",
