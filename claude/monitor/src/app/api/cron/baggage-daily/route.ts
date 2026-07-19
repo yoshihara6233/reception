@@ -47,7 +47,6 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const now = new Date()
   const today = jstDateStr(now)
   const yesterday = jstDateStr(now, -1)
-  const yesterdayYmd = yesterday.replaceAll('-', '')   // 来訪者コレクション名の日付部
 
   const { data: settingsRows, error: sErr } = await svc
     .from('inspection_settings')
@@ -130,28 +129,34 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       r.errors.push(String((e as Error).message ?? e))
     }
 
-    // ── 3. 来訪者の当日コレクション削除（前日分・不存在/AWS未設定は握る） ───
+    // ── 3. 来訪者コレクション削除（直近7日分を掃引 — cron が1日落ちても翌日
+    //       追いつく。不存在は deleteCollectionById 内で無視・AWS障害は握って続行） ─
     try {
-      await deleteCollectionById(visitorDailyCollectionId(storeId, yesterdayYmd))
+      for (let d = 1; d <= 7; d++) {
+        const ymd = jstDateStr(now, -d).replaceAll('-', '')
+        await deleteCollectionById(visitorDailyCollectionId(storeId, ymd))
+      }
       r.visitorCollectionDeleted = true
     } catch (e) {
       r.errors.push(`rekognition: ${String((e as Error).message ?? e)}`)
     }
 
-    // ── 4. 保持期間 purge（クリップ・顔/名刺写真 → セッション行を CASCADE 削除） ─
+    // ── 4. 保持期間 purge ────────────────────────────────────────────────────
+    //   4a. クリップ: 対象セッションの storage_path を削除 → 行を CASCADE 削除
+    //   4b. 写真: キオスク撮影分は <store>/<ymd>/ 配下に集約されているため、
+    //       カットオフより古い日付フォルダごと削除（セッションに紐付かなかった
+    //       照合リトライ・タイムアウト時の孤児写真、途中入退イベントの顔も漏れなく消える。
+    //       従業員マスタの顔は employees/ 配下＝対象外）
     try {
       const cutoff = retentionCutoffIso(row.retention_days || 60, now)
       const { data: old } = await svc
         .from('inspection_sessions')
-        .select('id, entry_face_path, exit_face_path, card_photo_path')
+        .select('id')
         .eq('store_id', storeId)
         .lt('created_at', cutoff)
         .limit(500)   // 1回の cron で最大500件（残りは翌日以降に自然消化）
-      const sessions = (old ?? []) as {
-        id: string; entry_face_path: string | null; exit_face_path: string | null; card_photo_path: string | null
-      }[]
-      if (sessions.length > 0) {
-        const ids = sessions.map((s) => s.id)
+      const ids = ((old ?? []) as { id: string }[]).map((s) => s.id)
+      if (ids.length > 0) {
         const { data: clips } = await svc
           .from('inspection_clips')
           .select('storage_path')
@@ -162,20 +167,80 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           const { error } = await svc.storage.from('baggage-clips').remove(clipPaths)
           if (error) r.errors.push(`clip purge: ${error.message}`)
         }
-        const photoPaths = sessions
-          .flatMap((s) => [s.entry_face_path, s.exit_face_path, s.card_photo_path])
-          .filter(Boolean) as string[]
-        if (photoPaths.length > 0) {
-          const { error } = await svc.storage.from('baggage-photos').remove(photoPaths)
-          if (error) r.errors.push(`photo purge: ${error.message}`)
-        }
         const { error: delErr } = await svc.from('inspection_sessions').delete().in('id', ids)
         if (delErr) throw new Error(`session delete: ${delErr.message}`)
-        r.purgedSessions = sessions.length
+        r.purgedSessions = ids.length
       }
+
+      // 4b. 日付フォルダ単位の写真 purge（孤児含む全消し）
+      const cutoffYmd = jstDateStr(now, -(row.retention_days || 60)).replaceAll('-', '')
+      const { data: dayFolders } = await svc.storage.from('baggage-photos').list(storeId, { limit: 1000 })
+      for (const folder of dayFolders ?? []) {
+        if (!/^\d{8}$/.test(folder.name) || folder.name >= cutoffYmd) continue
+        const { data: files } = await svc.storage.from('baggage-photos').list(`${storeId}/${folder.name}`, { limit: 1000 })
+        const paths = (files ?? []).map((f) => `${storeId}/${folder.name}/${f.name}`)
+        if (paths.length > 0) {
+          const { error } = await svc.storage.from('baggage-photos').remove(paths)
+          if (error) r.errors.push(`photo folder purge ${folder.name}: ${error.message}`)
+        }
+      }
+
+      // 4c. セッションに紐付かなかった孤児イベント行（紐付き分は CASCADE 済み）
+      await svc.from('inspection_session_events')
+        .delete()
+        .eq('store_id', storeId)
+        .is('session_id', null)
+        .lt('created_at', cutoff)
     } catch (e) {
       r.errors.push(String((e as Error).message ?? e))
     }
+  }
+
+  // ── 5. クリップジョブの後始末（全店舗横断・エッジが二度と拾わないジョブの確定） ──
+  //   - pending のまま deadline_at 超過（エッジ停止・カメラ削除・非対応vendor）→ failed
+  //   - running のまま30分更新なし（エッジがクレーム後にクラッシュ）→ pending へ戻す
+  //     （deadline 超過分は failed）。管理画面が「処理中」のまま固まるのを防ぐ。
+  const jobSweep = { failed: 0, requeued: 0 }
+  try {
+    const nowIso2 = new Date().toISOString()
+    const { data: expired } = await svc
+      .from('inspection_clip_jobs')
+      .update({ status: 'failed', updated_at: nowIso2 })
+      .in('status', ['pending', 'running'])
+      .lt('deadline_at', nowIso2)
+      .select('id, tenant_id, store_id, session_id, camera_id')
+    jobSweep.failed = expired?.length ?? 0
+    for (const j of (expired ?? []) as { tenant_id: string; store_id: string; session_id: string; camera_id: string | null }[]) {
+      // 詳細画面が「取得失敗」を表示できるようクリップ行も failed で残す（done は上書きしない）
+      const { data: existing } = await svc
+        .from('inspection_clips')
+        .select('upload_status')
+        .eq('session_id', j.session_id)
+        .eq('camera_id', j.camera_id)
+        .maybeSingle()
+      if (existing?.upload_status === 'done') continue
+      await svc.from('inspection_clips').upsert(
+        {
+          tenant_id: j.tenant_id, store_id: j.store_id, session_id: j.session_id, camera_id: j.camera_id,
+          storage_path: `failed/${j.session_id}/${j.camera_id}`, upload_status: 'failed',
+        },
+        { onConflict: 'session_id,camera_id' },
+      )
+    }
+    const staleIso = new Date(Date.now() - 30 * 60 * 1000).toISOString()
+    const { data: requeued } = await svc
+      .from('inspection_clip_jobs')
+      .update({ status: 'pending', updated_at: nowIso2 })
+      .eq('status', 'running')
+      .lt('updated_at', staleIso)
+      .select('id')
+    jobSweep.requeued = requeued?.length ?? 0
+  } catch (e) {
+    results.push({
+      storeId: '(job-sweep)', unmatchedMarked: 0, mailSent: false, mailRecipients: 0,
+      visitorCollectionDeleted: false, purgedSessions: 0,
+      errors: [String((e as Error).message ?? e)],
+    })
   }
 
   const summary = {
@@ -184,8 +249,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     unmatchedMarked: results.reduce((a, r) => a + r.unmatchedMarked, 0),
     mailsSent: results.filter((r) => r.mailSent).length,
     purgedSessions: results.reduce((a, r) => a + r.purgedSessions, 0),
+    jobSweep,
     errors: results.flatMap((r) => r.errors.map((e) => `${r.storeId.slice(0, 8)}: ${e}`)),
   }
   console.log('[baggage-daily]', JSON.stringify(summary))
-  return NextResponse.json({ ok: true, ...summary, results })
+  // ok はエラー0の時のみ true（監視がボディで異常検知できるように。HTTP は 200 のまま
+  // — Vercel Cron はリトライしないため 5xx にする利点がない）
+  return NextResponse.json({ ok: summary.errors.length === 0, ...summary, results })
 }

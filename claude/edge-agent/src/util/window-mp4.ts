@@ -21,6 +21,17 @@ import type { CameraDescriptor } from '../types.js'
 
 const WORK_DIR = join(tmpdir(), 'intereco-edge-window')
 
+// ffmpeg/ffprobe が異常入力でハングした場合の上限。超過で SIGKILL（ワーカの busy が
+// 永久に解放されず全クリップ処理が止まる事故の防止）。
+const FFMPEG_KILL_MS = 5 * 60 * 1000
+const FFPROBE_KILL_MS = 30 * 1000
+
+/** spawn したプロセスに kill タイマーを付け、exit で解除するヘルパ。 */
+function armKillTimer(proc: import('node:child_process').ChildProcess, ms: number): void {
+  const t = setTimeout(() => { try { proc.kill('SIGKILL') } catch { /* already dead */ } }, ms)
+  proc.on('exit', () => clearTimeout(t))
+}
+
 /**
  * Frigate clip.mp4 を faststart MP4 へ remux（libx264 再エンコード）。
  * Frigate の fragmented MP4 + 非単調DTS は copy では直らないため再エンコードする。
@@ -40,6 +51,7 @@ export async function remuxFaststart(input: Buffer, id: string): Promise<Buffer>
         '-c:a', 'copy',
         '-movflags', '+faststart', '-f', 'mp4', '-y', outPath,
       ], { stdio: ['ignore', 'pipe', 'pipe'] })
+      armKillTimer(proc, FFMPEG_KILL_MS)
       let stderr = ''
       proc.stderr?.on('data', (b: Buffer) => { stderr += b.toString() })
       proc.on('error', reject)
@@ -60,6 +72,7 @@ export async function probeVideoCodec(path: string): Promise<string | null> {
         '-v', 'error', '-select_streams', 'v:0',
         '-show_entries', 'stream=codec_name', '-of', 'default=nw=1:nk=1', path,
       ], { stdio: ['ignore', 'pipe', 'pipe'] })
+      armKillTimer(proc, FFPROBE_KILL_MS)
       let out = ''
       proc.stdout?.on('data', (b: Buffer) => { out += b.toString() })
       proc.on('error', () => resolve(null))
@@ -81,6 +94,7 @@ export async function probeDurationSec(buf: Buffer, id: string): Promise<number 
         '-v', 'error', '-show_entries', 'format=duration',
         '-of', 'default=nw=1:nk=1', p,
       ], { stdio: ['ignore', 'pipe', 'pipe'] })
+      armKillTimer(proc, FFPROBE_KILL_MS)
       let out = ''
       proc.stdout?.on('data', (b: Buffer) => { out += b.toString() })
       proc.on('error', () => resolve(null))
@@ -116,6 +130,7 @@ export async function transcodeHevcToH264IfNeeded(input: Buffer, id: string): Pr
         '-c:a', 'aac', '-b:a', '96k',
         '-movflags', '+faststart', '-f', 'mp4', '-y', outPath,
       ], { stdio: ['ignore', 'pipe', 'pipe'] })
+      armKillTimer(proc, FFMPEG_KILL_MS)
       let stderr = ''
       proc.stderr?.on('data', (b: Buffer) => { stderr += b.toString() })
       proc.on('error', reject)

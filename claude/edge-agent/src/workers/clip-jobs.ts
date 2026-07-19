@@ -72,8 +72,19 @@ async function rescheduleOrFail(supa: SupabaseClient, job: ClipJob, tenantId: st
     await supa.from('inspection_clip_jobs')
       .update({ status: 'failed', updated_at: now.toISOString() })
       .eq('id', job.id)
-    // 詳細画面が「取得失敗」を出せるようクリップ行も failed で残す（tenant 解決済みのときのみ）。
+    // 詳細画面が「取得失敗」を出せるようクリップ行も failed で残す（tenant 解決済みのときのみ・
+    // 既に done の行は上書きしない — 重複ジョブの遅延失敗で成功記録を潰さない）。
     if (tenantId) {
+      const { data: existing } = await supa
+        .from('inspection_clips')
+        .select('upload_status')
+        .eq('session_id', job.session_id)
+        .eq('camera_id', job.camera_id)
+        .maybeSingle()
+      if (existing?.upload_status === 'done') {
+        logger.warn({ job: job.id, reason }, 'clip-jobs: past deadline (clip already done — row kept)')
+        return
+      }
       const { error } = await supa.from('inspection_clips').upsert(
         {
           tenant_id: tenantId,

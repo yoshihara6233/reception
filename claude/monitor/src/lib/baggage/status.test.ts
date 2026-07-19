@@ -36,6 +36,11 @@ describe('クリップバッジ（2本の upload_status から導出）', () => 
   test('2本done → 2/2', () => {
     expect(clipBadge(['done', 'done']).label).toBe('2/2')
   })
+  test('1カメラ店舗: expected=1 で done に到達しラベルは 1/1（永遠の一部のみ回帰防止）', () => {
+    expect(clipBadge(['done'], 1).label).toBe('1/1')
+    expect(clipBadge(['done'], 1).tone).toBe('ok')
+    expect(clipBadge(['uploading'], 1).label).toBe('処理中')
+  })
   test('failed かつ未達 → 取得失敗', () => {
     expect(clipBadge(['failed', 'uploading']).label).toBe('取得失敗')
     // 片方 failed でももう片方 done で2本揃わなければ failed

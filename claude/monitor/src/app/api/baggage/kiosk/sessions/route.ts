@@ -45,6 +45,22 @@ export async function POST(req: NextRequest) {
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status })
   const { svc, store, settings } = guard
 
+  // facePath は face-auth が生成した自店舗プレフィックスのみ受理
+  // （他店舗パスの持ち込み＝写真プロキシ経由の越権閲覧・visitor登録の混入を防ぐ）
+  if (body.facePath && !body.facePath.startsWith(`${store.id}/`)) {
+    return NextResponse.json({ error: 'invalid_face_path' }, { status: 400 })
+  }
+  // employeeId も自店舗の従業員のみ受理（face-auth の一致結果以外の任意UUIDを弾く）
+  if (body.employeeId) {
+    const { data: emp } = await svc
+      .from('employees')
+      .select('id')
+      .eq('id', body.employeeId)
+      .eq('store_id', store.id)
+      .maybeSingle()
+    if (!emp) return NextResponse.json({ error: 'invalid_employee' }, { status: 400 })
+  }
+
   const now = new Date()
   const nowIso = now.toISOString()
   const common = {
@@ -110,7 +126,8 @@ export async function POST(req: NextRequest) {
 
   let sessionId: string
   if (open) {
-    const { error } = await svc
+    // 冪等クローズ: exit_at が未設定の時だけ更新（二重送信・並行リクエストの後着は 0 行）。
+    const { data: closed, error } = await svc
       .from('inspection_sessions')
       .update({
         exit_at: nowIso,
@@ -123,9 +140,29 @@ export async function POST(req: NextRequest) {
         updated_at: nowIso,
       })
       .eq('id', open.id)
+      .is('exit_at', null)
+      .select('id')
+      .maybeSingle()
     if (error) return NextResponse.json({ error: 'session_update_failed' }, { status: 500 })
+    if (!closed) {
+      // 先着が既にクローズ済み（重複送信）。ジョブを増やさず成功で返す。
+      return NextResponse.json({ sessionId: open.id, status: exitStatus, clipJobs: 0, duplicate: true })
+    }
     sessionId = open.id
   } else {
+    // 直前にクローズされたばかりなら重複送信とみなす（幽霊 unmatched_entry の量産防止）。
+    const { data: justClosed } = await svc
+      .from('inspection_sessions')
+      .select('id, status')
+      .eq('store_id', store.id)
+      .eq('person_kind', body.personKind)
+      .gte('exit_at', new Date(now.getTime() - 30_000).toISOString())
+      .order('exit_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (justClosed) {
+      return NextResponse.json({ sessionId: justClosed.id, status: justClosed.status, clipJobs: 0, duplicate: true })
+    }
     // 入室記録なし退出（アンマッチ）でも検査は成立させる
     const { data, error } = await svc
       .from('inspection_sessions')
@@ -145,6 +182,7 @@ export async function POST(req: NextRequest) {
   }
 
   // クリップジョブ生成（全退出系＝completed / interrupted。カメラ未設定なら 0 件）
+  let clipJobsCreated = 0
   if (settings.cameraIds.length > 0) {
     const jobs = buildClipJobs(
       { inspectionStartedAt: new Date(startedAt), inspectionEndedAt: new Date(endedAt), cameraIds: settings.cameraIds },
@@ -164,10 +202,11 @@ export async function POST(req: NextRequest) {
       })),
     )
     if (error) console.error('[baggage] clip job insert failed:', error.message)
+    else clipJobsCreated = jobs.length
   }
 
   return NextResponse.json(
-    { sessionId, status: open ? exitStatus : 'unmatched_entry', clipJobs: settings.cameraIds.length },
+    { sessionId, status: open ? exitStatus : 'unmatched_entry', clipJobs: clipJobsCreated },
     { status: 201 },
   )
 }

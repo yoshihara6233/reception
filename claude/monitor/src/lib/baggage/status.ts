@@ -41,14 +41,15 @@ export function sessionBadge(status: string): BadgeDef {
 }
 
 /**
- * クリップ2本の upload_status からクリップ表示状態を導く。
- *   0本 done → processing / 1本 → partial / 2本 → done。
+ * クリップの upload_status から表示状態を導く。
+ *   expected = その検査の期待本数（クリップジョブ数。店舗のカメラ設定は1〜2台）。
+ *   0本 done → processing / 一部 → partial / 全数 → done（ラベルは n/n で動的）。
  *   いずれか failed かつ未達 → failed。expired は保持purge後に別途付与。
  */
 export function clipBadge(uploadStatuses: string[], expected = 2): BadgeDef {
   const done = uploadStatuses.filter((s) => s === 'done').length
   if (uploadStatuses.some((s) => s === 'failed') && done < expected) return CLIP_STATUS.failed
-  if (done >= expected) return CLIP_STATUS.done
+  if (done >= expected) return { ...CLIP_STATUS.done, label: `${expected}/${expected}` }
   if (done > 0) return CLIP_STATUS.partial
   return CLIP_STATUS.processing
 }

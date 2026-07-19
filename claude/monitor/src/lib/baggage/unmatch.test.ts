@@ -58,4 +58,12 @@ describe('buildUnmatchEmail', () => {
     expect(html).toContain('入室記録なし')
     expect(html).toContain('田中')
   })
+  test('氏名・店舗名の HTML 特殊文字はエスケープされる（メールHTML注入防止）', () => {
+    const { html } = buildUnmatchEmail('<b>店</b>', '2026-07-18', [
+      { personLabel: '<script>alert(1)</script>', kind: 'unmatched_exit', at: null },
+    ])
+    expect(html).not.toContain('<script>')
+    expect(html).toContain('&lt;script&gt;')
+    expect(html).toContain('&lt;b&gt;店&lt;/b&gt;')
+  })
 })

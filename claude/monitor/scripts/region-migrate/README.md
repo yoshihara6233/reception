@@ -90,12 +90,17 @@ Settings → Environment Variables を新プロジェクト値に差替 → Rede
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY` = 新 publishable key
 - `SUPABASE_SERVICE_ROLE_KEY` = 新 secret key（Sensitive）
 
-## 7. エッジ実機 .env（on-box・ユーザー作業）
+## 7. エッジ実機 env（on-box・ユーザー作業）
 
 ⚠ これを忘れると heartbeat/grid/snapshot が全停止する（鍵ローテ時と同じ）。
+⚠ OTA 化後の正パスは **`/home/intereco/edge/shared/agent.env`**（systemd の
+EnvironmentFile）。旧パス `/home/intereco/intereco/claude/edge-agent/.env` の
+編集は**無効**（2026-07-19 の移行で実際にハマった）。demo エッジは
+`/home/intereco/intereco/claude/edge-agent/.env.demo`。迷ったら
+`systemctl cat intereco-edge` で EnvironmentFile を確認する。
 
 ```bash
-sudo nano /home/intereco/intereco/claude/edge-agent/.env
+sudo nano /home/intereco/edge/shared/agent.env
 #   SUPABASE_URL=https://<新ref>.supabase.co
 #   SUPABASE_ANON_KEY=<新 publishable>
 #   SUPABASE_SERVICE_ROLE_KEY=<新 secret>

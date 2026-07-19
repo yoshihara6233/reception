@@ -84,6 +84,7 @@ export async function POST(req: NextRequest) {
       .select('id, name')
       .eq('id', race.value.externalId)
       .eq('store_id', store.id)
+      .eq('status', 'active')   // 登録抹消済みの従業員は認証させない
       .maybeSingle()
     if (!emp) return NextResponse.json({ matched: false, authSkipped: false, facePath })
     return NextResponse.json({

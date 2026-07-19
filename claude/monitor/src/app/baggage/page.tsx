@@ -74,6 +74,7 @@ export default async function BaggageHistoryPage(
 
   let rows: SessionRow[] = []
   let clipsBySession = new Map<string, string[]>()
+  const jobsBySession = new Map<string, number>()   // 期待クリップ本数（1カメラ店舗は1）
   if (storeId) {
     const { data } = await supa
       .from('inspection_sessions')
@@ -89,13 +90,17 @@ export default async function BaggageHistoryPage(
     })
 
     if (rows.length > 0) {
-      const { data: clips } = await supa
-        .from('inspection_clips')
-        .select('session_id, upload_status')
-        .in('session_id', rows.map((r) => r.id))
+      const ids = rows.map((r) => r.id)
+      const [{ data: clips }, { data: jobs }] = await Promise.all([
+        supa.from('inspection_clips').select('session_id, upload_status').in('session_id', ids),
+        supa.from('inspection_clip_jobs').select('session_id').in('session_id', ids),
+      ])
       clipsBySession = new Map()
       for (const c of (clips ?? []) as { session_id: string; upload_status: string }[]) {
         clipsBySession.set(c.session_id, [...(clipsBySession.get(c.session_id) ?? []), c.upload_status])
+      }
+      for (const j of (jobs ?? []) as { session_id: string }[]) {
+        jobsBySession.set(j.session_id, (jobsBySession.get(j.session_id) ?? 0) + 1)
       }
     }
   }
@@ -185,6 +190,7 @@ export default async function BaggageHistoryPage(
                   )}
                   {visible.map((r) => {
                     const statuses = clipsBySession.get(r.id)
+                    const expected = jobsBySession.get(r.id)
                     const person = r.person_kind === 'staff'
                       ? (r.employees?.name ?? '（未特定）')
                       : (r.visitor_name ?? '（未特定）')
@@ -205,7 +211,9 @@ export default async function BaggageHistoryPage(
                         <td className="px-3 py-2 font-mono tabular-nums">{hm(r.entry_at)}</td>
                         <td className="px-3 py-2 font-mono tabular-nums">{hm(r.exit_at)}</td>
                         <td className="px-3 py-2">
-                          {statuses ? <Badge def={clipBadge(statuses)} /> : <span className="text-slate-400 dark:text-gedink3">—</span>}
+                          {statuses || expected
+                            ? <Badge def={clipBadge(statuses ?? [], expected ?? statuses?.length ?? 2)} />
+                            : <span className="text-slate-400 dark:text-gedink3">—</span>}
                         </td>
                       </tr>
                     )

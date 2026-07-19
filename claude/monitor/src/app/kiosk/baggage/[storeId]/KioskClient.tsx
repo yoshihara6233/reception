@@ -19,7 +19,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { startCamera, captureFrame, stopCamera, blobToDataUrl } from '@/lib/camera/capture'
 import {
-  availableActions, requiresInspection, isTempEvent, firstStep, advanceStep,
+  availableActions, isTempEvent, firstStep, advanceStep, AUTO_IDLE_SEC,
   type AnnounceStep, type FlowAction, type PersonKind, type TerminalMode, type StepPhase,
 } from '@/lib/baggage/inspection-flow'
 
@@ -79,6 +79,7 @@ export function KioskClient(props: Props) {
 
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
+  const finishingRef = useRef(false)   // 退出POSTの二重送信ガード
   const actions = availableActions(terminalMode)
 
   // 時計（アイドルヘッダー）
@@ -107,13 +108,26 @@ export function KioskClient(props: Props) {
   }, [])
   const resetToIdle = useCallback(() => { stopCam(); setScreen({ s: 'idle' }) }, [stopCam])
 
-  // 完了=3秒 / 途中記録=2秒 でアイドルへ（B・E）
+  // 完了=AUTO_IDLE_SEC(3秒) / 途中記録=2秒 でアイドルへ（B・E）
   useEffect(() => {
     if (screen.s === 'complete' || screen.s === 'recorded') {
-      const t = setTimeout(resetToIdle, screen.s === 'recorded' ? 2000 : 3000)
+      const t = setTimeout(resetToIdle, screen.s === 'recorded' ? 2000 : AUTO_IDLE_SEC * 1000)
       return () => clearTimeout(t)
     }
   }, [screen, resetToIdle])
+
+  // オフライン表示中は 10秒毎に API へ疎通確認（ネットワークは生きていて API 側が
+  // 一時失敗だった場合、online イベントは発火しないため自動復帰しない問題の対策）
+  useEffect(() => {
+    if (!offline) return
+    const t = setInterval(async () => {
+      try {
+        const res = await fetch('/api/server-time', { cache: 'no-store' })
+        if (res.ok) setOffline(false)
+      } catch { /* まだ不達 */ }
+    }, 10_000)
+    return () => clearInterval(t)
+  }, [offline])
 
   // ── API ─────────────────────────────────────────────────────────────────────
   const postSession = useCallback(async (payload: Record<string, unknown>): Promise<boolean> => {
@@ -172,15 +186,22 @@ export function KioskClient(props: Props) {
   const finishExit = useCallback(async (
     kind: PersonKind, ctx: FaceCtx, startedAt: string, status: 'completed' | 'interrupted',
   ) => {
-    const ok = await postSession({
-      action: 'exit', personKind: kind, facePath: ctx.facePath,
-      employeeId: ctx.employeeId ?? null, entrySessionId: ctx.entrySessionId ?? null,
-      authSkipped: ctx.authSkipped,
-      inspectionStartedAt: startedAt, inspectionEndedAt: new Date().toISOString(), status,
-    })
-    if (!ok) return
-    if (status === 'completed') setScreen({ s: 'complete', label: '検査が完了しました' })
-    else resetToIdle()
+    // 二重送信ガード（最終「次へ」の連打・タイムアウト効果の再発火）。
+    if (finishingRef.current) return
+    finishingRef.current = true
+    try {
+      const ok = await postSession({
+        action: 'exit', personKind: kind, facePath: ctx.facePath,
+        employeeId: ctx.employeeId ?? null, entrySessionId: ctx.entrySessionId ?? null,
+        authSkipped: ctx.authSkipped,
+        inspectionStartedAt: startedAt, inspectionEndedAt: new Date().toISOString(), status,
+      })
+      if (!ok) return
+      if (status === 'completed') setScreen({ s: 'complete', label: '検査が完了しました' })
+      else resetToIdle()
+    } finally {
+      finishingRef.current = false
+    }
   }, [postSession, resetToIdle])
 
   const nextStep = useCallback(() => {
@@ -234,13 +255,14 @@ export function KioskClient(props: Props) {
   }, [screen]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── D: STEP 無操作タイムアウト（各STEP・満了で interrupted 記録） ─────────────
+  // 0 で打ち止め（負値まで減らすと effect が毎秒再発火して退出POSTを連射してしまう）。
   useEffect(() => {
     if (screen.s !== 'step') return
-    const t = setInterval(() => setRemaining((r) => r - 1), 1000)
+    const t = setInterval(() => setRemaining((r) => Math.max(0, r - 1)), 1000)
     return () => clearInterval(t)
   }, [screen])
   useEffect(() => {
-    if (screen.s === 'step' && remaining <= 0) {
+    if (screen.s === 'step' && remaining === 0) {
       finishExit(screen.kind, screen.ctx, screen.startedAt, 'interrupted')
     }
   }, [remaining, screen, finishExit])

@@ -20,8 +20,16 @@ export default async function BaggageEmployeesPage(
   const { data: { user } } = await supa.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: stores } = await supa.from('stores').select('id, name').order('name')
-  const storeOptions = (stores ?? []) as { id: string; name: string }[]
+  // stores の RLS はテナント全体を返すため、store_manager 等は自分の担当店舗
+  // （admin_users.store_ids）に絞る — API 側の requireBaggageAccess と同じスコープ。
+  const [{ data: stores }, { data: profile }] = await Promise.all([
+    supa.from('stores').select('id, name').order('name'),
+    supa.from('admin_users').select('role, store_ids').eq('auth_user_id', user.id).maybeSingle(),
+  ])
+  const allStores = (stores ?? []) as { id: string; name: string }[]
+  const isWide = profile?.role === 'super_admin' || profile?.role === 'tenant_admin'
+  const allowed = new Set((profile?.store_ids ?? []) as string[])
+  const storeOptions = isWide ? allStores : allStores.filter((s) => allowed.has(s.id))
   const storeId = sp.store && storeOptions.some((s) => s.id === sp.store) ? sp.store : storeOptions[0]?.id
 
   let employees: EmployeeRow[] = []
