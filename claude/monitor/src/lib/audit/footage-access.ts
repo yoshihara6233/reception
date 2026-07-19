@@ -19,6 +19,9 @@ export type FootageAccessType =
   | 'bcp_export'
   | 'patrol_view'
   | 'bcp_view'
+  | 'baggage_view'
+  | 'baggage_clip'
+  | 'baggage_photo'
 
 export interface FootageAccessEntry {
   actorUserId: string

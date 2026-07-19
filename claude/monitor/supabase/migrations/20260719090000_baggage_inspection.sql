@@ -244,3 +244,14 @@ VALUES (
 ON CONFLICT (id) DO NOTHING;
 
 -- 読み書きはサーバ側 service role のみ（storage.objects へのセッション用ポリシーは作らない）
+
+-- ============================================================
+-- 8. 映像閲覧アクセスログ（G3）へ手荷物検査の閲覧種別を追加
+-- ============================================================
+-- baggage_view = 検査詳細ページ閲覧 / baggage_clip = クリップ再生 / baggage_photo = 顔・名刺静止画
+ALTER TABLE footage_access_log DROP CONSTRAINT IF EXISTS footage_access_log_access_type_check;
+ALTER TABLE footage_access_log ADD CONSTRAINT footage_access_log_access_type_check
+  CHECK (access_type IN (
+    'alarm_snapshot','alarm_frame','patrol_snapshot','bcp_export','patrol_view','bcp_view',
+    'baggage_view','baggage_clip','baggage_photo'
+  ));

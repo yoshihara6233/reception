@@ -23,6 +23,18 @@ export interface KioskSettings {
   steps: AnnounceStep[]
 }
 
+export type BaggageAccessResult =
+  | { ok: false; status: number; error: string }
+  | {
+      ok: true
+      user: { id: string }
+      profile: { id: string; role: string; tenant_id: string; store_ids: string[] }
+      store: { id: string; tenantId: string; name: string }
+      svc: ReturnType<typeof createSupabaseService>
+      /** RLS 配下のセッションクライアント（監査ログ INSERT 等に使う） */
+      supa: Awaited<ReturnType<typeof import('@/lib/supabase/server').createSupabaseServer>>
+    }
+
 export type KioskGuardResult =
   | { ok: false; status: number; error: string }
   | {
@@ -32,7 +44,11 @@ export type KioskGuardResult =
       svc: ReturnType<typeof createSupabaseService>
     }
 
-export async function requireKioskStore(storeId: string | null | undefined): Promise<KioskGuardResult> {
+/**
+ * 店舗アクセスのみ（enabled 不問）— 従業員マスタ・設定画面の API 用。
+ * baggage_store_access（RLS ヘルパ）と同じ判定をコードで行う。
+ */
+export async function requireBaggageAccess(storeId: string | null | undefined): Promise<BaggageAccessResult> {
   if (!storeId) return { ok: false, status: 400, error: 'storeId_required' }
 
   const guard = await requireAdmin()
@@ -53,6 +69,22 @@ export async function requireKioskStore(storeId: string | null | undefined): Pro
     (p.store_ids ?? []).includes(store.id)
   if (!allowed) return { ok: false, status: 403, error: 'forbidden' }
 
+  return {
+    ok: true,
+    user: { id: guard.user.id },
+    profile: p,
+    store: { id: store.id, tenantId: store.tenant_id, name: store.name },
+    svc,
+    supa: guard.supa,
+  }
+}
+
+/** キオスク用: 店舗アクセス＋ inspection_settings.enabled の店舗のみ。 */
+export async function requireKioskStore(storeId: string | null | undefined): Promise<KioskGuardResult> {
+  const access = await requireBaggageAccess(storeId)
+  if (!access.ok) return access
+  const { svc, store } = access
+
   const { data: s } = await svc
     .from('inspection_settings')
     .select('enabled, camera_ids, retention_days, nvr_retention_days, inspection_timeout_sec, terminal_mode, audio_enabled, audio_volume, announce_steps')
@@ -62,7 +94,7 @@ export async function requireKioskStore(storeId: string | null | undefined): Pro
 
   return {
     ok: true,
-    store: { id: store.id, tenantId: store.tenant_id, name: store.name },
+    store,
     settings: {
       cameraIds: (s.camera_ids ?? []) as string[],
       retentionDays: Number(s.retention_days) || 60,
