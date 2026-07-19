@@ -130,6 +130,13 @@ export function KioskClient(props: Props) {
     }
   }, [storeId])
 
+  const startInspection = useCallback((kind: PersonKind, ctx: FaceCtx) => {
+    const phase = firstStep(steps)
+    if (phase.kind === 'step') speak(phase.text)
+    setRemaining(timeoutSec)
+    setScreen({ s: 'step', phase, kind, ctx, startedAt: new Date().toISOString() })
+  }, [steps, speak, timeoutSec])
+
   // ── 顔認証後の分岐（C → B/D/E/F） ───────────────────────────────────────────
   const proceedAfterFace = useCallback(async (action: FlowAction, kind: PersonKind, ctx: FaceCtx) => {
     stopCam()
@@ -160,14 +167,7 @@ export function KioskClient(props: Props) {
 
     // exit → 検査 STEP へ（D）
     startInspection(kind, ctx)
-  }, [postSession, stopCam]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const startInspection = useCallback((kind: PersonKind, ctx: FaceCtx) => {
-    const phase = firstStep(steps)
-    if (phase.kind === 'step') speak(phase.text)
-    setRemaining(timeoutSec)
-    setScreen({ s: 'step', phase, kind, ctx, startedAt: new Date().toISOString() })
-  }, [steps, speak, timeoutSec])
+  }, [postSession, stopCam, startInspection])
 
   const finishExit = useCallback(async (
     kind: PersonKind, ctx: FaceCtx, startedAt: string, status: 'completed' | 'interrupted',
