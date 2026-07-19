@@ -4,8 +4,9 @@
  * 手荷物検査 店舗設定フォーム（M4・クライアント）
  * STEP 文言は全角40字上限（D13）— 入力側でも制限し、保存時にサーバで正規化。
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { QRCodeSVG } from 'qrcode.react'
 import { STEP_TEXT_MAX, type AnnounceStep, type TerminalMode } from '@/lib/baggage/inspection-flow'
 
 export interface SettingsForm {
@@ -36,6 +37,15 @@ export function SettingsClient(
   const [f, setF] = useState<SettingsForm>(initial)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  // キオスクURL（この店舗のiPad用）。SSRとクライアントで origin がずれると
+  // hydration mismatch になるためマウント後に組み立てる。
+  const [kioskUrl, setKioskUrl] = useState('')
+  const [copied, setCopied] = useState(false)
+  useEffect(() => {
+    setKioskUrl(`${window.location.origin}/kiosk/baggage/${f.storeId}`)
+    setCopied(false)
+  }, [f.storeId])
 
   const set = <K extends keyof SettingsForm>(k: K, v: SettingsForm[K]) => setF((p) => ({ ...p, [k]: v }))
 
@@ -88,6 +98,42 @@ export function SettingsClient(
           表示
         </button>
       </form>
+
+      {/* iPad キオスク URL ＋ QR（この店舗の受付端末で開く） */}
+      <div className="flex flex-wrap items-center gap-5 rounded border border-slate-200 bg-white p-4 dark:border-gedline dark:bg-gedbg2">
+        <div className="rounded-lg bg-white p-2.5 ring-1 ring-slate-200 dark:ring-gedline">
+          {kioskUrl
+            ? <QRCodeSVG value={kioskUrl} size={132} level="M" marginSize={1} />
+            : <div className="flex h-[132px] w-[132px] items-center justify-center text-[10px] text-slate-400">読み込み中…</div>}
+        </div>
+        <div className="min-w-[240px] flex-1 space-y-2">
+          <div className="text-[13px] font-bold text-slate-900 dark:text-gedink">iPad 受付端末のURL</div>
+          <p className="text-[12px] text-slate-500 dark:text-gedink3">
+            この店舗の受付 iPad で下記URLを開くか、QRコードを読み取ってください。ログイン後に固定表示できます。
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <code className="break-all rounded bg-slate-100 px-2 py-1 font-mono text-[12px] text-slate-700 dark:bg-gedbg3 dark:text-gedink2">
+              {kioskUrl || '…'}
+            </code>
+            <button
+              type="button"
+              disabled={!kioskUrl}
+              onClick={() => { if (kioskUrl) { void navigator.clipboard.writeText(kioskUrl).then(() => setCopied(true)) } }}
+              className="rounded border border-slate-300 bg-white px-2.5 py-1 text-[12px] hover:bg-slate-50 disabled:opacity-40 dark:border-gedline dark:bg-gedbg2 dark:text-gedink dark:hover:bg-gedbg3">
+              {copied ? 'コピーしました' : 'URLをコピー'}
+            </button>
+            <a href={kioskUrl || '#'} target="_blank" rel="noopener noreferrer"
+              className="rounded border border-slate-300 bg-white px-2.5 py-1 text-[12px] hover:bg-slate-50 dark:border-gedline dark:bg-gedbg2 dark:text-gedink dark:hover:bg-gedbg3">
+              開く
+            </a>
+          </div>
+          {!f.enabled && (
+            <p className="text-[12px] text-amber-700 dark:text-amber-400">
+              ※ このURLは「この店舗で有効にする」を保存後に利用できます。
+            </p>
+          )}
+        </div>
+      </div>
 
       <div className="space-y-4 rounded border border-slate-200 bg-white p-4 text-sm dark:border-gedline dark:bg-gedbg2">
         <div className={row}>
