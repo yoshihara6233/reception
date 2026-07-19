@@ -21,178 +21,17 @@
  *   endpoint already produces a fragmented MP4 that HTML5 video can seek
  *   inside; no re-mux needed.
  */
-import { spawn } from 'node:child_process'
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { type SupabaseClient } from '@supabase/supabase-js'
 import { getSupabase } from '../supabase.js'
 import { logger } from '../logger.js'
 import { config } from '../config.js'
 import { downloadIproNvrMp4 } from '../adapters/i-pro/nvr-vod.js'
+import { remuxFaststart, transcodeHevcToH264IfNeeded } from '../util/window-mp4.js'
 import type { CameraDescriptor } from '../types.js'
 
 // 中央クライアント（鍵ローテ同期対応）に委譲。
 function getSupa(): SupabaseClient {
   return getSupabase()
-}
-
-/**
- * F79 — Re-encode a Frigate clip.mp4 into a browser-friendly MP4.
- *
- * Why re-encode instead of `-c copy`?
- *   Frigate's clip.mp4 has TWO problems that block HTML5 <video> playback:
- *
- *   1. **Fragmented MP4** (moov + many×moof/mdat) — the browser plays only
- *      the first segment and stops because plain <video src> can't follow
- *      moof headers without MSE.
- *   2. **Non-monotonic DTS** (decode timestamps repeat or go backwards) —
- *      the H.264 stream from go2rtc has irregular timing that, when copied
- *      verbatim, makes the decoder give up after the first frame. ffmpeg's
- *      analyzer reports ~150 "non monotonically increasing dts" warnings on
- *      a single 60 s clip. Result: browser shows the first frame frozen.
- *
- *   `-c copy` (zero re-encode) merges the fragments but PRESERVES the bad
- *   DTS, so the video still plays as a static frame. `-fflags +genpts`,
- *   `-vsync vfr/cfr`, `-bsf:v h264_mp4toannexb` all fail to repair it in
- *   copy mode because the original packets keep their broken DTS.
- *
- *   Re-encoding through libx264 -preset ultrafast costs ~1-3 s on the
- *   Beelink N150 for a 60 s clip and produces clean, strictly increasing
- *   timestamps that every browser plays correctly.
- *
- *   ffmpeg -i in.mp4 -c:v libx264 -preset ultrafast -crf 23 -profile:v main \
- *          -c:a copy -movflags +faststart -f mp4 out.mp4
- *
- * Returns the re-encoded bytes. Throws if ffmpeg exits non-zero or is missing.
- */
-async function remuxFaststart(input: Buffer, clipId: string): Promise<Buffer> {
-  const dir   = join(tmpdir(), 'intereco-edge-vod')
-  await mkdir(dir, { recursive: true })
-  const inPath  = join(dir, `${clipId}.in.mp4`)
-  const outPath = join(dir, `${clipId}.out.mp4`)
-
-  try {
-    await writeFile(inPath, input)
-
-    await new Promise<void>((resolve, reject) => {
-      const proc = spawn(config.FFMPEG_BIN, [
-        '-hide_banner', '-loglevel', 'warning',
-        '-i', inPath,
-        // Video: re-encode through libx264 with ultrafast preset. Re-encoding
-        // is required (not just remuxing) because Frigate's clip.mp4 ships
-        // non-monotonic DTS that no copy-mode flag fixes. main profile keeps
-        // the file widely compatible (avc1.4D...). crf 23 = visually
-        // transparent at moderate bitrate.
-        '-c:v', 'libx264',
-        '-preset', 'ultrafast',
-        '-crf', '23',
-        '-profile:v', 'main',
-        '-pix_fmt', 'yuv420p',
-        // Audio: copy if present (Frigate sub stream usually has no audio).
-        '-c:a', 'copy',
-        // Container: faststart so moov sits before mdat for instant playback.
-        '-movflags', '+faststart',
-        '-f', 'mp4',
-        '-y',
-        outPath,
-      ], { stdio: ['ignore', 'pipe', 'pipe'] })
-
-      let stderr = ''
-      proc.stderr?.on('data', (b: Buffer) => { stderr += b.toString() })
-      proc.on('error', reject)
-      proc.on('exit', (code) => {
-        if (code === 0) resolve()
-        else reject(new Error(`ffmpeg remux exit ${code}: ${stderr.slice(0, 300)}`))
-      })
-    })
-
-    return await readFile(outPath)
-  } finally {
-    await unlink(inPath).catch(() => {})
-    await unlink(outPath).catch(() => {})
-  }
-}
-
-/**
- * VODの動画コーデックを判定（ffprobe）。判定不能時は null。
- * 'hevc' なら Chrome/Firefox が再生不可なので H.264 へ変換する必要がある。
- */
-async function probeVideoCodec(path: string): Promise<string | null> {
-  try {
-    return await new Promise<string | null>((resolve) => {
-      const proc = spawn(config.FFPROBE_BIN, [
-        '-v', 'error',
-        '-select_streams', 'v:0',
-        '-show_entries', 'stream=codec_name',
-        '-of', 'default=nw=1:nk=1',
-        path,
-      ], { stdio: ['ignore', 'pipe', 'pipe'] })
-      let out = ''
-      proc.stdout?.on('data', (b: Buffer) => { out += b.toString() })
-      proc.on('error', () => resolve(null))
-      proc.on('exit', () => resolve(out.trim().split(/\s+/)[0] || null))
-    })
-  } catch {
-    return null
-  }
-}
-
-/**
- * H.265(HEVC) の録画MP4は Chrome/Firefox が再生できない（OS/ブラウザ依存）。
- * その場合のみ H.264(libx264) へ変換して全ブラウザ再生可能にする。
- * H.264 等はそのまま返す（再エンコードの世代劣化を避ける）。
- *
- * バッチ処理（非リアルタイム）なので reliability 重視で libx264 を使用。
- * ※ライブの低遅延変換は別途 go2rtc(QSV) で行う方針（docs/live-h264-go2rtc-plan.md）。
- */
-async function transcodeHevcToH264IfNeeded(input: Buffer, clipId: string): Promise<Buffer> {
-  const dir = join(tmpdir(), 'intereco-edge-vod')
-  await mkdir(dir, { recursive: true })
-  const inPath  = join(dir, `${clipId}.src.mp4`)
-  const outPath = join(dir, `${clipId}.h264.mp4`)
-  try {
-    await writeFile(inPath, input)
-    const codec = await probeVideoCodec(inPath)
-    if (codec !== 'hevc' && codec !== 'h265') {
-      // H.264 等はそのまま（codec=null=判定不能時も、動いている既存ケースを壊さないため素通し）
-      logger.info({ clipId, codec }, 'vod: no transcode (already browser-playable)')
-      return input
-    }
-    logger.info({ clipId, codec }, 'vod: HEVC detected → transcoding to H.264')
-    const startedAt = Date.now()
-    await new Promise<void>((resolve, reject) => {
-      const proc = spawn(config.FFMPEG_BIN, [
-        '-hide_banner', '-loglevel', 'warning',
-        '-i', inPath,
-        '-c:v', 'libx264',
-        '-preset', 'veryfast',
-        '-crf', '23',
-        '-profile:v', 'main',
-        '-pix_fmt', 'yuv420p',
-        // 音声は AAC へ（無音声ストリームなら無害にスキップ）。
-        '-c:a', 'aac', '-b:a', '96k',
-        '-movflags', '+faststart',
-        '-f', 'mp4', '-y', outPath,
-      ], { stdio: ['ignore', 'pipe', 'pipe'] })
-      let stderr = ''
-      proc.stderr?.on('data', (b: Buffer) => { stderr += b.toString() })
-      proc.on('error', reject)
-      proc.on('exit', (code) => {
-        if (code === 0) resolve()
-        else reject(new Error(`ffmpeg hevc→h264 exit ${code}: ${stderr.slice(0, 300)}`))
-      })
-    })
-    const out = await readFile(outPath)
-    logger.info(
-      { clipId, srcBytes: input.length, h264Bytes: out.length, transcodeMs: Date.now() - startedAt },
-      'vod: transcoded HEVC→H.264',
-    )
-    return out
-  } finally {
-    await unlink(inPath).catch(() => {})
-    await unlink(outPath).catch(() => {})
-  }
 }
 
 const BUCKET = 'vod-clips'

@@ -22,6 +22,10 @@
     "./commands": {
       "types": "./src/commands.ts",
       "import": "./src/commands.ts"
+    },
+    "./baggage": {
+      "types": "./src/baggage.ts",
+      "import": "./src/baggage.ts"
     }
   },
   "scripts": {
