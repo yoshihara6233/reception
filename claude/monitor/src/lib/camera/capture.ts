@@ -75,7 +75,7 @@ export function captureFrame(videoElement: HTMLVideoElement, zoom = 1, maxDim?: 
   }
 
   // Convert to blob synchronously via dataURL for simplicity
-  const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.75)
   const byteString = atob(dataUrl.split(',')[1])
   const mimeString = dataUrl.split(',')[0].split(':')[1].split(';')[0]
   const ab = new ArrayBuffer(byteString.length)

@@ -90,7 +90,7 @@ const COL = {
 }
 
 /** 撮影までのプレビュー時間（顔を枠に合わせる猶予）。短いほど体感が速い。 */
-const CAPTURE_DELAY_MS = 600
+const CAPTURE_DELAY_MS = 300
 /** face-auth 全体のクライアント側ガード（サーバ3秒レース＋通信の余裕）。 */
 const FACE_TOTAL_GUARD_MS = 10000
 /**
@@ -98,10 +98,10 @@ const FACE_TOTAL_GUARD_MS = 10000
  * 従来の 2.0 から寄せる。照合(登録/認証)は同じ倍率で撮ること＝両方これを使う。
  */
 const FACE_CAPTURE_ZOOM = 2.6
-/** 顔画像の長辺上限。小さくしてアップロード/照合を高速化（顔照合は 720 で十分）。 */
-const FACE_CAPTURE_MAXDIM = 720
+/** 顔画像の長辺上限。小さくしてアップロード/照合を高速化（顔照合は 512 で十分）。 */
+const FACE_CAPTURE_MAXDIM = 512
 /** 名刺画像の長辺上限（文字が読める程度に大きめ）。 */
-const CARD_CAPTURE_MAXDIM = 1100
+const CARD_CAPTURE_MAXDIM = 900
 
 export function KioskClient(props: Props) {
   const { storeId, storeName, terminalMode, timeoutSec, audioEnabled, audioVolume, steps, consentText, consentVersion, entryGreetingText, exitMessageText, buildId } = props
