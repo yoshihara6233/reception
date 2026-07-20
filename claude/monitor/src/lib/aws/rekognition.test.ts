@@ -101,9 +101,9 @@ describe('コア層: コレクション名を素通し（従業員/来訪者分�
     expect(r).toEqual({ matched: true, faceId: 'f9', externalId: 'sess-1', confidence: 95 })
   })
 
-  test('検索の threshold は引数で指定（既定80）', async () => {
+  test('検索の threshold は引数で指定（既定72）', async () => {
     await searchFaceInCollection('baggage-emp-s', Buffer.from('img'))
-    expect(lastInput('SearchFacesByImage')?.FaceMatchThreshold).toBe(80)
+    expect(lastInput('SearchFacesByImage')?.FaceMatchThreshold).toBe(72)
     await searchFaceInCollection('baggage-emp-s', Buffer.from('img'), 90)
     expect(lastInput('SearchFacesByImage')?.FaceMatchThreshold).toBe(90)
   })

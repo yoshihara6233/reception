@@ -150,13 +150,14 @@ export async function POST(req: NextRequest) {
     }
     sessionId = open.id
   } else {
-    // 直前にクローズされたばかりなら重複送信とみなす（幽霊 unmatched_entry の量産防止）。
+    // 二重送信（同一操作のリトライ）のみを重複とみなす短い窓。顔認証できない退室は
+    // 原則アンマッチとして記録するため、別人の連続退室を取りこぼさないよう窓を短くする。
     const { data: justClosed } = await svc
       .from('inspection_sessions')
       .select('id, status')
       .eq('store_id', store.id)
       .eq('person_kind', body.personKind)
-      .gte('exit_at', new Date(now.getTime() - 30_000).toISOString())
+      .gte('exit_at', new Date(now.getTime() - 5_000).toISOString())
       .order('exit_at', { ascending: false })
       .limit(1)
       .maybeSingle()
@@ -212,9 +213,14 @@ export async function POST(req: NextRequest) {
 }
 
 /**
- * 「未退出の最新 entry」を解決する。
- * 顔一致の結果があれば本人に直結（visitor=セッションID / staff=employee_id）、
- * 無ければ従来どおり店舗×区分の最新（同時滞在で誤紐付けの可能性は authSkipped 前提の限界）。
+ * 「未退出の入室セッション」を顔認証の結果に基づいてのみ解決する。
+ *
+ * 顔認証で本人が特定できた時だけ紐づける:
+ *   - 来訪者: entrySessionId（当日コレクション照合で得た本人の入室セッションID）
+ *   - 従業員: employeeId（常設コレクション照合で得た本人）→ その従業員の未退出セッション
+ * 顔認証できていない（entrySessionId も employeeId も無い）場合は、店舗×区分の最新を
+ * 推測で紐づけない → 呼び出し側でアンマッチ（入室記録なし）として記録する。
+ * （旧実装は未特定時に最新の入室へ機械的に紐づけていたが、別人を同一視する恐れがあり廃止）
  */
 async function findOpenSession(
   svc: ReturnType<typeof import('@/lib/supabase/server').createSupabaseService>,
@@ -223,6 +229,7 @@ async function findOpenSession(
   employeeId: string | null,
   entrySessionId: string | null,
 ): Promise<{ id: string; employee_id: string | null } | null> {
+  // 来訪者: 顔照合で本人の入室セッションが取れた時のみ。
   if (entrySessionId) {
     const { data } = await svc
       .from('inspection_sessions')
@@ -231,17 +238,22 @@ async function findOpenSession(
       .eq('store_id', storeId)
       .is('exit_at', null)
       .maybeSingle()
-    if (data) return data
+    return data ?? null
   }
-  let q = svc
-    .from('inspection_sessions')
-    .select('id, employee_id')
-    .eq('store_id', storeId)
-    .eq('person_kind', personKind)
-    .is('exit_at', null)
-    .order('entry_at', { ascending: false })
-    .limit(1)
-  if (employeeId) q = q.eq('employee_id', employeeId)
-  const { data } = await q.maybeSingle()
-  return data ?? null
+  // 従業員: 顔照合で本人(employee_id)が特定できた時のみ、その従業員の未退出セッションに。
+  if (employeeId) {
+    const { data } = await svc
+      .from('inspection_sessions')
+      .select('id, employee_id')
+      .eq('store_id', storeId)
+      .eq('person_kind', personKind)
+      .eq('employee_id', employeeId)
+      .is('exit_at', null)
+      .order('entry_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    return data ?? null
+  }
+  // 顔認証で本人特定できていない → 推測で紐づけない（アンマッチにする）。
+  return null
 }

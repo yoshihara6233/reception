@@ -248,8 +248,11 @@ export function KioskClient(props: Props) {
         proceedAfterFace(action, kind, {
           facePath: r.facePath,
           employeeId: r.employeeId, lastName: r.lastName, entrySessionId: r.entrySessionId,
-          // 来訪者の入室は「登録」なので不一致でも省略扱いにしない
-          authSkipped: r.authSkipped || (!r.matched && !(kind === 'visitor' && action === 'entry')),
+          // サーバの判定をそのまま使う。authSkipped=true は「認証を省略/実行できなかった」
+          // （AWS未設定・タイムアウト・カメラ/通信不可）のみ。顔照合は実行できたが該当者
+          // なし（no_match）は authSkipped=false のまま＝「認証省略」ではなく単に未特定として
+          // 記録し、本人特定できないため紐づけない（アンマッチ）。
+          authSkipped: r.authSkipped,
         })
       } catch {
         clearTimeout(guard); skip()   // カメラ不可・通信失敗 → 認証省略で継続
