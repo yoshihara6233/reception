@@ -7,7 +7,7 @@
  * 閲覧は footage_access_log（baggage_view・5分dedup）に記録（G3）。
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { createSupabaseServer } from '@/lib/supabase/server'
+import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { recordFootageAccess } from '@/lib/audit/footage-access'
 
 export async function GET(
@@ -24,15 +24,22 @@ export async function GET(
     .from('inspection_sessions')
     .select(`id, store_id, person_kind, visitor_name, visitor_company, entry_at, exit_at,
       entry_face_path, exit_face_path, card_photo_path, inspection_started_at, inspection_ended_at,
-      status, auth_skipped, confirmed_at, inspection_date, consent_at, consent_version,
-      employees ( name, face_photo_path ), stores ( name )`)
+      status, auth_skipped, confirmed_at, inspection_date, consent_at, consent_version, employee_id,
+      stores ( name )`)
     .eq('id', id)
     .maybeSingle()
   if (!sess) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 
-  const emp = (Array.isArray(sess.employees) ? sess.employees[0] : sess.employees) as
-    { name: string; face_photo_path: string | null } | null
   const store = (Array.isArray(sess.stores) ? sess.stores[0] : sess.stores) as { name: string } | null
+
+  // employees は reception 世代のレガシーRLS（JWT tenant 依存）で JOIN が空になるため、
+  // セッションの可視性を RLS で確認した上で、従業員名/顔は service 経由で解決する。
+  let emp: { name: string; face_photo_path: string | null } | null = null
+  if (sess.person_kind === 'staff' && sess.employee_id) {
+    const { data } = await createSupabaseService()
+      .from('employees').select('name, face_photo_path').eq('id', sess.employee_id).maybeSingle()
+    emp = data as { name: string; face_photo_path: string | null } | null
+  }
 
   const { data: clipRows } = await supa
     .from('inspection_clips')
