@@ -5,11 +5,25 @@
  * 設定は inspection_settings（RLS: baggage_store_access で店舗スコープ）。
  * 画面本体は KioskClient（SCREEN A〜F・ワイヤーフレーム v3 準拠）。
  */
+import type { Metadata } from 'next'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { loadTenantSettings } from '@/lib/baggage/tenant-settings'
 import { resolveKioskOrAdmin } from '@/lib/baggage/kiosk-guard'
 import { KioskClient } from './KioskClient'
 import { KioskPinGate } from './KioskPinGate'
+
+// キオスク画面のみ store 別 manifest を参照させ、「ホーム画面に追加」で
+// 作られるアイコンが管理画面(/stores)ではなくこのキオスク画面を開くようにする。
+// （アプリ共通 manifest の start_url は /stores のまま本部監視用に残す。）
+export async function generateMetadata(
+  { params }: { params: Promise<{ storeId: string }> },
+): Promise<Metadata> {
+  const { storeId } = await params
+  return {
+    manifest: `/kiosk/baggage/${storeId}/manifest.webmanifest`,
+    appleWebApp: { capable: true, title: '手荷物検査', statusBarStyle: 'black-translucent' },
+  }
+}
 
 function FullScreenMessage({ title, sub }: { title: string; sub?: string }) {
   return (
