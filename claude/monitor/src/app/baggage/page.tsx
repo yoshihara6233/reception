@@ -7,15 +7,17 @@
  */
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
 import { BAGGAGE_NAV, BAGGAGE_NAV_TITLE } from './nav'
 import {
-  sessionBadge, clipBadge, AUTH_SKIPPED_BADGE, UNCONFIRMED_BADGE,
-  HISTORY_FILTERS, type HistoryFilterKey, type BadgeDef,
+  sessionBadge, clipBadge,
+  HISTORY_FILTERS, type HistoryFilterKey,
 } from '@/lib/baggage/status'
 import { jstDateStr } from '@/lib/baggage/unmatch'
+import { HistoryWorkspace, type RowVM } from './HistoryWorkspace'
 
 interface SessionRow {
   id: string
@@ -28,25 +30,6 @@ interface SessionRow {
   confirmed_at: string | null
   employees: { name: string } | null
 }
-
-const toneClass: Record<BadgeDef['tone'], string> = {
-  ok:     'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
-  warn:   'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
-  bad:    'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
-  muted:  'bg-slate-200 text-slate-600 dark:bg-gedbg3 dark:text-gedink3',
-  accent: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
-}
-
-function Badge({ def }: { def: BadgeDef }) {
-  return (
-    <span className={`inline-block whitespace-nowrap rounded px-2 py-0.5 text-[11px] font-medium ${toneClass[def.tone]}`}>
-      {def.label}
-    </span>
-  )
-}
-
-const hm = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tokyo' }) : '—'
 
 export default async function BaggageHistoryPage(
   { searchParams }: { searchParams: Promise<{ store?: string; date?: string; f?: string }> },
@@ -68,7 +51,12 @@ export default async function BaggageHistoryPage(
     })
     .filter(Boolean) as { id: string; name: string }[]
 
-  const storeId = sp.store && storeOptions.some((s) => s.id === sp.store) ? sp.store : storeOptions[0]?.id
+  // 店舗の既定: ?store → cookie(bg_store・前回選択) → 先頭。いずれも可視店舗に限る。
+  const cookieStore = (await cookies()).get('bg_store')?.value
+  const storeId =
+    (sp.store && storeOptions.some((s) => s.id === sp.store) && sp.store) ||
+    (cookieStore && storeOptions.some((s) => s.id === cookieStore) && cookieStore) ||
+    storeOptions[0]?.id
   const date = /^\d{4}-\d{2}-\d{2}$/.test(sp.date ?? '') ? sp.date! : jstDateStr(new Date())
   const filter: HistoryFilterKey = (HISTORY_FILTERS.some((f) => f.key === sp.f) ? sp.f : 'all') as HistoryFilterKey
 
@@ -123,6 +111,23 @@ export default async function BaggageHistoryPage(
     return `/baggage?${p.toString()}`
   }
 
+  // クリップバッジは行内で導出できないシリアライズ済み値としてサーバで確定する。
+  const rowVMs: RowVM[] = visible.map((r) => {
+    const statuses = clipsBySession.get(r.id)
+    const expected = jobsBySession.get(r.id)
+    return {
+      id: r.id,
+      person: r.person_kind === 'staff' ? (r.employees?.name ?? '（未特定）') : (r.visitor_name ?? '（未特定）'),
+      kind: r.person_kind,
+      entryAt: r.entry_at,
+      exitAt: r.exit_at,
+      statusBadge: sessionBadge(r.status),
+      authSkipped: r.auth_skipped,
+      unconfirmed: r.confirmed_at === null && r.status !== 'entered',
+      clip: (statuses || expected) ? clipBadge(statuses ?? [], expected ?? statuses?.length ?? 2) : null,
+    }
+  })
+
   return (
     <AdminShell pathname="/baggage" nav={BAGGAGE_NAV} navTitle={BAGGAGE_NAV_TITLE}>
       <PageHeader title="手荷物検査 履歴" crumb={[{ href: '/baggage', label: BAGGAGE_NAV_TITLE }]} />
@@ -168,59 +173,8 @@ export default async function BaggageHistoryPage(
               })}
             </div>
 
-            {/* 履歴テーブル（状態バッジ先頭・OV#3） */}
-            <div className="overflow-x-auto rounded border border-slate-200 bg-white dark:border-gedline dark:bg-gedbg2">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 text-left text-[11px] text-slate-500 dark:border-gedline dark:text-gedink3">
-                    <th className="px-3 py-2 font-medium">状態</th>
-                    <th className="px-3 py-2 font-medium">時刻</th>
-                    <th className="px-3 py-2 font-medium">人物</th>
-                    <th className="px-3 py-2 font-medium">区分</th>
-                    <th className="px-3 py-2 font-medium">入室</th>
-                    <th className="px-3 py-2 font-medium">退出</th>
-                    <th className="px-3 py-2 font-medium">映像</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visible.length === 0 && (
-                    <tr><td colSpan={7} className="px-3 py-8 text-center text-slate-500 dark:text-gedink3">
-                      該当する検査はありません
-                    </td></tr>
-                  )}
-                  {visible.map((r) => {
-                    const statuses = clipsBySession.get(r.id)
-                    const expected = jobsBySession.get(r.id)
-                    const person = r.person_kind === 'staff'
-                      ? (r.employees?.name ?? '（未特定）')
-                      : (r.visitor_name ?? '（未特定）')
-                    return (
-                      <tr key={r.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 dark:border-gedline/50 dark:hover:bg-gedbg3">
-                        <td className="px-3 py-2">
-                          <Link href={`/baggage/${r.id}`} className="flex flex-wrap gap-1">
-                            <Badge def={sessionBadge(r.status)} />
-                            {r.auth_skipped && <Badge def={AUTH_SKIPPED_BADGE} />}
-                            {r.confirmed_at === null && r.status !== 'entered' && <Badge def={UNCONFIRMED_BADGE} />}
-                          </Link>
-                        </td>
-                        <td className="px-3 py-2 font-mono tabular-nums">{hm(r.exit_at ?? r.entry_at)}</td>
-                        <td className="px-3 py-2">
-                          <Link href={`/baggage/${r.id}`} className="text-blue-700 hover:underline dark:text-gedaccent">{person}</Link>
-                        </td>
-                        <td className="px-3 py-2">{r.person_kind === 'staff' ? '従業員' : '来訪者'}</td>
-                        <td className="px-3 py-2 font-mono tabular-nums">{hm(r.entry_at)}</td>
-                        <td className="px-3 py-2 font-mono tabular-nums">{hm(r.exit_at)}</td>
-                        <td className="px-3 py-2">
-                          {statuses || expected
-                            ? <Badge def={clipBadge(statuses ?? [], expected ?? statuses?.length ?? 2)} />
-                            : <span className="text-slate-400 dark:text-gedink3">—</span>}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+            {/* 履歴（左一覧×右詳細・行を次々に選択） */}
+            <HistoryWorkspace rows={rowVMs} storeId={storeId ?? null} />
           </>
         )}
       </div>
