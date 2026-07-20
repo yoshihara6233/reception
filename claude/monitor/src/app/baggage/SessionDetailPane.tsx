@@ -73,6 +73,8 @@ export function SessionDetailPane({ sessionId }: { sessionId: string | null }) {
   const [detail, setDetail] = useState<Detail | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // 映像を最後まで再生した検査だけ「確認済み」を解禁（セッションIDで管理）。
+  const [reviewedId, setReviewedId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!sessionId) { setDetail(null); setError(null); return }
@@ -127,7 +129,7 @@ export function SessionDetailPane({ sessionId }: { sessionId: string | null }) {
         )}
         <span className="font-mono text-[12px] text-slate-500 dark:text-gedink3">#{detail.id.slice(0, 8)}</span>
         <div className="ml-auto flex items-center gap-3">
-          <ConfirmButton sessionId={detail.id} confirmed={detail.confirmedAt !== null} />
+          <ConfirmButton sessionId={detail.id} confirmed={detail.confirmedAt !== null} disabled={reviewedId !== detail.id} />
           <Link href={`/baggage/${detail.id}`} className="text-[12px] text-blue-700 hover:underline dark:text-gedaccent">別画面で開く ↗</Link>
         </div>
       </div>
@@ -139,8 +141,8 @@ export function SessionDetailPane({ sessionId }: { sessionId: string | null }) {
         </div>
       )}
 
-      {/* 2カメラ同期プレイヤー（倍速対応）。key で行切替のたびに再生状態を初期化 */}
-      <SessionPlayer key={detail.id} clips={detail.clips} windowLabel={windowLabel} />
+      {/* 2カメラ同期プレイヤー（倍速対応・シーク不可）。key で行切替のたびに再生状態を初期化 */}
+      <SessionPlayer key={detail.id} clips={detail.clips} windowLabel={windowLabel} onReviewed={() => setReviewedId(detail.id)} />
 
       {/* 顔比較列 */}
       <div className="flex flex-col gap-3 md:flex-row">
