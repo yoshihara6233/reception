@@ -24,6 +24,7 @@ import {
 } from '@/lib/baggage/unmatch'
 import { deleteCollectionById, visitorDailyCollectionId } from '@/lib/aws/rekognition'
 import { loadTenantSettings } from '@/lib/baggage/tenant-settings'
+import { isR2Path, r2Key, r2Configured, deleteClipObjects } from '@/lib/baggage/r2'
 
 export const maxDuration = 300   // 店舗数×Storage削除で伸びるため上限を確保
 
@@ -174,8 +175,20 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           .in('session_id', ids)
         const clipPaths = ((clips ?? []) as { storage_path: string }[])
           .map((c) => c.storage_path).filter((p) => !p.startsWith('failed/'))
-        if (clipPaths.length > 0) {
-          const { error } = await svc.storage.from('baggage-clips').remove(clipPaths)
+        // R2 分（r2: プレフィックス）と Supabase 分を分けて削除。
+        const r2Keys = clipPaths.filter(isR2Path).map(r2Key)
+        const supaPaths = clipPaths.filter((p) => !isR2Path(p))
+        if (r2Keys.length > 0) {
+          if (r2Configured()) {
+            try { await deleteClipObjects(r2Keys) }
+            catch (e) { r.errors.push(`clip purge (r2): ${String((e as Error).message ?? e)}`) }
+          } else {
+            // env が外れた状態で行だけ消すと R2 に孤児が残るため明示エラー。
+            r.errors.push(`clip purge (r2): R2 not configured (${r2Keys.length} keys skipped)`)
+          }
+        }
+        if (supaPaths.length > 0) {
+          const { error } = await svc.storage.from('baggage-clips').remove(supaPaths)
           if (error) r.errors.push(`clip purge: ${error.message}`)
         }
         const { error: delErr } = await svc.from('inspection_sessions').delete().in('id', ids)
