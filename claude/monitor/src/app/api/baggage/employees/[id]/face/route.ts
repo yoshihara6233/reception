@@ -135,6 +135,7 @@ export async function POST(
     await svc.storage.from('baggage-photos').remove([path])
     const msg = (e as Error).message
     const noFace = /Face not detected/i.test(msg)
+    if (!noFace) console.error('[baggage face-register] rekognition 失敗', { store: store.id, employee: id, err: msg })
     return NextResponse.json({ error: noFace ? 'face_not_detected' : 'rekognition_failed', detail: msg },
       { status: noFace ? 422 : 502 })
   }
