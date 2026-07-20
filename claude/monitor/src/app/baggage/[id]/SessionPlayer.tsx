@@ -16,16 +16,27 @@ export interface PlayerClip {
   durationSec: number | null
 }
 
-const SPEEDS = [1, 1.5, 2, 4] as const
+const SPEEDS = [1, 2, 4, 8] as const
 
-export function SessionPlayer({ clips, windowLabel }: { clips: PlayerClip[]; windowLabel: string }) {
+export function SessionPlayer(
+  { clips, windowLabel, onReviewed }:
+  { clips: PlayerClip[]; windowLabel: string; onReviewed?: () => void },
+) {
   const refs = useRef<(HTMLVideoElement | null)[]>([])
   const [playing, setPlaying] = useState(false)
   const [time, setTime] = useState(0)
   const [duration, setDuration] = useState(0)
   const [rate, setRate] = useState(1)
+  const reviewedRef = useRef(false)
 
   const videos = () => refs.current.filter(Boolean) as HTMLVideoElement[]
+
+  // 一度でも最後まで再生したら「確認済み」ボタンを解禁する（親へ通知）。
+  const markReviewed = useCallback(() => {
+    if (reviewedRef.current) return
+    reviewedRef.current = true
+    onReviewed?.()
+  }, [onReviewed])
 
   // 倍速はプレイヤーが変わっても全 video に反映する（seek/切替後の取りこぼし防止）。
   const applyRate = useCallback((r: number) => {
@@ -44,10 +55,18 @@ export function SessionPlayer({ clips, windowLabel }: { clips: PlayerClip[]; win
     if (!playing) return
     const t = setInterval(() => {
       const v = videos()[0]
-      if (v) setTime(v.currentTime)
+      if (v) {
+        setTime(v.currentTime)
+        if (duration > 0 && v.currentTime >= duration - 0.4) markReviewed()
+      }
     }, 250)
     return () => clearInterval(t)
-  }, [playing])
+  }, [playing, duration, markReviewed])
+
+  // 映像が無い（クリップ処理中・期限切れ）検査は確認を妨げない → 即解禁。
+  useEffect(() => {
+    if (clips.length === 0) markReviewed()
+  }, [clips.length, markReviewed])
 
   const toggle = useCallback(() => {
     const vs = videos()
@@ -57,12 +76,7 @@ export function SessionPlayer({ clips, windowLabel }: { clips: PlayerClip[]; win
     setPlaying(true)
   }, [playing, rate])
 
-  const seek = useCallback((t: number) => {
-    videos().forEach((v) => { v.currentTime = t })
-    setTime(t)
-  }, [])
-
-  const onEnded = useCallback(() => { setPlaying(false) }, [])
+  const onEnded = useCallback(() => { setPlaying(false); markReviewed() }, [markReviewed])
 
   const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
 
@@ -113,15 +127,13 @@ export function SessionPlayer({ clips, windowLabel }: { clips: PlayerClip[]; win
           )}
         </button>
         <span className="font-mono tabular-nums">{fmt(time)}</span>
-        <input
-          type="range"
-          min={0}
-          max={Math.max(duration, 0.1)}
-          step={0.1}
-          value={Math.min(time, duration)}
-          onChange={(e) => seek(Number(e.target.value))}
-          className="h-1 flex-1 accent-blue-800"
-        />
+        {/* 進捗表示のみ（シーク不可・映像を最後まで確認させるため） */}
+        <div className="h-1.5 flex-1 overflow-hidden rounded bg-slate-200 dark:bg-gedbg3" role="progressbar"
+          aria-label="再生位置（シーク不可）"
+          aria-valuemin={0} aria-valuemax={Math.round(duration)} aria-valuenow={Math.round(time)}>
+          <div className="h-full bg-blue-700 dark:bg-gedaccent"
+            style={{ width: `${duration > 0 ? Math.min(100, (time / duration) * 100) : 0}%` }} />
+        </div>
         <span className="font-mono tabular-nums">{fmt(duration)}</span>
         <div className="flex items-center gap-1" role="group" aria-label="再生速度">
           {SPEEDS.map((s) => (

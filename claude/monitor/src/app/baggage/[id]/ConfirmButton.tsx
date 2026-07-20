@@ -7,7 +7,10 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
-export function ConfirmButton({ sessionId, confirmed }: { sessionId: string; confirmed: boolean }) {
+export function ConfirmButton(
+  { sessionId, confirmed, disabled = false }:
+  { sessionId: string; confirmed: boolean; disabled?: boolean },
+) {
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState(confirmed)
@@ -17,7 +20,8 @@ export function ConfirmButton({ sessionId, confirmed }: { sessionId: string; con
   }
   return (
     <button
-      disabled={busy}
+      disabled={busy || disabled}
+      title={disabled ? '映像を最後まで再生してから確認できます' : undefined}
       onClick={async () => {
         setBusy(true)
         try {
