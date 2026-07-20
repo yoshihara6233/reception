@@ -10,6 +10,7 @@ import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
 import { loadTenantSettings } from '@/lib/baggage/tenant-settings'
 import { TenantSettingsClient } from './TenantSettingsClient'
+import { StoreListClient, type StoreRow } from './StoreListClient'
 
 export default async function AdminBaggagePage(
   { searchParams }: { searchParams: Promise<{ tenant?: string }> },
@@ -55,16 +56,61 @@ export default async function AdminBaggagePage(
 
   const settings = await loadTenantSettings(svc, tenantId)
 
+  // 店舗別（有効化・カメラ）: テナント配下の全店舗＋各店舗の設定・カメラをまとめて取得。
+  const { data: stores } = await svc.from('stores').select('id, name').eq('tenant_id', tenantId).order('name')
+  const storeList = (stores ?? []) as { id: string; name: string }[]
+  const storeIds = storeList.map((s) => s.id)
+
+  const [{ data: settingsRows }, { data: cams }] = await Promise.all([
+    storeIds.length
+      ? svc.from('inspection_settings').select('store_id, enabled, camera_ids').in('store_id', storeIds)
+      : Promise.resolve({ data: [] }),
+    svc.from('recorder_cameras')
+      .select('id, name, channel, recorders!inner ( edge_devices!inner ( store_id ) )')
+      .eq('enabled', true),
+  ])
+  const settingsByStore = new Map((((settingsRows ?? []) as { store_id: string; enabled: boolean; camera_ids: string[] }[]))
+    .map((s) => [s.store_id, s]))
+  const camsByStore = new Map<string, { id: string; name: string; channel: number }[]>()
+  for (const c of (cams ?? []) as { id: string; name: string; channel: number; recorders: unknown }[]) {
+    const rec = Array.isArray(c.recorders) ? c.recorders[0] : c.recorders
+    const ed = rec && (Array.isArray((rec as { edge_devices?: unknown }).edge_devices)
+      ? (rec as { edge_devices: { store_id?: string }[] }).edge_devices[0]
+      : (rec as { edge_devices?: { store_id?: string } }).edge_devices)
+    const sid = (ed as { store_id?: string } | undefined)?.store_id
+    if (!sid || !storeIds.includes(sid)) continue
+    camsByStore.set(sid, [...(camsByStore.get(sid) ?? []), { id: c.id, name: c.name, channel: c.channel }])
+  }
+
+  const storeRows: StoreRow[] = storeList.map((s) => {
+    const cameras = (camsByStore.get(s.id) ?? []).sort((a, b) => a.channel - b.channel)
+    const cfg = settingsByStore.get(s.id)
+    return {
+      id: s.id,
+      name: s.name,
+      enabled: cfg?.enabled ?? false,
+      cameraIds: ((cfg?.camera_ids ?? []) as string[]).filter((id) => cameras.some((c) => c.id === id)),
+      cameras,
+    }
+  })
+
   return (
     <AdminShell pathname="/admin/baggage" section="admin">
-      <PageHeader title="手荷物検査 共通設定" />
-      <div className="p-5">
-        <TenantSettingsClient
-          isSuperAdmin={role === 'super_admin'}
-          tenants={tenants}
-          tenantId={tenantId}
-          initial={settings}
-        />
+      <PageHeader title="手荷物検査 設定" />
+      <div className="space-y-8 p-5">
+        <section>
+          <h2 className="mb-3 text-[15px] font-bold text-slate-900 dark:text-gedink">共通設定（全店舗）</h2>
+          <TenantSettingsClient
+            isSuperAdmin={role === 'super_admin'}
+            tenants={tenants}
+            tenantId={tenantId}
+            initial={settings}
+          />
+        </section>
+        <section>
+          <h2 className="mb-3 text-[15px] font-bold text-slate-900 dark:text-gedink">店舗別設定（有効化・検査台カメラ・iPad URL）</h2>
+          <StoreListClient stores={storeRows} />
+        </section>
       </div>
     </AdminShell>
   )

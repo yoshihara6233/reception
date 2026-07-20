@@ -8,8 +8,8 @@ import type { NavItem } from '@/components/AdminShell'
 
 export const BAGGAGE_NAV_TITLE = '手荷物検査'
 
+// 設定（共通・店舗別）は管理（/admin/baggage）に集約したためサイドバーから撤去。
 export const BAGGAGE_NAV: NavItem[] = [
   { href: '/baggage',           label: '履歴',         icon: '☰', exact: true },
   { href: '/baggage/employees', label: '従業員マスタ', icon: '⚇' },
-  { href: '/baggage/settings',  label: '設定',         icon: '⚙' },
 ]
