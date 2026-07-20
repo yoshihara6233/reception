@@ -50,17 +50,25 @@ const hms = (iso: string | null) =>
   iso ? new Date(iso).toLocaleTimeString('ja-JP', { hour12: false, timeZone: 'Asia/Tokyo' }) : '—'
 
 function Face(
-  { sessionId, kind, label, sub, has }:
-  { sessionId: string; kind: 'entry' | 'exit' | 'employee' | 'card'; label: string; sub: string; has: boolean },
+  { sessionId, kind, label, sub, has, onZoom }:
+  { sessionId: string; kind: 'entry' | 'exit' | 'employee' | 'card'; label: string; sub: string; has: boolean; onZoom: (src: string, label: string) => void },
 ) {
+  const src = `/api/baggage/sessions/${sessionId}/photo?kind=${kind}`
   return (
     <div className="flex flex-1 items-center gap-3 rounded border border-slate-200 bg-white p-3 dark:border-gedline dark:bg-gedbg2">
-      <div className="flex h-14 w-14 flex-none items-center justify-center overflow-hidden rounded bg-slate-200 text-[10px] text-slate-500 dark:bg-gedbg3 dark:text-gedink3">
+      <button
+        type="button"
+        disabled={!has}
+        onClick={() => has && onZoom(src, label)}
+        title={has ? 'クリックで拡大' : undefined}
+        className="flex h-14 w-14 flex-none items-center justify-center overflow-hidden rounded bg-slate-200 text-[10px] text-slate-500 disabled:cursor-default dark:bg-gedbg3 dark:text-gedink3"
+        style={{ cursor: has ? 'zoom-in' : 'default' }}
+      >
         {has
           // eslint-disable-next-line @next/next/no-img-element
-          ? <img src={`/api/baggage/sessions/${sessionId}/photo?kind=${kind}`} alt={label} className="h-full w-full object-cover" />
+          ? <img src={src} alt={label} className="h-full w-full object-cover" />
           : 'なし'}
-      </div>
+      </button>
       <div>
         <div className="text-[11px] text-slate-500 dark:text-gedink3">{label}</div>
         <div className="font-mono text-sm tabular-nums text-slate-800 dark:text-gedink">{sub}</div>
@@ -75,6 +83,8 @@ export function SessionDetailPane({ sessionId }: { sessionId: string | null }) {
   const [error, setError] = useState<string | null>(null)
   // 映像を最後まで再生した検査だけ「確認済み」を解禁（セッションIDで管理）。
   const [reviewedId, setReviewedId] = useState<string | null>(null)
+  // 顔/名刺の拡大表示（ライトボックス）。
+  const [zoom, setZoom] = useState<{ src: string; label: string } | null>(null)
 
   useEffect(() => {
     if (!sessionId) { setDetail(null); setError(null); return }
@@ -119,6 +129,7 @@ export function SessionDetailPane({ sessionId }: { sessionId: string | null }) {
     : 'クリップ処理中（エッジ切り出し待ち）'
 
   return (
+    <>
     <div className="space-y-4 rounded border border-slate-200 bg-white p-4 dark:border-gedline dark:bg-gedbg2">
       {/* 見出し行 */}
       <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -146,11 +157,11 @@ export function SessionDetailPane({ sessionId }: { sessionId: string | null }) {
 
       {/* 顔比較列 */}
       <div className="flex flex-col gap-3 md:flex-row">
-        <Face sessionId={detail.id} kind="entry" label={detail.authSkipped ? '入室（推定）' : '入室'} sub={hms(detail.entryAt)} has={detail.hasEntryFace} />
-        <Face sessionId={detail.id} kind="exit" label={detail.authSkipped ? '退出（推定）' : '退出'} sub={hms(detail.exitAt)} has={detail.hasExitFace} />
+        <Face sessionId={detail.id} kind="entry" label={detail.authSkipped ? '入室（推定）' : '入室'} sub={hms(detail.entryAt)} has={detail.hasEntryFace} onZoom={(s, l) => setZoom({ src: s, label: l })} />
+        <Face sessionId={detail.id} kind="exit" label={detail.authSkipped ? '退出（推定）' : '退出'} sub={hms(detail.exitAt)} has={detail.hasExitFace} onZoom={(s, l) => setZoom({ src: s, label: l })} />
         {detail.personKind === 'staff'
-          ? <Face sessionId={detail.id} kind="employee" label="従業員マスタ" sub={detail.employeeName ?? '未登録'} has={detail.hasEmployeeFace} />
-          : <Face sessionId={detail.id} kind="card" label="名刺" sub={detail.visitorCompany ?? detail.person} has={detail.hasCardPhoto} />}
+          ? <Face sessionId={detail.id} kind="employee" label="従業員マスタ" sub={detail.employeeName ?? '未登録'} has={detail.hasEmployeeFace} onZoom={(s, l) => setZoom({ src: s, label: l })} />
+          : <Face sessionId={detail.id} kind="card" label="名刺" sub={detail.visitorCompany ?? detail.person} has={detail.hasCardPhoto} onZoom={(s, l) => setZoom({ src: s, label: l })} />}
       </div>
 
       {/* メタ */}
@@ -171,5 +182,19 @@ export function SessionDetailPane({ sessionId }: { sessionId: string | null }) {
         <div className="ml-auto self-end text-slate-500 dark:text-gedink3">この閲覧は監査ログに記録されます</div>
       </div>
     </div>
+
+    {/* 拡大表示（ライトボックス）。背景クリックで閉じる。 */}
+    {zoom && (
+      <div
+        onClick={() => setZoom(null)}
+        className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-black/80 p-6"
+        role="dialog" aria-label={`${zoom.label} 拡大`}
+      >
+        <div className="text-[13px] text-white/80">{zoom.label}（クリックで閉じる）</div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={zoom.src} alt={zoom.label} className="max-h-[85vh] max-w-[92vw] rounded object-contain shadow-2xl" />
+      </div>
+    )}
+    </>
   )
 }
