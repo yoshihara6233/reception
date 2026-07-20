@@ -5,11 +5,12 @@
  * The left nav is configurable via the `nav` + `navTitle` props so each section
  * (マスタ管理 / 警備 / BCP …) shows its own menu. Defaults to the admin master nav.
  */
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { AppHeader } from './AppHeader'
 import { StatusBar } from './StatusBar'
+import { AdminShellClient } from './AdminShellClient'
 import { getT } from '@/lib/i18n/server'
 import type { Msg } from '@/lib/i18n/messages'
 
@@ -153,39 +154,15 @@ export async function AdminShell({
             ? t.navTitle[section]
             : '設定')
 
+  // 左メニュー折りたたみの初期値は cookie から（サーバ確定でちらつき防止）。
+  const collapsed = (await cookies()).get('nav_collapsed')?.value === '1'
+
   return (
     <div className="flex h-screen flex-col">
       <AppHeader userName={userName} />
-      <div className="grid flex-1 grid-cols-[220px_1fr] overflow-hidden">
-        <aside className="overflow-y-auto border-r border-slate-200 bg-slate-50 dark:border-gedline dark:bg-gedbg2">
-          <div className="border-b border-slate-200 bg-white px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:border-gedline dark:bg-gedbg2 dark:text-gedink3">
-            {effectiveTitle}
-          </div>
-          <nav className="p-2 text-xs">
-            {effectiveNav.map((e) => {
-              const active = e.exact
-                ? pathname === e.href
-                : pathname === e.href || pathname.startsWith(e.href + '/')
-              return (
-                <Link
-                  key={e.href}
-                  href={e.href}
-                  className={
-                    'flex items-center gap-2 rounded px-2.5 py-1.5 ' +
-                    (active
-                      ? 'bg-blue-100 font-semibold text-blue-800 dark:bg-gedbg3 dark:text-gedink dark:shadow-[inset_2px_0_0_var(--color-gedaccent)]'
-                      : 'text-slate-600 hover:bg-slate-100 dark:text-gedink2 dark:hover:bg-gedbg3')
-                  }
-                >
-                  <span className="w-4 text-center">{e.icon}</span>
-                  {e.label}
-                </Link>
-              )
-            })}
-          </nav>
-        </aside>
-        <main className="overflow-auto bg-slate-100 dark:bg-gedbg">{children}</main>
-      </div>
+      <AdminShellClient nav={effectiveNav} title={effectiveTitle} pathname={pathname} initialCollapsed={collapsed}>
+        {children}
+      </AdminShellClient>
       <StatusBar />
     </div>
   )
