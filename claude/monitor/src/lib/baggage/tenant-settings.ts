@@ -15,6 +15,10 @@ export interface BaggageTenantSettings {
   audioEnabled: boolean
   audioVolume: number
   steps: AnnounceStep[]
+  /** 個人情報取扱い同意の表示文言（空なら同意画面を出さない）。 */
+  consentText: string
+  /** 同意文言の版（文言変更で +1）。 */
+  consentVersion: number
 }
 
 export const DEFAULT_TENANT_SETTINGS: BaggageTenantSettings = {
@@ -25,6 +29,8 @@ export const DEFAULT_TENANT_SETTINGS: BaggageTenantSettings = {
   audioEnabled: true,
   audioVolume: 1,
   steps: normalizeAnnounceSteps(undefined),
+  consentText: '',
+  consentVersion: 1,
 }
 
 /** DB 行 → 共通設定（行が無ければ既定）。 */
@@ -38,10 +44,12 @@ export function rowToTenantSettings(s: Record<string, unknown> | null | undefine
     audioEnabled: s.audio_enabled !== false,
     audioVolume: Number(s.audio_volume ?? 1),
     steps: normalizeAnnounceSteps(s.announce_steps),
+    consentText: typeof s.consent_text === 'string' ? s.consent_text : '',
+    consentVersion: Number(s.consent_version) || 1,
   }
 }
 
-const COLS = 'retention_days, nvr_retention_days, inspection_timeout_sec, terminal_mode, audio_enabled, audio_volume, announce_steps'
+const COLS = 'retention_days, nvr_retention_days, inspection_timeout_sec, terminal_mode, audio_enabled, audio_volume, announce_steps, consent_text, consent_version'
 
 /** テナントの共通設定を読む（任意の supabase クライアント・行なしは既定）。 */
 export async function loadTenantSettings(

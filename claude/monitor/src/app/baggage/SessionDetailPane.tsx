@@ -30,6 +30,8 @@ interface Detail {
   authSkipped: boolean
   confirmedAt: string | null
   inspectionDate: string
+  consentAt: string | null
+  consentVersion: number | null
   storeName: string | null
   windowSec: number | null
   maxOffset: number | null
@@ -157,6 +159,13 @@ export function SessionDetailPane({ sessionId }: { sessionId: string | null }) {
           <span className="font-mono tabular-nums">{hms(detail.inspectionStartedAt)} 〜 {hms(detail.inspectionEndedAt)}</span></div>
         <div><div className="text-[11px] text-slate-500 dark:text-gedink3">NVR時刻差</div>
           <span className="font-mono tabular-nums">{detail.maxOffset === null ? '—' : `${detail.maxOffset >= 0 ? '+' : ''}${detail.maxOffset}s`}</span></div>
+        {detail.personKind === 'visitor' && (
+          <div><div className="text-[11px] text-slate-500 dark:text-gedink3">個人情報同意</div>
+            {detail.consentAt
+              ? <span className="text-emerald-700 dark:text-emerald-400">同意 v{detail.consentVersion ?? 1}（{hms(detail.consentAt)}）</span>
+              : <span className="text-slate-500 dark:text-gedink3">記録なし</span>}
+          </div>
+        )}
         <div className="ml-auto self-end text-slate-500 dark:text-gedink3">この閲覧は監査ログに記録されます</div>
       </div>
     </div>

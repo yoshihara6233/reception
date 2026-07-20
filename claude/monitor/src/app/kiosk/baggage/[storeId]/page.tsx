@@ -57,6 +57,8 @@ export default async function BaggageKioskPage(
       audioEnabled={tenant.audioEnabled}
       audioVolume={tenant.audioVolume}
       steps={tenant.steps}
+      consentText={tenant.consentText}
+      consentVersion={tenant.consentVersion}
     />
   )
 }

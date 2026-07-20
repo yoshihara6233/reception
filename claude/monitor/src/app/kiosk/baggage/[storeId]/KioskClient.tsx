@@ -31,6 +31,10 @@ interface Props {
   audioEnabled: boolean
   audioVolume: number
   steps: AnnounceStep[]
+  /** 個人情報取扱い同意の文言（空なら同意画面を出さない）。 */
+  consentText: string
+  /** 同意文言の版（記録に残す）。 */
+  consentVersion: number
 }
 
 /** 顔照合の結果（face-auth API 応答）を後続画面へ引き回す。 */
@@ -53,6 +57,9 @@ type Screen =
   | { s: 'regList'; employees: { id: string; name: string }[] | null; error?: string }
   | { s: 'regCapture'; employee: { id: string; name: string }; captured?: string; busy?: boolean; error?: string }
   | { s: 'regDone'; name: string }
+  // 個人情報取扱い同意（来訪者=入室毎／従業員=顔登録時）。同意後に次画面へ。
+  | { s: 'consent'; onAgree: 'faceAuth'; kind: PersonKind; action: FlowAction }
+  | { s: 'consent'; onAgree: 'regCapture'; kind: 'staff'; employee: { id: string; name: string } }
 
 const ACTION_LABEL: Record<FlowAction, { t: string; sub: string; primary?: boolean }> = {
   entry:       { t: '入室', sub: '顔認証' },
@@ -80,7 +87,7 @@ const FACE_TOTAL_GUARD_MS = 10000
 const FACE_CAPTURE_ZOOM = 2.6
 
 export function KioskClient(props: Props) {
-  const { storeId, storeName, terminalMode, timeoutSec, audioEnabled, audioVolume, steps } = props
+  const { storeId, storeName, terminalMode, timeoutSec, audioEnabled, audioVolume, steps, consentText, consentVersion } = props
   const [screen, setScreen] = useState<Screen>({ s: 'idle' })
   const [clock, setClock] = useState('')
   const [offline, setOffline] = useState(false)
@@ -89,6 +96,8 @@ export function KioskClient(props: Props) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const finishingRef = useRef(false)   // 退出POSTの二重送信ガード
+  const consentRef = useRef<number | null>(null)   // 直近の同意版（同意後の記録用・毎回リセット）
+  const hasConsent = consentText.trim().length > 0
   const actions = availableActions(terminalMode)
 
   // 時計（アイドルヘッダー）
@@ -115,7 +124,34 @@ export function KioskClient(props: Props) {
   const stopCam = useCallback(() => {
     if (streamRef.current) { stopCamera(streamRef.current); streamRef.current = null }
   }, [])
-  const resetToIdle = useCallback(() => { stopCam(); setScreen({ s: 'idle' }) }, [stopCam])
+  const resetToIdle = useCallback(() => { stopCam(); consentRef.current = null; setScreen({ s: 'idle' }) }, [stopCam])
+
+  // 動作開始（区分×動作）。来訪者の入室は同意文言があれば先に同意画面。
+  const startAction = useCallback((action: FlowAction, kind: PersonKind) => {
+    if (hasConsent && kind === 'visitor' && action === 'entry') {
+      setScreen({ s: 'consent', onAgree: 'faceAuth', kind, action })
+    } else {
+      consentRef.current = null
+      setScreen({ s: 'faceAuth', action, kind })
+    }
+  }, [hasConsent])
+
+  // セルフ顔登録の開始（従業員）。同意文言があれば先に同意画面。
+  const startEnroll = useCallback((employee: { id: string; name: string }) => {
+    if (hasConsent) setScreen({ s: 'consent', onAgree: 'regCapture', kind: 'staff', employee })
+    else { consentRef.current = null; setScreen({ s: 'regCapture', employee }) }
+  }, [hasConsent])
+
+  // 同意して次へ（同意版を記録用に控える）。
+  const agreeConsent = useCallback(() => {
+    setScreen((cur) => {
+      if (cur.s !== 'consent') return cur
+      consentRef.current = consentVersion
+      return cur.onAgree === 'faceAuth'
+        ? { s: 'faceAuth', action: cur.action, kind: cur.kind }
+        : { s: 'regCapture', employee: cur.employee }
+    })
+  }, [consentVersion])
 
   // 完了=AUTO_IDLE_SEC(3秒) / 途中記録=2秒 でアイドルへ（B・E・顔登録完了）
   useEffect(() => {
@@ -183,6 +219,8 @@ export function KioskClient(props: Props) {
       const ok = await postSession({
         action, personKind: kind, facePath: ctx.facePath,
         employeeId: ctx.employeeId ?? null, authSkipped: ctx.authSkipped,
+        // 来訪者入室の同意（同意画面を通っていれば版が入る）。
+        consentVersion: kind === 'visitor' ? consentRef.current : null,
       })
       if (ok) setScreen({ s: 'complete', label: '入室を記録しました' })
       return
@@ -311,7 +349,8 @@ export function KioskClient(props: Props) {
     try {
       const res = await fetch(`/api/baggage/employees/${screen.employee.id}/face`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ image: screen.captured, onlyIfUnregistered: true }),
+        // 顔登録時の同意（同意画面を通っていれば版が入る）を記録。
+        body: JSON.stringify({ image: screen.captured, onlyIfUnregistered: true, consentVersion: consentRef.current }),
       })
       if (!res.ok) {
         const j = await res.json().catch(() => null) as { error?: string } | null
@@ -378,7 +417,7 @@ export function KioskClient(props: Props) {
               {actions.map((a) => {
                 const primary = ACTION_LABEL[a].primary
                 return (
-                  <button key={a} onClick={() => setScreen({ s: 'faceAuth', action: a, kind })} style={{
+                  <button key={a} onClick={() => startAction(a, kind)} style={{
                     width: 180, height: 104, background: '#fff',
                     border: `${primary ? 2 : 1}px solid ${primary ? COL.accent : COL.line}`,
                     color: primary ? COL.accent : COL.ink, borderRadius: 6, cursor: 'pointer',
@@ -418,7 +457,7 @@ export function KioskClient(props: Props) {
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center',
               maxWidth: 780, maxHeight: 360, overflowY: 'auto', padding: 4 }}>
               {screen.employees.map((e) => (
-                <button key={e.id} onClick={() => setScreen({ s: 'regCapture', employee: e })} style={{
+                <button key={e.id} onClick={() => startEnroll(e)} style={{
                   minWidth: 180, height: 72, background: '#fff', border: `1px solid ${COL.line}`,
                   borderRadius: 6, fontSize: 20, fontWeight: 700, fontFamily: 'inherit',
                   color: COL.ink, cursor: 'pointer', padding: '0 20px' }}>
@@ -480,6 +519,22 @@ export function KioskClient(props: Props) {
           <CheckMark />
           <div style={{ fontSize: 40, fontWeight: 700 }}>{lastNameOfClient(screen.name)}さんの顔を登録しました</div>
           <div style={{ fontSize: 14, color: COL.ink3 }}>次回から顔認証で入退室できます。3秒後に最初の画面に戻ります</div>
+        </div>
+      )}
+
+      {/* ── 個人情報取扱い同意（来訪者=入室毎／従業員=顔登録時） ── */}
+      {screen.s === 'consent' && (
+        <div style={centerBox(24)}>
+          <div style={{ fontSize: 26, fontWeight: 700 }}>個人情報の取扱いについて</div>
+          <div style={{ width: 760, maxHeight: 360, overflowY: 'auto', background: '#fff',
+            border: `1px solid ${COL.line}`, borderRadius: 6, padding: '20px 24px', textAlign: 'left',
+            fontSize: 16, lineHeight: 1.8, color: COL.ink2, whiteSpace: 'pre-wrap' }}>
+            {consentText}
+          </div>
+          <div style={{ width: 760, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <button onClick={agreeConsent} style={primaryFullBtn}>同意して進む</button>
+            <button onClick={resetToIdle} style={ghostFullBtn}>同意しない（最初の画面に戻る）</button>
+          </div>
         </div>
       )}
 

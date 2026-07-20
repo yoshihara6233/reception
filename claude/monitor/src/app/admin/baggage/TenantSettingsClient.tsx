@@ -132,6 +132,23 @@ export function TenantSettingsClient(
             ))}
           </div>
         </div>
+
+        {/* 個人情報取扱い同意の文言（iPadで表示。従業員=顔登録時／来訪者=入室毎に確認） */}
+        <div className="border-t border-slate-100 pt-4 dark:border-gedline/50">
+          <div className="mb-2 flex items-center gap-3">
+            <span className={label}>個人情報取扱い同意の文言</span>
+            <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-[11px] text-slate-500 dark:bg-gedbg3 dark:text-gedink3">現在 v{f.consentVersion}</span>
+          </div>
+          <textarea
+            value={f.consentText}
+            onChange={(e) => set('consentText', e.target.value.slice(0, 4000))}
+            rows={5}
+            placeholder="例）当店では手荷物検査のため、顔情報を取得・照合し、検査記録として一定期間保管します。ご同意のうえ「同意して進む」を押してください。"
+            className={`${input} w-full`} />
+          <p className="mt-1 text-[12px] text-slate-500 dark:text-gedink3">
+            iPadキオスクで表示します。<b>空欄なら同意画面を出しません</b>。文言を変更して保存すると版(v)が上がり、以降の同意はその版で記録されます（過去の同意と区別できます）。
+          </p>
+        </div>
       </div>
 
       {msg && (

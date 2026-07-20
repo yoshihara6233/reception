@@ -76,6 +76,7 @@ const Body = z.object({
   // キオスクのセルフ登録用: 既に顔が登録済みなら 409（共有端末での上書きなりすまし防止）。
   // 管理画面からの差し替えは false/未指定のまま。
   onlyIfUnregistered: z.boolean().optional(),
+  consentVersion: z.number().int().nullish(),   // 顔登録時の同意版（同意画面を通った場合）
 })
 
 function dataUrlToBuffer(dataUrl: string): { buf: Buffer; mime: string; ext: string } | null {
@@ -156,7 +157,13 @@ export async function POST(
   }
   const { error } = await svc
     .from('employees')
-    .update({ face_photo_path: path, rekognition_face_id: faceId })
+    .update({
+      face_photo_path: path, rekognition_face_id: faceId,
+      // 顔登録時の同意（同意画面を通っていれば版・日時を記録）。
+      ...(parsed.data.consentVersion != null
+        ? { consent_at: new Date().toISOString(), consent_version: parsed.data.consentVersion }
+        : {}),
+    })
     .eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
