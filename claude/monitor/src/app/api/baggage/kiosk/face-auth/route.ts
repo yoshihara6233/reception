@@ -50,16 +50,17 @@ export async function POST(req: NextRequest) {
   const buf = dataUrlToBuffer(body.image)
   if (!buf) return NextResponse.json({ error: 'invalid_image' }, { status: 400 })
 
-  // 1) 顔写真を保存（照合の成否に関わらず記録として添付する）
+  // 1) 顔写真の保存は「並行」で開始（照合と同時に走らせて体感を短縮）。
   const now = new Date()
   const facePath = `${store.id}/${jstYmd(now)}/${crypto.randomUUID()}.jpg`
-  const { error: upErr } = await svc.storage
+  const uploadPromise = svc.storage
     .from('baggage-photos')
     .upload(facePath, buf, { contentType: 'image/jpeg', upsert: false })
-  if (upErr) return NextResponse.json({ error: 'photo_upload_failed' }, { status: 500 })
 
-  // 2) 照合（visitor entry は登録のみなので照合スキップ）
+  // 2) 照合（visitor entry は登録のみなので照合スキップ）— アップロード完了を待って返す。
   if (body.personKind === 'visitor' && body.action === 'entry') {
+    const { error: upErr } = await uploadPromise
+    if (upErr) return NextResponse.json({ error: 'photo_upload_failed' }, { status: 500 })
     return NextResponse.json({ matched: false, authSkipped: false, facePath })
   }
 
@@ -70,10 +71,12 @@ export async function POST(req: NextRequest) {
   // AWS 未設定は即ログ（authSkipped で継続するが原因を残す）
   if (!process.env.AWS_REGION || !process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
     console.error('[baggage face-auth] AWS not configured → 認証省略', { store: store.id, kind: body.personKind })
+    const { error: upErr } = await uploadPromise
+    if (upErr) return NextResponse.json({ error: 'photo_upload_failed' }, { status: 500 })
     return NextResponse.json({ matched: false, authSkipped: true, facePath, reason: 'aws_not_configured' })
   }
 
-  // 3秒レース。withTimeout は理由を潰すため、ここでは実エラーを保持して診断ログに出す。
+  // 照合レース（アップロードと並行）。withTimeout は理由を潰すため実エラーを保持して診断ログに出す。
   let searchResult: Awaited<ReturnType<typeof searchFaceInCollection>> | null = null
   let failReason: string | null = null
   try {
@@ -85,6 +88,10 @@ export async function POST(req: NextRequest) {
     const m = (e as Error).message
     failReason = m === '__timeout__' ? 'timeout' : `error: ${m}`
   }
+
+  // 応答前にアップロード完了を確認（写真は記録として必須）。
+  const { error: upErr } = await uploadPromise
+  if (upErr) return NextResponse.json({ error: 'photo_upload_failed' }, { status: 500 })
 
   if (failReason) {
     console.error('[baggage face-auth] 照合失敗 → 認証省略', { store: store.id, kind: body.personKind, collectionId, reason: failReason })
@@ -116,11 +123,17 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  // visitor: externalId = 入室時に登録した inspection_sessions.id
+  // visitor: externalId = 入室時に登録した inspection_sessions.id。入室時刻も返す（退室画面に表示）。
+  const { data: entrySess } = await svc
+    .from('inspection_sessions')
+    .select('entry_at')
+    .eq('id', result.externalId)
+    .maybeSingle()
   return NextResponse.json({
     matched: true,
     authSkipped: false,
     facePath,
     entrySessionId: result.externalId,
+    entryAt: entrySess?.entry_at ?? null,
   })
 }

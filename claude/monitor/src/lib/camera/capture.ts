@@ -38,30 +38,40 @@ export async function startCamera(
 /**
  * @param zoom 1.0 = full frame, 2.0 = center crop at 2× zoom
  *             キオスクタブレット固定時は 2.0 で約50cm距離の顔にフィット
+ * @param maxDim 出力の長辺上限(px)。指定すると縮小して JPEG を小さくする
+ *              （アップロード/Rekognition の高速化。顔照合は 720 程度で十分）。
  */
-export function captureFrame(videoElement: HTMLVideoElement, zoom = 1): Blob | null {
+export function captureFrame(videoElement: HTMLVideoElement, zoom = 1, maxDim?: number): Blob | null {
   const vw = videoElement.videoWidth
   const vh = videoElement.videoHeight
   // カメラ未準備（0×0）で撮ると空dataURLになり atob が例外を投げるため、null で返す
   // （呼び出し側は「カメラを起動できませんでした」を表示して再試行できる）。
   if (!vw || !vh) return null
 
+  // 出力サイズ（長辺を maxDim で頭打ち・アスペクト比維持）。
+  let outW = vw, outH = vh
+  if (maxDim && Math.max(vw, vh) > maxDim) {
+    const scale = maxDim / Math.max(vw, vh)
+    outW = Math.round(vw * scale)
+    outH = Math.round(vh * scale)
+  }
+
   const canvas = document.createElement('canvas')
-  canvas.width = vw
-  canvas.height = vh
+  canvas.width = outW
+  canvas.height = outH
 
   const ctx = canvas.getContext('2d')
   if (!ctx) return null
 
   if (zoom > 1) {
-    // Center-crop: show only the inner 1/zoom area, stretched to full resolution
+    // Center-crop: show only the inner 1/zoom area, stretched to the output size
     const cropW = vw / zoom
     const cropH = vh / zoom
     const srcX = (vw - cropW) / 2
     const srcY = (vh - cropH) / 2
-    ctx.drawImage(videoElement, srcX, srcY, cropW, cropH, 0, 0, vw, vh)
+    ctx.drawImage(videoElement, srcX, srcY, cropW, cropH, 0, 0, outW, outH)
   } else {
-    ctx.drawImage(videoElement, 0, 0)
+    ctx.drawImage(videoElement, 0, 0, outW, outH)
   }
 
   // Convert to blob synchronously via dataURL for simplicity
