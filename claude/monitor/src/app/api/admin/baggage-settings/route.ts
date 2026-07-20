@@ -45,16 +45,24 @@ export async function PUT(req: NextRequest) {
   const svc = createSupabaseService()
   const steps = normalizeAnnounceSteps(body.steps)
 
-  // 同意文言: 変更時のみ consent_version を +1（過去同意と区別）。
-  const consentText = (body.consentText ?? '').trim()
-  const { data: cur } = await svc
-    .from('baggage_tenant_settings')
-    .select('consent_text, consent_version')
-    .eq('tenant_id', tenantId)
-    .maybeSingle()
-  const prevText = (cur?.consent_text ?? '') as string
-  const prevVersion = Number(cur?.consent_version) || 1
-  const consentVersion = consentText !== prevText ? prevVersion + 1 : prevVersion
+  // 同意文言: 省略時は現状維持（部分更新でも消さない）。指定時のみ版を管理:
+  //   初めての文言は v1、以降は文言変更のたびに +1、無変更は据え置き。
+  let consentUpdate: Record<string, unknown> = {}
+  if (body.consentText !== undefined) {
+    const consentText = body.consentText.trim()
+    const { data: cur } = await svc
+      .from('baggage_tenant_settings')
+      .select('consent_text, consent_version')
+      .eq('tenant_id', tenantId)
+      .maybeSingle()
+    const prevText = (cur?.consent_text ?? '') as string
+    const prevVersion = Number(cur?.consent_version) || 1
+    const consentVersion =
+      consentText === prevText ? prevVersion
+      : !prevText ? 1                    // 初回の文言は v1
+      : prevVersion + 1                  // 文言変更で +1
+    consentUpdate = { consent_text: consentText, consent_version: consentVersion }
+  }
 
   const { error } = await svc.from('baggage_tenant_settings').upsert({
     tenant_id: tenantId,
@@ -65,8 +73,7 @@ export async function PUT(req: NextRequest) {
     audio_enabled: body.audioEnabled,
     audio_volume: body.audioVolume,
     announce_steps: steps,
-    consent_text: consentText,
-    consent_version: consentVersion,
+    ...consentUpdate,
     updated_at: new Date().toISOString(),
   }, { onConflict: 'tenant_id' })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
