@@ -49,6 +49,8 @@ interface FaceCtx {
   facePath: string | null
   employeeId?: string
   entrySessionId?: string
+  /** 来訪者退室で入室セッションに一致した場合の入室時刻（ISO）。 */
+  entryAt?: string
   lastName?: string
   authSkipped: boolean
 }
@@ -87,8 +89,8 @@ const COL = {
   ok: '#2F7A4F', warn: '#B5761A', warnSoft: '#F6EFE2', danger: '#A3332B',
 }
 
-/** 撮影までのプレビュー時間（顔を枠に合わせる猶予）。 */
-const CAPTURE_DELAY_MS = 1200
+/** 撮影までのプレビュー時間（顔を枠に合わせる猶予）。短いほど体感が速い。 */
+const CAPTURE_DELAY_MS = 600
 /** face-auth 全体のクライアント側ガード（サーバ3秒レース＋通信の余裕）。 */
 const FACE_TOTAL_GUARD_MS = 10000
 /**
@@ -96,6 +98,10 @@ const FACE_TOTAL_GUARD_MS = 10000
  * 従来の 2.0 から寄せる。照合(登録/認証)は同じ倍率で撮ること＝両方これを使う。
  */
 const FACE_CAPTURE_ZOOM = 2.6
+/** 顔画像の長辺上限。小さくしてアップロード/照合を高速化（顔照合は 720 で十分）。 */
+const FACE_CAPTURE_MAXDIM = 720
+/** 名刺画像の長辺上限（文字が読める程度に大きめ）。 */
+const CARD_CAPTURE_MAXDIM = 1100
 
 export function KioskClient(props: Props) {
   const { storeId, storeName, terminalMode, timeoutSec, audioEnabled, audioVolume, steps, consentText, consentVersion, entryGreetingText, exitMessageText, buildId } = props
@@ -299,7 +305,7 @@ export function KioskClient(props: Props) {
         streamRef.current = await startCamera(videoRef.current, { facingMode: 'user' })
         await new Promise((r) => setTimeout(r, CAPTURE_DELAY_MS))
         if (cancelled) return
-        const blob = videoRef.current ? captureFrame(videoRef.current, FACE_CAPTURE_ZOOM) : null
+        const blob = videoRef.current ? captureFrame(videoRef.current, FACE_CAPTURE_ZOOM, FACE_CAPTURE_MAXDIM) : null
         if (!blob) throw new Error('capture failed')
         const image = await blobToDataUrl(blob)
         const res = await fetch('/api/baggage/kiosk/face-auth', {
@@ -309,13 +315,13 @@ export function KioskClient(props: Props) {
         if (!res.ok) throw new Error(String(res.status))
         const r = await res.json() as {
           matched: boolean; authSkipped: boolean; facePath: string | null
-          employeeId?: string; lastName?: string; entrySessionId?: string
+          employeeId?: string; lastName?: string; entrySessionId?: string; entryAt?: string
         }
         if (cancelled) return
         cancelled = true; clearTimeout(guard)
         proceedAfterFace(action, kind, {
           facePath: r.facePath,
-          employeeId: r.employeeId, lastName: r.lastName, entrySessionId: r.entrySessionId,
+          employeeId: r.employeeId, lastName: r.lastName, entrySessionId: r.entrySessionId, entryAt: r.entryAt,
           // サーバの判定をそのまま使う。authSkipped=true は「認証を省略/実行できなかった」
           // （AWS未設定・タイムアウト・カメラ/通信不可）のみ。顔照合は実行できたが該当者
           // なし（no_match）は authSkipped=false のまま＝「認証省略」ではなく単に未特定として
@@ -355,7 +361,7 @@ export function KioskClient(props: Props) {
 
   const captureForReg = useCallback(async () => {
     if (screen.s !== 'regCapture') return
-    const blob = videoRef.current ? captureFrame(videoRef.current, FACE_CAPTURE_ZOOM) : null
+    const blob = videoRef.current ? captureFrame(videoRef.current, FACE_CAPTURE_ZOOM, FACE_CAPTURE_MAXDIM) : null
     if (!blob) { setScreen({ ...screen, error: 'カメラを起動できませんでした。係員をお呼びください。' }); return }
     const image = await blobToDataUrl(blob)
     stopCam()
@@ -375,7 +381,7 @@ export function KioskClient(props: Props) {
   // 来訪者の顔を「撮影」ボタンで撮る → 保存（当日コレクション登録は sessions が入室時に実施）。
   const captureVFace = useCallback(async () => {
     if (screen.s !== 'vcapFace' || screen.busy) return
-    const blob = videoRef.current ? captureFrame(videoRef.current, FACE_CAPTURE_ZOOM) : null
+    const blob = videoRef.current ? captureFrame(videoRef.current, FACE_CAPTURE_ZOOM, FACE_CAPTURE_MAXDIM) : null
     if (!blob) { setScreen({ s: 'vcapFace', error: 'カメラを起動できませんでした。係員をお呼びください。' }); return }
     setScreen({ s: 'vcapFace', busy: true })
     const image = await blobToDataUrl(blob); stopCam()
@@ -418,18 +424,18 @@ export function KioskClient(props: Props) {
       const facePath = screen.facePath
       let cardImage: string | null = null
       if (!skip) {
-        const blob = videoRef.current ? captureFrame(videoRef.current, 1) : null
+        const blob = videoRef.current ? captureFrame(videoRef.current, 1, CARD_CAPTURE_MAXDIM) : null
         if (!blob) { setScreen({ s: 'vcapCard', facePath, error: 'カメラを起動できませんでした。' }); return }
         cardImage = await blobToDataUrl(blob)
       }
       setScreen({ s: 'vcapCard', facePath, busy: true }); stopCam()
       const ok = await finishVisitorEntry(facePath, cardImage)
-      if (ok) setScreen({ s: 'complete', label: '入室を記録しました' })
+      if (ok) { speak('ご入室ください。'); setScreen({ s: 'complete', label: 'ご入室ください', sub: '受付を記録しました' }) }
       else setScreen({ s: 'vcapCard', facePath, error: '記録に失敗しました。もう一度お試しください。' })
     } finally {
       finishingRef.current = false
     }
-  }, [screen, stopCam, finishVisitorEntry])
+  }, [screen, stopCam, finishVisitorEntry, speak])
 
   const REG_ERR: Record<string, string> = {
     already_registered: 'この方の顔は登録済みです。変更は管理者にご相談ください。',
@@ -471,10 +477,14 @@ export function KioskClient(props: Props) {
   }, [remaining, screen, finishExit])
 
   // ── レンダリング ────────────────────────────────────────────────────────────
+  const hhmm = (iso: string) => new Date(iso).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tokyo' })
   const personChip = (ctx: FaceCtx, kind: PersonKind) => (
     <span style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#EFEBE3',
       border: `1px solid ${COL.line}`, borderRadius: 4, padding: '6px 14px', fontSize: 14 }}>
-      {ctx.lastName ? `認証OK — ${ctx.lastName}さん` : '認証省略'}
+      {ctx.lastName ? `認証OK — ${ctx.lastName}さん`
+        : ctx.entryAt ? `${hhmm(ctx.entryAt)} に入室`
+        : ctx.entrySessionId ? '入室記録と一致'
+        : '認証省略'}
       <span style={{ fontSize: 11, background: COL.accentSoft, color: COL.accent, borderRadius: 4, padding: '1px 8px' }}>
         {KIND_LABEL[kind]}
       </span>
