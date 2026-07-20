@@ -22,6 +22,8 @@ const Body = z.object({
   audioVolume: z.number().min(0).max(1),
   steps: z.array(z.object({ order: z.number(), text: z.string().max(STEP_TEXT_MAX) })).max(10),
   consentText: z.string().max(4000).optional(),
+  entryGreetingText: z.string().max(200).optional(),
+  exitMessageText: z.string().max(200).optional(),
 })
 
 export async function PUT(req: NextRequest) {
@@ -74,6 +76,9 @@ export async function PUT(req: NextRequest) {
     audio_volume: body.audioVolume,
     announce_steps: steps,
     ...consentUpdate,
+    // 文言は指定時のみ更新（省略時は現状維持）。
+    ...(body.entryGreetingText !== undefined ? { entry_greeting_text: body.entryGreetingText.trim() } : {}),
+    ...(body.exitMessageText !== undefined ? { exit_message_text: body.exitMessageText.trim() } : {}),
     updated_at: new Date().toISOString(),
   }, { onConflict: 'tenant_id' })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

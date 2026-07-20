@@ -29,6 +29,7 @@ const Body = z.object({
   employeeId: z.string().uuid().nullish(),        // staff: face-auth の一致結果
   entrySessionId: z.string().uuid().nullish(),    // visitor exit: face-auth の一致結果
   facePath: z.string().nullish(),
+  cardPhotoPath: z.string().nullish(),          // 来訪者入室の名刺写真パス（kiosk/photo で取得）
   authSkipped: z.boolean().optional(),
   consentVersion: z.number().int().nullish(),   // 来訪者入室の同意版（同意画面を通った場合）
   // exit 時のみ（検査窓・確定状態）
@@ -50,6 +51,9 @@ export async function POST(req: NextRequest) {
   // （他店舗パスの持ち込み＝写真プロキシ経由の越権閲覧・visitor登録の混入を防ぐ）
   if (body.facePath && !body.facePath.startsWith(`${store.id}/`)) {
     return NextResponse.json({ error: 'invalid_face_path' }, { status: 400 })
+  }
+  if (body.cardPhotoPath && !body.cardPhotoPath.startsWith(`${store.id}/`)) {
+    return NextResponse.json({ error: 'invalid_card_path' }, { status: 400 })
   }
   // employeeId も自店舗の従業員のみ受理（face-auth の一致結果以外の任意UUIDを弾く）
   if (body.employeeId) {
@@ -81,6 +85,7 @@ export async function POST(req: NextRequest) {
         inspection_date: jstDateStr(now),
         entry_at: nowIso,
         entry_face_path: body.facePath ?? null,
+        card_photo_path: body.cardPhotoPath ?? null,
         status: 'entered',
         // 来訪者入室の同意（同意画面を通っていれば版が入る）。
         consent_at: body.consentVersion != null ? nowIso : null,

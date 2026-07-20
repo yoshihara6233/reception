@@ -133,6 +133,25 @@ export function TenantSettingsClient(
           </div>
         </div>
 
+        {/* 入室あいさつ・退室メッセージ（iPad表示・読み上げ） */}
+        <div className="border-t border-slate-100 pt-4 dark:border-gedline/50">
+          <div className="mb-2"><span className={label}>入室あいさつ（従業員・顔認証成功時）</span></div>
+          <input
+            value={f.entryGreetingText}
+            onChange={(e) => set('entryGreetingText', e.target.value.slice(0, 200))}
+            placeholder="{name}様、今日も一日頑張りましょう。"
+            className={`${input} w-full`} />
+          <p className="mt-1 text-[12px] text-slate-500 dark:text-gedink3"><code>{'{name}'}</code> が氏名（姓）に置き換わります。空欄なら既定文言。</p>
+
+          <div className="mb-2 mt-4"><span className={label}>退室メッセージ（検査完了時）</span></div>
+          <input
+            value={f.exitMessageText}
+            onChange={(e) => set('exitMessageText', e.target.value.slice(0, 200))}
+            placeholder="お疲れ様でした。またのご入室をお待ちしております。"
+            className={`${input} w-full`} />
+          <p className="mt-1 text-[12px] text-slate-500 dark:text-gedink3">検査完了画面で表示・読み上げます。空欄なら既定文言。</p>
+        </div>
+
         {/* 個人情報取扱い同意の文言（iPadで表示。従業員=顔登録時／来訪者=入室毎に確認） */}
         <div className="border-t border-slate-100 pt-4 dark:border-gedline/50">
           <div className="mb-2 flex items-center gap-3">

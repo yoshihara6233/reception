@@ -22,6 +22,7 @@ import {
   availableActions, isTempEvent, firstStep, advanceStep, AUTO_IDLE_SEC,
   type AnnounceStep, type FlowAction, type PersonKind, type TerminalMode, type StepPhase,
 } from '@/lib/baggage/inspection-flow'
+import { DEFAULT_ENTRY_GREETING, DEFAULT_EXIT_MESSAGE } from '@/lib/baggage/tenant-settings'
 
 interface Props {
   storeId: string
@@ -35,6 +36,10 @@ interface Props {
   consentText: string
   /** 同意文言の版（記録に残す）。 */
   consentVersion: number
+  /** 従業員入室・顔認証成功時のあいさつ（{name} を氏名に置換）。 */
+  entryGreetingText: string
+  /** 退室（検査完了）時のメッセージ。 */
+  exitMessageText: string
 }
 
 /** 顔照合の結果（face-auth API 応答）を後続画面へ引き回す。 */
@@ -49,17 +54,21 @@ interface FaceCtx {
 type Screen =
   | { s: 'idle' }
   | { s: 'faceAuth'; action: FlowAction; kind: PersonKind }
-  | { s: 'authFail'; kind: PersonKind; ctx: FaceCtx }               // F（退出のみ）
+  | { s: 'authFail'; kind: PersonKind; ctx: FaceCtx; action: FlowAction }   // 退出=検査へ / 入室=スキップ
+  | { s: 'entryGreeting'; name: string }                             // 従業員入室・認証成功のあいさつ
   | { s: 'step'; phase: StepPhase; kind: PersonKind; ctx: FaceCtx; startedAt: string }
   | { s: 'recorded'; action: 'temp_exit' | 'temp_return'; lastName?: string }  // B
-  | { s: 'complete'; label: string }                                 // E
+  | { s: 'complete'; label: string; sub?: string }                   // E
   // セルフ顔登録（顔未登録の従業員のみ選択可 — 上書きなりすまし防止・差し替えは管理画面）
   | { s: 'regList'; employees: { id: string; name: string }[] | null; error?: string }
   | { s: 'regCapture'; employee: { id: string; name: string }; captured?: string; busy?: boolean; error?: string }
   | { s: 'regDone'; name: string }
-  // 個人情報取扱い同意（来訪者=入室毎／従業員=顔登録時）。同意後に次画面へ。
-  | { s: 'consent'; onAgree: 'faceAuth'; kind: PersonKind; action: FlowAction }
+  // 個人情報取扱い同意（来訪者=入室／従業員=顔登録時）。同意後に次画面へ。
+  | { s: 'consent'; onAgree: 'vcapFace'; kind: 'visitor' }
   | { s: 'consent'; onAgree: 'regCapture'; kind: 'staff'; employee: { id: string; name: string } }
+  // 来訪者入室: 手動撮影（顔→名刺）。撮影ボタンで撮る。
+  | { s: 'vcapFace'; busy?: boolean; error?: string }
+  | { s: 'vcapCard'; facePath: string; busy?: boolean; error?: string }
 
 const ACTION_LABEL: Record<FlowAction, { t: string; sub: string; primary?: boolean }> = {
   entry:       { t: '入室', sub: '顔認証' },
@@ -87,7 +96,9 @@ const FACE_TOTAL_GUARD_MS = 10000
 const FACE_CAPTURE_ZOOM = 2.6
 
 export function KioskClient(props: Props) {
-  const { storeId, storeName, terminalMode, timeoutSec, audioEnabled, audioVolume, steps, consentText, consentVersion } = props
+  const { storeId, storeName, terminalMode, timeoutSec, audioEnabled, audioVolume, steps, consentText, consentVersion, entryGreetingText, exitMessageText } = props
+  const greetingOf = (name: string) => (entryGreetingText.trim() || DEFAULT_ENTRY_GREETING).replaceAll('{name}', name)
+  const exitMessage = exitMessageText.trim() || DEFAULT_EXIT_MESSAGE
   const [screen, setScreen] = useState<Screen>({ s: 'idle' })
   const [clock, setClock] = useState('')
   const [offline, setOffline] = useState(false)
@@ -126,10 +137,11 @@ export function KioskClient(props: Props) {
   }, [])
   const resetToIdle = useCallback(() => { stopCam(); consentRef.current = null; setScreen({ s: 'idle' }) }, [stopCam])
 
-  // 動作開始（区分×動作）。来訪者の入室は同意文言があれば先に同意画面。
+  // 動作開始（区分×動作）。来訪者の入室は手動撮影フロー（顔→名刺）、必要なら先に同意。
   const startAction = useCallback((action: FlowAction, kind: PersonKind) => {
-    if (hasConsent && kind === 'visitor' && action === 'entry') {
-      setScreen({ s: 'consent', onAgree: 'faceAuth', kind, action })
+    if (kind === 'visitor' && action === 'entry') {
+      if (hasConsent) setScreen({ s: 'consent', onAgree: 'vcapFace', kind })
+      else { consentRef.current = null; setScreen({ s: 'vcapFace' }) }
     } else {
       consentRef.current = null
       setScreen({ s: 'faceAuth', action, kind })
@@ -147,15 +159,15 @@ export function KioskClient(props: Props) {
     setScreen((cur) => {
       if (cur.s !== 'consent') return cur
       consentRef.current = consentVersion
-      return cur.onAgree === 'faceAuth'
-        ? { s: 'faceAuth', action: cur.action, kind: cur.kind }
+      return cur.onAgree === 'vcapFace'
+        ? { s: 'vcapFace' }
         : { s: 'regCapture', employee: cur.employee }
     })
   }, [consentVersion])
 
-  // 完了=AUTO_IDLE_SEC(3秒) / 途中記録=2秒 でアイドルへ（B・E・顔登録完了）
+  // 完了=AUTO_IDLE_SEC(3秒) / 途中記録=2秒 でアイドルへ（B・E・顔登録完了・入室あいさつ）
   useEffect(() => {
-    if (screen.s === 'complete' || screen.s === 'recorded' || screen.s === 'regDone') {
+    if (screen.s === 'complete' || screen.s === 'recorded' || screen.s === 'regDone' || screen.s === 'entryGreeting') {
       const t = setTimeout(resetToIdle, screen.s === 'recorded' ? 2000 : AUTO_IDLE_SEC * 1000)
       return () => clearTimeout(t)
     }
@@ -200,9 +212,11 @@ export function KioskClient(props: Props) {
   const proceedAfterFace = useCallback(async (action: FlowAction, kind: PersonKind, ctx: FaceCtx) => {
     stopCam()
 
-    // 退出で不一致（省略含む）→ F（本人がスキップ/再試行を選ぶ）
-    if (action === 'exit' && !ctx.lastName && !ctx.entrySessionId) {
-      setScreen({ s: 'authFail', kind, ctx }); return
+    // 認証できなかった → 自動で進めず、本人がスキップ/再試行を選ぶ（入室・退出とも）。
+    // 退出は entrySessionId（来訪者）でも成立。入室（従業員）は lastName のみ。
+    if ((action === 'exit' && !ctx.lastName && !ctx.entrySessionId) ||
+        (action === 'entry' && !ctx.lastName)) {
+      setScreen({ s: 'authFail', kind, ctx, action }); return
     }
 
     if (isTempEvent(action)) {
@@ -215,20 +229,29 @@ export function KioskClient(props: Props) {
       return
     }
 
+    // 従業員入室（認証成功）→ あいさつ表示（来訪者入室は手動撮影フローで別処理）。
     if (action === 'entry') {
       const ok = await postSession({
         action, personKind: kind, facePath: ctx.facePath,
         employeeId: ctx.employeeId ?? null, authSkipped: ctx.authSkipped,
-        // 来訪者入室の同意（同意画面を通っていれば版が入る）。
-        consentVersion: kind === 'visitor' ? consentRef.current : null,
       })
-      if (ok) setScreen({ s: 'complete', label: '入室を記録しました' })
+      if (ok && ctx.lastName) { speak(greetingOf(ctx.lastName)); setScreen({ s: 'entryGreeting', name: ctx.lastName }) }
+      else if (ok) setScreen({ s: 'complete', label: '入室を記録しました' })
       return
     }
 
     // exit → 検査 STEP へ（D）
     startInspection(kind, ctx)
-  }, [postSession, stopCam, startInspection])
+  }, [postSession, stopCam, startInspection, speak, greetingOf])
+
+  // 入室で認証できなかった時のスキップ（記録は authSkipped で残す）。
+  const skipEntry = useCallback(async (kind: PersonKind, ctx: FaceCtx) => {
+    const ok = await postSession({
+      action: 'entry', personKind: kind, facePath: ctx.facePath,
+      employeeId: null, authSkipped: true,
+    })
+    if (ok) setScreen({ s: 'complete', label: '入室を記録しました' })
+  }, [postSession])
 
   const finishExit = useCallback(async (
     kind: PersonKind, ctx: FaceCtx, startedAt: string, status: 'completed' | 'interrupted',
@@ -244,12 +267,12 @@ export function KioskClient(props: Props) {
         inspectionStartedAt: startedAt, inspectionEndedAt: new Date().toISOString(), status,
       })
       if (!ok) return
-      if (status === 'completed') setScreen({ s: 'complete', label: '検査が完了しました' })
+      if (status === 'completed') { speak(exitMessage); setScreen({ s: 'complete', label: '検査が完了しました', sub: exitMessage }) }
       else resetToIdle()
     } finally {
       finishingRef.current = false
     }
-  }, [postSession, resetToIdle])
+  }, [postSession, resetToIdle, speak, exitMessage])
 
   const nextStep = useCallback(() => {
     if (screen.s !== 'step' || screen.phase.kind !== 'step') return
@@ -336,6 +359,69 @@ export function KioskClient(props: Props) {
     stopCam()
     setScreen({ ...screen, captured: image, error: undefined })
   }, [screen, stopCam])
+
+  // ── 来訪者入室: 手動撮影（顔→名刺）。プレビュー中はカメラ起動。 ──
+  useEffect(() => {
+    if (screen.s !== 'vcapFace' && screen.s !== 'vcapCard') return
+    ;(async () => {
+      try { if (videoRef.current) streamRef.current = await startCamera(videoRef.current, { facingMode: 'user' }) }
+      catch { /* 撮影ボタンでエラー表示 */ }
+    })()
+    return () => { stopCam() }
+  }, [screen, stopCam])
+
+  // 来訪者の顔を「撮影」ボタンで撮る → 保存（当日コレクション登録は sessions が入室時に実施）。
+  const captureVFace = useCallback(async () => {
+    if (screen.s !== 'vcapFace' || screen.busy) return
+    const blob = videoRef.current ? captureFrame(videoRef.current, FACE_CAPTURE_ZOOM) : null
+    if (!blob) { setScreen({ s: 'vcapFace', error: 'カメラを起動できませんでした。係員をお呼びください。' }); return }
+    setScreen({ s: 'vcapFace', busy: true })
+    const image = await blobToDataUrl(blob); stopCam()
+    try {
+      const res = await fetch('/api/baggage/kiosk/face-auth', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ storeId, personKind: 'visitor', action: 'entry', image }),
+      })
+      if (!res.ok) throw new Error()
+      const r = await res.json() as { facePath: string | null }
+      if (!r.facePath) throw new Error()
+      setScreen({ s: 'vcapCard', facePath: r.facePath })
+    } catch {
+      setScreen({ s: 'vcapFace', error: '撮影に失敗しました。もう一度お試しください。' })
+    }
+  }, [screen, storeId, stopCam])
+
+  // 来訪者の入室を確定（名刺あり=撮影 / 名刺なし=スキップ）。
+  const finishVisitorEntry = useCallback(async (facePath: string, cardImage: string | null) => {
+    let cardPath: string | null = null
+    if (cardImage) {
+      const up = await fetch('/api/baggage/kiosk/photo', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ storeId, image: cardImage }),
+      }).catch(() => null)
+      if (!up || !up.ok) return false
+      cardPath = ((await up.json().catch(() => null)) as { path?: string } | null)?.path ?? null
+    }
+    return postSession({
+      action: 'entry', personKind: 'visitor', facePath, cardPhotoPath: cardPath,
+      authSkipped: false, consentVersion: consentRef.current,
+    })
+  }, [storeId, postSession])
+
+  const captureVCard = useCallback(async (skip: boolean) => {
+    if (screen.s !== 'vcapCard' || screen.busy) return
+    const facePath = screen.facePath
+    let cardImage: string | null = null
+    if (!skip) {
+      const blob = videoRef.current ? captureFrame(videoRef.current, 1) : null
+      if (!blob) { setScreen({ s: 'vcapCard', facePath, error: 'カメラを起動できませんでした。' }); return }
+      cardImage = await blobToDataUrl(blob)
+    }
+    setScreen({ s: 'vcapCard', facePath, busy: true }); stopCam()
+    const ok = await finishVisitorEntry(facePath, cardImage)
+    if (ok) setScreen({ s: 'complete', label: '入室を記録しました' })
+    else setScreen({ s: 'vcapCard', facePath, error: '記録に失敗しました。もう一度お試しください。' })
+  }, [screen, stopCam, finishVisitorEntry])
 
   const REG_ERR: Record<string, string> = {
     already_registered: 'この方の顔は登録済みです。変更は管理者にご相談ください。',
@@ -557,19 +643,71 @@ export function KioskClient(props: Props) {
         </div>
       )}
 
-      {/* ── F: 退出の顔照合失敗（中立文言・スキップ可） ── */}
+      {/* ── F: 顔認証失敗（中立文言・スキップ/再試行。自動では進めない） ── */}
       {screen.s === 'authFail' && (
         <div style={centerBox(28)}>
           <div style={{ width: 720, background: COL.warnSoft, border: `1px solid ${COL.warn}`,
             borderRadius: 6, padding: '20px 24px' }}>
             <div style={{ fontWeight: 700, fontSize: 18 }}>認証できませんでした</div>
-            <div style={{ fontSize: 15, color: COL.ink2 }}>そのまま検査へお進みください。手続きは通常どおり完了します。</div>
+            <div style={{ fontSize: 15, color: COL.ink2 }}>
+              {screen.action === 'exit' ? 'そのまま検査へお進みください。手続きは通常どおり完了します。' : 'もう一度顔認証するか、スキップして入室できます。'}
+            </div>
           </div>
           <div style={{ width: 720, display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <button onClick={() => startInspection(screen.kind, { ...screen.ctx, authSkipped: true })}
-              style={primaryFullBtn}>検査へ進む</button>
-            <button onClick={() => setScreen({ s: 'faceAuth', action: 'exit', kind: screen.kind })}
+            {screen.action === 'exit' ? (
+              <button onClick={() => startInspection(screen.kind, { ...screen.ctx, authSkipped: true })}
+                style={primaryFullBtn}>検査へ進む</button>
+            ) : (
+              <button onClick={() => skipEntry(screen.kind, { ...screen.ctx, authSkipped: true })}
+                style={primaryFullBtn}>スキップして入室</button>
+            )}
+            <button onClick={() => setScreen({ s: 'faceAuth', action: screen.action, kind: screen.kind })}
               style={ghostFullBtn}>もう一度顔認証する</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── 従業員入室・認証成功のあいさつ（3秒→idle） ── */}
+      {screen.s === 'entryGreeting' && (
+        <div style={centerBox(28)}>
+          <CheckMark />
+          <div style={{ fontSize: 34, fontWeight: 700, textAlign: 'center', maxWidth: 820 }}>{greetingOf(lastNameOfClient(screen.name))}</div>
+          <div style={{ fontSize: 14, color: COL.ink3 }}>入室を記録しました。3秒後に最初の画面に戻ります</div>
+        </div>
+      )}
+
+      {/* ── 来訪者入室: 顔を「撮影」ボタンで撮る ── */}
+      {screen.s === 'vcapFace' && (
+        <div style={centerBox(20)}>
+          <div style={{ fontSize: 30, fontWeight: 700 }}>お顔を撮影します</div>
+          <div style={{ fontSize: 15, color: COL.ink3 }}>枠に合わせて「撮影」を押してください（退室時の照合に使います）</div>
+          <div style={{ width: 520, height: 390, background: '#1a1c1f', borderRadius: 6, position: 'relative',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+            <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <div style={{ position: 'absolute', width: 230, height: 300, border: '2px dashed #8a8f96', borderRadius: '50%/46%' }} />
+          </div>
+          {screen.error && <div style={{ color: COL.danger, fontSize: 15 }}>{screen.error}</div>}
+          <div style={{ width: 520, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <button disabled={screen.busy} onClick={captureVFace} style={primaryFullBtn}>{screen.busy ? '撮影中…' : '撮影'}</button>
+            <button onClick={resetToIdle} style={ghostFullBtn}>最初の画面に戻る</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── 来訪者入室: 名刺を「撮影」ボタンで撮る（なしでも可） ── */}
+      {screen.s === 'vcapCard' && (
+        <div style={centerBox(20)}>
+          <div style={{ fontSize: 30, fontWeight: 700 }}>名刺を撮影します</div>
+          <div style={{ fontSize: 15, color: COL.ink3 }}>名刺を枠に合わせて「撮影」を押してください（お持ちでなければ「名刺なしで進む」）</div>
+          <div style={{ width: 560, height: 360, background: '#1a1c1f', borderRadius: 6, position: 'relative',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+            <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <div style={{ position: 'absolute', width: 420, height: 250, border: '2px dashed #8a8f96', borderRadius: 8 }} />
+          </div>
+          {screen.error && <div style={{ color: COL.danger, fontSize: 15 }}>{screen.error}</div>}
+          <div style={{ width: 560, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <button disabled={screen.busy} onClick={() => captureVCard(false)} style={primaryFullBtn}>{screen.busy ? '記録中…' : '撮影して入室'}</button>
+            <button disabled={screen.busy} onClick={() => captureVCard(true)} style={ghostFullBtn}>名刺なしで進む</button>
           </div>
         </div>
       )}
@@ -627,10 +765,11 @@ export function KioskClient(props: Props) {
 
       {/* ── E: 完了（3秒→idle） ── */}
       {screen.s === 'complete' && (
-        <div style={centerBox(36)}>
+        <div style={centerBox(28)}>
           <CheckMark />
-          <div style={{ fontSize: 44, fontWeight: 700 }}>{screen.label}</div>
-          <div style={{ fontSize: 14, color: COL.ink3 }}>お疲れさまでした。3秒後に最初の画面に戻ります</div>
+          <div style={{ fontSize: 40, fontWeight: 700 }}>{screen.label}</div>
+          {screen.sub && <div style={{ fontSize: 24, fontWeight: 600, textAlign: 'center', maxWidth: 820, color: COL.ink2 }}>{screen.sub}</div>}
+          <div style={{ fontSize: 14, color: COL.ink3 }}>3秒後に最初の画面に戻ります</div>
         </div>
       )}
 
