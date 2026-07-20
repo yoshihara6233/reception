@@ -122,7 +122,8 @@ export async function searchFaceInCollection(
   imageBuffer: Buffer,
   threshold = 80,
 ): Promise<SearchFaceResult> {
-  await ensureCollectionById(collectionId)
+  // 検索側では CreateCollection を呼ばない（コレクションは登録時に作られる前提）。
+  // 毎回 CreateCollection すると 3秒レースを容易に超えて認証省略になるため。
   const client = getClient()
 
   let resp
@@ -135,8 +136,8 @@ export async function searchFaceInCollection(
     }))
   } catch (err: unknown) {
     const name = (err as { name?: string }).name
-    // 顔が検出されなかった（画像に顔がない）
-    if (name === 'InvalidParameterException') {
+    // 顔が検出されなかった（画像に顔がない）／コレクション未作成（誰も未登録）は一致なし。
+    if (name === 'InvalidParameterException' || name === 'ResourceNotFoundException') {
       return { matched: false, faceId: null, externalId: null, confidence: 0 }
     }
     throw err

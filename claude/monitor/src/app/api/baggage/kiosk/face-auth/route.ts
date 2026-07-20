@@ -14,7 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireKioskStore } from '@/lib/baggage/kiosk-guard'
-import { withTimeout, lastNameOf, jstYmd } from '@/lib/baggage/face-auth'
+import { lastNameOf, jstYmd } from '@/lib/baggage/face-auth'
 import { FACE_AUTH_TIMEOUT_SEC } from '@/lib/baggage/inspection-flow'
 import {
   employeeCollectionId,
@@ -64,29 +64,46 @@ export async function POST(req: NextRequest) {
     ? employeeCollectionId(store.id)
     : visitorDailyCollectionId(store.id, jstYmd(now))
 
-  const race = await withTimeout(
-    searchFaceInCollection(collectionId, buf),
-    FACE_AUTH_TIMEOUT_SEC * 1000,
-  )
+  // AWS 未設定は即ログ（authSkipped で継続するが原因を残す）
+  if (!process.env.AWS_REGION || !process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
+    console.error('[baggage face-auth] AWS not configured → 認証省略', { store: store.id, kind: body.personKind })
+    return NextResponse.json({ matched: false, authSkipped: true, facePath, reason: 'aws_not_configured' })
+  }
 
-  if (!race.ok) {
-    // 3秒超過 / AWS 障害・未設定 → 認証省略でフロー継続
-    return NextResponse.json({ matched: false, authSkipped: true, facePath })
+  // 3秒レース。withTimeout は理由を潰すため、ここでは実エラーを保持して診断ログに出す。
+  let searchResult: Awaited<ReturnType<typeof searchFaceInCollection>> | null = null
+  let failReason: string | null = null
+  try {
+    searchResult = await Promise.race([
+      searchFaceInCollection(collectionId, buf),
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error('__timeout__')), FACE_AUTH_TIMEOUT_SEC * 1000)),
+    ])
+  } catch (e) {
+    const m = (e as Error).message
+    failReason = m === '__timeout__' ? 'timeout' : `error: ${m}`
   }
-  if (!race.value.matched || !race.value.externalId) {
-    return NextResponse.json({ matched: false, authSkipped: false, facePath })
+
+  if (failReason) {
+    console.error('[baggage face-auth] 照合失敗 → 認証省略', { store: store.id, kind: body.personKind, collectionId, reason: failReason })
+    return NextResponse.json({ matched: false, authSkipped: true, facePath, reason: failReason })
   }
+  if (!searchResult!.matched || !searchResult!.externalId) {
+    // コレクションに一致なし（＝顔未登録 or 別人）。原因追跡のため件数感を残す。
+    console.warn('[baggage face-auth] 一致なし', { store: store.id, kind: body.personKind, collectionId })
+    return NextResponse.json({ matched: false, authSkipped: false, facePath, reason: 'no_match' })
+  }
+  const result = searchResult!
 
   if (body.personKind === 'staff') {
     // externalId = employees.id
     const { data: emp } = await svc
       .from('employees')
       .select('id, name')
-      .eq('id', race.value.externalId)
+      .eq('id', result.externalId)
       .eq('store_id', store.id)
       .eq('status', 'active')   // 登録抹消済みの従業員は認証させない
       .maybeSingle()
-    if (!emp) return NextResponse.json({ matched: false, authSkipped: false, facePath })
+    if (!emp) return NextResponse.json({ matched: false, authSkipped: false, facePath, reason: 'employee_inactive_or_missing' })
     return NextResponse.json({
       matched: true,
       authSkipped: false,
@@ -101,6 +118,6 @@ export async function POST(req: NextRequest) {
     matched: true,
     authSkipped: false,
     facePath,
-    entrySessionId: race.value.externalId,
+    entrySessionId: result.externalId,
   })
 }
