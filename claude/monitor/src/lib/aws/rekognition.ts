@@ -116,11 +116,15 @@ export async function indexFaceInCollection(
   }
 }
 
-/** 顔写真でコレクションを検索し、最も類似度の高い ExternalImageId を返す。 */
+/**
+ * 顔写真でコレクションを検索し、最も類似度の高い ExternalImageId を返す。
+ * 既定閾値 72: 登録済みでも実運用（角度・照明差）で 80 未満になり一致しない事例が
+ * あったため引き下げ。72 は本人一致の実用域（誤一致は別人写真の目視で担保）。
+ */
 export async function searchFaceInCollection(
   collectionId: string,
   imageBuffer: Buffer,
-  threshold = 80,
+  threshold = 72,
 ): Promise<SearchFaceResult> {
   // 検索側では CreateCollection を呼ばない（コレクションは登録時に作られる前提）。
   // 毎回 CreateCollection すると 3秒レースを容易に超えて認証省略になるため。
