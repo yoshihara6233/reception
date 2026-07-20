@@ -390,6 +390,56 @@ export function edgeRecoveredEmail(p: EdgeHealthParams): { subject: string; html
   return { subject, html }
 }
 
+export interface TunnelHealthParams {
+  edgeName:   string
+  storeName:  string
+  downMin:    number   // 何分継続して断か
+  monitorUrl: string
+}
+
+/**
+ * cloudflared トンネル断（heartbeat は生存＝エッジは動いているが遠隔ライブ経路が
+ * 落ちている）時の通知。エッジ無応答通知とは別建て（原因切り分けが異なるため）。
+ */
+export function tunnelDownAlertEmail(p: TunnelHealthParams): { subject: string; html: string } {
+  const subject = `[Intereco 死活監視] トンネル断 - ${p.storeName} / ${p.edgeName}`
+  const html = `
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="UTF-8"></head>
+<body style="font-family:sans-serif;color:#333;max-width:600px;margin:0 auto;padding:20px">
+  <h2 style="color:#c0392b">🔴 トンネル断（遠隔ライブ経路）</h2>
+  <p>エッジ本体は応答していますが、cloudflared トンネル（go2rtc への遠隔経路）に <b>${p.downMin}分以上</b>到達できません。遠隔の高画質ライブ/HLSが視聴できない状態です。</p>
+  <table style="width:100%;border-collapse:collapse;margin:16px 0">
+    <tr><td style="padding:8px;background:#f5f5f5;font-weight:bold;width:140px;border:1px solid #ddd">店舗</td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(p.storeName)}</td></tr>
+    <tr><td style="padding:8px;background:#f5f5f5;font-weight:bold;border:1px solid #ddd">エッジ</td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(p.edgeName)}</td></tr>
+  </table>
+  <p>確認事項: エッジ上の cloudflared サービス（<code>systemctl status cloudflared</code>）、Cloudflare ダッシュボードのトンネル状態、go2rtc の稼働。</p>
+  <p><a href="${escapeHtml(p.monitorUrl)}" style="display:inline-block;background:#0f172a;color:#fff;padding:10px 20px;border-radius:4px;text-decoration:none;font-weight:bold">監視画面を開く</a></p>
+  <hr style="margin:24px 0;border:none;border-top:1px solid #eee">
+  <p style="font-size:12px;color:#999">Intereco モニタリングシステム 自動送信（死活監視）。</p>
+</body></html>`.trim()
+  return { subject, html }
+}
+
+/** 断だったトンネルが復旧した時の通知。 */
+export function tunnelRecoveredEmail(p: TunnelHealthParams): { subject: string; html: string } {
+  const subject = `[Intereco 死活監視] トンネル復旧 - ${p.storeName} / ${p.edgeName}`
+  const html = `
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="UTF-8"></head>
+<body style="font-family:sans-serif;color:#333;max-width:600px;margin:0 auto;padding:20px">
+  <h2 style="color:#16a34a">🟢 トンネル復旧</h2>
+  <p>断になっていた cloudflared トンネルへの到達が回復しました。遠隔ライブ経路は正常です。</p>
+  <table style="width:100%;border-collapse:collapse;margin:16px 0">
+    <tr><td style="padding:8px;background:#f5f5f5;font-weight:bold;width:140px;border:1px solid #ddd">店舗</td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(p.storeName)}</td></tr>
+    <tr><td style="padding:8px;background:#f5f5f5;font-weight:bold;border:1px solid #ddd">エッジ</td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(p.edgeName)}</td></tr>
+  </table>
+  <hr style="margin:24px 0;border:none;border-top:1px solid #eee">
+  <p style="font-size:12px;color:#999">Intereco モニタリングシステム 自動送信（死活監視）。</p>
+</body></html>`.trim()
+  return { subject, html }
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
