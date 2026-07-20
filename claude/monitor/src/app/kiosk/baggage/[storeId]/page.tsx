@@ -59,6 +59,8 @@ export default async function BaggageKioskPage(
       steps={tenant.steps}
       consentText={tenant.consentText}
       consentVersion={tenant.consentVersion}
+      entryGreetingText={tenant.entryGreetingText}
+      exitMessageText={tenant.exitMessageText}
     />
   )
 }

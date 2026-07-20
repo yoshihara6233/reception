@@ -19,7 +19,15 @@ export interface BaggageTenantSettings {
   consentText: string
   /** 同意文言の版（文言変更で +1）。 */
   consentVersion: number
+  /** 従業員入室・顔認証成功時のあいさつ（{name} を氏名に置換・空なら既定）。 */
+  entryGreetingText: string
+  /** 退室（検査完了）時のメッセージ（空なら既定）。 */
+  exitMessageText: string
 }
+
+/** 既定の文言（設定が空のときのフォールバック）。 */
+export const DEFAULT_ENTRY_GREETING = '{name}様、今日も一日頑張りましょう。'
+export const DEFAULT_EXIT_MESSAGE = 'お疲れ様でした。またのご入室をお待ちしております。'
 
 export const DEFAULT_TENANT_SETTINGS: BaggageTenantSettings = {
   retentionDays: 60,
@@ -31,6 +39,8 @@ export const DEFAULT_TENANT_SETTINGS: BaggageTenantSettings = {
   steps: normalizeAnnounceSteps(undefined),
   consentText: '',
   consentVersion: 1,
+  entryGreetingText: '',
+  exitMessageText: '',
 }
 
 /** DB 行 → 共通設定（行が無ければ既定）。 */
@@ -46,10 +56,12 @@ export function rowToTenantSettings(s: Record<string, unknown> | null | undefine
     steps: normalizeAnnounceSteps(s.announce_steps),
     consentText: typeof s.consent_text === 'string' ? s.consent_text : '',
     consentVersion: Number(s.consent_version) || 1,
+    entryGreetingText: typeof s.entry_greeting_text === 'string' ? s.entry_greeting_text : '',
+    exitMessageText: typeof s.exit_message_text === 'string' ? s.exit_message_text : '',
   }
 }
 
-const COLS = 'retention_days, nvr_retention_days, inspection_timeout_sec, terminal_mode, audio_enabled, audio_volume, announce_steps, consent_text, consent_version'
+const COLS = 'retention_days, nvr_retention_days, inspection_timeout_sec, terminal_mode, audio_enabled, audio_volume, announce_steps, consent_text, consent_version, entry_greeting_text, exit_message_text'
 
 /** テナントの共通設定を読む（任意の supabase クライアント・行なしは既定）。 */
 export async function loadTenantSettings(
