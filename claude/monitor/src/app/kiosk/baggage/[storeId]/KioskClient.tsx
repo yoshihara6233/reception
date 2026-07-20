@@ -73,6 +73,11 @@ const COL = {
 const CAPTURE_DELAY_MS = 1200
 /** face-auth 全体のクライアント側ガード（サーバ3秒レース＋通信の余裕）。 */
 const FACE_TOTAL_GUARD_MS = 10000
+/**
+ * 顔撮影の中央クロップ倍率。顔が小さく写る（遠い）と Rekognition の一致率が落ちるため、
+ * 従来の 2.0 から寄せる。照合(登録/認証)は同じ倍率で撮ること＝両方これを使う。
+ */
+const FACE_CAPTURE_ZOOM = 2.6
 
 export function KioskClient(props: Props) {
   const { storeId, storeName, terminalMode, timeoutSec, audioEnabled, audioVolume, steps } = props
@@ -231,7 +236,7 @@ export function KioskClient(props: Props) {
         streamRef.current = await startCamera(videoRef.current, { facingMode: 'user' })
         await new Promise((r) => setTimeout(r, CAPTURE_DELAY_MS))
         if (cancelled) return
-        const blob = videoRef.current ? captureFrame(videoRef.current, 2) : null
+        const blob = videoRef.current ? captureFrame(videoRef.current, FACE_CAPTURE_ZOOM) : null
         if (!blob) throw new Error('capture failed')
         const image = await blobToDataUrl(blob)
         const res = await fetch('/api/baggage/kiosk/face-auth', {
@@ -287,7 +292,7 @@ export function KioskClient(props: Props) {
 
   const captureForReg = useCallback(async () => {
     if (screen.s !== 'regCapture') return
-    const blob = videoRef.current ? captureFrame(videoRef.current, 2) : null
+    const blob = videoRef.current ? captureFrame(videoRef.current, FACE_CAPTURE_ZOOM) : null
     if (!blob) { setScreen({ ...screen, error: 'カメラを起動できませんでした。係員をお呼びください。' }); return }
     const image = await blobToDataUrl(blob)
     stopCam()
