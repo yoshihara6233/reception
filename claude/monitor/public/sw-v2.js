@@ -13,7 +13,7 @@
 
 // CACHE_NAME を変えると activate ハンドラが古いキャッシュを全削除する。
 // バンドル変更時はバンプすること。
-const CACHE_NAME  = 'intereco-monitor-v2-f71'
+const CACHE_NAME  = 'intereco-monitor-v2-f72'
 const OFFLINE_URL = '/offline'
 
 const STATIC_ASSETS = [
