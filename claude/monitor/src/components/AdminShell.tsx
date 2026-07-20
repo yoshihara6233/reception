@@ -28,6 +28,7 @@ export function getAdminNav(t: Msg): NavItem[] {
     // F49.J: NVR 機種マスタ (EOL/EOS 管理)
     { href: '/admin/nvr-models', label: 'NVR 機種',           icon: '🛰' },
     { href: '/admin/bcp',        label: 'BCP発動条件',         icon: '🚨' },
+    { href: '/admin/baggage',    label: '手荷物検査設定',      icon: '🧳' },
     { href: '/admin/users',      label: t.adminNav.users,     icon: '⚇' },
     { href: '/admin/import',     label: t.adminNav.csvImport, icon: '⇪' },
     { href: '/admin/limits',     label: t.adminNav.limits,    icon: '⏱' },
@@ -79,6 +80,7 @@ export const ADMIN_NAV: NavItem[] = [
   { href: '/admin/stores',     label: '店舗',           icon: '⛬' },
   { href: '/admin/edges',      label: 'エッジサーバ',   icon: '⌬' },
   { href: '/admin/bcp',        label: 'BCP発動条件',     icon: '🚨' },
+  { href: '/admin/baggage',    label: '手荷物検査設定', icon: '🧳' },
   { href: '/admin/users',      label: 'ユーザ',         icon: '⚇' },
   { href: '/admin/import',     label: 'CSV 一括投入',   icon: '⇪' },
   { href: '/admin/limits',     label: '視聴上限',       icon: '⏱' },

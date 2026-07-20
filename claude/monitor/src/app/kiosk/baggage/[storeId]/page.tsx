@@ -7,7 +7,7 @@
  */
 import { redirect } from 'next/navigation'
 import { createSupabaseServer } from '@/lib/supabase/server'
-import { normalizeAnnounceSteps, type TerminalMode } from '@/lib/baggage/inspection-flow'
+import { loadTenantSettings } from '@/lib/baggage/tenant-settings'
 import { KioskClient } from './KioskClient'
 
 export default async function BaggageKioskPage(
@@ -18,13 +18,10 @@ export default async function BaggageKioskPage(
   const { data: { user } } = await supa.auth.getUser()
   if (!user) redirect('/login')
 
+  // 店舗固有（有効化）は inspection_settings、表示設定はテナント共通。
   const [{ data: store }, { data: s }] = await Promise.all([
-    supa.from('stores').select('id, name').eq('id', storeId).maybeSingle(),
-    supa
-      .from('inspection_settings')
-      .select('enabled, inspection_timeout_sec, terminal_mode, audio_enabled, audio_volume, announce_steps')
-      .eq('store_id', storeId)
-      .maybeSingle(),
+    supa.from('stores').select('id, name, tenant_id').eq('id', storeId).maybeSingle(),
+    supa.from('inspection_settings').select('enabled').eq('store_id', storeId).maybeSingle(),
   ])
 
   if (!store || !s?.enabled) {
@@ -40,15 +37,17 @@ export default async function BaggageKioskPage(
     )
   }
 
+  const tenant = await loadTenantSettings(supa, store.tenant_id)
+
   return (
     <KioskClient
       storeId={store.id}
       storeName={store.name}
-      terminalMode={(s.terminal_mode ?? 'both') as TerminalMode}
-      timeoutSec={Number(s.inspection_timeout_sec) || 120}
-      audioEnabled={s.audio_enabled !== false}
-      audioVolume={Number(s.audio_volume ?? 1)}
-      steps={normalizeAnnounceSteps(s.announce_steps)}
+      terminalMode={tenant.terminalMode}
+      timeoutSec={tenant.timeoutSec}
+      audioEnabled={tenant.audioEnabled}
+      audioVolume={tenant.audioVolume}
+      steps={tenant.steps}
     />
   )
 }

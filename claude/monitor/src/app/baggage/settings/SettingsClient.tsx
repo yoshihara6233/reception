@@ -1,29 +1,23 @@
 'use client'
 
 /**
- * 手荷物検査 店舗設定フォーム（M4・クライアント）
- * STEP 文言は全角40字上限（D13）— 入力側でも制限し、保存時にサーバで正規化。
+ * 手荷物検査 店舗設定フォーム（M4・店舗固有のみ）
+ *
+ * 店舗固有は「有効化・検査台カメラ（最大2台）」だけ。保持期間・タイムアウト・端末
+ * モード・音声・STEP文言はテナント共通（/admin/baggage）で一元管理する。
+ * この画面には iPad キオスクの URL/QR も表示する。
  */
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { QRCodeSVG } from 'qrcode.react'
-import { STEP_TEXT_MAX, type AnnounceStep, type TerminalMode } from '@/lib/baggage/inspection-flow'
 
 export interface SettingsForm {
   storeId: string
   enabled: boolean
   cameraIds: string[]
-  retentionDays: number
-  nvrRetentionDays: number
-  timeoutSec: number
-  terminalMode: TerminalMode
-  audioEnabled: boolean
-  audioVolume: number
-  steps: AnnounceStep[]
 }
 
-const row = 'flex flex-wrap items-center gap-3'
-const label = 'w-44 text-[13px] text-slate-600 dark:text-gedink2'
 const input = 'rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-900 dark:border-gedline dark:bg-gedbg dark:text-gedink'
 
 export function SettingsClient(
@@ -38,16 +32,13 @@ export function SettingsClient(
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
-  // キオスクURL（この店舗のiPad用）。SSRとクライアントで origin がずれると
-  // hydration mismatch になるためマウント後に組み立てる。
+  // キオスクURL（この店舗のiPad用）。hydration mismatch 回避のためマウント後に組む。
   const [kioskUrl, setKioskUrl] = useState('')
   const [copied, setCopied] = useState(false)
   useEffect(() => {
     setKioskUrl(`${window.location.origin}/kiosk/baggage/${f.storeId}`)
     setCopied(false)
   }, [f.storeId])
-
-  const set = <K extends keyof SettingsForm>(k: K, v: SettingsForm[K]) => setF((p) => ({ ...p, [k]: v }))
 
   const toggleCamera = (id: string) => {
     setF((p) => {
@@ -58,23 +49,12 @@ export function SettingsClient(
     })
   }
 
-  const setStep = (i: number, text: string) => {
-    setF((p) => {
-      const steps = p.steps.map((s, j) => (j === i ? { ...s, text: text.slice(0, STEP_TEXT_MAX) } : s))
-      return { ...p, steps }
-    })
-  }
-  const addStep = () => setF((p) => ({ ...p, steps: [...p.steps, { order: p.steps.length + 1, text: '' }] }))
-  const removeStep = (i: number) => setF((p) => ({
-    ...p,
-    steps: p.steps.filter((_, j) => j !== i).map((s, j) => ({ order: j + 1, text: s.text })),
-  }))
-
   const save = async () => {
     setBusy(true); setMsg(null)
     try {
       const res = await fetch('/api/baggage/settings', {
-        method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(f),
+        method: 'PUT', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ storeId: f.storeId, enabled: f.enabled, cameraIds: f.cameraIds }),
       })
       if (!res.ok) {
         const j = await res.json().catch(() => null) as { error?: string } | null
@@ -135,17 +115,18 @@ export function SettingsClient(
         </div>
       </div>
 
+      {/* 店舗固有設定（有効化＋カメラ） */}
       <div className="space-y-4 rounded border border-slate-200 bg-white p-4 text-sm dark:border-gedline dark:bg-gedbg2">
-        <div className={row}>
-          <span className={label}>手荷物検査オプション</span>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="w-44 text-[13px] text-slate-600 dark:text-gedink2">手荷物検査オプション</span>
           <label className="flex items-center gap-2">
-            <input type="checkbox" checked={f.enabled} onChange={(e) => set('enabled', e.target.checked)} />
+            <input type="checkbox" checked={f.enabled} onChange={(e) => setF((p) => ({ ...p, enabled: e.target.checked }))} />
             この店舗で有効にする
           </label>
         </div>
 
-        <div className={row}>
-          <span className={label}>検査台カメラ（最大2台）</span>
+        <div className="flex flex-wrap items-start gap-3">
+          <span className="w-44 text-[13px] text-slate-600 dark:text-gedink2">検査台カメラ（最大2台）</span>
           <div className="flex flex-col gap-1">
             {cameras.length === 0 && <span className="text-slate-500 dark:text-gedink3">この店舗にカメラが登録されていません</span>}
             {cameras.map((c) => (
@@ -160,67 +141,11 @@ export function SettingsClient(
           </div>
         </div>
 
-        <div className={row}>
-          <span className={label}>クリップ保持（日）</span>
-          <input type="number" min={1} max={365} value={f.retentionDays}
-            onChange={(e) => set('retentionDays', Number(e.target.value))} className={`${input} w-24`} />
-          <span className={label}>NVR録画保持（日）</span>
-          <input type="number" min={3} max={90} value={f.nvrRetentionDays}
-            onChange={(e) => set('nvrRetentionDays', Number(e.target.value))} className={`${input} w-24`} />
-        </div>
-
-        <div className={row}>
-          <span className={label}>STEP無操作タイムアウト（秒）</span>
-          <input type="number" min={30} max={600} value={f.timeoutSec}
-            onChange={(e) => set('timeoutSec', Number(e.target.value))} className={`${input} w-24`} />
-        </div>
-
-        <div className={row}>
-          <span className={label}>端末モード</span>
-          <select value={f.terminalMode} onChange={(e) => set('terminalMode', e.target.value as TerminalMode)} className={input}>
-            <option value="both">入退両用</option>
-            <option value="entry_only">入室専用</option>
-            <option value="exit_only">退出専用</option>
-          </select>
-        </div>
-
-        <div className={row}>
-          <span className={label}>音声案内（TTS）</span>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={f.audioEnabled} onChange={(e) => set('audioEnabled', e.target.checked)} />
-            読み上げる（既定ON — アナウンス自体が抑止力）
-          </label>
-          <span className="text-[12px] text-slate-500 dark:text-gedink3">音量</span>
-          <input type="range" min={0} max={1} step={0.1} value={f.audioVolume}
-            onChange={(e) => set('audioVolume', Number(e.target.value))} className="w-32 accent-[#2C4A7E]" />
-          <span className="w-8 font-mono text-[12px] tabular-nums">{Math.round(f.audioVolume * 100)}%</span>
-        </div>
-
-        <div>
-          <div className="mb-2 flex items-center gap-3">
-            <span className={label}>検査STEP文言（全角{STEP_TEXT_MAX}字まで）</span>
-            <button onClick={addStep} disabled={f.steps.length >= 10}
-              className="rounded border border-slate-300 px-2 py-0.5 text-[12px] hover:bg-slate-50 disabled:opacity-40 dark:border-gedline dark:text-gedink dark:hover:bg-gedbg3">
-              ＋ STEP追加
-            </button>
-          </div>
-          <div className="space-y-2">
-            {f.steps.map((s, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <span className="w-16 font-mono text-[12px] text-slate-500 dark:text-gedink3">STEP {i + 1}</span>
-                <input value={s.text} onChange={(e) => setStep(i, e.target.value)}
-                  maxLength={STEP_TEXT_MAX} className={`${input} flex-1`} />
-                <span className="w-12 text-right font-mono text-[11px] tabular-nums text-slate-400 dark:text-gedink3">
-                  {s.text.length}/{STEP_TEXT_MAX}
-                </span>
-                <button onClick={() => removeStep(i)} disabled={f.steps.length <= 1}
-                  className="rounded border border-slate-300 px-2 py-0.5 text-[12px] text-slate-600 hover:bg-slate-50 disabled:opacity-40 dark:border-gedline dark:text-gedink2 dark:hover:bg-gedbg3">
-                  削除
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
+        <p className="text-[12px] text-slate-500 dark:text-gedink3">
+          保持期間・STEP無操作タイムアウト・端末モード・音声・検査STEP文言は全店舗共通です。
+          <Link href="/admin/baggage" className="ml-1 text-blue-700 underline dark:text-gedaccent">管理 → 手荷物検査設定</Link>
+          で変更できます。
+        </p>
       </div>
 
       {msg && (

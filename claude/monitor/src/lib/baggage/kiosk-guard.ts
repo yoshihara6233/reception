@@ -10,7 +10,8 @@
  */
 import { requireAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
-import { normalizeAnnounceSteps, type AnnounceStep, type TerminalMode } from './inspection-flow'
+import { type AnnounceStep, type TerminalMode } from './inspection-flow'
+import { loadTenantSettings } from './tenant-settings'
 
 export interface KioskSettings {
   cameraIds: string[]
@@ -79,17 +80,21 @@ export async function requireBaggageAccess(storeId: string | null | undefined): 
   }
 }
 
-/** キオスク用: 店舗アクセス＋ inspection_settings.enabled の店舗のみ。 */
+/**
+ * キオスク用: 店舗アクセス＋ inspection_settings.enabled の店舗のみ。
+ * 店舗固有（enabled / camera_ids）は inspection_settings、その他の設定
+ * （保持日数・タイムアウト・端末モード・音声・STEP文言）はテナント共通
+ * （baggage_tenant_settings）から合成する。
+ */
 export async function requireKioskStore(storeId: string | null | undefined): Promise<KioskGuardResult> {
   const access = await requireBaggageAccess(storeId)
   if (!access.ok) return access
   const { svc, store } = access
 
-  const { data: s } = await svc
-    .from('inspection_settings')
-    .select('enabled, camera_ids, retention_days, nvr_retention_days, inspection_timeout_sec, terminal_mode, audio_enabled, audio_volume, announce_steps')
-    .eq('store_id', storeId)
-    .maybeSingle()
+  const [{ data: s }, tenant] = await Promise.all([
+    svc.from('inspection_settings').select('enabled, camera_ids').eq('store_id', storeId).maybeSingle(),
+    loadTenantSettings(svc, store.tenantId),
+  ])
   if (!s?.enabled) return { ok: false, status: 403, error: 'baggage_not_enabled' }
 
   return {
@@ -97,13 +102,13 @@ export async function requireKioskStore(storeId: string | null | undefined): Pro
     store,
     settings: {
       cameraIds: (s.camera_ids ?? []) as string[],
-      retentionDays: Number(s.retention_days) || 60,
-      nvrRetentionDays: Number(s.nvr_retention_days) || 14,
-      timeoutSec: Number(s.inspection_timeout_sec) || 120,
-      terminalMode: (s.terminal_mode ?? 'both') as TerminalMode,
-      audioEnabled: s.audio_enabled !== false,
-      audioVolume: Number(s.audio_volume ?? 1),
-      steps: normalizeAnnounceSteps(s.announce_steps),
+      retentionDays: tenant.retentionDays,
+      nvrRetentionDays: tenant.nvrRetentionDays,
+      timeoutSec: tenant.timeoutSec,
+      terminalMode: tenant.terminalMode,
+      audioEnabled: tenant.audioEnabled,
+      audioVolume: tenant.audioVolume,
+      steps: tenant.steps,
     },
     svc,
   }

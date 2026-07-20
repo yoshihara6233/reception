@@ -23,6 +23,7 @@ import {
   type SessionLite, type UnmatchItem,
 } from '@/lib/baggage/unmatch'
 import { deleteCollectionById, visitorDailyCollectionId } from '@/lib/aws/rekognition'
+import { loadTenantSettings } from '@/lib/baggage/tenant-settings'
 
 export const maxDuration = 300   // 店舗数×Storage削除で伸びるため上限を確保
 
@@ -50,16 +51,26 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   const { data: settingsRows, error: sErr } = await svc
     .from('inspection_settings')
-    .select('store_id, retention_days, stores ( name )')
+    .select('store_id, tenant_id, stores ( name )')
     .eq('enabled', true)
   if (sErr) return NextResponse.json({ error: sErr.message }, { status: 500 })
 
+  // 保持日数はテナント共通設定（baggage_tenant_settings）から。テナント毎に一度だけ読む。
+  const tenantRetention = new Map<string, number>()
+  const getRetentionDays = async (tenantId: string): Promise<number> => {
+    if (tenantRetention.has(tenantId)) return tenantRetention.get(tenantId)!
+    const t = await loadTenantSettings(svc, tenantId)
+    tenantRetention.set(tenantId, t.retentionDays)
+    return t.retentionDays
+  }
+
   const results: StoreResult[] = []
 
-  for (const row of (settingsRows ?? []) as { store_id: string; retention_days: number; stores: unknown }[]) {
+  for (const row of (settingsRows ?? []) as { store_id: string; tenant_id: string; stores: unknown }[]) {
     const storeId = row.store_id
     const storeRel = Array.isArray(row.stores) ? row.stores[0] : row.stores
     const storeName = (storeRel as { name?: string } | null)?.name ?? storeId.slice(0, 8)
+    const retentionDays = await getRetentionDays(row.tenant_id)
     const r: StoreResult = {
       storeId, unmatchedMarked: 0, mailSent: false, mailRecipients: 0,
       visitorCollectionDeleted: false, purgedSessions: 0, errors: [],
@@ -148,7 +159,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     //       照合リトライ・タイムアウト時の孤児写真、途中入退イベントの顔も漏れなく消える。
     //       従業員マスタの顔は employees/ 配下＝対象外）
     try {
-      const cutoff = retentionCutoffIso(row.retention_days || 60, now)
+      const cutoff = retentionCutoffIso(retentionDays, now)
       const { data: old } = await svc
         .from('inspection_sessions')
         .select('id')
@@ -173,7 +184,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       }
 
       // 4b. 日付フォルダ単位の写真 purge（孤児含む全消し）
-      const cutoffYmd = jstDateStr(now, -(row.retention_days || 60)).replaceAll('-', '')
+      const cutoffYmd = jstDateStr(now, -(retentionDays)).replaceAll('-', '')
       const { data: dayFolders } = await svc.storage.from('baggage-photos').list(storeId, { limit: 1000 })
       for (const folder of dayFolders ?? []) {
         if (!/^\d{8}$/.test(folder.name) || folder.name >= cutoffYmd) continue
