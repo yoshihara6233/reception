@@ -30,6 +30,7 @@ const Body = z.object({
   entrySessionId: z.string().uuid().nullish(),    // visitor exit: face-auth の一致結果
   facePath: z.string().nullish(),
   authSkipped: z.boolean().optional(),
+  consentVersion: z.number().int().nullish(),   // 来訪者入室の同意版（同意画面を通った場合）
   // exit 時のみ（検査窓・確定状態）
   inspectionStartedAt: z.string().datetime({ offset: true }).optional(),
   inspectionEndedAt: z.string().datetime({ offset: true }).optional(),
@@ -81,6 +82,9 @@ export async function POST(req: NextRequest) {
         entry_at: nowIso,
         entry_face_path: body.facePath ?? null,
         status: 'entered',
+        // 来訪者入室の同意（同意画面を通っていれば版が入る）。
+        consent_at: body.consentVersion != null ? nowIso : null,
+        consent_version: body.consentVersion ?? null,
       })
       .select('id')
       .single()

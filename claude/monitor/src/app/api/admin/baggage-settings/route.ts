@@ -21,6 +21,7 @@ const Body = z.object({
   audioEnabled: z.boolean(),
   audioVolume: z.number().min(0).max(1),
   steps: z.array(z.object({ order: z.number(), text: z.string().max(STEP_TEXT_MAX) })).max(10),
+  consentText: z.string().max(4000).optional(),
 })
 
 export async function PUT(req: NextRequest) {
@@ -43,6 +44,18 @@ export async function PUT(req: NextRequest) {
 
   const svc = createSupabaseService()
   const steps = normalizeAnnounceSteps(body.steps)
+
+  // 同意文言: 変更時のみ consent_version を +1（過去同意と区別）。
+  const consentText = (body.consentText ?? '').trim()
+  const { data: cur } = await svc
+    .from('baggage_tenant_settings')
+    .select('consent_text, consent_version')
+    .eq('tenant_id', tenantId)
+    .maybeSingle()
+  const prevText = (cur?.consent_text ?? '') as string
+  const prevVersion = Number(cur?.consent_version) || 1
+  const consentVersion = consentText !== prevText ? prevVersion + 1 : prevVersion
+
   const { error } = await svc.from('baggage_tenant_settings').upsert({
     tenant_id: tenantId,
     retention_days: body.retentionDays,
@@ -52,6 +65,8 @@ export async function PUT(req: NextRequest) {
     audio_enabled: body.audioEnabled,
     audio_volume: body.audioVolume,
     announce_steps: steps,
+    consent_text: consentText,
+    consent_version: consentVersion,
     updated_at: new Date().toISOString(),
   }, { onConflict: 'tenant_id' })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

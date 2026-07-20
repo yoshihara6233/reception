@@ -37,7 +37,7 @@ export default async function BaggageEmployeesPage(
     const svc = createSupabaseService()
     const { data } = await svc
       .from('employees')
-      .select('id, name, employee_code, face_photo_path, rekognition_face_id, created_at')
+      .select('id, name, employee_code, face_photo_path, rekognition_face_id, consent_at, consent_version, created_at')
       .eq('store_id', storeId)
       .eq('status', 'active')
       .order('name')

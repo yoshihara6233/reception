@@ -40,7 +40,7 @@ export default async function BaggageSessionPage(
     .from('inspection_sessions')
     .select(`id, store_id, person_kind, visitor_name, visitor_company, entry_at, exit_at,
       entry_face_path, exit_face_path, card_photo_path, inspection_started_at, inspection_ended_at,
-      status, auth_skipped, confirmed_at, inspection_date,
+      status, auth_skipped, confirmed_at, inspection_date, consent_at, consent_version,
       employees ( name, face_photo_path ), stores ( name )`)
     .eq('id', id)
     .maybeSingle()
@@ -158,6 +158,13 @@ export default async function BaggageSessionPage(
             <span className="font-mono tabular-nums">{hms(sess.inspection_started_at)} 〜 {hms(sess.inspection_ended_at)}</span></div>
           <div><div className="text-[11px] text-slate-500 dark:text-gedink3">NVR時刻差</div>
             <span className="font-mono tabular-nums">{maxOffset === null ? '—' : `${maxOffset >= 0 ? '+' : ''}${maxOffset}s`}</span></div>
+          {sess.person_kind === 'visitor' && (
+            <div><div className="text-[11px] text-slate-500 dark:text-gedink3">個人情報同意</div>
+              {sess.consent_at
+                ? <span className="text-emerald-700 dark:text-emerald-400">同意 v{sess.consent_version ?? 1}（{hms(sess.consent_at)}）</span>
+                : <span className="text-slate-500 dark:text-gedink3">記録なし</span>}
+            </div>
+          )}
           <div className="ml-auto self-end text-slate-500 dark:text-gedink3">この閲覧は監査ログに記録されます</div>
         </div>
       </div>

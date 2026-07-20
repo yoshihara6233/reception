@@ -24,7 +24,7 @@ export async function GET(
     .from('inspection_sessions')
     .select(`id, store_id, person_kind, visitor_name, visitor_company, entry_at, exit_at,
       entry_face_path, exit_face_path, card_photo_path, inspection_started_at, inspection_ended_at,
-      status, auth_skipped, confirmed_at, inspection_date,
+      status, auth_skipped, confirmed_at, inspection_date, consent_at, consent_version,
       employees ( name, face_photo_path ), stores ( name )`)
     .eq('id', id)
     .maybeSingle()
@@ -85,6 +85,8 @@ export async function GET(
     authSkipped: !!sess.auth_skipped,
     confirmedAt: sess.confirmed_at,
     inspectionDate: sess.inspection_date,
+    consentAt: sess.consent_at,
+    consentVersion: sess.consent_version,
     storeName: store?.name ?? null,
     windowSec,
     maxOffset,

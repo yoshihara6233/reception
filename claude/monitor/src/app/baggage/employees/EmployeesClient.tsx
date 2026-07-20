@@ -13,6 +13,8 @@ export interface EmployeeRow {
   employee_code: string | null
   face_photo_path: string | null
   rekognition_face_id: string | null
+  consent_at: string | null
+  consent_version: number | null
   created_at: string
 }
 
@@ -156,12 +158,13 @@ export function EmployeesClient(
               <th className="px-3 py-2 font-medium">氏名</th>
               <th className="px-3 py-2 font-medium">社員コード</th>
               <th className="px-3 py-2 font-medium">顔登録</th>
+              <th className="px-3 py-2 font-medium">同意</th>
               <th className="px-3 py-2 font-medium">操作</th>
             </tr>
           </thead>
           <tbody>
             {employees.length === 0 && (
-              <tr><td colSpan={4} className="px-3 py-8 text-center text-slate-500 dark:text-gedink3">
+              <tr><td colSpan={5} className="px-3 py-8 text-center text-slate-500 dark:text-gedink3">
                 従業員が登録されていません
               </td></tr>
             )}
@@ -182,6 +185,16 @@ export function EmployeesClient(
                     </div>
                   ) : (
                     <span className="rounded bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">未登録</span>
+                  )}
+                </td>
+                <td className="px-3 py-2">
+                  {e.consent_at ? (
+                    <span className="rounded bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
+                      title={new Date(e.consent_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}>
+                      同意 v{e.consent_version ?? 1}
+                    </span>
+                  ) : (
+                    <span className="rounded bg-slate-200 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-gedbg3 dark:text-gedink3">未取得</span>
                   )}
                 </td>
                 <td className="px-3 py-2">
