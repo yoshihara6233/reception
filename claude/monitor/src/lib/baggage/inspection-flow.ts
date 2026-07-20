@@ -90,3 +90,10 @@ export const DEFAULT_STEP_TIMEOUT_SEC = 120
 export const AUTO_IDLE_SEC = 3
 /** 顔認証の最大待ち（秒）。超過で auth_skipped を立ててフロー継続（可用性優先）。 */
 export const FACE_AUTH_TIMEOUT_SEC = 3
+/**
+ * サーバ側の Rekognition 照合/登録タイムアウト（秒）。
+ * FACE_AUTH_TIMEOUT_SEC（3秒）は「キオスクの体感上限」だが、実際の Rekognition 呼び出しは
+ * コールドスタート時に3秒を超えて false timeout になり「認証省略」を量産する。
+ * サーバ側の実タイムアウトはこちらで別に持つ（温間は 1秒前後で返る）。
+ */
+export const FACE_SEARCH_TIMEOUT_SEC = 8
