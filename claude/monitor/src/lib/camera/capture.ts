@@ -42,6 +42,9 @@ export async function startCamera(
 export function captureFrame(videoElement: HTMLVideoElement, zoom = 1): Blob | null {
   const vw = videoElement.videoWidth
   const vh = videoElement.videoHeight
+  // カメラ未準備（0×0）で撮ると空dataURLになり atob が例外を投げるため、null で返す
+  // （呼び出し側は「カメラを起動できませんでした」を表示して再試行できる）。
+  if (!vw || !vh) return null
 
   const canvas = document.createElement('canvas')
   canvas.width = vw

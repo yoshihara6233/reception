@@ -409,18 +409,24 @@ export function KioskClient(props: Props) {
   }, [storeId, postSession])
 
   const captureVCard = useCallback(async (skip: boolean) => {
-    if (screen.s !== 'vcapCard' || screen.busy) return
-    const facePath = screen.facePath
-    let cardImage: string | null = null
-    if (!skip) {
-      const blob = videoRef.current ? captureFrame(videoRef.current, 1) : null
-      if (!blob) { setScreen({ s: 'vcapCard', facePath, error: 'カメラを起動できませんでした。' }); return }
-      cardImage = await blobToDataUrl(blob)
+    // finishingRef で再入防止（入室はサーバ側に冪等化が無いため二重セッションを作らせない）。
+    if (screen.s !== 'vcapCard' || screen.busy || finishingRef.current) return
+    finishingRef.current = true
+    try {
+      const facePath = screen.facePath
+      let cardImage: string | null = null
+      if (!skip) {
+        const blob = videoRef.current ? captureFrame(videoRef.current, 1) : null
+        if (!blob) { setScreen({ s: 'vcapCard', facePath, error: 'カメラを起動できませんでした。' }); return }
+        cardImage = await blobToDataUrl(blob)
+      }
+      setScreen({ s: 'vcapCard', facePath, busy: true }); stopCam()
+      const ok = await finishVisitorEntry(facePath, cardImage)
+      if (ok) setScreen({ s: 'complete', label: '入室を記録しました' })
+      else setScreen({ s: 'vcapCard', facePath, error: '記録に失敗しました。もう一度お試しください。' })
+    } finally {
+      finishingRef.current = false
     }
-    setScreen({ s: 'vcapCard', facePath, busy: true }); stopCam()
-    const ok = await finishVisitorEntry(facePath, cardImage)
-    if (ok) setScreen({ s: 'complete', label: '入室を記録しました' })
-    else setScreen({ s: 'vcapCard', facePath, error: '記録に失敗しました。もう一度お試しください。' })
   }, [screen, stopCam, finishVisitorEntry])
 
   const REG_ERR: Record<string, string> = {
