@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { recordFootageAccess } from '@/lib/audit/footage-access'
+import { isR2Path, r2Key, presignClipGet } from '@/lib/baggage/r2'
 
 const BUCKET = 'baggage-clips'
 const SIGNED_TTL = 300   // 動画はスクラブで再リクエストされるため長め
@@ -34,6 +35,18 @@ export async function GET(
     actorUserId: user.id, storeId: clip.store_id, accessType: 'baggage_clip',
     resourceId: id, cameraId: clip.camera_id,
   })
+
+  // R2 保存分（storage_path が r2: プレフィックス）は presigned GET へ 302。
+  // エグレス無料のため全件確認再生でも転送費ゼロ（handbook §15.3）。
+  if (isR2Path(clip.storage_path)) {
+    try {
+      const url = await presignClipGet(r2Key(clip.storage_path), SIGNED_TTL)
+      return NextResponse.redirect(url, 302)
+    } catch (e) {
+      console.error('[baggage clips] R2 presign failed', String(e))
+      return new NextResponse('Sign Failed', { status: 500 })
+    }
+  }
 
   const svc = createSupabaseService()
   const { data: signed, error } = await svc.storage.from(BUCKET).createSignedUrl(clip.storage_path, SIGNED_TTL)

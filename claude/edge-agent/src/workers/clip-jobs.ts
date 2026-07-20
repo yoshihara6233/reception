@@ -19,6 +19,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '../logger.js'
 import { getSupabase } from '../supabase.js'
 import { loadCameras } from '../cameras.js'
+import { config } from '../config.js'
 import { fetchWindowMp4, probeDurationSec, supportsWindowMp4 } from '../util/window-mp4.js'
 import { validateClipReport, nextRetryAt, isPastDeadline } from '@intereco/shared/baggage'
 import type { CameraDescriptor } from '../types.js'
@@ -113,6 +114,59 @@ async function rescheduleOrFail(supa: SupabaseClient, job: ClipJob, tenantId: st
   logger.info({ job: job.id, retry, reason }, 'clip-jobs: rescheduled')
 }
 
+/**
+ * クリップのアップロード。monitor へ問い合わせて R2 presigned PUT が返れば
+ * R2 直アップロード（storage_path は `r2:<key>`）、そうでなければ従来どおり
+ * Supabase Storage（storage_path は素のキー）。戻り値は inspection_clips に
+ * 書く storage_path（両方失敗なら null）。
+ */
+async function uploadClip(supa: SupabaseClient, buf: Buffer, job: ClipJob): Promise<string | null> {
+  // 1) R2 presigned PUT を試す（MONITOR_URL 設定時のみ。失敗は警告してフォールバック）。
+  if (config.MONITOR_URL) {
+    try {
+      const res = await fetch(`${config.MONITOR_URL}/api/baggage/edge/clip-upload`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          Authorization: 'Bearer ' + config.EDGE_DEVICE_TOKEN,
+        },
+        body: JSON.stringify({ sessionId: job.session_id, cameraId: job.camera_id }),
+        signal: AbortSignal.timeout(10_000),
+      })
+      if (res.ok) {
+        const j = await res.json() as { mode: string; url?: string; storagePath?: string }
+        if (j.mode === 'r2' && j.url && j.storagePath) {
+          const put = await fetch(j.url, {
+            method: 'PUT',
+            headers: { 'content-type': 'video/mp4' },
+            body: new Uint8Array(buf),
+            // 100MB 級を細回線で上げるケースを考慮した長めのタイムアウト。
+            signal: AbortSignal.timeout(180_000),
+          })
+          if (put.ok) return j.storagePath
+          logger.warn({ job: job.id, status: put.status }, 'clip-jobs: R2 PUT failed → supabase fallback')
+        }
+        // mode:'supabase' は R2 未設定＝正常系のフォールバック指示。
+      } else {
+        logger.warn({ job: job.id, status: res.status }, 'clip-jobs: clip-upload API error → supabase fallback')
+      }
+    } catch (e) {
+      logger.warn({ job: job.id, err: String(e) }, 'clip-jobs: R2 path error → supabase fallback')
+    }
+  }
+
+  // 2) Supabase Storage（従来経路）。
+  const path = `${job.session_id}/${job.camera_id}.mp4`
+  const { error: upErr } = await supa.storage.from(BUCKET).upload(path, buf, {
+    contentType: 'video/mp4', upsert: true,
+  })
+  if (upErr) {
+    logger.warn({ job: job.id, err: upErr.message }, 'clip-jobs: supabase upload failed')
+    return null
+  }
+  return path
+}
+
 async function processJob(supa: SupabaseClient, job: ClipJob, camera: CameraDescriptor, tenantId: string): Promise<void> {
   const id = `${job.session_id}-${job.camera_id}`
   let buf: Buffer
@@ -139,12 +193,11 @@ async function processJob(supa: SupabaseClient, job: ClipJob, camera: CameraDesc
   }
 
   // アップロード（session/camera で決定的パス・再試行で上書き）。
-  const path = `${job.session_id}/${job.camera_id}.mp4`
-  const { error: upErr } = await supa.storage.from(BUCKET).upload(path, buf, {
-    contentType: 'video/mp4', upsert: true,
-  })
-  if (upErr) {
-    await rescheduleOrFail(supa, job, tenantId, `upload: ${upErr.message}`)
+  // R2（コスト是正: エグレス無料）を優先し、未設定/失敗時は Supabase へ
+  // フォールバック（可用性優先 — クリップを止めない）。
+  const path = await uploadClip(supa, buf, job)
+  if (!path) {
+    await rescheduleOrFail(supa, job, tenantId, 'upload failed (r2 and supabase)')
     return
   }
 
