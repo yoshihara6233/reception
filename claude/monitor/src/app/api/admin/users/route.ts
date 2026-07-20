@@ -19,7 +19,7 @@ const Body = z.object({
   email:        z.string().email(),
   password:     z.string().min(8),
   display_name: z.string().min(1),
-  role:         z.enum(['super_admin', 'tenant_admin', 'store_manager', 'viewer']),
+  role:         z.enum(['super_admin', 'tenant_admin', 'store_manager', 'baggage_manager', 'viewer']),
   tenant_id:    z.string().uuid().nullable().optional(),
   store_ids:    z.array(z.string().uuid()).default([]),
 })

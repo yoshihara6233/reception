@@ -5,39 +5,48 @@
  * 設定は inspection_settings（RLS: baggage_store_access で店舗スコープ）。
  * 画面本体は KioskClient（SCREEN A〜F・ワイヤーフレーム v3 準拠）。
  */
-import { redirect } from 'next/navigation'
-import { createSupabaseServer } from '@/lib/supabase/server'
+import { createSupabaseService } from '@/lib/supabase/server'
 import { loadTenantSettings } from '@/lib/baggage/tenant-settings'
+import { resolveKioskOrAdmin } from '@/lib/baggage/kiosk-guard'
 import { KioskClient } from './KioskClient'
+import { KioskPinGate } from './KioskPinGate'
+
+function FullScreenMessage({ title, sub }: { title: string; sub?: string }) {
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center',
+      justifyContent: 'center', gap: 12, background: '#F7F5F1', color: '#0F0F10',
+      fontFamily: 'Noto Sans JP, sans-serif' }}>
+      <div style={{ fontSize: 24, fontWeight: 700 }}>{title}</div>
+      {sub && <div style={{ fontSize: 14, color: '#5B5B5F' }}>{sub}</div>}
+    </div>
+  )
+}
 
 export default async function BaggageKioskPage(
   { params }: { params: Promise<{ storeId: string }> },
 ) {
   const { storeId } = await params
-  const supa = await createSupabaseServer()
-  const { data: { user } } = await supa.auth.getUser()
-  if (!user) redirect('/login')
 
-  // 店舗固有（有効化）は inspection_settings、表示設定はテナント共通。
-  const [{ data: store }, { data: s }] = await Promise.all([
-    supa.from('stores').select('id, name, tenant_id').eq('id', storeId).maybeSingle(),
-    supa.from('inspection_settings').select('enabled').eq('store_id', storeId).maybeSingle(),
-  ])
-
-  if (!store || !s?.enabled) {
-    return (
-      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center',
-        justifyContent: 'center', gap: 12, background: '#F7F5F1', color: '#0F0F10',
-        fontFamily: 'Noto Sans JP, sans-serif' }}>
-        <div style={{ fontSize: 24, fontWeight: 700 }}>
-          {store ? 'この店舗では手荷物検査オプションが有効になっていません' : '店舗が見つかりません'}
-        </div>
-        <div style={{ fontSize: 14, color: '#5B5B5F' }}>管理画面の手荷物検査設定をご確認ください。</div>
-      </div>
-    )
+  // PIN セッション or 手荷物検査ロールのログインで店舗を解決。
+  const auth = await resolveKioskOrAdmin(storeId)
+  if (!auth.ok) {
+    // 未認証（ログインもPINも無い）→ PINパッド。店名だけ表示用に取得。
+    if (auth.status === 401) {
+      const svc = createSupabaseService()
+      const { data: store } = await svc.from('stores').select('name').eq('id', storeId).maybeSingle()
+      return <KioskPinGate storeId={storeId} storeName={store?.name ?? null} />
+    }
+    if (auth.status === 404) return <FullScreenMessage title="店舗が見つかりません" />
+    return <FullScreenMessage title="この端末にはアクセス権がありません" sub="店舗のPIN、または担当店舗の権限をご確認ください。" />
   }
 
-  const tenant = await loadTenantSettings(supa, store.tenant_id)
+  const { svc, store } = auth
+  const { data: s } = await svc.from('inspection_settings').select('enabled').eq('store_id', store.id).maybeSingle()
+  if (!s?.enabled) {
+    return <FullScreenMessage title="この店舗では手荷物検査オプションが有効になっていません" sub="管理画面の手荷物検査設定をご確認ください。" />
+  }
+
+  const tenant = await loadTenantSettings(svc, store.tenantId)
 
   return (
     <KioskClient

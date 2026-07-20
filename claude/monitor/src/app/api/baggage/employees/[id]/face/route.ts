@@ -7,9 +7,11 @@
  * キオスクと違いタイムアウトレースはせず、失敗は素直にエラーを返す。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
 import { z } from 'zod'
-import { requireAdmin } from '@/lib/admin/guard'
-import { requireBaggageAccess } from '@/lib/baggage/kiosk-guard'
+import { requireAdmin, requireBaggageRole } from '@/lib/admin/guard'
+import { requireBaggageAccess, resolveKioskOrAdmin } from '@/lib/baggage/kiosk-guard'
+import { KIOSK_COOKIE, kioskSessionStoreId } from '@/lib/baggage/kiosk-pin'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { recordAudit } from '@/lib/admin/audit'
 import {
@@ -92,9 +94,14 @@ export async function POST(
   const parsed = Body.safeParse(await req.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
 
-  // 認証を先に（未認証者への UUID 存在オラクル・認証前の service 読みを作らない）
-  const auth = await requireAdmin()
-  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
+  // 認証プレゲート（未認証者への UUID 存在オラクル・認証前の service 読みを作らない）:
+  // 正規のキオスクPINセッション or 手荷物検査ロールのログイン。iPad は PIN 経路で
+  // 「はじめての方の顔登録（セルフ登録）」を行えるようにする。
+  const pinStore = kioskSessionStoreId((await cookies()).get(KIOSK_COOKIE)?.value, new Date())
+  if (!pinStore) {
+    const role = await requireBaggageRole()
+    if (!role.ok) return NextResponse.json({ error: role.error }, { status: role.status })
+  }
 
   const svc0 = createSupabaseService()
   const { data: emp } = await svc0
@@ -103,14 +110,17 @@ export async function POST(
     .eq('id', id)
     .maybeSingle()
   if (!emp) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+
+  // 認可は「存在・状態を漏らす前」に。emp の店舗への権限（PIN一致 or 店舗アクセス）が
+  // 無ければ、存在しない場合と同じ 404 を返す（越権の存在オラクルを作らない）。
+  const guard = await resolveKioskOrAdmin(emp.store_id)
+  if (!guard.ok) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  const { svc, store } = guard
+
   if (emp.status !== 'active') return NextResponse.json({ error: 'employee_inactive' }, { status: 409 })
   if (parsed.data.onlyIfUnregistered && emp.rekognition_face_id) {
     return NextResponse.json({ error: 'already_registered' }, { status: 409 })
   }
-
-  const guard = await requireBaggageAccess(emp.store_id)
-  if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status })
-  const { svc, store } = guard
 
   const img = dataUrlToBuffer(parsed.data.image)
   if (!img) return NextResponse.json({ error: 'invalid_image' }, { status: 400 })
@@ -150,9 +160,12 @@ export async function POST(
     .eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  await recordAudit(guard.supa, {
-    actorUserId: guard.user.id, action: 'baggage.employee.face_register', targetType: 'employee',
-    targetId: id, storeId: store.id,
-  })
+  // 監査は admin 経路のみ（PIN セルフ登録は auth.uid() が無く RLS INSERT 不可）。
+  if (guard.via === 'admin' && guard.supa && guard.actorUserId) {
+    await recordAudit(guard.supa, {
+      actorUserId: guard.actorUserId, action: 'baggage.employee.face_register', targetType: 'employee',
+      targetId: id, storeId: store.id,
+    })
+  }
   return NextResponse.json({ ok: true, faceId })
 }

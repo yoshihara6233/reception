@@ -8,10 +8,12 @@
  * 書き込みは RLS にポリシーが無い（deny）ため service client で行う — このガードを
  * 通ったリクエストのみが書けるという二段構え。
  */
-import { requireAdmin } from '@/lib/admin/guard'
+import { cookies } from 'next/headers'
+import { requireBaggageRole } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { type AnnounceStep, type TerminalMode } from './inspection-flow'
 import { loadTenantSettings } from './tenant-settings'
+import { KIOSK_COOKIE, verifyKioskSession } from './kiosk-pin'
 
 export interface KioskSettings {
   cameraIds: string[]
@@ -52,7 +54,7 @@ export type KioskGuardResult =
 export async function requireBaggageAccess(storeId: string | null | undefined): Promise<BaggageAccessResult> {
   if (!storeId) return { ok: false, status: 400, error: 'storeId_required' }
 
-  const guard = await requireAdmin()
+  const guard = await requireBaggageRole()
   if (!guard.ok) return { ok: false, status: guard.status, error: guard.error }
 
   const svc = createSupabaseService()
@@ -81,13 +83,50 @@ export async function requireBaggageAccess(storeId: string | null | undefined): 
 }
 
 /**
- * キオスク用: 店舗アクセス＋ inspection_settings.enabled の店舗のみ。
+ * 店舗の解決（キオスク実行経路用）— 以下のいずれかで通す:
+ *   1) 有効なキオスクPINセッション cookie（その店舗限定）— iPad常用経路。admin_users 照会不要。
+ *   2) 手荷物検査ロールのログインセッション（requireBaggageAccess）。
+ * 返り値の actorUserId は admin 経路のみ非null（PIN経路は null）。
+ */
+export type StoreAuthResult =
+  | { ok: false; status: number; error: string }
+  | {
+      ok: true
+      store: { id: string; tenantId: string; name: string }
+      svc: ReturnType<typeof createSupabaseService>
+      actorUserId: string | null
+      via: 'pin' | 'admin'
+      /** admin 経路のみ非null（監査 INSERT は auth.uid() 一致が必要なため）。 */
+      supa: Awaited<ReturnType<typeof import('@/lib/supabase/server').createSupabaseServer>> | null
+    }
+
+export async function resolveKioskOrAdmin(storeId: string | null | undefined): Promise<StoreAuthResult> {
+  if (!storeId) return { ok: false, status: 400, error: 'storeId_required' }
+
+  // 1) PIN セッション（署名cookie）を先に見る — キオスクの常用経路。
+  const token = (await cookies()).get(KIOSK_COOKIE)?.value
+  if (verifyKioskSession(token, storeId, new Date())) {
+    const svc = createSupabaseService()
+    const { data: store } = await svc
+      .from('stores').select('id, tenant_id, name').eq('id', storeId).maybeSingle()
+    if (!store) return { ok: false, status: 404, error: 'store_not_found' }
+    return { ok: true, store: { id: store.id, tenantId: store.tenant_id, name: store.name }, svc, actorUserId: null, via: 'pin', supa: null }
+  }
+
+  // 2) ログインセッション（手荷物検査ロール）。
+  const access = await requireBaggageAccess(storeId)
+  if (!access.ok) return access
+  return { ok: true, store: access.store, svc: access.svc, actorUserId: access.user.id, via: 'admin', supa: access.supa }
+}
+
+/**
+ * キオスク用: 店舗アクセス（PIN or ログイン）＋ inspection_settings.enabled の店舗のみ。
  * 店舗固有（enabled / camera_ids）は inspection_settings、その他の設定
  * （保持日数・タイムアウト・端末モード・音声・STEP文言）はテナント共通
  * （baggage_tenant_settings）から合成する。
  */
 export async function requireKioskStore(storeId: string | null | undefined): Promise<KioskGuardResult> {
-  const access = await requireBaggageAccess(storeId)
+  const access = await resolveKioskOrAdmin(storeId)
   if (!access.ok) return access
   const { svc, store } = access
 
