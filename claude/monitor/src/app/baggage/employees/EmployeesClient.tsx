@@ -170,9 +170,19 @@ export function EmployeesClient(
                 <td className="px-3 py-2">{e.name}</td>
                 <td className="px-3 py-2 font-mono tabular-nums">{e.employee_code ?? '—'}</td>
                 <td className="px-3 py-2">
-                  {e.rekognition_face_id
-                    ? <span className="rounded bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">登録済み</span>
-                    : <span className="rounded bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">未登録</span>}
+                  {e.rekognition_face_id ? (
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-11 w-11 flex-none items-center justify-center overflow-hidden rounded bg-slate-200 dark:bg-gedbg3">
+                        {e.face_photo_path
+                          // eslint-disable-next-line @next/next/no-img-element
+                          ? <img src={`/api/baggage/employees/${e.id}/photo`} alt={`${e.name} の顔写真`} className="h-full w-full object-cover" />
+                          : <span className="text-[9px] text-slate-500 dark:text-gedink3">写真なし</span>}
+                      </span>
+                      <span className="rounded bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">登録済み</span>
+                    </div>
+                  ) : (
+                    <span className="rounded bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">未登録</span>
+                  )}
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex gap-2">
