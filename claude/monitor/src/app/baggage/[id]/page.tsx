@@ -126,6 +126,13 @@ export default async function BaggageSessionPage(
           <span className="font-mono text-[12px] text-slate-500 dark:text-gedink3">#{id.slice(0, 8)}</span>
         </div>
 
+        {/* 顔認証省略時: 入退室の同一人物性は未確認である旨（過信させない） */}
+        {sess.auth_skipped && (
+          <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-[12px] text-amber-800 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+            顔認証が省略されたため、入室と退出が<strong>同一人物である保証はありません</strong>（滞在中の最新の入室記録に自動で対応づけています）。下の映像と顔写真でご確認ください。
+          </div>
+        )}
+
         {/* 2カメラ同期プレイヤー（主役・OV#4） */}
         <SessionPlayer
           clips={playable}
@@ -136,8 +143,8 @@ export default async function BaggageSessionPage(
 
         {/* 顔3枚比較列（同一人物かの目視・OV#13 は管理画面ではフルネーム可） */}
         <div className="flex flex-col gap-3 md:flex-row">
-          {face('entry', '入室', hms(sess.entry_at), sess.entry_face_path)}
-          {face('exit', '退出', hms(sess.exit_at), sess.exit_face_path)}
+          {face('entry', sess.auth_skipped ? '入室（推定）' : '入室', hms(sess.entry_at), sess.entry_face_path)}
+          {face('exit', sess.auth_skipped ? '退出（推定）' : '退出', hms(sess.exit_at), sess.exit_face_path)}
           {sess.person_kind === 'staff'
             ? face('employee', '従業員マスタ', emp?.name ?? '未登録', emp?.face_photo_path ?? null)
             : face('card', '名刺', sess.visitor_company ?? sess.visitor_name ?? '—', sess.card_photo_path)}

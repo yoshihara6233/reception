@@ -16,19 +16,29 @@ export interface PlayerClip {
   durationSec: number | null
 }
 
+const SPEEDS = [1, 1.5, 2, 4] as const
+
 export function SessionPlayer({ clips, windowLabel }: { clips: PlayerClip[]; windowLabel: string }) {
   const refs = useRef<(HTMLVideoElement | null)[]>([])
   const [playing, setPlaying] = useState(false)
   const [time, setTime] = useState(0)
   const [duration, setDuration] = useState(0)
+  const [rate, setRate] = useState(1)
 
   const videos = () => refs.current.filter(Boolean) as HTMLVideoElement[]
+
+  // 倍速はプレイヤーが変わっても全 video に反映する（seek/切替後の取りこぼし防止）。
+  const applyRate = useCallback((r: number) => {
+    setRate(r)
+    videos().forEach((v) => { v.playbackRate = r })
+  }, [])
 
   // 最長クリップを基準に総尺を決める（メタデータ読込後）
   const onLoaded = useCallback(() => {
     const d = Math.max(0, ...videos().map((v) => (Number.isFinite(v.duration) ? v.duration : 0)))
     if (d > 0) setDuration(d)
-  }, [])
+    videos().forEach((v) => { v.playbackRate = rate })
+  }, [rate])
 
   useEffect(() => {
     if (!playing) return
@@ -43,9 +53,9 @@ export function SessionPlayer({ clips, windowLabel }: { clips: PlayerClip[]; win
     const vs = videos()
     if (vs.length === 0) return
     if (playing) { vs.forEach((v) => v.pause()); setPlaying(false); return }
-    vs.forEach((v) => { void v.play().catch(() => {}) })
+    vs.forEach((v) => { v.playbackRate = rate; void v.play().catch(() => {}) })
     setPlaying(true)
-  }, [playing])
+  }, [playing, rate])
 
   const seek = useCallback((t: number) => {
     videos().forEach((v) => { v.currentTime = t })
@@ -113,7 +123,24 @@ export function SessionPlayer({ clips, windowLabel }: { clips: PlayerClip[]; win
           className="h-1 flex-1 accent-blue-800"
         />
         <span className="font-mono tabular-nums">{fmt(duration)}</span>
-        <span className="hidden text-slate-500 dark:text-gedink3 md:inline">{windowLabel}</span>
+        <div className="flex items-center gap-1" role="group" aria-label="再生速度">
+          {SPEEDS.map((s) => (
+            <button
+              key={s}
+              onClick={() => applyRate(s)}
+              aria-pressed={rate === s}
+              className={
+                'rounded px-2 py-0.5 text-[12px] font-mono tabular-nums ' +
+                (rate === s
+                  ? 'bg-blue-700 text-white dark:bg-gedaccent'
+                  : 'border border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-gedline dark:text-gedink2 dark:hover:bg-gedbg3')
+              }
+            >
+              {s}×
+            </button>
+          ))}
+        </div>
+        <span className="hidden text-slate-500 dark:text-gedink3 lg:inline">{windowLabel}</span>
       </div>
     </div>
   )
