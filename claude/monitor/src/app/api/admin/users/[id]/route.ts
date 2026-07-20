@@ -13,7 +13,7 @@ import { createSupabaseService } from '@/lib/supabase/server'
 
 const UpdateBody = z.object({
   display_name: z.string().min(1).optional(),
-  role:         z.enum(['super_admin', 'tenant_admin', 'store_manager', 'viewer']).optional(),
+  role:         z.enum(['super_admin', 'tenant_admin', 'store_manager', 'baggage_manager', 'viewer']).optional(),
   tenant_id:    z.string().uuid().nullable().optional(),
   store_ids:    z.array(z.string().uuid()).optional(),
   password:     z.string().min(8).optional(),

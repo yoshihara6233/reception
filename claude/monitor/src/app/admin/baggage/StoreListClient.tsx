@@ -1,13 +1,13 @@
 'use client'
 
 /**
- * 手荷物検査 店舗別設定（有効化・検査台カメラ・iPad URL/QR）を全店舗まとめて編集。
+ * 手荷物検査 店舗別設定（有効化・検査台カメラ）を全店舗まとめて編集。
+ * iPadのQR/PIN設定は手荷物検査モジュールの「iPad設定」(/baggage/ipad) へ移設。
  * 共通設定（保持日数・タイムアウト等）は同ページ上部の TenantSettingsClient。
  * 保存は店舗ごと（PUT /api/baggage/settings）。
  */
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { QRCodeSVG } from 'qrcode.react'
 
 export interface StoreRow {
   id: string
@@ -22,10 +22,6 @@ export function StoreListClient({ stores }: { stores: StoreRow[] }) {
   const [rows, setRows] = useState<StoreRow[]>(stores)
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ id: string; ok: boolean; text: string } | null>(null)
-  const [origin, setOrigin] = useState('')
-  const [qrOpen, setQrOpen] = useState<string | null>(null)
-  const [copied, setCopied] = useState<string | null>(null)
-  useEffect(() => { setOrigin(window.location.origin) }, [])
 
   const patch = (id: string, up: Partial<StoreRow>) =>
     setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...up } : r)))
@@ -63,7 +59,6 @@ export function StoreListClient({ stores }: { stores: StoreRow[] }) {
   return (
     <div className="space-y-3">
       {rows.map((r) => {
-        const kioskUrl = origin ? `${origin}/kiosk/baggage/${r.id}` : ''
         return (
           <div key={r.id} className="rounded border border-slate-200 bg-white p-4 dark:border-gedline dark:bg-gedbg2">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -91,31 +86,10 @@ export function StoreListClient({ stores }: { stores: StoreRow[] }) {
               </div>
             </div>
 
-            {/* iPad URL / QR */}
-            <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px]">
-              <span className="w-40 text-[13px] text-slate-600 dark:text-gedink2">iPad 受付端末</span>
-              <code className="break-all rounded bg-slate-100 px-2 py-1 font-mono text-slate-700 dark:bg-gedbg3 dark:text-gedink2">
-                {kioskUrl || '…'}
-              </code>
-              <button type="button" disabled={!kioskUrl}
-                onClick={() => { if (kioskUrl) void navigator.clipboard.writeText(kioskUrl).then(() => setCopied(r.id)) }}
-                className="rounded border border-slate-300 bg-white px-2.5 py-1 hover:bg-slate-50 disabled:opacity-40 dark:border-gedline dark:bg-gedbg2 dark:text-gedink dark:hover:bg-gedbg3">
-                {copied === r.id ? 'コピーしました' : 'URLをコピー'}
-              </button>
-              <a href={kioskUrl || '#'} target="_blank" rel="noopener noreferrer"
-                className="rounded border border-slate-300 bg-white px-2.5 py-1 hover:bg-slate-50 dark:border-gedline dark:bg-gedbg2 dark:text-gedink dark:hover:bg-gedbg3">
-                開く
-              </a>
-              <button type="button" onClick={() => setQrOpen(qrOpen === r.id ? null : r.id)}
-                className="rounded border border-slate-300 bg-white px-2.5 py-1 hover:bg-slate-50 dark:border-gedline dark:bg-gedbg2 dark:text-gedink dark:hover:bg-gedbg3">
-                {qrOpen === r.id ? 'QRを閉じる' : 'QRを表示'}
-              </button>
+            {/* iPad の QR / PIN 設定は「手荷物検査 › iPad設定」へ移設 */}
+            <div className="mt-3 text-[12px] text-slate-500 dark:text-gedink3">
+              iPad の QRコード・6桁PINは <span className="font-medium text-slate-700 dark:text-gedink2">手荷物検査 › iPad設定</span> で行います。
             </div>
-            {qrOpen === r.id && kioskUrl && (
-              <div className="mt-2 inline-block rounded-lg bg-white p-2.5 ring-1 ring-slate-200 dark:ring-gedline">
-                <QRCodeSVG value={kioskUrl} size={132} level="M" marginSize={1} />
-              </div>
-            )}
 
             <div className="mt-3 flex items-center gap-3">
               <button onClick={() => save(r)} disabled={busy !== null}

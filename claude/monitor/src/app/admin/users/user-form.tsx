@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
-export type Role = 'super_admin' | 'tenant_admin' | 'store_manager' | 'viewer'
+export type Role = 'super_admin' | 'tenant_admin' | 'store_manager' | 'baggage_manager' | 'viewer'
 
 export interface FormInitial {
   email:        string
@@ -26,10 +26,11 @@ interface Props {
 }
 
 const ROLE_LABELS: Record<Role, string> = {
-  super_admin:   '全体管理者 (super_admin)',
-  tenant_admin:  'テナント管理者 (tenant_admin)',
-  store_manager: '店舗管理者 (store_manager)',
-  viewer:        '閲覧者 (viewer)',
+  super_admin:     '全体管理者 (super_admin)',
+  tenant_admin:    'テナント管理者 (tenant_admin)',
+  store_manager:   '店舗管理者 (store_manager)',
+  baggage_manager: '手荷物検査店長 (baggage_manager)',
+  viewer:          '閲覧者 (viewer)',
 }
 
 export function UserForm({ mode, id, initial, tenants, stores, canCreateSuperAdmin }: Props) {
@@ -44,7 +45,7 @@ export function UserForm({ mode, id, initial, tenants, stores, canCreateSuperAdm
     ? stores.filter((s) => s.tenant_id === form.tenant_id)
     : stores
 
-  const showStorePicker = form.role === 'store_manager' || form.role === 'viewer'
+  const showStorePicker = form.role === 'store_manager' || form.role === 'baggage_manager' || form.role === 'viewer'
 
   async function save(e: React.FormEvent) {
     e.preventDefault()
@@ -155,8 +156,8 @@ export function UserForm({ mode, id, initial, tenants, stores, canCreateSuperAdm
             onChange={(e) => setForm({ ...form, role: e.target.value as Role })}
             className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
           >
-            {(canCreateSuperAdmin ? (['super_admin','tenant_admin','store_manager','viewer'] as Role[]) :
-              (['tenant_admin','store_manager','viewer'] as Role[])).map((r) => (
+            {(canCreateSuperAdmin ? (['super_admin','tenant_admin','store_manager','baggage_manager','viewer'] as Role[]) :
+              (['tenant_admin','store_manager','baggage_manager','viewer'] as Role[])).map((r) => (
               <option key={r} value={r}>{ROLE_LABELS[r]}</option>
             ))}
           </select>

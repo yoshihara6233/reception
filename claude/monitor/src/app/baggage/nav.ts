@@ -12,4 +12,5 @@ export const BAGGAGE_NAV_TITLE = '手荷物検査'
 export const BAGGAGE_NAV: NavItem[] = [
   { href: '/baggage',           label: '履歴',         icon: '☰', exact: true },
   { href: '/baggage/employees', label: '従業員マスタ', icon: '⚇' },
+  { href: '/baggage/ipad',      label: 'iPad設定',     icon: '▤' },
 ]
