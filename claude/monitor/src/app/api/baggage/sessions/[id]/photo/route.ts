@@ -29,18 +29,24 @@ export async function GET(
 
   const { data: sess } = await supa
     .from('inspection_sessions')
-    .select('id, store_id, entry_face_path, exit_face_path, card_photo_path, employees ( face_photo_path )')
+    .select('id, store_id, entry_face_path, exit_face_path, card_photo_path, employee_id')
     .eq('id', id)
     .maybeSingle()
   if (!sess) return new NextResponse('Not Found', { status: 404 })
 
-  const emp = (Array.isArray(sess.employees) ? sess.employees[0] : sess.employees) as
-    { face_photo_path: string | null } | null
+  const svc = createSupabaseService()
+
+  // 従業員マスタ顔は legacy RLS 回避のため service で解決（可視性は上の RLS 読みで担保）。
+  let empFacePath: string | null = null
+  if (kind === 'employee' && sess.employee_id) {
+    const { data: emp } = await svc.from('employees').select('face_photo_path').eq('id', sess.employee_id).maybeSingle()
+    empFacePath = (emp?.face_photo_path as string | null) ?? null
+  }
   const path =
     kind === 'entry'    ? sess.entry_face_path
     : kind === 'exit'     ? sess.exit_face_path
     : kind === 'card'     ? sess.card_photo_path
-    : emp?.face_photo_path ?? null
+    : empFacePath
   if (!path) return new NextResponse('Not Found', { status: 404 })
 
   await recordFootageAccess({
@@ -48,7 +54,6 @@ export async function GET(
     resourceId: `${id}:${kind}`,
   })
 
-  const svc = createSupabaseService()
   const { data: signed, error } = await svc.storage.from(BUCKET).createSignedUrl(path, SIGNED_TTL)
   if (error || !signed?.signedUrl) return new NextResponse('Sign Failed', { status: 500 })
   return NextResponse.redirect(signed.signedUrl, 302)

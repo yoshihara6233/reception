@@ -6,7 +6,7 @@
  * 本ページの閲覧は footage_access_log（baggage_view）に記録される（G3）。
  */
 import { redirect, notFound } from 'next/navigation'
-import { createSupabaseServer } from '@/lib/supabase/server'
+import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
 import { recordFootageAccess } from '@/lib/audit/footage-access'
@@ -40,15 +40,21 @@ export default async function BaggageSessionPage(
     .from('inspection_sessions')
     .select(`id, store_id, person_kind, visitor_name, visitor_company, entry_at, exit_at,
       entry_face_path, exit_face_path, card_photo_path, inspection_started_at, inspection_ended_at,
-      status, auth_skipped, confirmed_at, inspection_date, consent_at, consent_version,
-      employees ( name, face_photo_path ), stores ( name )`)
+      status, auth_skipped, confirmed_at, inspection_date, consent_at, consent_version, employee_id,
+      stores ( name )`)
     .eq('id', id)
     .maybeSingle()
   if (!sess) notFound()
 
-  const emp = (Array.isArray(sess.employees) ? sess.employees[0] : sess.employees) as
-    { name: string; face_photo_path: string | null } | null
   const store = (Array.isArray(sess.stores) ? sess.stores[0] : sess.stores) as { name: string } | null
+
+  // 従業員は legacy RLS 回避のため service 経由で解決（可視性は上の RLS 読みで担保）。
+  let emp: { name: string; face_photo_path: string | null } | null = null
+  if (sess.person_kind === 'staff' && sess.employee_id) {
+    const { data } = await createSupabaseService()
+      .from('employees').select('name, face_photo_path').eq('id', sess.employee_id).maybeSingle()
+    emp = data as { name: string; face_photo_path: string | null } | null
+  }
 
   const { data: clipRows } = await supa
     .from('inspection_clips')

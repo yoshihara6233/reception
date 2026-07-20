@@ -8,7 +8,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
-import { createSupabaseServer } from '@/lib/supabase/server'
+import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
 import { BAGGAGE_NAV, BAGGAGE_NAV_TITLE } from './nav'
@@ -28,7 +28,8 @@ interface SessionRow {
   status: string
   auth_skipped: boolean
   confirmed_at: string | null
-  employees: { name: string } | null
+  employee_id: string | null
+  employeeName: string | null
 }
 
 export default async function BaggageHistoryPage(
@@ -66,16 +67,21 @@ export default async function BaggageHistoryPage(
   if (storeId) {
     const { data } = await supa
       .from('inspection_sessions')
-      .select('id, person_kind, visitor_name, entry_at, exit_at, status, auth_skipped, confirmed_at, employees ( name )')
+      .select('id, person_kind, visitor_name, entry_at, exit_at, status, auth_skipped, confirmed_at, employee_id')
       .eq('store_id', storeId)
       .eq('inspection_date', date)
       .order('exit_at', { ascending: false, nullsFirst: false })
       .limit(500)
-    rows = ((data ?? []) as unknown[]).map((r) => {
-      const row = r as Omit<SessionRow, 'employees'> & { employees: unknown }
-      const emp = Array.isArray(row.employees) ? row.employees[0] : row.employees
-      return { ...row, employees: (emp ?? null) as SessionRow['employees'] }
-    })
+    rows = ((data ?? []) as unknown[]).map((r) => ({ ...(r as Omit<SessionRow, 'employeeName'>), employeeName: null }))
+
+    // 従業員名は legacy RLS 回避のため service で一括解決（可視性は上の RLS 読みで担保）。
+    const empIds = [...new Set(rows.filter((r) => r.person_kind === 'staff' && r.employee_id).map((r) => r.employee_id as string))]
+    if (empIds.length > 0) {
+      const { data: emps } = await createSupabaseService()
+        .from('employees').select('id, name').in('id', empIds)
+      const nameById = new Map((emps ?? []).map((e) => [e.id as string, e.name as string]))
+      rows = rows.map((r) => ({ ...r, employeeName: r.employee_id ? nameById.get(r.employee_id) ?? null : null }))
+    }
 
     if (rows.length > 0) {
       const ids = rows.map((r) => r.id)
@@ -117,7 +123,7 @@ export default async function BaggageHistoryPage(
     const expected = jobsBySession.get(r.id)
     return {
       id: r.id,
-      person: r.person_kind === 'staff' ? (r.employees?.name ?? '（未特定）') : (r.visitor_name ?? '（未特定）'),
+      person: r.person_kind === 'staff' ? (r.employeeName ?? '（未特定）') : (r.visitor_name ?? '（未特定）'),
       kind: r.person_kind,
       entryAt: r.entry_at,
       exitAt: r.exit_at,
