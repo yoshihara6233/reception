@@ -15,7 +15,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireKioskStore } from '@/lib/baggage/kiosk-guard'
 import { lastNameOf, jstYmd } from '@/lib/baggage/face-auth'
-import { FACE_AUTH_TIMEOUT_SEC } from '@/lib/baggage/inspection-flow'
+import { FACE_SEARCH_TIMEOUT_SEC } from '@/lib/baggage/inspection-flow'
 import {
   employeeCollectionId,
   visitorDailyCollectionId,
@@ -34,6 +34,9 @@ function dataUrlToBuffer(dataUrl: string): Buffer | null {
   if (!m) return null
   try { return Buffer.from(m[2], 'base64') } catch { return null }
 }
+
+// 照合(最大8秒)＋コールドスタートが関数上限で切られないよう余裕を確保。
+export const maxDuration = 20
 
 export async function POST(req: NextRequest) {
   const parsed = Body.safeParse(await req.json().catch(() => null))
@@ -76,7 +79,7 @@ export async function POST(req: NextRequest) {
   try {
     searchResult = await Promise.race([
       searchFaceInCollection(collectionId, buf),
-      new Promise<never>((_, rej) => setTimeout(() => rej(new Error('__timeout__')), FACE_AUTH_TIMEOUT_SEC * 1000)),
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error('__timeout__')), FACE_SEARCH_TIMEOUT_SEC * 1000)),
     ])
   } catch (e) {
     const m = (e as Error).message

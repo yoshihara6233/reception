@@ -72,7 +72,7 @@ const COL = {
 /** 撮影までのプレビュー時間（顔を枠に合わせる猶予）。 */
 const CAPTURE_DELAY_MS = 1200
 /** face-auth 全体のクライアント側ガード（サーバ3秒レース＋通信の余裕）。 */
-const FACE_TOTAL_GUARD_MS = 6000
+const FACE_TOTAL_GUARD_MS = 10000
 
 export function KioskClient(props: Props) {
   const { storeId, storeName, terminalMode, timeoutSec, audioEnabled, audioVolume, steps } = props
@@ -475,7 +475,7 @@ export function KioskClient(props: Props) {
         </div>
       )}
 
-      {/* ── C: 顔認証（自動撮影・最大3秒） ── */}
+      {/* ── C: 顔認証（自動撮影） ── */}
       {screen.s === 'faceAuth' && (
         <div style={centerBox(24)}>
           <div style={{ fontSize: 32, fontWeight: 700 }}>
@@ -488,7 +488,7 @@ export function KioskClient(props: Props) {
             <div style={{ position: 'absolute', width: 230, height: 300, border: '2px dashed #8a8f96',
               borderRadius: '50%/46%' }} />
             <div style={{ position: 'absolute', bottom: 16, left: 0, right: 0, textAlign: 'center',
-              color: '#cfd3d9', fontSize: 15 }}>認証しています…（最大3秒）</div>
+              color: '#cfd3d9', fontSize: 15 }}>認証しています…</div>
           </div>
           <div style={{ fontSize: 14, color: COL.ink3 }}>認証できない場合も、そのまま手続きを続けられます（自動でご案内します）</div>
         </div>

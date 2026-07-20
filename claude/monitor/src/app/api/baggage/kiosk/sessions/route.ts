@@ -20,7 +20,7 @@ import { isTempEvent } from '@/lib/baggage/inspection-flow'
 import { withTimeout, jstYmd } from '@/lib/baggage/face-auth'
 import { jstDateStr } from '@/lib/baggage/unmatch'
 import { visitorDailyCollectionId, indexFaceInCollection } from '@/lib/aws/rekognition'
-import { FACE_AUTH_TIMEOUT_SEC } from '@/lib/baggage/inspection-flow'
+import { FACE_SEARCH_TIMEOUT_SEC } from '@/lib/baggage/inspection-flow'
 
 const Body = z.object({
   storeId: z.string().uuid(),
@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
         const buf = Buffer.from(await blob.arrayBuffer())
         const r = await withTimeout(
           indexFaceInCollection(visitorDailyCollectionId(store.id, jstYmd(now)), data.id, buf),
-          FACE_AUTH_TIMEOUT_SEC * 1000,
+          FACE_SEARCH_TIMEOUT_SEC * 1000,
         )
         faceIndexed = r.ok
       }
