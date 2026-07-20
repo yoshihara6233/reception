@@ -74,13 +74,28 @@ type Screen =
   | { s: 'vcapFace'; busy?: boolean; error?: string }
   | { s: 'vcapCard'; facePath: string; busy?: boolean; error?: string }
 
-const ACTION_LABEL: Record<FlowAction, { t: string; sub: string; primary?: boolean }> = {
-  entry:       { t: '入室', sub: '顔認証' },
-  temp_exit:   { t: '途中退室', sub: '顔認証のみ' },
-  temp_return: { t: '途中入室', sub: '顔認証のみ' },
-  exit:        { t: '退室', sub: '手荷物検査', primary: true },
+const ACTION_LABEL: Record<FlowAction, { t: string; primary?: boolean }> = {
+  entry:       { t: '入室' },
+  temp_exit:   { t: '途中退室' },
+  temp_return: { t: '途中入室' },
+  exit:        { t: '退室', primary: true },
 }
 const KIND_LABEL: Record<PersonKind, string> = { staff: '従業員', visitor: '来訪者' }
+
+/**
+ * トップ画面ボタン下の補助ラベル（実フローに一致させる）。
+ * - 入室: 来訪者=顔撮影（照合せず登録用に撮る）／従業員=顔認証（照合）
+ * - 退室: 顔認証してから手荷物検査（両区分共通）
+ * - 途中退室/途中入室: 顔認証のみ
+ */
+function actionSub(action: FlowAction, kind: PersonKind): string {
+  switch (action) {
+    case 'entry':       return kind === 'visitor' ? '顔撮影' : '顔認証'
+    case 'temp_exit':
+    case 'temp_return': return '顔認証のみ'
+    case 'exit':        return '顔認証＋手荷物検査'
+  }
+}
 
 // Genesis Edge トークン（iPad 独自トーン・D11）
 const COL = {
@@ -539,7 +554,7 @@ export function KioskClient(props: Props) {
                     gap: 2, fontSize: 22, fontWeight: 700, fontFamily: 'inherit' }}>
                     {ACTION_LABEL[a].t}
                     <span style={{ fontSize: 12, fontWeight: 400, color: primary ? COL.accent : COL.ink3 }}>
-                      {ACTION_LABEL[a].sub}
+                      {actionSub(a, kind)}
                     </span>
                   </button>
                 )
