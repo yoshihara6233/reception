@@ -40,6 +40,8 @@ interface Props {
   entryGreetingText: string
   /** 退室（検査完了）時のメッセージ。 */
   exitMessageText: string
+  /** 稼働中ビルドの識別子（デプロイ確認用・アイドル画面に表示）。 */
+  buildId: string
 }
 
 /** 顔照合の結果（face-auth API 応答）を後続画面へ引き回す。 */
@@ -96,7 +98,7 @@ const FACE_TOTAL_GUARD_MS = 10000
 const FACE_CAPTURE_ZOOM = 2.6
 
 export function KioskClient(props: Props) {
-  const { storeId, storeName, terminalMode, timeoutSec, audioEnabled, audioVolume, steps, consentText, consentVersion, entryGreetingText, exitMessageText } = props
+  const { storeId, storeName, terminalMode, timeoutSec, audioEnabled, audioVolume, steps, consentText, consentVersion, entryGreetingText, exitMessageText, buildId } = props
   const greetingOf = (name: string) => (entryGreetingText.trim() || DEFAULT_ENTRY_GREETING).replaceAll('{name}', name)
   const exitMessage = exitMessageText.trim() || DEFAULT_EXIT_MESSAGE
   const [screen, setScreen] = useState<Screen>({ s: 'idle' })
@@ -494,6 +496,16 @@ export function KioskClient(props: Props) {
         <span style={{ fontSize: 13, color: COL.ink3, display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ width: 8, height: 8, borderRadius: '50%', background: COL.danger }} />
           {screen.s === 'idle' ? 'この検査エリアは録画されています' : '録画中'}
+          {screen.s === 'idle' && (
+            <>
+              <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: COL.line2 }}
+                title="稼働中バージョン">v:{buildId}</span>
+              <button onClick={() => window.location.reload()}
+                style={{ fontSize: 12, color: COL.ink3, background: 'transparent', border: `1px solid ${COL.line}`,
+                  borderRadius: 4, padding: '2px 8px', cursor: 'pointer' }}
+                title="最新版に更新（キオスクを再読込）">更新</button>
+            </>
+          )}
         </span>
       </div>
 

@@ -61,6 +61,7 @@ export default async function BaggageKioskPage(
       consentVersion={tenant.consentVersion}
       entryGreetingText={tenant.entryGreetingText}
       exitMessageText={tenant.exitMessageText}
+      buildId={(process.env.VERCEL_GIT_COMMIT_SHA ?? 'dev').slice(0, 7)}
     />
   )
 }
