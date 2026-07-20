@@ -14,6 +14,14 @@ export async function GET(req: NextRequest) {
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status })
   const { svc, store } = guard
 
+  // テナント共通設定（同意文言・あいさつ・退室文言）。migration 未適用でも落ちないよう
+  // select('*') で取得し、列の有無・値をそのまま見る。
+  const { data: tenantRow, error: tenantErr } = await svc
+    .from('baggage_tenant_settings')
+    .select('*')
+    .eq('tenant_id', guard.store.tenantId)
+    .maybeSingle()
+
   const { data: emps } = await svc
     .from('employees')
     .select('id, name, employee_code, status, rekognition_face_id, consent_at, consent_version')
@@ -27,8 +35,21 @@ export async function GET(req: NextRequest) {
     .order('created_at', { ascending: false })
     .limit(15)
 
+  const t = (tenantRow ?? {}) as Record<string, unknown>
   return NextResponse.json({
     store: store.name,
+    tenantSettings: {
+      rowExists: !!tenantRow,
+      // migration 未適用なら列自体が存在しない → undefined になる（適用済みなら null/値）。
+      consentTextSet: typeof t.consent_text === 'string' && t.consent_text.trim().length > 0,
+      consentTextLength: typeof t.consent_text === 'string' ? t.consent_text.length : null,
+      consentVersion: t.consent_version ?? null,
+      entryGreetingSet: typeof t.entry_greeting_text === 'string' && t.entry_greeting_text.trim().length > 0,
+      exitMessageSet: typeof t.exit_message_text === 'string' && t.exit_message_text.trim().length > 0,
+      consentColumnPresent: 'consent_text' in t,
+      greetingColumnPresent: 'entry_greeting_text' in t,
+      error: tenantErr?.message ?? null,
+    },
     employees: (emps ?? []).map((e) => ({
       name: e.name,
       code: e.employee_code,
