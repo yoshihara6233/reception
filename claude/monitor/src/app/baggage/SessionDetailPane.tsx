@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { SessionPlayer, type PlayerClip } from './[id]/SessionPlayer'
 import { ConfirmButton } from './[id]/ConfirmButton'
+import { RetryClipsButton } from './RetryClipsButton'
 import { sessionBadge, AUTH_SKIPPED_BADGE, type BadgeDef } from '@/lib/baggage/status'
 
 interface Detail {
@@ -38,6 +39,9 @@ interface Detail {
   clips: PlayerClip[]
   /** 切り出しジョブ実行中（映像がこれから増える）。true の間は確認済みを解禁しない。 */
   clipsPending: boolean
+  /** クリップジョブ総数・完了数（「映像を再取得」ボタンの表示判定）。 */
+  clipTotal: number
+  clipDone: number
 }
 
 const toneClass: Record<BadgeDef['tone'], string> = {
@@ -87,6 +91,8 @@ export function SessionDetailPane({ sessionId }: { sessionId: string | null }) {
   const [reviewedId, setReviewedId] = useState<string | null>(null)
   // 顔/名刺の拡大表示（ライトボックス）。
   const [zoom, setZoom] = useState<{ src: string; label: string } | null>(null)
+  // 再取得後などに詳細を取り直すためのトリガ。
+  const [reload, setReload] = useState(0)
 
   useEffect(() => {
     if (!sessionId) { setDetail(null); setError(null); return }
@@ -101,7 +107,7 @@ export function SessionDetailPane({ sessionId }: { sessionId: string | null }) {
       .catch((e) => { if (alive) { setDetail(null); setError((e as Error).message) } })
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
-  }, [sessionId])
+  }, [sessionId, reload])
 
   if (!sessionId) {
     return (
@@ -156,6 +162,11 @@ export function SessionDetailPane({ sessionId }: { sessionId: string | null }) {
 
       {/* 2カメラ同期プレイヤー（倍速対応・シーク不可）。key で行切替のたびに再生状態を初期化 */}
       <SessionPlayer key={detail.id} clips={detail.clips} windowLabel={windowLabel} clipsPending={detail.clipsPending} onReviewed={() => setReviewedId(detail.id)} />
+
+      {/* 未完了（処理中/取得失敗）の検査は手動で再取得できる */}
+      <div className="flex justify-end">
+        <RetryClipsButton sessionId={detail.id} clipTotal={detail.clipTotal} clipDone={detail.clipDone} onRequeued={() => setReload((x) => x + 1)} />
+      </div>
 
       {/* 顔比較列 */}
       <div className="flex flex-col gap-3 md:flex-row">
