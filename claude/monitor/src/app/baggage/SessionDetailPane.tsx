@@ -36,6 +36,8 @@ interface Detail {
   windowSec: number | null
   maxOffset: number | null
   clips: PlayerClip[]
+  /** 切り出しジョブ実行中（映像がこれから増える）。true の間は確認済みを解禁しない。 */
+  clipsPending: boolean
 }
 
 const toneClass: Record<BadgeDef['tone'], string> = {
@@ -153,7 +155,7 @@ export function SessionDetailPane({ sessionId }: { sessionId: string | null }) {
       )}
 
       {/* 2カメラ同期プレイヤー（倍速対応・シーク不可）。key で行切替のたびに再生状態を初期化 */}
-      <SessionPlayer key={detail.id} clips={detail.clips} windowLabel={windowLabel} onReviewed={() => setReviewedId(detail.id)} />
+      <SessionPlayer key={detail.id} clips={detail.clips} windowLabel={windowLabel} clipsPending={detail.clipsPending} onReviewed={() => setReviewedId(detail.id)} />
 
       {/* 顔比較列 */}
       <div className="flex flex-col gap-3 md:flex-row">

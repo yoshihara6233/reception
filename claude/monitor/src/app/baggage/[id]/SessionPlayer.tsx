@@ -19,8 +19,14 @@ export interface PlayerClip {
 const SPEEDS = [1, 2, 4, 8] as const
 
 export function SessionPlayer(
-  { clips, windowLabel, onReviewed }:
-  { clips: PlayerClip[]; windowLabel: string; onReviewed?: () => void },
+  { clips, windowLabel, clipsPending = false, onReviewed }:
+  {
+    clips: PlayerClip[]
+    windowLabel: string
+    /** 切り出しジョブが実行中（これから映像が増える）。true の間は確認を解禁しない。 */
+    clipsPending?: boolean
+    onReviewed?: () => void
+  },
 ) {
   const refs = useRef<(HTMLVideoElement | null)[]>([])
   const [playing, setPlaying] = useState(false)
@@ -29,14 +35,16 @@ export function SessionPlayer(
   const [rate, setRate] = useState(1)
   const reviewedRef = useRef(false)
 
-  const videos = () => refs.current.filter(Boolean) as HTMLVideoElement[]
-
   // 一度でも最後まで再生したら「確認済み」ボタンを解禁する（親へ通知）。
+  // ただし取得中（clipsPending）は解禁しない — 残りのカメラ映像を見ずに
+  // 確認済みにできてしまう抜け道を塞ぐ（店長は全件確認再生が前提）。
   const markReviewed = useCallback(() => {
-    if (reviewedRef.current) return
+    if (reviewedRef.current || clipsPending) return
     reviewedRef.current = true
     onReviewed?.()
-  }, [onReviewed])
+  }, [onReviewed, clipsPending])
+
+  const videos = () => refs.current.filter(Boolean) as HTMLVideoElement[]
 
   // 倍速はプレイヤーが変わっても全 video に反映する（seek/切替後の取りこぼし防止）。
   const applyRate = useCallback((r: number) => {
@@ -63,7 +71,9 @@ export function SessionPlayer(
     return () => clearInterval(t)
   }, [playing, duration, markReviewed])
 
-  // 映像が無い（クリップ処理中・期限切れ）検査は確認を妨げない → 即解禁。
+  // 映像が1本も無い検査の扱い:
+  //   取得中（clipsPending）→ 解禁しない（markReviewed 側でガード。取得完了後に再判定）
+  //   取得失敗が確定（!clipsPending）→ 見るものが無いので解禁（永久に確認不能を防ぐ）
   useEffect(() => {
     if (clips.length === 0) markReviewed()
   }, [clips.length, markReviewed])
@@ -80,21 +90,32 @@ export function SessionPlayer(
 
   const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
 
+  // 取得中の注意（確認済みを押せない理由をその場で説明）。
+  const pendingNote = clipsPending && (
+    <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-[12px] text-amber-800 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+      検査映像を取得中です（エッジ切り出し待ち・通常5〜10分）。<strong>すべての映像が揃い、最後まで再生してから</strong>「確認済み」にできます。
+    </div>
+  )
+
   if (clips.length === 0) {
     return (
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        {[0, 1].map((i) => (
-          <div key={i} className="flex aspect-video flex-col items-center justify-center gap-1 rounded bg-gedbg text-sm text-gedaccent">
-            <span>カメラ{i + 1}</span>
-            <span className="text-[11px] text-gedink3">{windowLabel}</span>
-          </div>
-        ))}
+      <div className="space-y-3">
+        {pendingNote}
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {[0, 1].map((i) => (
+            <div key={i} className="flex aspect-video flex-col items-center justify-center gap-1 rounded bg-gedbg text-sm text-gedaccent">
+              <span>カメラ{i + 1}</span>
+              <span className="text-[11px] text-gedink3">{clipsPending ? '映像を取得中…' : windowLabel}</span>
+            </div>
+          ))}
+        </div>
       </div>
     )
   }
 
   return (
     <div className="space-y-3">
+      {pendingNote}
       <div className={`grid grid-cols-1 gap-3 ${clips.length > 1 ? 'md:grid-cols-2' : ''}`}>
         {clips.slice(0, 2).map((c, i) => (
           <div key={c.id} className="overflow-hidden rounded bg-gedbg">

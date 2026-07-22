@@ -12,8 +12,8 @@ import { PageHeader } from '@/components/admin/PageHeader'
 import { recordFootageAccess } from '@/lib/audit/footage-access'
 import { BAGGAGE_NAV, BAGGAGE_NAV_TITLE } from '../nav'
 import { sessionBadge, AUTH_SKIPPED_BADGE } from '@/lib/baggage/status'
-import { SessionPlayer, type PlayerClip } from './SessionPlayer'
-import { ConfirmButton } from './ConfirmButton'
+import { type PlayerClip } from './SessionPlayer'
+import { SessionReview } from './SessionReview'
 
 interface ClipRow {
   id: string
@@ -81,6 +81,16 @@ export default async function BaggageSessionPage(
       durationSec: c.duration_sec ? Number(c.duration_sec) : null,
     }))
 
+  // 切り出しジョブ実行中は「確認済み」を解禁しない（映像を見ずに確認できる抜け道防止）。
+  // ジョブ表は edge 用キューでユーザーRLSでは見えないため service で数える
+  //（セッション可視性は上の RLS 読みで担保済み）。
+  const { count: pendingJobs } = await createSupabaseService()
+    .from('inspection_clip_jobs')
+    .select('id', { count: 'exact', head: true })
+    .eq('session_id', id)
+    .in('status', ['pending', 'running'])
+  const clipsPending = (pendingJobs ?? 0) > 0
+
   const windowSec = sess.inspection_started_at && sess.inspection_ended_at
     ? Math.max(0, (new Date(sess.inspection_ended_at).getTime() - new Date(sess.inspection_started_at).getTime()) / 1000)
     : null
@@ -112,7 +122,6 @@ export default async function BaggageSessionPage(
       <PageHeader
         title="検査詳細"
         crumb={[{ href: '/baggage', label: BAGGAGE_NAV_TITLE }, { href: `/baggage/${id}`, label: `${sess.inspection_date} ${person}` }]}
-        actions={<ConfirmButton sessionId={id} confirmed={sess.confirmed_at !== null} />}
       />
       <div className="space-y-4 p-5">
 
@@ -139,9 +148,12 @@ export default async function BaggageSessionPage(
           </div>
         )}
 
-        {/* 2カメラ同期プレイヤー（主役・OV#4） */}
-        <SessionPlayer
+        {/* 2カメラ同期プレイヤー（主役・OV#4）＋ 再生完了ゲート付き確認ボタン */}
+        <SessionReview
+          sessionId={id}
+          confirmed={sess.confirmed_at !== null}
           clips={playable}
+          clipsPending={clipsPending}
           windowLabel={windowSec !== null
             ? `検査窓 ${Math.floor(windowSec / 60)}:${String(Math.round(windowSec % 60)).padStart(2, '0')}（±15s バッファ含む）`
             : 'クリップ処理中（エッジ切り出し待ち）'}
