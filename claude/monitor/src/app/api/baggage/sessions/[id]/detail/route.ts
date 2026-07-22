@@ -52,6 +52,16 @@ export async function GET(
     return { ...row, cameraName: (cam as { name?: string } | null)?.name ?? 'カメラ' }
   })
 
+  // 切り出しジョブが実行中か（= これから映像が増えるか）。実行中は「確認済み」を
+  // 解禁しない（映像を見ずに確認できる抜け道防止）。ジョブ表は edge 用キューで
+  // ユーザーRLSでは見えないため、セッション可視性を確認済みのここで service で数える。
+  const { count: pendingJobs } = await createSupabaseService()
+    .from('inspection_clip_jobs')
+    .select('id', { count: 'exact', head: true })
+    .eq('session_id', id)
+    .in('status', ['pending', 'running'])
+  const clipsPending = (pendingJobs ?? 0) > 0
+
   // G3: 閲覧を記録（best-effort・5分dedup）
   await recordFootageAccess({
     actorUserId: user.id, storeId: sess.store_id, accessType: 'baggage_view', resourceId: id,
@@ -98,5 +108,6 @@ export async function GET(
     windowSec,
     maxOffset,
     clips: playableClips,
+    clipsPending,
   })
 }
