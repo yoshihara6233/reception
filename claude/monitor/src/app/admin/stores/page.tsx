@@ -46,6 +46,7 @@ export default async function StoresAdmin({
         crumb={[{ href: '/admin', label: t.breadcrumb.admin }, { href: '/admin/stores', label: t.adminNav.stores }]}
         actions={
           <>
+            <LinkBtn href="/admin/stores/new">＋ 新規店舗</LinkBtn>
             <LinkBtn href="/admin/import">{ts.csvImportBtn}</LinkBtn>
           </>
         }
