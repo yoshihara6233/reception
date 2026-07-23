@@ -14,7 +14,8 @@ import { recordAudit } from '@/lib/admin/audit'
 
 const Body = z.object({
   kind: z.enum(['agent', 'cloudflared']),
-  version: z.string().min(1).max(120),
+  // 前後空白を除去（版文字列に空白が混じると git 参照解決が壊れる）。
+  version: z.string().min(1).max(120).transform((s) => s.trim()).pipe(z.string().min(1)),
 })
 
 export async function POST(req: NextRequest) {

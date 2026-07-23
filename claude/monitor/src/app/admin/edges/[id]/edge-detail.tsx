@@ -145,10 +145,14 @@ function OtaPanel({ edge }: { edge: EdgePayload }) {
 
   async function saveDesired() {
     setBusy(true); setMsg(null)
+    // 貼り付け時の前後空白を除去（末尾スペースで OTA が invalid reference になる事故防止）。
+    const agentTrimmed = agent.trim(); const cfdTrimmed = cfd.trim()
+    if (agentTrimmed !== agent) setAgent(agentTrimmed)
+    if (cfdTrimmed !== cfd) setCfd(cfdTrimmed)
     const res = await fetch(`/api/admin/edges/${edge.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ desired_agent_version: agent, desired_cloudflared_version: cfd }),
+      body: JSON.stringify({ desired_agent_version: agentTrimmed, desired_cloudflared_version: cfdTrimmed }),
     })
     setBusy(false)
     if (!res.ok) { const j = await res.json().catch(() => ({})); setMsg(j.error ?? `保存失敗: ${res.status}`); return }
