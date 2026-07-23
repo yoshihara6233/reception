@@ -6,6 +6,7 @@
  */
 import { redirect } from 'next/navigation'
 import { createSupabaseServer } from '@/lib/supabase/server'
+import { resolveTenantFeatures } from '@/lib/tenant/features'
 import { AppHeader } from './AppHeader'
 import { StoreTree } from './StoreTree'
 import { StoreDetail } from './StoreDetail'
@@ -28,6 +29,9 @@ export async function AppShell({
   if (!user) redirect('/login')
 
   const userName = user.user_metadata?.name ?? user.email ?? '不明'
+
+  // テナントのオプション機能（巡回/発報/検査）を解決してヘッダーの出し分けに使う。
+  const features = await resolveTenantFeatures(supa)
 
   // Fetch store groups + recent BCP alert store IDs in parallel
   const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
@@ -69,6 +73,7 @@ export async function AppShell({
       userName={userName}
       groups={groups}
       selectedStoreId={selectedStoreId}
+      features={features}
     >
       {/* Desktop 3-col layout with a collapsible detail panel (ShellBody) */}
       <ShellBody
