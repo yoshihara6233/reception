@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
+import { storeIdsBelongToTenant } from '@/lib/admin/user-scope'
 
 const UpdateBody = z.object({
   display_name: z.string().min(1).optional(),
@@ -56,8 +57,25 @@ export async function PUT(
     if (body.role === 'super_admin') {
       return NextResponse.json({ error: 'cannot_promote_super_admin' }, { status: 403 })
     }
-    if (body.tenant_id && body.tenant_id !== guard.profile.tenant_id) {
+    // tenant_id 変更は自テナントのみ。null 指定（テナント剥がし）もここで拒否
+    // （旧: `body.tenant_id && …` は null が falsy ですり抜け＝孤児レコードの原因だった）。
+    if (body.tenant_id !== undefined && body.tenant_id !== guard.profile.tenant_id) {
       return NextResponse.json({ error: 'cross_tenant_forbidden' }, { status: 403 })
+    }
+  }
+
+  // 最終ロール／テナントを確定し、store_ids がそのテナントの店舗のみか検証する。
+  const finalRole = body.role ?? target.role
+  const finalTenantId = finalRole === 'super_admin'
+    ? null
+    : (body.tenant_id !== undefined ? body.tenant_id : target.tenant_id)
+  if (finalRole !== 'super_admin' && !finalTenantId) {
+    return NextResponse.json({ error: 'tenant_required' }, { status: 400 })
+  }
+  if (body.store_ids !== undefined) {
+    const checkIds = finalRole === 'super_admin' ? [] : body.store_ids
+    if (!(await storeIdsBelongToTenant(svc, checkIds, finalTenantId))) {
+      return NextResponse.json({ error: 'store_ids_cross_tenant' }, { status: 400 })
     }
   }
 
@@ -67,6 +85,8 @@ export async function PUT(
   if (body.role         !== undefined) patch.role         = body.role
   if (body.tenant_id    !== undefined) patch.tenant_id    = body.tenant_id
   if (body.store_ids    !== undefined) patch.store_ids    = body.store_ids
+  // super_admin ロールは店舗スコープを持たない（テナントも剥がす）。
+  if (finalRole === 'super_admin') { patch.tenant_id = null; patch.store_ids = [] }
 
   if (Object.keys(patch).length > 0) {
     const { error: updErr } = await svc.from('admin_users').update(patch).eq('id', id)

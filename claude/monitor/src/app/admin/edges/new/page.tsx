@@ -1,10 +1,13 @@
+import { notFound } from 'next/navigation'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
-import { createSupabaseServer } from '@/lib/supabase/server'
+import { requireSuperAdmin } from '@/lib/admin/guard'
 import { EdgeNewForm } from './edge-new-form'
 
 export default async function NewEdgePage() {
-  const supa = await createSupabaseServer()
+  const guard = await requireSuperAdmin()
+  if (!guard.ok) notFound()
+  const supa = guard.supa
 
   // List stores that don't yet have an edge (one edge per store policy).
   const { data } = await supa

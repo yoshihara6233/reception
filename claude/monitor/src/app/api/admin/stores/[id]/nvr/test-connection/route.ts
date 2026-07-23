@@ -7,6 +7,7 @@
  * 旧 /api/stores/[id]/nvr/test-connection から移設。
  */
 import { NextResponse } from 'next/server'
+import { requireAdmin } from '@/lib/admin/guard'
 
 interface RequestBody {
   vendor:   string
@@ -19,6 +20,14 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params
+
+  // 認可: admin ロール＋対象店舗が可視（＝自テナント）であること。middleware は
+  // /api/** を認証ゲートしないため、ここで明示的に確認する（Phase1 で実接続に置換時の SSRF 予防）。
+  const guard = await requireAdmin()
+  if (!guard.ok) return NextResponse.json({ ok: false, message: guard.error }, { status: guard.status })
+  const { data: store } = await guard.supa.from('stores').select('id').eq('id', id).maybeSingle()
+  if (!store) return NextResponse.json({ ok: false, message: 'store_not_visible' }, { status: 404 })
+
   let body: RequestBody
   try {
     body = await req.json() as RequestBody

@@ -1,7 +1,8 @@
 import Link from 'next/link'
+import { notFound } from 'next/navigation'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader, LinkBtn } from '@/components/admin/PageHeader'
-import { createSupabaseServer } from '@/lib/supabase/server'
+import { requireSuperAdmin } from '@/lib/admin/guard'
 import { getT } from '@/lib/i18n/server'
 
 interface Row {
@@ -30,7 +31,10 @@ export default async function EdgesAdmin({
   searchParams: Promise<{ status?: string; q?: string }>
 }) {
   const { status, q } = await searchParams
-  const supa = await createSupabaseServer()
+  // ②運営管理＝super_admin 専用（メニューでも非表示。直URL到達をここで遮断）。
+  const guard = await requireSuperAdmin()
+  if (!guard.ok) notFound()
+  const supa = guard.supa
   const t = await getT()
   const te = t.adminEdges
 

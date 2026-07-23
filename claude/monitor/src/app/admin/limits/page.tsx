@@ -19,11 +19,12 @@ const DEFAULT_MAX_CONCURRENT = 5
 export default async function LimitsAdmin() {
   const t = await getT()
 
+  // ②運営管理＝super_admin 専用（視聴上限は運営/契約側の制御）。
   const guard = await requireAdmin()
-  if (!guard.ok || !['super_admin', 'tenant_admin'].includes(guard.profile.role)) {
+  if (!guard.ok || guard.profile.role !== 'super_admin') {
     notFound()
   }
-  const isSuper = guard.profile.role === 'super_admin'
+  const isSuper = true
 
   const svc = createSupabaseService()
   let tq = svc.from('tenants').select('id, name').order('name').limit(500)

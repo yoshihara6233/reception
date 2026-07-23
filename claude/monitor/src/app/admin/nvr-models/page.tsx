@@ -6,9 +6,10 @@
  * トリガで自動同期される。
  */
 import Link from 'next/link'
+import { notFound } from 'next/navigation'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
-import { createSupabaseServer } from '@/lib/supabase/server'
+import { requireSuperAdmin } from '@/lib/admin/guard'
 import type { NvrModelsRow } from '@/lib/supabase/db-types'
 
 function fmtDate(iso: string | null): string {
@@ -29,7 +30,10 @@ export default async function AdminNvrModelsPage(
   { searchParams }: { searchParams: Promise<{ vendor?: string }> },
 ) {
   const { vendor } = await searchParams
-  const supa = await createSupabaseServer()
+  // ②運営管理＝super_admin 専用。
+  const guard = await requireSuperAdmin()
+  if (!guard.ok) notFound()
+  const supa = guard.supa
 
   let query = supa.from('nvr_models')
     .select('*')
