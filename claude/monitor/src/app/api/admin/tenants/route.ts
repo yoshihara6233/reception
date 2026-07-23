@@ -21,6 +21,10 @@ const Body = z.object({
   status: z.enum(['active', 'suspended', 'trial']).default('trial'),
   slug:   z.string().trim().toLowerCase().min(1).max(64).regex(/^[a-z0-9-]+$/, 'slug_format')
             .nullable().optional(),
+  // オプション機能（巡回/発報/検査）。新規は既定 OFF ＝契約で個別に有効化。
+  opt_patrol:  z.boolean().default(false),
+  opt_alarm:   z.boolean().default(false),
+  opt_baggage: z.boolean().default(false),
 })
 
 export async function POST(req: NextRequest) {
@@ -37,7 +41,10 @@ export async function POST(req: NextRequest) {
   const body = parsed.data
 
   const svc = createSupabaseService()
-  const insert: Record<string, unknown> = { name: body.name, plan: body.plan, status: body.status }
+  const insert: Record<string, unknown> = {
+    name: body.name, plan: body.plan, status: body.status,
+    opt_patrol: body.opt_patrol, opt_alarm: body.opt_alarm, opt_baggage: body.opt_baggage,
+  }
   if (body.slug) insert.slug = body.slug
 
   const { data, error } = await svc.from('tenants').insert(insert).select('id').single()
@@ -53,7 +60,8 @@ export async function POST(req: NextRequest) {
     targetType:  'tenant',
     targetId:    data.id,
     storeId:     null,
-    changes:     { name: body.name, plan: body.plan, status: body.status, slug: body.slug ?? null },
+    changes:     { name: body.name, plan: body.plan, status: body.status, slug: body.slug ?? null,
+                   opt_patrol: body.opt_patrol, opt_alarm: body.opt_alarm, opt_baggage: body.opt_baggage },
   })
 
   return NextResponse.json({ ok: true, id: data.id })

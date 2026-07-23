@@ -7,10 +7,13 @@ export type Plan   = 'starter' | 'standard' | 'enterprise'
 export type Status = 'active' | 'suspended' | 'trial'
 
 export interface TenantInitial {
-  name:   string
-  plan:   Plan
-  status: Status
-  slug:   string | null
+  name:        string
+  plan:        Plan
+  status:      Status
+  slug:        string | null
+  opt_patrol:  boolean
+  opt_alarm:   boolean
+  opt_baggage: boolean
 }
 
 const PLAN_LABELS: Record<Plan, string> = {
@@ -43,10 +46,13 @@ export function TenantForm({ mode, id, initial }: { mode: 'create' | 'edit'; id?
     const url    = mode === 'create' ? '/api/admin/tenants' : `/api/admin/tenants/${id}`
     const method = mode === 'create' ? 'POST' : 'PUT'
     const body: Record<string, unknown> = {
-      name:   form.name,
-      plan:   form.plan,
-      status: form.status,
-      slug:   form.slug?.trim() ? form.slug.trim().toLowerCase() : null,
+      name:        form.name,
+      plan:        form.plan,
+      status:      form.status,
+      slug:        form.slug?.trim() ? form.slug.trim().toLowerCase() : null,
+      opt_patrol:  form.opt_patrol,
+      opt_alarm:   form.opt_alarm,
+      opt_baggage: form.opt_baggage,
     }
 
     const res = await fetch(url, {
@@ -101,6 +107,32 @@ export function TenantForm({ mode, id, initial }: { mode: 'create' | 'edit'; id?
                className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm font-mono" placeholder="例: acme-corp" />
         <p className="mt-1 text-[11px] text-slate-500">URL 等で使う識別子。未入力可。重複不可。</p>
       </Field>
+
+      <fieldset className="rounded border border-slate-200 p-3">
+        <legend className="px-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+          オプション機能（有料）
+        </legend>
+        <p className="mb-2 text-[11px] text-slate-500">
+          Monitor + BCP は基本パック（常時有効）。以下を無効にすると、対応メニューがこのテナントで非表示になります。
+        </p>
+        <div className="space-y-1.5">
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={form.opt_patrol}
+                   onChange={(e) => setForm({ ...form, opt_patrol: e.target.checked })} />
+            巡回（AI警備 / <span className="font-mono text-xs">/security</span>）
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={form.opt_alarm}
+                   onChange={(e) => setForm({ ...form, opt_alarm: e.target.checked })} />
+            発報（アラーム / <span className="font-mono text-xs">/alarms</span>）
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={form.opt_baggage}
+                   onChange={(e) => setForm({ ...form, opt_baggage: e.target.checked })} />
+            手荷物検査（<span className="font-mono text-xs">/baggage</span>・検査設定）
+          </label>
+        </div>
+      </fieldset>
 
       {err  && <p className="rounded bg-red-50 px-3 py-2 text-xs text-red-700">{err}</p>}
       {done && <p className="rounded bg-emerald-50 px-3 py-2 text-xs text-emerald-700">保存しました</p>}

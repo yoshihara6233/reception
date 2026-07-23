@@ -24,7 +24,13 @@ export default async function NewTenantPage() {
         ]}
       />
       <div className="max-w-2xl px-5 py-5">
-        <TenantForm mode="create" initial={{ name: '', plan: 'starter', status: 'trial', slug: null }} />
+        <TenantForm
+          mode="create"
+          initial={{
+            name: '', plan: 'starter', status: 'trial', slug: null,
+            opt_patrol: false, opt_alarm: false, opt_baggage: false,
+          }}
+        />
       </div>
     </AdminShell>
   )
