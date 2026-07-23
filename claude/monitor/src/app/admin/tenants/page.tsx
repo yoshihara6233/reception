@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader, LinkBtn } from '@/components/admin/PageHeader'
 import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
+import { ActAsTenantButton } from './ActAsTenantButton'
 
 interface Row {
   id: string
@@ -75,7 +76,10 @@ export default async function TenantsAdmin() {
                   <td className="px-3 py-2 font-mono text-[11px] text-slate-500">{t.slug ?? '—'}</td>
                   <td className="px-3 py-2 tabular-nums">{t.stores?.[0]?.count ?? 0}</td>
                   <td className="px-3 py-2 text-right">
-                    <Link href={`/admin/tenants/${t.id}`} className="text-blue-600 hover:underline">編集</Link>
+                    <div className="flex items-center justify-end gap-3">
+                      <ActAsTenantButton tenantId={t.id} />
+                      <Link href={`/admin/tenants/${t.id}`} className="text-blue-600 hover:underline">編集</Link>
+                    </div>
                   </td>
                 </tr>
               ))}

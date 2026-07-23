@@ -1,25 +1,44 @@
+import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
-import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
-import { StoreNewForm, type TenantOpt } from '../store-new-form'
+import { createSupabaseServer } from '@/lib/supabase/server'
+import { resolveAdminContext } from '@/lib/tenant/acting'
+import { StoreNewForm } from '../store-new-form'
 
 export default async function NewStorePage() {
   const supa = await createSupabaseServer()
   const { data: { user } } = await supa.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: me } = await supa
-    .from('admin_users').select('role, tenant_id').eq('auth_user_id', user.id).single()
   // 店舗作成は super_admin / tenant_admin のみ。
-  if (!me || (me.role !== 'super_admin' && me.role !== 'tenant_admin')) notFound()
+  const ctx = await resolveAdminContext(supa)
+  if (!ctx.role || !['super_admin', 'tenant_admin'].includes(ctx.role)) notFound()
 
-  // super_admin は全テナントから選択。tenant_admin は自テナント固定（picker 不要）。
-  let tenants: TenantOpt[] = []
-  if (me.role === 'super_admin') {
-    const svc = createSupabaseService()
-    const { data } = await svc.from('tenants').select('id, name').order('name')
-    tenants = (data ?? []) as TenantOpt[]
+  // 作成先テナントは文脈から自動決定（drop-down は置かない）。
+  // super_admin は「操作中テナント」を選んでからでないと作成できない。
+  if (!ctx.tenantId) {
+    return (
+      <AdminShell pathname="/admin/stores" section="admin">
+        <PageHeader
+          title="店舗 新規作成"
+          crumb={[
+            { href: '/admin',        label: 'マスタ' },
+            { href: '/admin/stores', label: '店舗' },
+            { href: '/admin/stores/new', label: '新規作成' },
+          ]}
+        />
+        <div className="max-w-2xl space-y-3 px-5 py-5 text-sm text-slate-600">
+          <p>操作中テナントが未選択のため、店舗を作成できません。</p>
+          <p>
+            <Link href="/admin/tenants" className="text-blue-600 underline">
+              運営管理 → テナント
+            </Link>
+            から操作するテナントを選択してください。
+          </p>
+        </div>
+      </AdminShell>
+    )
   }
 
   return (
@@ -33,10 +52,7 @@ export default async function NewStorePage() {
         ]}
       />
       <div className="max-w-2xl px-5 py-5">
-        <StoreNewForm
-          tenants={tenants}
-          lockedTenantId={me.role === 'tenant_admin' ? me.tenant_id : null}
-        />
+        <StoreNewForm lockedTenantId={ctx.tenantId} tenantName={ctx.tenantName} />
       </div>
     </AdminShell>
   )
