@@ -39,7 +39,9 @@ export default async function AdminBcpPage() {
     .order('area_code', { ascending: true, nullsFirst: false })
     .order('name')
     .limit(10_000)
-  if (ctx.tenantId) storesQuery = storesQuery.eq('tenant_id', ctx.tenantId)
+  // 店舗限定ロール(store_manager等)は担当店舗のみ。テナントロールはテナント全体。
+  if (ctx.storeIds) storesQuery = storesQuery.in('id', ctx.storeIds)
+  else if (ctx.tenantId) storesQuery = storesQuery.eq('tenant_id', ctx.tenantId)
 
   const [storesRes, settingsRes] = await Promise.all([
     storesQuery,

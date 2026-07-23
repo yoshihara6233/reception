@@ -39,7 +39,9 @@ export default async function StoresAdmin({
     `)
     .order('name')
     .limit(500)
-  if (ctx.tenantId) query = query.eq('tenant_id', ctx.tenantId)
+  // 店舗限定ロールは担当店舗のみ・テナントロールはテナント全体。
+  if (ctx.storeIds) query = query.in('id', ctx.storeIds)
+  else if (ctx.tenantId) query = query.eq('tenant_id', ctx.tenantId)
   if (q) query = query.ilike('name', `%${q}%`)
   if (area) query = query.eq('area_code', area)
 

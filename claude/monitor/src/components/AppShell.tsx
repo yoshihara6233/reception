@@ -7,6 +7,7 @@
 import { redirect } from 'next/navigation'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { resolveTenantFeatures } from '@/lib/tenant/features'
+import { resolveAdminContext } from '@/lib/tenant/acting'
 import { AppHeader } from './AppHeader'
 import { StoreTree } from './StoreTree'
 import { StoreDetail } from './StoreDetail'
@@ -33,16 +34,24 @@ export async function AppShell({
   // テナントのオプション機能（巡回/発報/検査）を解決してヘッダーの出し分けに使う。
   const features = await resolveTenantFeatures(supa)
 
+  // 可視店舗をロールで絞る: 店舗マネージャ等は担当店舗のみ／tenant_admin はテナント／
+  // super_admin は全店舗（操作中テナント選択時はそのテナント）。
+  const ctx = await resolveAdminContext(supa)
+
   // Fetch store groups + recent BCP alert store IDs in parallel
   const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 
+  let storesQuery = supa
+    .from('stores')
+    .select('id, name, area_code, edge_devices ( status, last_seen_at )')
+    .order('area_code', { ascending: true, nullsFirst: false })
+    .order('name')
+    .limit(10_000)
+  if (ctx.storeIds) storesQuery = storesQuery.in('id', ctx.storeIds)
+  else if (ctx.tenantId) storesQuery = storesQuery.eq('tenant_id', ctx.tenantId)
+
   const [storeRes, alertRes] = await Promise.all([
-    supa
-      .from('stores')
-      .select('id, name, area_code, edge_devices ( status, last_seen_at )')
-      .order('area_code', { ascending: true, nullsFirst: false })
-      .order('name')
-      .limit(10_000),
+    storesQuery,
     supa
       .from('bcp_events')
       .select('store_id')
