@@ -47,7 +47,10 @@ export default async function AuditPage() {
   // super_admin のみ全件（従来どおり）。
   const ctx = await resolveAdminContext(supa)
   let scopeStoreIds: string[] | null = null
-  if (ctx.tenantId) {
+  if (ctx.storeIds) {
+    // 店舗限定ロールは担当店舗のログのみ。
+    scopeStoreIds = ctx.storeIds
+  } else if (ctx.tenantId) {
     const svc0 = createSupabaseService()
     const { data: ts } = await svc0.from('stores').select('id').eq('tenant_id', ctx.tenantId)
     scopeStoreIds = (ts ?? []).map((s) => s.id as string)
