@@ -33,15 +33,13 @@ export async function PUT(req: NextRequest) {
 
   const guard = await requireAdmin()
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status })
-  // 共通設定を変えられるのは super_admin / tenant_admin のみ（店長は不可）。
-  if (guard.profile.role !== 'super_admin' && guard.profile.role !== 'tenant_admin') {
+  // 共通設定を「変更」できるのは super_admin のみ（tenant_admin は閲覧のみ＝UIもグレー表示）。
+  if (guard.profile.role !== 'super_admin') {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
 
-  // 対象テナント: tenant_admin は自テナント固定。super_admin は body.tenantId（無ければ自分）。
-  const tenantId = guard.profile.role === 'super_admin'
-    ? (body.tenantId ?? guard.profile.tenant_id)
-    : guard.profile.tenant_id
+  // 対象テナント: super_admin が操作中テナント（body.tenantId、無ければ自分）に対して設定。
+  const tenantId = body.tenantId ?? guard.profile.tenant_id
   if (!tenantId) return NextResponse.json({ error: 'tenant_not_resolved' }, { status: 400 })
 
   const svc = createSupabaseService()
