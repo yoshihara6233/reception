@@ -123,6 +123,21 @@ describe('edge_devices RLS（テナント×ロール越権防止）', () => {
   })
 })
 
+describe('stores RLS（店舗×ロール可視性: super=全件 / tenant_admin=自テナント / store_manager=担当店舗）', () => {
+  it('super_admin は全店舗', async () => {
+    expect(ids(await asUser(U_SUPER, 'select id from stores'))).toEqual([S_A1, S_A2, S_B1].sort())
+  })
+  it('tenant_admin A は自テナントの店舗のみ（B は不可視）', async () => {
+    expect(ids(await asUser(U_TADMINA, 'select id from stores'))).toEqual([S_A1, S_A2].sort())
+  })
+  it('store_manager A1 は担当店舗のみ（同テナントの A2 も不可視）', async () => {
+    expect(ids(await asUser(U_SMGRA1, 'select id from stores'))).toEqual([S_A1])
+  })
+  it('未認証(anon)は何も見えない', async () => {
+    expect(await asUser(null, 'select id from stores')).toHaveLength(0)
+  })
+})
+
 describe('recorders / recorder_cameras は edge 可視性に連鎖', () => {
   it('tenant_admin A は B テナントのレコーダ/カメラを見られない', async () => {
     expect(await asUser(U_TADMINA, 'select id from recorders')).toHaveLength(0)
