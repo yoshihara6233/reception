@@ -25,6 +25,10 @@ export function TenantSettingsClient(
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
+  // 共通設定を変更できるのは super_admin のみ。tenant_admin は閲覧専用
+  // （フォームは disabled ＝ グレースケール表示・保存ボタンなし）。
+  const readOnly = !isSuperAdmin
+
   const set = <K extends keyof BaggageTenantSettings>(k: K, v: BaggageTenantSettings[K]) => setF((p) => ({ ...p, [k]: v }))
   const setStep = (i: number, text: string) =>
     setF((p) => ({ ...p, steps: p.steps.map((s, j) => (j === i ? { ...s, text: text.slice(0, STEP_TEXT_MAX) } : s)) }))
@@ -70,7 +74,19 @@ export function TenantSettingsClient(
         </form>
       )}
 
-      <div className="space-y-4 rounded border border-slate-200 bg-white p-4 text-sm dark:border-gedline dark:bg-gedbg2">
+      {readOnly && (
+        <div className="rounded border border-slate-300 bg-slate-100 px-3 py-2 text-[13px] text-slate-600 dark:border-gedline dark:bg-gedbg3 dark:text-gedink2">
+          この共通設定は<b>スーパー管理者のみ変更できます</b>。ここでは内容の確認のみ行えます。
+        </div>
+      )}
+
+      <fieldset
+        disabled={readOnly}
+        className={
+          'space-y-4 rounded border border-slate-200 bg-white p-4 text-sm dark:border-gedline dark:bg-gedbg2 ' +
+          (readOnly ? 'pointer-events-none opacity-60 grayscale' : '')
+        }
+      >
         <div className={row}>
           <span className={label}>クリップ保持（日）</span>
           <input type="number" min={1} max={365} value={f.retentionDays}
@@ -168,7 +184,7 @@ export function TenantSettingsClient(
             iPadキオスクで表示します。<b>空欄なら同意画面を出しません</b>。文言を変更して保存すると版(v)が上がり、以降の同意はその版で記録されます（過去の同意と区別できます）。
           </p>
         </div>
-      </div>
+      </fieldset>
 
       {msg && (
         <div className={
@@ -179,10 +195,12 @@ export function TenantSettingsClient(
         }>{msg.text}</div>
       )}
 
-      <button onClick={save} disabled={busy}
-        className="rounded bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 disabled:opacity-40">
-        {busy ? '保存中…' : '共通設定を保存'}
-      </button>
+      {!readOnly && (
+        <button onClick={save} disabled={busy}
+          className="rounded bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 disabled:opacity-40">
+          {busy ? '保存中…' : '共通設定を保存'}
+        </button>
+      )}
     </div>
   )
 }
