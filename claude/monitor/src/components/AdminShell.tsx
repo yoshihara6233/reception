@@ -9,6 +9,8 @@ import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { resolveTenantFeatures } from '@/lib/tenant/features'
+import { resolveAdminContext } from '@/lib/tenant/acting'
+import { ActingTenantBar } from './ActingTenantBar'
 import { AppHeader } from './AppHeader'
 import { StatusBar } from './StatusBar'
 import { AdminShellClient } from './AdminShellClient'
@@ -20,24 +22,35 @@ export type AdminSection = 'admin' | 'security' | 'bcp' | 'infra'
 // F22: factory helpers — return translated nav for a given section. Pages
 // can pass `section="infra"` to AdminShell and let it build the nav, or
 // call these directly when they need the typed array.
-export function getAdminNav(t: Msg): NavItem[] {
-  return [
+// マスタ管理ナビは2プレーンに分離する:
+//   ①設定（テナント運用）— tenant_admin と super_admin が「操作中テナント」に対して使う
+//   ②運営管理（SaaS運営）— super_admin 専用。tenant_admin にはメニュー自体を出さない
+// CSV一括投入は店舗ページ右上に導線があるためメニューから除外（直URLは有効）。
+export function getAdminNav(t: Msg, opts?: { isSuper?: boolean; baggage?: boolean }): NavItem[] {
+  const items: NavItem[] = [
     { href: '/admin',            label: t.adminNav.dashboard, icon: '▣', exact: true },
-    // テナント管理（super_admin 専用ページ。他ロールは開くと 404）。
-    { href: '/admin/tenants',    label: 'テナント',            icon: '🏢' },
     { href: '/admin/stores',     label: t.adminNav.stores,    icon: '⛬' },
-    { href: '/admin/edges',      label: t.adminNav.edges,     icon: '⌬' },
-    // レコーダはエッジ配下（/admin/edges/[id]）で管理。専用ページは未実装のため
-    // デッドリンク（/admin/recorders）はナビから除外。
-    // F49.J: NVR 機種マスタ (EOL/EOS 管理)
-    { href: '/admin/nvr-models', label: 'NVR 機種',           icon: '🛰' },
-    { href: '/admin/bcp',        label: 'BCP発動条件',         icon: '🚨' },
-    { href: '/admin/baggage',    label: '手荷物検査設定',      icon: '🧳' },
     { href: '/admin/users',      label: t.adminNav.users,     icon: '⚇' },
-    { href: '/admin/import',     label: t.adminNav.csvImport, icon: '⇪' },
-    { href: '/admin/limits',     label: t.adminNav.limits,    icon: '⏱' },
+    // 手荷物検査の「内容設定」（同意文言・STEP等）はテナント側の持ち物＝①。
+    // 「使えるか(ON/OFF=課金)」は②のテナント編集フラグで運営が制御する。
+    ...(opts?.baggage !== false
+      ? [{ href: '/admin/baggage', label: '手荷物検査設定', icon: '🧳' }] : []),
+    { href: '/admin/bcp',        label: 'BCP発動条件',         icon: '🚨' },
     { href: '/admin/audit',      label: t.adminNav.audit,     icon: '☰' },
   ]
+  if (opts?.isSuper) {
+    items.push(
+      { href: '#ops', label: '運営管理', icon: '', heading: true },
+      { href: '/admin/tenants',    label: 'テナント',   icon: '🏢' },
+      { href: '/admin/edges',      label: t.adminNav.edges, icon: '⌬' },
+      // レコーダはエッジ配下（/admin/edges/[id]）で管理。専用ページは未実装のため
+      // デッドリンク（/admin/recorders）はナビから除外。
+      // F49.J: NVR 機種マスタ (EOL/EOS 管理)
+      { href: '/admin/nvr-models', label: 'NVR 機種',   icon: '🛰' },
+      { href: '/admin/limits',     label: t.adminNav.limits, icon: '⏱' },
+    )
+  }
+  return items
 }
 export function getSecurityNav(t: Msg): NavItem[] {
   return [
@@ -76,19 +89,18 @@ export interface NavItem {
   icon: string
   /** exact match only (section root, e.g. /admin, /security) — won't activate on sub-paths */
   exact?: boolean
+  /** true = リンクではなく区切り見出し（②運営管理 の区分け表示に使用） */
+  heading?: boolean
 }
 
-// マスタ管理（既定）
+// マスタ管理（既定・非i18nフォールバック）。ロール不明のため ①設定 のみ
+// （②運営管理 は getAdminNav(t, {isSuper:true}) 経由でのみ出す）。
 export const ADMIN_NAV: NavItem[] = [
   { href: '/admin',            label: 'ダッシュボード', icon: '▣', exact: true },
-  { href: '/admin/tenants',    label: 'テナント',       icon: '🏢' },
   { href: '/admin/stores',     label: '店舗',           icon: '⛬' },
-  { href: '/admin/edges',      label: 'エッジサーバ',   icon: '⌬' },
-  { href: '/admin/bcp',        label: 'BCP発動条件',     icon: '🚨' },
-  { href: '/admin/baggage',    label: '手荷物検査設定', icon: '🧳' },
   { href: '/admin/users',      label: 'ユーザ',         icon: '⚇' },
-  { href: '/admin/import',     label: 'CSV 一括投入',   icon: '⇪' },
-  { href: '/admin/limits',     label: '視聴上限',       icon: '⏱' },
+  { href: '/admin/baggage',    label: '手荷物検査設定', icon: '🧳' },
+  { href: '/admin/bcp',        label: 'BCP発動条件',     icon: '🚨' },
   { href: '/admin/audit',      label: 'アクセスログ',   icon: '☰' },
 ]
 
@@ -142,21 +154,24 @@ export async function AdminShell({
 
   const userName = user.user_metadata?.name ?? user.email ?? '不明'
 
-  // テナントのオプション機能（巡回/発報/検査）。ヘッダータブと管理ナビの出し分けに使う。
-  const features = await resolveTenantFeatures(supa)
+  // テナントのオプション機能（巡回/発報/検査）とテナント文脈
+  // （tenant_admin=自テナント / super_admin=操作中テナント）。
+  const [features, ctx] = await Promise.all([
+    resolveTenantFeatures(supa),
+    resolveAdminContext(supa),
+  ])
 
   // Resolve nav + title. Priority: section (translated) > explicit nav/title
   // > admin default.
   const t = section ? await getT() : null
   let effectiveNav: NavItem[] =
     nav
-      ?? (section === 'admin'    ? getAdminNav(t!)
+      ?? (section === 'admin'    ? getAdminNav(t!, { isSuper: ctx.isSuper, baggage: features.baggage })
         : section === 'security' ? getSecurityNav(t!)
         : section === 'bcp'      ? getBcpNav(t!)
         : section === 'infra'    ? getInfraNav(t!)
         : ADMIN_NAV)
-  // 手荷物検査がオプション無効なら「手荷物検査設定」を管理ナビから隠す。
-  // （巡回/発報 は管理ナビに項目が無く、上部タブ側で features により出し分け。）
+  // 手荷物検査がオプション無効なら「手荷物検査設定」を隠す（nav 明示指定の経路も含めて保険）。
   if (!features.baggage) {
     effectiveNav = effectiveNav.filter((n) => n.href !== '/admin/baggage')
   }
@@ -173,6 +188,10 @@ export async function AdminShell({
     <div className="flex h-screen flex-col">
       <AppHeader userName={userName} />
       <AdminShellClient nav={effectiveNav} title={effectiveTitle} pathname={pathname} initialCollapsed={collapsed}>
+        {/* super_admin のみ: ①設定プレーンがどのテナントに固定されているかを常時明示 */}
+        {ctx.isSuper && section === 'admin' && (
+          <ActingTenantBar tenantName={ctx.acting ? ctx.tenantName : null} />
+        )}
         {children}
       </AdminShellClient>
       <StatusBar />

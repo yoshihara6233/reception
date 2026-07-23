@@ -58,6 +58,14 @@ export function AdminShellClient({
           </div>
           <nav className="p-2 text-xs">
             {nav.map((e) => {
+              // 区切り見出し（②運営管理 等）: リンクではなくラベルのみ描画。
+              if (e.heading) {
+                return (
+                  <div key={e.href} className="mt-3 border-t border-slate-200 px-2.5 pb-1 pt-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:border-gedline dark:text-gedink3">
+                    {e.label}
+                  </div>
+                )
+              }
               const active = e.exact
                 ? pathname === e.href
                 : pathname === e.href || pathname.startsWith(e.href + '/')
