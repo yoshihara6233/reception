@@ -84,12 +84,14 @@ export default async function BaggageSessionPage(
   // 切り出しジョブ実行中は「確認済み」を解禁しない（映像を見ずに確認できる抜け道防止）。
   // ジョブ表は edge 用キューでユーザーRLSでは見えないため service で数える
   //（セッション可視性は上の RLS 読みで担保済み）。
-  const { count: pendingJobs } = await createSupabaseService()
+  const { data: jobRows } = await createSupabaseService()
     .from('inspection_clip_jobs')
-    .select('id', { count: 'exact', head: true })
+    .select('status')
     .eq('session_id', id)
-    .in('status', ['pending', 'running'])
-  const clipsPending = (pendingJobs ?? 0) > 0
+  const jobStatuses = ((jobRows ?? []) as { status: string }[]).map((j) => j.status)
+  const clipsPending = jobStatuses.some((s) => s === 'pending' || s === 'running')
+  const clipTotal = jobStatuses.length
+  const clipDone = jobStatuses.filter((s) => s === 'done').length
 
   const windowSec = sess.inspection_started_at && sess.inspection_ended_at
     ? Math.max(0, (new Date(sess.inspection_ended_at).getTime() - new Date(sess.inspection_started_at).getTime()) / 1000)
@@ -154,6 +156,8 @@ export default async function BaggageSessionPage(
           confirmed={sess.confirmed_at !== null}
           clips={playable}
           clipsPending={clipsPending}
+          clipTotal={clipTotal}
+          clipDone={clipDone}
           windowLabel={windowSec !== null
             ? `検査窓 ${Math.floor(windowSec / 60)}:${String(Math.round(windowSec % 60)).padStart(2, '0')}（±15s バッファ含む）`
             : 'クリップ処理中（エッジ切り出し待ち）'}

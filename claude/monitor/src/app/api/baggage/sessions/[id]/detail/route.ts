@@ -52,15 +52,18 @@ export async function GET(
     return { ...row, cameraName: (cam as { name?: string } | null)?.name ?? 'カメラ' }
   })
 
-  // 切り出しジョブが実行中か（= これから映像が増えるか）。実行中は「確認済み」を
-  // 解禁しない（映像を見ずに確認できる抜け道防止）。ジョブ表は edge 用キューで
-  // ユーザーRLSでは見えないため、セッション可視性を確認済みのここで service で数える。
-  const { count: pendingJobs } = await createSupabaseService()
+  // 切り出しジョブの状況（service。ジョブ表は edge 用キューでユーザーRLSでは見えない）。
+  //  - clipsPending: 実行中(pending/running)が有る → 確認済みを解禁しない
+  //  - clipTotal / clipDone: 「再取得」ボタンの表示判定（未完了なら出す）
+  const jobsSvc = createSupabaseService()
+  const { data: jobRows } = await jobsSvc
     .from('inspection_clip_jobs')
-    .select('id', { count: 'exact', head: true })
+    .select('status')
     .eq('session_id', id)
-    .in('status', ['pending', 'running'])
-  const clipsPending = (pendingJobs ?? 0) > 0
+  const jobStatuses = ((jobRows ?? []) as { status: string }[]).map((j) => j.status)
+  const clipsPending = jobStatuses.some((s) => s === 'pending' || s === 'running')
+  const clipTotal = jobStatuses.length
+  const clipDone = jobStatuses.filter((s) => s === 'done').length
 
   // G3: 閲覧を記録（best-effort・5分dedup）
   await recordFootageAccess({
@@ -109,5 +112,7 @@ export async function GET(
     maxOffset,
     clips: playableClips,
     clipsPending,
+    clipTotal,
+    clipDone,
   })
 }
