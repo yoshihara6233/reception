@@ -79,8 +79,8 @@ export default async function AuditPage() {
   const storeIds  = [...new Set([...sessions.map((s) => s.store_id), ...footage.map((f) => f.store_id)].filter((v): v is string => !!v))]
   const cameraIds = [...new Set([...sessions.map((s) => s.camera_id), ...footage.map((f) => f.camera_id)].filter((v): v is string => !!v))]
   const [{ data: admins }, { data: strs }, { data: cams }] = await Promise.all([
-    userIds.length   ? svc.from('admin_users').select('auth_user_id, email').in('auth_user_id', userIds)
-                     : Promise.resolve({ data: [] as { auth_user_id: string; email: string | null }[] }),
+    userIds.length   ? svc.from('admin_users').select('auth_user_id, email, role').in('auth_user_id', userIds)
+                     : Promise.resolve({ data: [] as { auth_user_id: string; email: string | null; role: string | null }[] }),
     storeIds.length  ? svc.from('stores').select('id, name').in('id', storeIds)
                      : Promise.resolve({ data: [] as { id: string; name: string | null }[] }),
     cameraIds.length ? svc.from('recorder_cameras').select('id, name').in('id', cameraIds)
@@ -89,12 +89,21 @@ export default async function AuditPage() {
   const emailBy  = new Map((admins ?? []).map((a) => [a.auth_user_id as string, (a.email as string | null) ?? '']))
   const storeBy  = new Map((strs ?? []).map((s) => [s.id as string, (s.name as string | null) ?? '']))
   const cameraBy = new Map((cams ?? []).map((c) => [c.id as string, (c.name as string | null) ?? '']))
+
+  // SaaS運営者（super_admin）の閲覧はテナント側に見せない: 記録は残すが、
+  // 閲覧者が super_admin でない場合は super_admin 操作者の行を除外する。
+  const superActorIds = new Set(
+    (admins ?? []).filter((a) => a.role === 'super_admin').map((a) => a.auth_user_id as string),
+  )
+  const hideSuperActors = ctx.role !== 'super_admin'
+  const visibleSessions = hideSuperActors ? sessions.filter((s) => !superActorIds.has(s.user_id)) : sessions
+  const visibleFootage  = hideSuperActors ? footage.filter((f) => !superActorIds.has(f.actor_user_id)) : footage
   const email  = (uid: string) => emailBy.get(uid) || (uid ? uid.slice(0, 8) + '…' : '')
   const store  = (sid: string | null) => (sid && storeBy.get(sid)) || ''
   const camera = (cid: string | null) => (cid && cameraBy.get(cid)) || ''
 
   const rows: AccessRowVM[] = [
-    ...sessions.map((s) => ({
+    ...visibleSessions.map((s) => ({
       id: `s_${s.id}`,
       accessedAt: s.started_at,
       accessType: s.mode,
@@ -103,7 +112,7 @@ export default async function AuditPage() {
       cameraName: camera(s.camera_id),
       durationSec: s.duration_sec,
     })),
-    ...footage.map((f) => ({
+    ...visibleFootage.map((f) => ({
       id: `f_${f.id}`,
       accessedAt: f.accessed_at,
       accessType: f.access_type,
