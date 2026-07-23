@@ -22,6 +22,8 @@ export type AdminSection = 'admin' | 'security' | 'bcp' | 'infra'
 export function getAdminNav(t: Msg): NavItem[] {
   return [
     { href: '/admin',            label: t.adminNav.dashboard, icon: '▣', exact: true },
+    // テナント管理（super_admin 専用ページ。他ロールは開くと 404）。
+    { href: '/admin/tenants',    label: 'テナント',            icon: '🏢' },
     { href: '/admin/stores',     label: t.adminNav.stores,    icon: '⛬' },
     { href: '/admin/edges',      label: t.adminNav.edges,     icon: '⌬' },
     // レコーダはエッジ配下（/admin/edges/[id]）で管理。専用ページは未実装のため
@@ -78,6 +80,7 @@ export interface NavItem {
 // マスタ管理（既定）
 export const ADMIN_NAV: NavItem[] = [
   { href: '/admin',            label: 'ダッシュボード', icon: '▣', exact: true },
+  { href: '/admin/tenants',    label: 'テナント',       icon: '🏢' },
   { href: '/admin/stores',     label: '店舗',           icon: '⛬' },
   { href: '/admin/edges',      label: 'エッジサーバ',   icon: '⌬' },
   { href: '/admin/bcp',        label: 'BCP発動条件',     icon: '🚨' },
