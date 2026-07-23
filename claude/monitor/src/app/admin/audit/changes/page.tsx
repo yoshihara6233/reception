@@ -7,7 +7,8 @@
  */
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { createSupabaseServer } from '@/lib/supabase/server'
+import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
+import { resolveAdminContext } from '@/lib/tenant/acting'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
 
@@ -58,11 +59,20 @@ export default async function AuditChangesPage({
   const { data: { user } } = await supa.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data, count } = await supa
+  // SaaS運営者（super_admin）の設定変更はテナント側に見せない。
+  // クエリ段階で actor を除外し、ページング件数も正しく保つ。
+  const ctx = await resolveAdminContext(supa)
+  let query = supa
     .from('admin_audit_log')
     .select('id, ts, actor_user_id, action, target_type, target_id, store_id, changes, stores ( name )', { count: 'exact' })
     .order('ts', { ascending: false })
-    .range(offset, offset + PAGE_SIZE - 1)
+  if (ctx.role !== 'super_admin') {
+    const svc = createSupabaseService()
+    const { data: supers } = await svc.from('admin_users').select('auth_user_id').eq('role', 'super_admin')
+    const superIds = (supers ?? []).map((s) => s.auth_user_id as string)
+    if (superIds.length) query = query.not('actor_user_id', 'in', `(${superIds.join(',')})`)
+  }
+  const { data, count } = await query.range(offset, offset + PAGE_SIZE - 1)
 
   const rows = (data ?? []) as unknown as ChangeRow[]
   const totalPages = Math.ceil((count ?? 0) / PAGE_SIZE)
