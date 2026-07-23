@@ -40,3 +40,11 @@ export function requireAdmin() {
 export function requireBaggageRole() {
   return requireRole(BAGGAGE_ROLES)
 }
+
+/**
+ * 運営管理プレーン（②）＝SaaS運営者のみ。テナント／エッジ／NVR機種／視聴上限など、
+ * 個別テナントに属さない運営レベルの操作に使う。tenant_admin 以下は 403。
+ */
+export function requireSuperAdmin() {
+  return requireRole(['super_admin'])
+}

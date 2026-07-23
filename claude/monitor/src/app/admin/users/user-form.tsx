@@ -41,9 +41,11 @@ export function UserForm({ mode, id, initial, tenants, stores, canCreateSuperAdm
   const [err,  setErr]  = useState<string | null>(null)
   const [done, setDone] = useState(false)
 
+  // テナント未選択時は「全店舗」ではなく空にする（他テナントの店舗を担当に
+  // 割り当てられる誤操作を防ぐ）。テナントを選ぶとその店舗だけが候補に出る。
   const filteredStores = form.tenant_id
     ? stores.filter((s) => s.tenant_id === form.tenant_id)
-    : stores
+    : []
 
   const showStorePicker = form.role === 'store_manager' || form.role === 'baggage_manager' || form.role === 'viewer'
 

@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
+import { storeIdsBelongToTenant } from '@/lib/admin/user-scope'
 
 const Body = z.object({
   email:        z.string().email(),
@@ -49,6 +50,22 @@ export async function POST(req: NextRequest) {
 
   const svc = createSupabaseService()
 
+  // 実効テナント／店舗スコープをサーバ側で確定する（body を鵜呑みにしない）:
+  //   - tenant_admin は自テナント固定。
+  //   - super_admin ロールのユーザーはテナント非所属＝店舗スコープも持たない。
+  //   - その他ロールはテナント必須。
+  const effTenantId = guard.profile.role === 'tenant_admin'
+    ? guard.profile.tenant_id
+    : (body.role === 'super_admin' ? null : (body.tenant_id ?? null))
+  if (body.role !== 'super_admin' && !effTenantId) {
+    return NextResponse.json({ error: 'tenant_required' }, { status: 400 })
+  }
+  const effStoreIds = body.role === 'super_admin' ? [] : body.store_ids
+  // store_ids は実効テナントの店舗のみ許可（他テナント店舗の混入＝越権付与を封じる）。
+  if (!(await storeIdsBelongToTenant(svc, effStoreIds, effTenantId))) {
+    return NextResponse.json({ error: 'store_ids_cross_tenant' }, { status: 400 })
+  }
+
   // 1. Create auth user
   const { data: createData, error: authErr } = await svc.auth.admin.createUser({
     email:         body.email,
@@ -73,8 +90,8 @@ export async function POST(req: NextRequest) {
       email:        body.email,
       display_name: body.display_name,
       role:         body.role,
-      tenant_id:    body.tenant_id ?? null,
-      store_ids:    body.store_ids ?? [],
+      tenant_id:    effTenantId,
+      store_ids:    effStoreIds ?? [],
     })
     .select('id')
     .single()
