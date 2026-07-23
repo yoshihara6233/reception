@@ -1,6 +1,8 @@
 import 'server-only'
+import { cookies } from 'next/headers'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createSupabaseService } from '@/lib/supabase/server'
+import { ACTING_TENANT_COOKIE } from '@/lib/tenant/acting'
 
 /**
  * テナントが有効化しているオプション機能。Monitor + BCP は基本パックのため
@@ -32,13 +34,23 @@ export async function resolveTenantFeatures(supa: SupabaseClient): Promise<Tenan
       .select('role, tenant_id')
       .eq('auth_user_id', user.id)
       .single()
-    if (!me || me.role === 'super_admin' || !me.tenant_id) return ALL_FEATURES_ON
+    if (!me) return ALL_FEATURES_ON
+
+    // super_admin は「操作中テナント」を選択している間だけ、そのテナントの
+    // フラグでメニューを出し分ける（＝テナント視点で設定変更できる）。未選択は全ON。
+    let tenantId: string | null = null
+    if (me.role === 'super_admin') {
+      tenantId = (await cookies()).get(ACTING_TENANT_COOKIE)?.value ?? null
+    } else {
+      tenantId = me.tenant_id ?? null
+    }
+    if (!tenantId) return ALL_FEATURES_ON
 
     const svc = createSupabaseService()
     const { data: tn, error } = await svc
       .from('tenants')
       .select('opt_patrol, opt_alarm, opt_baggage')
-      .eq('id', me.tenant_id)
+      .eq('id', tenantId)
       .single()
     // 列がまだ本番へ適用されていない場合など＝隠さない。
     if (error || !tn) return ALL_FEATURES_ON
