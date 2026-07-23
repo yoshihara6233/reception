@@ -10,7 +10,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 export interface AuditEntry {
   actorUserId: string
   action:      string                 // 'recorder.update' / 'edge.update' / 'enrollment.issue' など
-  targetType:  'recorder' | 'recorder_cameras' | 'edge' | 'enrollment' | 'inspection_settings' | 'employee'
+  targetType:  'recorder' | 'recorder_cameras' | 'edge' | 'enrollment' | 'inspection_settings' | 'employee' | 'tenant' | 'store'
   targetId:    string | null
   storeId:     string | null          // RLS スコープ用
   changes?:    Record<string, unknown>
