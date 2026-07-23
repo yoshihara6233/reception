@@ -7,9 +7,10 @@
  * 新規作成 / 編集 / 削除 アクション付き (super_admin / tenant_admin のみ)。
  */
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { redirect } from 'next/navigation'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
+import { AdminDenied } from '@/components/admin/AdminDenied'
 import { requireAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { resolveAdminContext } from '@/lib/tenant/acting'
@@ -60,8 +61,13 @@ export default async function UsersAdmin({
   // here, then read the master list with the service client (RLS bypass).
   // super_admin sees everyone; tenant_admin is scoped to their own tenant.
   const guard = await requireAdmin()
-  if (!guard.ok || !['super_admin', 'tenant_admin'].includes(guard.profile.role)) {
-    notFound()
+  // 未認証は /login へ。認証済みだが権限不足は生404ではなく案内表示にする。
+  if (!guard.ok) {
+    if (guard.status === 401) redirect('/login')
+    return <AdminDenied pathname="/admin/users" />
+  }
+  if (!['super_admin', 'tenant_admin'].includes(guard.profile.role)) {
+    return <AdminDenied pathname="/admin/users" />
   }
   const canEdit = true
   const isSuper = guard.profile.role === 'super_admin'

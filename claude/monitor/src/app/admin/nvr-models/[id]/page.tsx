@@ -1,11 +1,12 @@
 /**
  * F49.J: NVR 機種マスタ 編集ページ
  */
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Save } from 'lucide-react'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
+import { AdminDenied } from '@/components/admin/AdminDenied'
 import { requireSuperAdmin } from '@/lib/admin/guard'
 import type { NvrModelsRow } from '@/lib/supabase/db-types'
 import { updateNvrModelAndBack } from './actions'
@@ -15,7 +16,7 @@ export default async function EditNvrModelPage(
 ) {
   const { id } = await params
   const guard = await requireSuperAdmin()
-  if (!guard.ok) notFound()
+  if (!guard.ok) { if (guard.status === 401) redirect('/login'); return <AdminDenied pathname="/admin/nvr-models" /> }
   const supa = guard.supa
   const { data } = await supa.from('nvr_models').select('*').eq('id', id).single()
   if (!data) notFound()
