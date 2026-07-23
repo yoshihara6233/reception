@@ -40,6 +40,22 @@ export function toIproUtcStamp(d: Date): string {
        + `${p(d.getUTCHours())}${p(d.getUTCMinutes())}00`
 }
 
+const MINUTE_MS = 60_000
+
+/**
+ * httpdl は分単位（秒00固定）。窓 [from,to] を「START=分切り捨て / END=分切り上げ」に
+ * 丸めた STARTTIME/ENDTIME に変換する。これをしないと、検査窓が同一分内に収まる短い
+ * 検査（例 08:33:05〜08:33:20）で START==END になり、NVR が空応答（録画なし）を返して
+ * 取得が恒久失敗する（手荷物検査の短窓クリップで頻発）。丸めた範囲は元の窓を必ず包含し、
+ * 最短でも1分＝START<END を保証する（余分な尺は検査窓を含むので確認上は無害）。
+ */
+export function iproVodMinuteRange(from: Date, to: Date): { startStamp: string; endStamp: string } {
+  const startMs = Math.floor(from.getTime() / MINUTE_MS) * MINUTE_MS
+  let endMs = Math.ceil(to.getTime() / MINUTE_MS) * MINUTE_MS
+  if (endMs <= startMs) endMs = startMs + MINUTE_MS
+  return { startStamp: toIproUtcStamp(new Date(startMs)), endStamp: toIproUtcStamp(new Date(endMs)) }
+}
+
 function splitOnBuffer(buf: Buffer, delim: Buffer): Buffer[] {
   const parts: Buffer[] = []
   let start = 0
@@ -113,8 +129,10 @@ export async function downloadIproNvrMp4(
   const t = opts.timeoutMs ?? 60_000
   const uid = await iproNvrLogin(opts)
   try {
+    // 分単位丸め（START=切り捨て/END=切り上げ）。同一分窓での START==END を防ぐ。
+    const { startStamp, endStamp } = iproVodMinuteRange(from, to)
     const url = `${opts.endpoint}/cgi-bin/httpdl.cgi?UID=${uid}`
-      + `&STARTTIME=${toIproUtcStamp(from)}&ENDTIME=${toIproUtcStamp(to)}`
+      + `&STARTTIME=${startStamp}&ENDTIME=${endStamp}`
       + `&KIND=MP4&CAM=${channel}&PC=AS60`
     const res = await digestGet(url, opts.username, opts.password, t)
     if (!res.ok) throw new Error(`i-PRO NVR httpdl HTTP ${res.status}`)

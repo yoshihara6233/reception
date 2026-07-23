@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
-  toIproUtcStamp, extractMp4FromMultipart, iproNvrLogin, downloadIproNvrMp4,
+  toIproUtcStamp, iproVodMinuteRange, extractMp4FromMultipart, iproNvrLogin, downloadIproNvrMp4,
 } from './nvr-vod'
 
 const opts = { endpoint: 'https://192.168.0.250', username: 'ADMIN', password: 'Admin123' }
@@ -14,6 +14,35 @@ describe('toIproUtcStamp', () => {
   it('JST 13:20 の絶対時刻は UTC 04:20 として整形される', () => {
     // 2026-06-19 13:20 JST = 04:20 UTC
     expect(toIproUtcStamp(new Date('2026-06-19T13:20:00+09:00'))).toBe('260619042000')
+  })
+})
+
+describe('iproVodMinuteRange（分単位丸め・同一分窓の START==END 回避）', () => {
+  it('検査窓が同一分内でも START<END（END を次の分へ切り上げ）', () => {
+    // 08:33:05〜08:33:20 JST（= 23:33:05〜23:33:20 UTC・同一分）→ START 23:33 / END 23:34
+    const from = new Date('2026-07-23T08:33:05+09:00')
+    const to = new Date('2026-07-23T08:33:20+09:00')
+    const { startStamp, endStamp } = iproVodMinuteRange(from, to)
+    expect(startStamp).toBe('260722233300')
+    expect(endStamp).toBe('260722233400')
+    expect(startStamp).not.toBe(endStamp)
+  })
+
+  it('分境界をまたぐ窓は START=切り捨て/END=切り上げ', () => {
+    // 08:29:56〜08:30:04 JST（23:29:56〜23:30:04 UTC）→ START 23:29 / END 23:31
+    const from = new Date('2026-07-23T08:29:56+09:00')
+    const to = new Date('2026-07-23T08:30:04+09:00')
+    const { startStamp, endStamp } = iproVodMinuteRange(from, to)
+    expect(startStamp).toBe('260722232900')
+    expect(endStamp).toBe('260722233100')
+  })
+
+  it('END が既に分ちょうどならそのまま（切り上げ不要）', () => {
+    const from = new Date(Date.UTC(2026, 6, 22, 23, 33, 0))
+    const to = new Date(Date.UTC(2026, 6, 22, 23, 35, 0))
+    const { startStamp, endStamp } = iproVodMinuteRange(from, to)
+    expect(startStamp).toBe('260722233300')
+    expect(endStamp).toBe('260722233500')
   })
 })
 
