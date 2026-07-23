@@ -15,9 +15,12 @@ import { MonitorMark } from './MonitorMark'
 export function AppHeader({
   userName: _userName,
   onMenuClick,
+  features,
 }: {
   userName?: string
   onMenuClick?: () => void
+  // テナントのオプション機能フラグ。未指定は全表示（後方互換・フェイルオープン）。
+  features?: { patrol: boolean; alarm: boolean; baggage: boolean }
 }) {
   const pathname    = usePathname() ?? ''
   const { t }       = useLang()
@@ -56,14 +59,20 @@ export function AppHeader({
     return () => { active = false; clearInterval(timer) }
   }, [pathname])
 
+  // オプション機能フラグで出し分け。未指定(=undefined)は全表示（フェイルオープン）。
+  // 巡回=/security・発報=/alarms・検査=/baggage は有料オプションのため、
+  // テナントで無効なら中央タブから隠す。/stores・/bcp・/infra は基本パック＝常時表示。
   const TABS: Array<{ href: string; label: string; base?: string }> = [
     { href: '/stores',   label: t.nav.monitor  },
     { href: '/bcp',      label: t.nav.bcp      },
     // PATROL の着地は巡回レポート（利用頻度が最も高い）。ハイライトは /security 配下全体。
-    { href: '/security/reports', label: t.nav.security, base: '/security' },
-    { href: '/alarms',   label: 'ALARM'         },
+    ...(features?.patrol !== false
+      ? [{ href: '/security/reports', label: t.nav.security, base: '/security' }] : []),
+    ...(features?.alarm !== false
+      ? [{ href: '/alarms', label: 'ALARM' }] : []),
     // 手荷物検査モジュール（M4）。ラベルは ALARM と同様に固定表記。
-    { href: '/baggage',  label: '検査'          },
+    ...(features?.baggage !== false
+      ? [{ href: '/baggage', label: '検査' }] : []),
     { href: '/infra',    label: t.nav.infra    },
     // F23: /logs タブは削除（マスタ内の監査ログと重複していたため）
     // F24: /admin（設定）は中央タブから外し、右側のアイコンに移動

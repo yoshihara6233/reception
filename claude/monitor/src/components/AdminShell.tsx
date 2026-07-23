@@ -8,6 +8,7 @@
 import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { createSupabaseServer } from '@/lib/supabase/server'
+import { resolveTenantFeatures } from '@/lib/tenant/features'
 import { AppHeader } from './AppHeader'
 import { StatusBar } from './StatusBar'
 import { AdminShellClient } from './AdminShellClient'
@@ -141,16 +142,24 @@ export async function AdminShell({
 
   const userName = user.user_metadata?.name ?? user.email ?? '不明'
 
+  // テナントのオプション機能（巡回/発報/検査）。ヘッダータブと管理ナビの出し分けに使う。
+  const features = await resolveTenantFeatures(supa)
+
   // Resolve nav + title. Priority: section (translated) > explicit nav/title
   // > admin default.
   const t = section ? await getT() : null
-  const effectiveNav: NavItem[] =
+  let effectiveNav: NavItem[] =
     nav
       ?? (section === 'admin'    ? getAdminNav(t!)
         : section === 'security' ? getSecurityNav(t!)
         : section === 'bcp'      ? getBcpNav(t!)
         : section === 'infra'    ? getInfraNav(t!)
         : ADMIN_NAV)
+  // 手荷物検査がオプション無効なら「手荷物検査設定」を管理ナビから隠す。
+  // （巡回/発報 は管理ナビに項目が無く、上部タブ側で features により出し分け。）
+  if (!features.baggage) {
+    effectiveNav = effectiveNav.filter((n) => n.href !== '/admin/baggage')
+  }
   const effectiveTitle: string =
     navTitle
       ?? (section && t

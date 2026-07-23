@@ -16,6 +16,9 @@ const Body = z.object({
   status: z.enum(['active', 'suspended', 'trial']).optional(),
   slug:   z.string().trim().toLowerCase().min(1).max(64).regex(/^[a-z0-9-]+$/, 'slug_format')
             .nullable().optional(),
+  opt_patrol:  z.boolean().optional(),
+  opt_alarm:   z.boolean().optional(),
+  opt_baggage: z.boolean().optional(),
 })
 
 export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -33,6 +36,8 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
 
   const patch: Record<string, unknown> = { ...parsed.data }
   if (Object.keys(patch).length === 0) return NextResponse.json({ error: 'no_fields' }, { status: 400 })
+  // slug は空文字送信を NULL 化（未設定へ戻す）。
+  if (patch.slug === '') patch.slug = null
 
   const svc = createSupabaseService()
   const { error } = await svc.from('tenants').update(patch).eq('id', id)
