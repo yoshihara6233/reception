@@ -9,6 +9,7 @@
  * 条件未満の発令も /bcp/jalerts の受信履歴には残る（録画を起動しないだけ）。
  */
 import { createSupabaseServer } from '@/lib/supabase/server'
+import { resolveAdminContext } from '@/lib/tenant/acting'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
 import { type BcpStoreSetting } from './BcpSettingsForm'
@@ -28,8 +29,20 @@ interface SettingRow {
 export default async function AdminBcpPage() {
   const supa = await createSupabaseServer()
 
+  // BCP発動条件は店舗別＝①設定プレーン。操作中テナント（tenant_admin=自テナント /
+  // super_admin=選択中テナント）に絞る。未選択の super_admin のみ全店舗を閲覧。
+  const ctx = await resolveAdminContext(supa)
+
+  let storesQuery = supa
+    .from('stores')
+    .select('id, name, area_code')
+    .order('area_code', { ascending: true, nullsFirst: false })
+    .order('name')
+    .limit(10_000)
+  if (ctx.tenantId) storesQuery = storesQuery.eq('tenant_id', ctx.tenantId)
+
   const [storesRes, settingsRes] = await Promise.all([
-    supa.from('stores').select('id, name, area_code').order('area_code', { ascending: true, nullsFirst: false }).order('name').limit(10_000),
+    storesQuery,
     supa.from('bcp_settings').select('store_id, enabled, quake_min_intensity, tsunami_enabled, missile_enabled, notify_emails, snapshot_offsets').limit(10_000),
   ])
 

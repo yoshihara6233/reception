@@ -8,6 +8,7 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
+import { resolveAdminContext } from '@/lib/tenant/acting'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
 import { AccessLogTable, type AccessRowVM } from './AccessLogTable'
@@ -41,17 +42,30 @@ export default async function AuditPage() {
   const { data: { user } } = await supa.auth.getUser()
   if (!user) redirect('/login')
 
-  // 2ソースを並行取得（いずれも RLS で可視範囲に限定）。
-  // ※ live_sessions は store/camera への FK が無く PostgREST 埋め込みJOINが失敗するため、
-  //   店舗名・カメラ名は下の service client マップで解決する（footage も同様に統一）。
-  const [{ data: sessData }, { data: footData }] = await Promise.all([
-    supa.from('live_sessions')
-      .select('id, user_id, store_id, camera_id, mode, started_at, duration_sec')
-      .order('started_at', { ascending: false }).limit(LIMIT),
-    supa.from('footage_access_log')
-      .select('id, actor_user_id, store_id, camera_id, access_type, accessed_at')
-      .order('accessed_at', { ascending: false }).limit(LIMIT),
-  ])
+  // アクセスログは①設定プレーン＝操作中テナントに絞る（tenant_admin=自テナント /
+  // super_admin=選択中テナント）。対象テナントの店舗IDでフィルタ。未選択の
+  // super_admin のみ全件（従来どおり）。
+  const ctx = await resolveAdminContext(supa)
+  let scopeStoreIds: string[] | null = null
+  if (ctx.tenantId) {
+    const svc0 = createSupabaseService()
+    const { data: ts } = await svc0.from('stores').select('id').eq('tenant_id', ctx.tenantId)
+    scopeStoreIds = (ts ?? []).map((s) => s.id as string)
+  }
+
+  // 2ソースを並行取得。※ live_sessions は store/camera への FK が無く PostgREST
+  //   埋め込みJOINが失敗するため、店舗名・カメラ名は下の service client マップで解決。
+  let sessQuery = supa.from('live_sessions')
+    .select('id, user_id, store_id, camera_id, mode, started_at, duration_sec')
+    .order('started_at', { ascending: false }).limit(LIMIT)
+  let footQuery = supa.from('footage_access_log')
+    .select('id, actor_user_id, store_id, camera_id, access_type, accessed_at')
+    .order('accessed_at', { ascending: false }).limit(LIMIT)
+  if (scopeStoreIds) {
+    sessQuery = sessQuery.in('store_id', scopeStoreIds)
+    footQuery = footQuery.in('store_id', scopeStoreIds)
+  }
+  const [{ data: sessData }, { data: footData }] = await Promise.all([sessQuery, footQuery])
   const sessions = (sessData ?? []) as unknown as SessionRow[]
   const footage  = (footData ?? []) as unknown as FootageRow[]
 
