@@ -9,13 +9,11 @@ import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/serv
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
 import { loadTenantSettings } from '@/lib/baggage/tenant-settings'
+import { resolveAdminContext } from '@/lib/tenant/acting'
 import { TenantSettingsClient } from './TenantSettingsClient'
 import { StoreListClient, type StoreRow } from './StoreListClient'
 
-export default async function AdminBaggagePage(
-  { searchParams }: { searchParams: Promise<{ tenant?: string }> },
-) {
-  const sp = await searchParams
+export default async function AdminBaggagePage() {
   const supa = await createSupabaseServer()
   const { data: { user } } = await supa.auth.getUser()
   if (!user) redirect('/login')
@@ -35,21 +33,19 @@ export default async function AdminBaggagePage(
     )
   }
 
-  // 対象テナント: tenant_admin は自テナント。super_admin はテナント選択可（既定は自分/先頭）。
+  // 対象テナント: tenant_admin は自テナント。super_admin は「操作中テナント」に固定
+  // （ページ内のテナント選択は撤去＝選び間違いで他テナント設定を書き換える事故を防ぐ）。
   const svc = createSupabaseService()
-  let tenants: { id: string; name: string }[] = []
-  let tenantId = profile?.tenant_id as string | undefined
-  if (role === 'super_admin') {
-    const { data } = await svc.from('tenants').select('id, name').order('name')
-    tenants = (data ?? []) as { id: string; name: string }[]
-    tenantId = (sp.tenant && tenants.some((t) => t.id === sp.tenant)) ? sp.tenant : (tenantId ?? tenants[0]?.id)
-  }
+  const ctx = await resolveAdminContext(supa)
+  const tenantId = ctx.tenantId ?? undefined
 
   if (!tenantId) {
     return (
       <AdminShell pathname="/admin/baggage" section="admin">
-        <PageHeader title="手荷物検査 共通設定" />
-        <div className="p-5 text-sm text-slate-600 dark:text-gedink2">対象テナントを解決できませんでした。</div>
+        <PageHeader title="手荷物検査 設定" />
+        <div className="p-5 text-sm text-slate-600 dark:text-gedink2">
+          操作中テナントが未選択です。上部バーまたは「運営管理 → テナント」から操作するテナントを選択してください。
+        </div>
       </AdminShell>
     )
   }
@@ -100,9 +96,10 @@ export default async function AdminBaggagePage(
       <div className="space-y-8 p-5">
         <section>
           <h2 className="mb-3 text-[15px] font-bold text-slate-900 dark:text-gedink">共通設定（全店舗）</h2>
+          {/* テナント選択は「操作中テナント」バーに一本化（ページ内selectは撤去＝tenants=[]） */}
           <TenantSettingsClient
             isSuperAdmin={role === 'super_admin'}
-            tenants={tenants}
+            tenants={[]}
             tenantId={tenantId}
             initial={settings}
           />

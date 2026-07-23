@@ -4,8 +4,6 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Globe } from 'lucide-react'
 
-export interface TenantOpt { id: string; name: string }
-
 interface FormState {
   name:      string
   tenant_id: string | null
@@ -24,15 +22,17 @@ const ERR_LABELS: Record<string, string> = {
 }
 
 export function StoreNewForm({
-  tenants,
   lockedTenantId,
+  tenantName,
 }: {
-  tenants: TenantOpt[]
-  lockedTenantId: string | null   // tenant_admin は自テナント固定（select を出さない）
+  /** 作成先テナント（tenant_admin=自テナント / super_admin=操作中テナント）。
+   *  drop-down は置かない — 選び間違いで他テナントに店舗を作る事故を構造的に防ぐ。 */
+  lockedTenantId: string
+  tenantName: string | null
 }) {
   const router = useRouter()
   const [form, setForm] = useState<FormState>({
-    name: '', tenant_id: lockedTenantId ?? null, address: null, area_code: null,
+    name: '', tenant_id: lockedTenantId, address: null, area_code: null,
     latitude: null, longitude: null, timezone: 'Asia/Tokyo', is_active: true,
   })
   const [busy, setBusy] = useState(false)
@@ -56,7 +56,7 @@ export function StoreNewForm({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name:      form.name,
-        tenant_id: lockedTenantId ?? form.tenant_id,
+        tenant_id: lockedTenantId,
         address:   form.address,
         area_code: form.area_code,
         latitude:  form.latitude,
@@ -82,15 +82,11 @@ export function StoreNewForm({
                className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm" placeholder="例: ◯◯店" />
       </Field>
 
-      {!lockedTenantId && (
-        <Field label="テナント *">
-          <select required value={form.tenant_id ?? ''}
-                  onChange={(e) => setForm({ ...form, tenant_id: e.target.value || null })}
-                  className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm">
-            <option value="">— 選択してください —</option>
-            {tenants.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-          </select>
-        </Field>
+      {/* 作成先テナントは固定表示（変更不可）。切替は「操作中テナント」バーから。 */}
+      {tenantName && (
+        <div className="rounded bg-slate-50 px-3 py-2 text-xs text-slate-600">
+          作成先テナント: <span className="font-bold">{tenantName}</span>
+        </div>
       )}
 
       <Field label="住所">

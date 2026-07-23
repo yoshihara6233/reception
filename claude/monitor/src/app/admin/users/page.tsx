@@ -12,6 +12,7 @@ import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
 import { requireAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
+import { resolveAdminContext } from '@/lib/tenant/acting'
 import { getT } from '@/lib/i18n/server'
 import type { Msg } from '@/lib/i18n/messages'
 import { UserDeleteButton } from './user-actions'
@@ -77,6 +78,11 @@ export default async function UsersAdmin({
 
   if (!isSuper) {
     query = query.eq('tenant_id', guard.profile.tenant_id)
+  } else {
+    // super_admin: 操作中テナント選択中はそのテナントのユーザーのみ表示
+    // （①設定プレーンをテナント文脈に固定する方針）。未選択は全件。
+    const ctx = await resolveAdminContext(guard.supa)
+    if (ctx.tenantId) query = query.eq('tenant_id', ctx.tenantId)
   }
   if (q) {
     query = query.or(`display_name.ilike.%${q}%,email.ilike.%${q}%`)

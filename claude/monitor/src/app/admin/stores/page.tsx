@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader, LinkBtn } from '@/components/admin/PageHeader'
 import { createSupabaseServer } from '@/lib/supabase/server'
+import { resolveAdminContext } from '@/lib/tenant/acting'
 import { getT } from '@/lib/i18n/server'
 
 interface Row {
@@ -25,6 +26,11 @@ export default async function StoresAdmin({
   const t = await getT()
   const ts = t.adminStores
 
+  // テナント文脈: tenant_admin=自テナント / super_admin=操作中テナント。
+  // super_admin が未選択の間は全店舗を閲覧できるが、新規作成はできない
+  // （選び間違いで他テナントに店舗を作る事故を防ぐ）。
+  const ctx = await resolveAdminContext(supa)
+
   let query = supa
     .from('stores')
     .select(`
@@ -33,6 +39,7 @@ export default async function StoresAdmin({
     `)
     .order('name')
     .limit(500)
+  if (ctx.tenantId) query = query.eq('tenant_id', ctx.tenantId)
   if (q) query = query.ilike('name', `%${q}%`)
   if (area) query = query.eq('area_code', area)
 
@@ -46,7 +53,8 @@ export default async function StoresAdmin({
         crumb={[{ href: '/admin', label: t.breadcrumb.admin }, { href: '/admin/stores', label: t.adminNav.stores }]}
         actions={
           <>
-            <LinkBtn href="/admin/stores/new">＋ 新規店舗</LinkBtn>
+            {/* 新規作成はテナント確定時のみ（super_admin は操作中テナント選択が前提） */}
+            {ctx.tenantId && <LinkBtn href="/admin/stores/new">＋ 新規店舗</LinkBtn>}
             <LinkBtn href="/admin/import">{ts.csvImportBtn}</LinkBtn>
           </>
         }
