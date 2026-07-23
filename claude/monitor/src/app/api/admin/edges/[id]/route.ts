@@ -3,16 +3,20 @@ import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
 import { recordAudit, storeIdForEdge } from '@/lib/admin/audit'
 
+// 版フィールドは前後空白を除去（末尾スペース混入で git worktree add が
+// "invalid reference" となり OTA が恒久 stage_failed する事故の防止）。
+const trimmedNullable = z.string().nullable().optional().transform((s) => (typeof s === 'string' ? s.trim() : s))
+
 const PatchBody = z.object({
   name:          z.string().min(1).max(120).optional(),
-  agent_version: z.string().nullable().optional(),
+  agent_version: trimmedNullable,
   // go2rtc 公開オリジン（Cloudflare Tunnel）。このエッジ配下の onvif-generic
   // カメラが継承。従来は SQL Editor 直編集だった。空文字は NULL 化。
   go2rtc_host:   z.string().nullable().optional(),
   // 自律OTA: 本部が宣言する目標版（per-device＝カナリア）。空文字/NULL=更新指示なし。
   // エッジは /api/edge/bootstrap の pull で受信して self-update する。
-  desired_agent_version:       z.string().nullable().optional(),
-  desired_cloudflared_version: z.string().nullable().optional(),
+  desired_agent_version:       trimmedNullable,
+  desired_cloudflared_version: trimmedNullable,
 })
 
 export async function PUT(
