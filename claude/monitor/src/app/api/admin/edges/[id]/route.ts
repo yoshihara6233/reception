@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { requireAdmin } from '@/lib/admin/guard'
+import { requireSuperAdmin } from '@/lib/admin/guard'
 import { recordAudit, storeIdForEdge } from '@/lib/admin/audit'
 
 // 版フィールドは前後空白を除去（末尾スペース混入で git worktree add が
@@ -23,7 +23,7 @@ export async function PUT(
   req: NextRequest,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const guard = await requireAdmin()
+  const guard = await requireSuperAdmin()
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status })
 
   const { id } = await ctx.params
@@ -53,7 +53,7 @@ export async function DELETE(
   _req: NextRequest,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const guard = await requireAdmin()
+  const guard = await requireSuperAdmin()
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status })
 
   const { id } = await ctx.params

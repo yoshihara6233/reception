@@ -9,7 +9,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { requireAdmin } from '@/lib/admin/guard'
+import { requireSuperAdmin } from '@/lib/admin/guard'
 import { recordAudit } from '@/lib/admin/audit'
 
 const Body = z.object({
@@ -19,7 +19,7 @@ const Body = z.object({
 })
 
 export async function POST(req: NextRequest) {
-  const guard = await requireAdmin()
+  const guard = await requireSuperAdmin()
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status })
 
   const parsed = Body.safeParse(await req.json().catch(() => null))

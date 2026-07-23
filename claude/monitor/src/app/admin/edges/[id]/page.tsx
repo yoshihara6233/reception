@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
-import { createSupabaseServer } from '@/lib/supabase/server'
+import { requireSuperAdmin } from '@/lib/admin/guard'
 import { EdgeDetail } from './edge-detail'
 
 interface EdgePayload {
@@ -52,7 +52,9 @@ export default async function EdgeEditPage(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params
-  const supa = await createSupabaseServer()
+  const guard = await requireSuperAdmin()
+  if (!guard.ok) notFound()
+  const supa = guard.supa
   const { data } = await supa
     .from('edge_devices')
     .select(`

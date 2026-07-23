@@ -5,7 +5,8 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { createSupabaseServer } from '@/lib/supabase/server'
+import { requireSuperAdmin } from '@/lib/admin/guard'
+import { createSupabaseService } from '@/lib/supabase/server'
 
 export interface SaveResult {
   ok:       boolean
@@ -26,7 +27,13 @@ export async function updateNvrModel(formData: FormData): Promise<SaveResult> {
   if (!id) return { ok: false, message: 'id が不正です' }
   if (!display_name) return { ok: false, message: '表示名は必須です' }
 
-  const supa = await createSupabaseServer()
+  // ②運営管理＝super_admin 専用（従来は無認可でサーバアクションが実行されていた）。
+  const guard = await requireSuperAdmin()
+  if (!guard.ok) return { ok: false, message: '権限がありません' }
+
+  // nvr_models の書き込みは RLS で service_role 限定＝service client を使う
+  // （従来は RLS セッションで fail-close していた機能バグも同時に解消）。
+  const supa = createSupabaseService()
   const { error } = await supa
     .from('nvr_models')
     .update({

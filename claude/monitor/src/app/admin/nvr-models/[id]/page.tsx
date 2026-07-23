@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { Save } from 'lucide-react'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
-import { createSupabaseServer } from '@/lib/supabase/server'
+import { requireSuperAdmin } from '@/lib/admin/guard'
 import type { NvrModelsRow } from '@/lib/supabase/db-types'
 import { updateNvrModelAndBack } from './actions'
 
@@ -14,7 +14,9 @@ export default async function EditNvrModelPage(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params
-  const supa = await createSupabaseServer()
+  const guard = await requireSuperAdmin()
+  if (!guard.ok) notFound()
+  const supa = guard.supa
   const { data } = await supa.from('nvr_models').select('*').eq('id', id).single()
   if (!data) notFound()
   const m = data as unknown as NvrModelsRow

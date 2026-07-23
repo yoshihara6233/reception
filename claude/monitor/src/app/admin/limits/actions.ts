@@ -2,7 +2,7 @@
 
 /**
  * R1: セッション上限（視聴時間上限 max_session_min ＋ 同時視聴上限 max_concurrent）を
- * テナント毎に保存する。認可: super_admin=全テナント / tenant_admin=自テナントのみ。
+ * テナント毎に保存する。認可: super_admin のみ（②運営管理プレーン）。
  * 書き込みは service client（session_limits の RLS は modify=admin ロール）。
  */
 import { revalidatePath } from 'next/cache'
@@ -18,13 +18,10 @@ export interface SessionLimitInput {
 export async function upsertSessionLimit(
   input: SessionLimitInput,
 ): Promise<{ ok: boolean; error?: string }> {
+  // ②運営管理＝super_admin 専用（視聴上限は運営/契約側の制御）。
   const guard = await requireAdmin()
-  if (!guard.ok || !['super_admin', 'tenant_admin'].includes(guard.profile.role)) {
+  if (!guard.ok || guard.profile.role !== 'super_admin') {
     return { ok: false, error: '権限がありません' }
-  }
-  // tenant_admin は自テナントのみ変更可（越権防止）。
-  if (guard.profile.role === 'tenant_admin' && guard.profile.tenant_id !== input.tenantId) {
-    return { ok: false, error: '他テナントの設定は変更できません' }
   }
 
   const sessionMin = Math.round(Number(input.maxSessionMin))
