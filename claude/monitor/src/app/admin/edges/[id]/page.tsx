@@ -1,6 +1,7 @@
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
+import { AdminDenied } from '@/components/admin/AdminDenied'
 import { requireSuperAdmin } from '@/lib/admin/guard'
 import { EdgeDetail } from './edge-detail'
 
@@ -53,7 +54,7 @@ export default async function EdgeEditPage(
 ) {
   const { id } = await params
   const guard = await requireSuperAdmin()
-  if (!guard.ok) notFound()
+  if (!guard.ok) { if (guard.status === 401) redirect('/login'); return <AdminDenied pathname="/admin/edges" /> }
   const supa = guard.supa
   const { data } = await supa
     .from('edge_devices')

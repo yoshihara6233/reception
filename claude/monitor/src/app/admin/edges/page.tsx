@@ -1,7 +1,8 @@
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { redirect } from 'next/navigation'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader, LinkBtn } from '@/components/admin/PageHeader'
+import { AdminDenied } from '@/components/admin/AdminDenied'
 import { requireSuperAdmin } from '@/lib/admin/guard'
 import { getT } from '@/lib/i18n/server'
 
@@ -33,7 +34,7 @@ export default async function EdgesAdmin({
   const { status, q } = await searchParams
   // ②運営管理＝super_admin 専用（メニューでも非表示。直URL到達をここで遮断）。
   const guard = await requireSuperAdmin()
-  if (!guard.ok) notFound()
+  if (!guard.ok) { if (guard.status === 401) redirect('/login'); return <AdminDenied pathname="/admin/edges" /> }
   const supa = guard.supa
   const t = await getT()
   const te = t.adminEdges

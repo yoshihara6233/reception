@@ -5,9 +5,10 @@
  * modify=admin ロールの RLS だが、tenants 一覧は service client で解決（他ロールの越権は
  * requireAdmin ＋ role フィルタで防ぐ）。
  */
-import { notFound } from 'next/navigation'
+import { redirect } from 'next/navigation'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
+import { AdminDenied } from '@/components/admin/AdminDenied'
 import { requireAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { getT } from '@/lib/i18n/server'
@@ -21,9 +22,8 @@ export default async function LimitsAdmin() {
 
   // ②運営管理＝super_admin 専用（視聴上限は運営/契約側の制御）。
   const guard = await requireAdmin()
-  if (!guard.ok || guard.profile.role !== 'super_admin') {
-    notFound()
-  }
+  if (!guard.ok) { if (guard.status === 401) redirect('/login'); return <AdminDenied pathname="/admin/limits" /> }
+  if (guard.profile.role !== 'super_admin') return <AdminDenied pathname="/admin/limits" />
   const isSuper = true
 
   const svc = createSupabaseService()

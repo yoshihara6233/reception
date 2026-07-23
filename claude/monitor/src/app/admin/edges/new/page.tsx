@@ -1,12 +1,13 @@
-import { notFound } from 'next/navigation'
+import { redirect } from 'next/navigation'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
+import { AdminDenied } from '@/components/admin/AdminDenied'
 import { requireSuperAdmin } from '@/lib/admin/guard'
 import { EdgeNewForm } from './edge-new-form'
 
 export default async function NewEdgePage() {
   const guard = await requireSuperAdmin()
-  if (!guard.ok) notFound()
+  if (!guard.ok) { if (guard.status === 401) redirect('/login'); return <AdminDenied pathname="/admin/edges" /> }
   const supa = guard.supa
 
   // List stores that don't yet have an edge (one edge per store policy).
