@@ -1,6 +1,19 @@
+/**
+ * PUT /api/admin/stores/[id] — 店舗編集
+ *
+ * 店舗別オプション（巡回/発報/検査）の ON/OFF もここで更新する。ON への変更は
+ * super_admin / tenant_admin のみ・テナントが当該機能を契約済み・かつテナントの
+ * 「ON にできる店舗数」クォータ内であること（アプリ層強制）。それ以外のロールの
+ * opt_* 変更は無視する（既存の店舗編集フローは壊さない）。
+ */
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
+import { createSupabaseService } from '@/lib/supabase/server'
+import {
+  getTenantQuota, getOptionOnCount, exceedsStoreLimit,
+  OPTION_KEYS, OPTION_STORE_COL, type OptionKey,
+} from '@/lib/admin/tenant-quota'
 
 const Body = z.object({
   name:       z.string().min(1).optional(),
@@ -10,6 +23,9 @@ const Body = z.object({
   longitude:  z.number().min(-180).max(180).nullable().optional(),
   timezone:   z.string().nullable().optional(),
   is_active:  z.boolean().optional(),
+  opt_patrol:  z.boolean().optional(),
+  opt_alarm:   z.boolean().optional(),
+  opt_baggage: z.boolean().optional(),
 })
 
 export async function PUT(
@@ -25,6 +41,48 @@ export async function PUT(
 
   const patch: Record<string, unknown> = { ...parsed.data }
   if (patch.latitude != null && patch.longitude != null) patch.geocoded_at = new Date().toISOString()
+
+  // オプションの ON/OFF は super_admin / tenant_admin のみ扱える。
+  const canManageOptions = ['super_admin', 'tenant_admin'].includes(guard.profile.role)
+  const wantsOptionChange = OPTION_KEYS.some((o) => parsed.data[OPTION_STORE_COL[o]] !== undefined)
+
+  if (wantsOptionChange) {
+    if (!canManageOptions) {
+      // 権限外のロールは opt_* を変更させない（他項目の編集は通す）。
+      for (const o of OPTION_KEYS) delete patch[OPTION_STORE_COL[o]]
+    } else {
+      const svc = createSupabaseService()
+      const { data: cur, error: curErr } = await svc
+        .from('stores')
+        .select('tenant_id, opt_patrol, opt_alarm, opt_baggage')
+        .eq('id', id)
+        .single()
+      if (curErr || !cur) return NextResponse.json({ error: 'store_not_found' }, { status: 404 })
+      const tenantId = cur.tenant_id as string | null
+      if (!tenantId) return NextResponse.json({ error: 'tenant_required' }, { status: 400 })
+
+      const { limits, contract } = await getTenantQuota(svc, tenantId)
+      for (const opt of OPTION_KEYS) {
+        const col = OPTION_STORE_COL[opt]
+        const next = parsed.data[col]
+        if (next === undefined) continue
+        const prev = !!cur[col]
+        if (next && !prev) {
+          // OFF → ON: 契約必須＋クォータ内（自店舗は除外して数える）。
+          if (!contract[opt]) {
+            return NextResponse.json({ error: 'option_not_contracted', option: opt }, { status: 409 })
+          }
+          const onCount = await getOptionOnCount(svc, tenantId, opt as OptionKey, id)
+          if (exceedsStoreLimit(limits[opt], onCount, 1)) {
+            return NextResponse.json(
+              { error: 'option_limit_exceeded', option: opt, current: onCount, limit: limits[opt] },
+              { status: 409 },
+            )
+          }
+        }
+      }
+    }
+  }
 
   const { error } = await guard.supa.from('stores').update(patch).eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

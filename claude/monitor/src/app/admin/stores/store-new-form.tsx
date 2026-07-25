@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Globe } from 'lucide-react'
+import { StoreOptionsFieldset, type StoreOptionsAvail, type StoreOptionState } from './StoreOptionsFieldset'
 
 interface FormState {
   name:      string
@@ -16,24 +17,32 @@ interface FormState {
 }
 
 const ERR_LABELS: Record<string, string> = {
-  tenant_required:   'テナントを選択してください',
-  insufficient_role: '店舗作成の権限がありません',
-  invalid_body:      '入力内容を確認してください',
+  tenant_required:      'テナントを選択してください',
+  insufficient_role:    '店舗作成の権限がありません',
+  invalid_body:         '入力内容を確認してください',
+  store_limit_exceeded: '店舗数が上限に達しています（テナント設定で上限を確認してください）',
+  option_not_contracted: 'このテナントで契約していないオプションは ON にできません',
+  option_limit_exceeded: 'オプションを ON にできる店舗数が上限に達しています',
 }
 
 export function StoreNewForm({
   lockedTenantId,
   tenantName,
+  optionsAvail,
 }: {
   /** 作成先テナント（tenant_admin=自テナント / super_admin=操作中テナント）。
    *  drop-down は置かない — 選び間違いで他テナントに店舗を作る事故を構造的に防ぐ。 */
   lockedTenantId: string
   tenantName: string | null
+  optionsAvail: StoreOptionsAvail
 }) {
   const router = useRouter()
   const [form, setForm] = useState<FormState>({
     name: '', tenant_id: lockedTenantId, address: null, area_code: null,
     latitude: null, longitude: null, timezone: 'Asia/Tokyo', is_active: true,
+  })
+  const [opts, setOpts] = useState<StoreOptionState>({
+    opt_patrol: false, opt_alarm: false, opt_baggage: false,
   })
   const [busy, setBusy] = useState(false)
   const [err,  setErr]  = useState<string | null>(null)
@@ -63,6 +72,9 @@ export function StoreNewForm({
         longitude: form.longitude,
         timezone:  form.timezone,
         is_active: form.is_active,
+        opt_patrol:  opts.opt_patrol,
+        opt_alarm:   opts.opt_alarm,
+        opt_baggage: opts.opt_baggage,
       }),
     })
     setBusy(false)
@@ -121,6 +133,8 @@ export function StoreNewForm({
         <input value={form.timezone} onChange={(e) => setForm({ ...form, timezone: e.target.value })}
                className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm" />
       </Field>
+
+      <StoreOptionsFieldset value={opts} avail={optionsAvail} onChange={setOpts} />
 
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={form.is_active}

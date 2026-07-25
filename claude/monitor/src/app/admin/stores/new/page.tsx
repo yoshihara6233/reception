@@ -2,8 +2,9 @@ import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
-import { createSupabaseServer } from '@/lib/supabase/server'
+import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { resolveAdminContext } from '@/lib/tenant/acting'
+import { getStoreOptionAvailability } from '@/lib/admin/tenant-quota'
 import { StoreNewForm } from '../store-new-form'
 
 export default async function NewStorePage() {
@@ -52,7 +53,11 @@ export default async function NewStorePage() {
         ]}
       />
       <div className="max-w-2xl px-5 py-5">
-        <StoreNewForm lockedTenantId={ctx.tenantId} tenantName={ctx.tenantName} />
+        <StoreNewForm
+          lockedTenantId={ctx.tenantId}
+          tenantName={ctx.tenantName}
+          optionsAvail={await getStoreOptionAvailability(createSupabaseService(), ctx.tenantId)}
+        />
       </div>
     </AdminShell>
   )

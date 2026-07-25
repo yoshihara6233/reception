@@ -14,6 +14,19 @@ export interface TenantInitial {
   opt_patrol:  boolean
   opt_alarm:   boolean
   opt_baggage: boolean
+  // 数量クォータ（null=無制限）
+  max_stores:  number | null
+  max_patrol:  number | null
+  max_alarm:   number | null
+  max_baggage: number | null
+}
+
+/** 現在の利用数（表示用・任意）。編集時のみ渡す。 */
+export interface TenantUsage {
+  stores:  number
+  patrol:  number
+  alarm:   number
+  baggage: number
 }
 
 const PLAN_LABELS: Record<Plan, string> = {
@@ -32,7 +45,9 @@ const ERR_LABELS: Record<string, string> = {
   invalid_body:    '入力内容を確認してください',
 }
 
-export function TenantForm({ mode, id, initial }: { mode: 'create' | 'edit'; id?: string; initial: TenantInitial }) {
+export function TenantForm({ mode, id, initial, usage }: {
+  mode: 'create' | 'edit'; id?: string; initial: TenantInitial; usage?: TenantUsage
+}) {
   const router = useRouter()
   const [form, setForm] = useState(initial)
   const [busy, setBusy] = useState(false)
@@ -53,6 +68,10 @@ export function TenantForm({ mode, id, initial }: { mode: 'create' | 'edit'; id?
       opt_patrol:  form.opt_patrol,
       opt_alarm:   form.opt_alarm,
       opt_baggage: form.opt_baggage,
+      max_stores:  form.max_stores,
+      max_patrol:  form.max_patrol,
+      max_alarm:   form.max_alarm,
+      max_baggage: form.max_baggage,
     }
 
     const res = await fetch(url, {
@@ -108,29 +127,49 @@ export function TenantForm({ mode, id, initial }: { mode: 'create' | 'edit'; id?
         <p className="mt-1 text-[11px] text-slate-500">URL 等で使う識別子。未入力可。重複不可。</p>
       </Field>
 
+      <Field label="店舗数の上限（空欄＝無制限）">
+        <div className="flex items-center gap-2">
+          <LimitInput value={form.max_stores} onChange={(v) => setForm({ ...form, max_stores: v })} />
+          {mode === 'edit' && usage && (
+            <span className="text-[11px] text-slate-500">現在 {usage.stores.toLocaleString()} 店舗</span>
+          )}
+        </div>
+        <p className="mt-1 text-[11px] text-slate-500">この上限に達すると、このテナントで新しい店舗を作成できません。</p>
+      </Field>
+
       <fieldset className="rounded border border-slate-200 p-3">
         <legend className="px-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">
           オプション機能（有料）
         </legend>
         <p className="mb-2 text-[11px] text-slate-500">
-          Monitor + BCP は基本パック（常時有効）。以下を無効にすると、対応メニューがこのテナントで非表示になります。
+          Monitor + BCP は基本パック（常時有効）。チェックで契約有効化（対応メニュー可視）。
+          「ON上限」は、その機能を<b>店舗別にON</b>にできる店舗数の上限（空欄＝無制限）。
         </p>
-        <div className="space-y-1.5">
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={form.opt_patrol}
-                   onChange={(e) => setForm({ ...form, opt_patrol: e.target.checked })} />
-            巡回（AI警備 / <span className="font-mono text-xs">/security</span>）
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={form.opt_alarm}
-                   onChange={(e) => setForm({ ...form, opt_alarm: e.target.checked })} />
-            発報（アラーム / <span className="font-mono text-xs">/alarms</span>）
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={form.opt_baggage}
-                   onChange={(e) => setForm({ ...form, opt_baggage: e.target.checked })} />
-            手荷物検査（<span className="font-mono text-xs">/baggage</span>・検査設定）
-          </label>
+        <div className="space-y-2.5">
+          <OptionRow
+            label="巡回（AI警備 / /security）"
+            checked={form.opt_patrol}
+            onChecked={(c) => setForm({ ...form, opt_patrol: c })}
+            max={form.max_patrol}
+            onMax={(v) => setForm({ ...form, max_patrol: v })}
+            usage={mode === 'edit' ? usage?.patrol : undefined}
+          />
+          <OptionRow
+            label="発報（アラーム / /alarms）"
+            checked={form.opt_alarm}
+            onChecked={(c) => setForm({ ...form, opt_alarm: c })}
+            max={form.max_alarm}
+            onMax={(v) => setForm({ ...form, max_alarm: v })}
+            usage={mode === 'edit' ? usage?.alarm : undefined}
+          />
+          <OptionRow
+            label="手荷物検査（/baggage・検査設定）"
+            checked={form.opt_baggage}
+            onChecked={(c) => setForm({ ...form, opt_baggage: c })}
+            max={form.max_baggage}
+            onMax={(v) => setForm({ ...form, max_baggage: v })}
+            usage={mode === 'edit' ? usage?.baggage : undefined}
+          />
         </div>
       </fieldset>
 
@@ -157,5 +196,56 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">{label}</span>
       {children}
     </label>
+  )
+}
+
+/** 数量上限の入力。空欄=無制限(null)。 */
+function LimitInput({ value, onChange }: { value: number | null; onChange: (v: number | null) => void }) {
+  return (
+    <input
+      type="number"
+      min={0}
+      max={100000}
+      value={value ?? ''}
+      placeholder="無制限"
+      onChange={(e) => {
+        const raw = e.target.value.trim()
+        if (raw === '') return onChange(null)
+        const n = Math.max(0, Math.trunc(Number(raw)))
+        onChange(Number.isFinite(n) ? n : null)
+      }}
+      className="w-28 rounded border border-slate-300 px-2 py-1.5 text-sm font-mono tabular-nums"
+    />
+  )
+}
+
+/** オプション1行: ON/OFF（契約）＋ ON上限（店舗数）＋ 現在ON数。 */
+function OptionRow({
+  label, checked, onChecked, max, onMax, usage,
+}: {
+  label: string
+  checked: boolean
+  onChecked: (c: boolean) => void
+  max: number | null
+  onMax: (v: number | null) => void
+  usage?: number
+}) {
+  const over = usage != null && max != null && usage > max
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-slate-100 pb-2 last:border-b-0 last:pb-0">
+      <label className="flex min-w-[16rem] items-center gap-2 text-sm">
+        <input type="checkbox" checked={checked} onChange={(e) => onChecked(e.target.checked)} />
+        {label}
+      </label>
+      <span className="flex items-center gap-1.5 text-[11px] text-slate-500">
+        ON上限
+        <LimitInput value={max} onChange={onMax} />
+      </span>
+      {usage != null && (
+        <span className={`text-[11px] tabular-nums ${over ? 'font-bold text-red-600' : 'text-slate-500'}`}>
+          現在ON {usage.toLocaleString()}{max != null ? ` / ${max.toLocaleString()}` : ''} 店舗
+        </span>
+      )}
+    </div>
   )
 }
