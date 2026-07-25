@@ -31,7 +31,12 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
 
   const svc = createSupabaseService()
-  const res = await finalizeMonthlyReport(svc, ctx.tenantId, parsed.data.ym, user.id)
-  if (!res.ok) return NextResponse.json({ error: res.error ?? 'finalize_failed' }, { status: 500 })
-  return NextResponse.json({ ok: true, ym: res.ym, pdfUrl: res.pdfUrl, storeCount: res.storeCount })
+  try {
+    const res = await finalizeMonthlyReport(svc, ctx.tenantId, parsed.data.ym, user.id)
+    if (!res.ok) return NextResponse.json({ error: res.error ?? 'finalize_failed' }, { status: 500 })
+    return NextResponse.json({ ok: true, ym: res.ym, pdfUrl: res.pdfUrl, storeCount: res.storeCount })
+  } catch (e) {
+    // 未捕捉例外の内容を返して原因を可視化する（500 の中身が見えるように）。
+    return NextResponse.json({ error: `exception: ${String((e as Error)?.message ?? e)}` }, { status: 500 })
+  }
 }
