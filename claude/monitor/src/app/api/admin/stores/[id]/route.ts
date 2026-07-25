@@ -46,6 +46,9 @@ export async function PUT(
   const canManageOptions = ['super_admin', 'tenant_admin'].includes(guard.profile.role)
   const wantsOptionChange = OPTION_KEYS.some((o) => parsed.data[OPTION_STORE_COL[o]] !== undefined)
 
+  // 数量上限は「保存は許可・超過は警告」のソフト運用。未契約のみハード拒否。
+  const warnings: string[] = []
+
   if (wantsOptionChange) {
     if (!canManageOptions) {
       // 権限外のロールは opt_* を変更させない（他項目の編集は通す）。
@@ -68,17 +71,12 @@ export async function PUT(
         if (next === undefined) continue
         const prev = !!cur[col]
         if (next && !prev) {
-          // OFF → ON: 契約必須＋クォータ内（自店舗は除外して数える）。
+          // OFF → ON: 契約はハード必須。上限超過は警告（自店舗は除外して数える）。
           if (!contract[opt]) {
             return NextResponse.json({ error: 'option_not_contracted', option: opt }, { status: 409 })
           }
           const onCount = await getOptionOnCount(svc, tenantId, opt as OptionKey, id)
-          if (exceedsStoreLimit(limits[opt], onCount, 1)) {
-            return NextResponse.json(
-              { error: 'option_limit_exceeded', option: opt, current: onCount, limit: limits[opt] },
-              { status: 409 },
-            )
-          }
+          if (exceedsStoreLimit(limits[opt], onCount, 1)) warnings.push(`option_limit_exceeded:${opt}`)
         }
       }
     }
@@ -86,5 +84,5 @@ export async function PUT(
 
   const { error } = await guard.supa.from('stores').update(patch).eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, warnings })
 }

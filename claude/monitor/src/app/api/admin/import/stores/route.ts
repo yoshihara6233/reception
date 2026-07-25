@@ -28,7 +28,7 @@ import {
   OPTION_KEYS, OPTION_STORE_COL, type OptionKey,
 } from '@/lib/admin/tenant-quota'
 
-interface RowResult { row: number; ok: boolean; id?: string; error?: string }
+interface RowResult { row: number; ok: boolean; id?: string; error?: string; warning?: string }
 
 // テナント毎の見込み（行をまたいで加減算する）。
 interface TenantProjection {
@@ -123,13 +123,15 @@ export async function POST(req: NextRequest) {
 
     const p = tenantId ? await projFor(tenantId) : null
 
-    // 店舗数上限（新規挿入のみ）。
+    // 数量上限は「登録は許可・超過は警告」。未契約のみハード拒否。
+    const rowWarnings: string[] = []
+
+    // 店舗数上限（新規挿入のみ）＝超過は警告（挿入は続行）。
     if (!isUpdate && p && p.storeLimit != null && p.storeCount + 1 > p.storeLimit) {
-      results.push({ row: i + 2, ok: false, error: 'store_limit_exceeded' })
-      continue
+      rowWarnings.push('store_limit_exceeded')
     }
 
-    // オプション ON 判定（契約＋クォータ）。ON へ増える分のみ検査、差分を反映。
+    // オプション ON 判定。未契約はハード拒否・上限超過は警告。ON へ増える分のみ判定。
     let optError: string | null = null
     if (p) {
       for (const o of OPTION_KEYS) {
@@ -139,7 +141,7 @@ export async function POST(req: NextRequest) {
         if (next && !before) {
           if (!p.contract[o]) { optError = `option_not_contracted:${o}`; break }
           if (p.optLimit[o] != null && p.optOn[o] + 1 > p.optLimit[o]!) {
-            optError = `option_limit_exceeded:${o}`; break
+            rowWarnings.push(`option_limit_exceeded:${o}`)
           }
         }
       }
@@ -160,7 +162,7 @@ export async function POST(req: NextRequest) {
       .single()
     if (error) { results.push({ row: i + 2, ok: false, error: error.message }); continue }
 
-    results.push({ row: i + 2, ok: true, id: data.id })
+    results.push({ row: i + 2, ok: true, id: data.id, warning: rowWarnings.join(' / ') || undefined })
 
     // 見込み数の反映（成功時）。
     if (p) {
@@ -175,7 +177,8 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const okCount  = results.filter((r) => r.ok).length
-  const errCount = results.length - okCount
-  return NextResponse.json({ total: results.length, ok: okCount, error: errCount, results })
+  const okCount   = results.filter((r) => r.ok).length
+  const errCount  = results.length - okCount
+  const warnCount = results.filter((r) => r.ok && r.warning).length
+  return NextResponse.json({ total: results.length, ok: okCount, error: errCount, warning: warnCount, results })
 }

@@ -57,16 +57,13 @@ export async function POST(req: NextRequest) {
   // テナントの上限・契約を読む（フェイルオープン: 列未適用/失敗は無制限扱い）。
   const { limits, contract } = await getTenantQuota(svc, tenantId)
 
-  // 店舗数上限。既存 + 1 が上限超過なら作成不可。
-  const storeCount = await getStoreCount(svc, tenantId)
-  if (exceedsStoreLimit(limits.stores, storeCount, 1)) {
-    return NextResponse.json(
-      { error: 'store_limit_exceeded', current: storeCount, limit: limits.stores },
-      { status: 409 },
-    )
-  }
+  // 数量上限は「登録は許可・超過は警告」のソフト運用。契約(未契約)のみハード。
+  const warnings: string[] = []
 
-  // 作成時に ON 指定されたオプションを検査（テナント契約＋クォータ内）。
+  const storeCount = await getStoreCount(svc, tenantId)
+  if (exceedsStoreLimit(limits.stores, storeCount, 1)) warnings.push('store_limit_exceeded')
+
+  // 作成時に ON 指定されたオプション。未契約はハード拒否・上限超過は警告。
   const wantOpts: Record<OptionKey, boolean> = {
     patrol:  !!body.opt_patrol,
     alarm:   !!body.opt_alarm,
@@ -78,12 +75,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'option_not_contracted', option: opt }, { status: 409 })
     }
     const onCount = await getOptionOnCount(svc, tenantId, opt)
-    if (exceedsStoreLimit(limits[opt], onCount, 1)) {
-      return NextResponse.json(
-        { error: 'option_limit_exceeded', option: opt, current: onCount, limit: limits[opt] },
-        { status: 409 },
-      )
-    }
+    if (exceedsStoreLimit(limits[opt], onCount, 1)) warnings.push(`option_limit_exceeded:${opt}`)
   }
 
   const lat = body.latitude ?? null
@@ -116,5 +108,5 @@ export async function POST(req: NextRequest) {
     changes:     { name: body.name, tenant_id: tenantId, area_code: body.area_code ?? null },
   })
 
-  return NextResponse.json({ ok: true, id: data.id })
+  return NextResponse.json({ ok: true, id: data.id, warnings })
 }

@@ -3,10 +3,10 @@
 /**
  * 店舗別オプション（巡回/発報/検査）の ON/OFF ピッカー。店舗新規・編集フォーム共用。
  *
- * 各オプションは「テナントが契約済み(contracted)」かつ「ON にできる店舗数の
- * 上限(limit)内」のときだけ ON にできる。既に ON の店舗は onCount から除外して
- * 渡す想定（編集時は自店舗を除く）ため、`checked` が false のときのみ残数で判定する。
- * 強制の本体はサーバAPI側（ここはUIガイド）。
+ * 各オプションは「テナントが契約済み(contracted)」であれば ON にできる。数量上限
+ * (limit)は**ソフト運用**＝超過しても ON 可能で、超過時は警告表示のみ（ブロックしない）。
+ * 未契約(contracted=false)のみ ON 不可（チェックボックス無効）。onCount は自店舗を
+ * 除外して渡す想定（編集時は自店舗を除く）。強制/警告の本体はサーバAPI側（ここはUIガイド）。
  */
 export interface OptAvail {
   contracted: boolean
@@ -43,19 +43,24 @@ export function StoreOptionsFieldset({
         利用オプション（この店舗）
       </legend>
       <p className="mb-2 text-[11px] text-slate-500">
-        テナントが契約し、かつ上限に空きがある機能のみ ON にできます。
+        テナントが契約している機能を ON にできます。上限を超えても登録は可能で、超過時は
+        <b className="text-amber-600">警告</b>を表示します（未契約の機能は ON にできません）。
       </p>
       <div className="space-y-2">
         {ROWS.map(({ key, avail: ak, label }) => {
           const a = avail[ak]
           const checked = value[key]
-          const remaining = a.limit == null ? null : Math.max(0, a.limit - a.onCount)
-          const canTurnOn = a.contracted && (a.limit == null || a.onCount < a.limit)
-          const disabled = !checked && !canTurnOn
+          const disabled = !a.contracted && !checked         // 未契約は新規ONのみ不可
+          const used = a.onCount + (checked ? 1 : 0)          // この店舗を ON にした場合の使用数
+          const over = a.limit != null && used > a.limit      // 上限超過（登録は可・警告）
           let note = ''
-          if (!a.contracted) note = 'テナント未契約'
-          else if (remaining != null) note = `残り ${remaining.toLocaleString()} / 上限 ${a.limit!.toLocaleString()} 店舗`
-          else note = '上限なし'
+          let tone = 'text-slate-500'
+          if (!a.contracted) { note = 'テナント未契約'; tone = 'text-amber-600' }
+          else if (a.limit == null) { note = '上限なし' }
+          else {
+            note = `${used.toLocaleString()} / 上限 ${a.limit.toLocaleString()} 店舗` + (over ? '（上限超過・警告）' : '')
+            tone = over ? 'text-amber-600 font-bold' : 'text-slate-500'
+          }
           return (
             <div key={key} className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <label className={`flex min-w-[15rem] items-center gap-2 text-sm ${disabled ? 'text-slate-400' : ''}`}>
@@ -67,9 +72,7 @@ export function StoreOptionsFieldset({
                 />
                 {label}
               </label>
-              <span className={`text-[11px] ${!a.contracted ? 'text-amber-600' : disabled ? 'text-red-600' : 'text-slate-500'}`}>
-                {note}
-              </span>
+              <span className={`text-[11px] ${tone}`}>{note}</span>
             </div>
           )
         })}

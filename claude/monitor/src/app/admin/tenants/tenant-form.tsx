@@ -131,10 +131,13 @@ export function TenantForm({ mode, id, initial, usage }: {
         <div className="flex items-center gap-2">
           <LimitInput value={form.max_stores} onChange={(v) => setForm({ ...form, max_stores: v })} />
           {mode === 'edit' && usage && (
-            <span className="text-[11px] text-slate-500">現在 {usage.stores.toLocaleString()} 店舗</span>
+            <span className={`text-[11px] ${form.max_stores != null && usage.stores > form.max_stores ? 'font-bold text-amber-600' : 'text-slate-500'}`}>
+              現在 {usage.stores.toLocaleString()} 店舗
+              {form.max_stores != null && usage.stores > form.max_stores && '（上限超過・警告）'}
+            </span>
           )}
         </div>
-        <p className="mt-1 text-[11px] text-slate-500">この上限に達すると、このテナントで新しい店舗を作成できません。</p>
+        <p className="mt-1 text-[11px] text-slate-500">上限を超えても店舗は作成できます（超過時は警告を表示）。</p>
       </Field>
 
       <fieldset className="rounded border border-slate-200 p-3">
@@ -143,7 +146,7 @@ export function TenantForm({ mode, id, initial, usage }: {
         </legend>
         <p className="mb-2 text-[11px] text-slate-500">
           Monitor + BCP は基本パック（常時有効）。チェックで契約有効化（対応メニュー可視）。
-          「ON上限」は、その機能を<b>店舗別にON</b>にできる店舗数の上限（空欄＝無制限）。
+          「ON上限」は、その機能を<b>店舗別にON</b>にできる店舗数の上限（空欄＝無制限）。上限を超えても登録は可能で、超過時は<b className="text-amber-600">警告</b>表示。
         </p>
         <div className="space-y-2.5">
           <OptionRow
@@ -242,8 +245,9 @@ function OptionRow({
         <LimitInput value={max} onChange={onMax} />
       </span>
       {usage != null && (
-        <span className={`text-[11px] tabular-nums ${over ? 'font-bold text-red-600' : 'text-slate-500'}`}>
+        <span className={`text-[11px] tabular-nums ${over ? 'font-bold text-amber-600' : 'text-slate-500'}`}>
           現在ON {usage.toLocaleString()}{max != null ? ` / ${max.toLocaleString()}` : ''} 店舗
+          {over && '（上限超過・警告）'}
         </span>
       )}
     </div>
