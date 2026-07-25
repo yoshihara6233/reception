@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Globe } from 'lucide-react'
 import { StoreOptionsFieldset, type StoreOptionsAvail, type StoreOptionState } from '../StoreOptionsFieldset'
@@ -138,6 +139,10 @@ export function StoreEditForm({
       )}
 
       <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+        <Link href="/admin/stores"
+              className="rounded border border-slate-300 bg-white px-4 py-1.5 text-sm text-slate-600 hover:bg-slate-50">
+          一覧
+        </Link>
         <button type="submit" disabled={busy}
                 className="rounded bg-blue-600 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50">
           {busy ? '保存中…' : '保存'}

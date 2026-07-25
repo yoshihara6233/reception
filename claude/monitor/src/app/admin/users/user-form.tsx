@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
 export type Role = 'super_admin' | 'tenant_admin' | 'store_manager' | 'baggage_manager' | 'viewer'
@@ -208,13 +209,12 @@ export function UserForm({ mode, id, initial, tenants, stores, canCreateSuperAdm
       {done && <p className="rounded bg-emerald-50 px-3 py-2 text-xs text-emerald-700">保存しました</p>}
 
       <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
-        <button
-          type="button"
-          onClick={() => router.push('/admin/users')}
-          className="rounded border border-slate-300 bg-white px-4 py-1.5 text-sm text-slate-600"
+        <Link
+          href="/admin/users"
+          className="rounded border border-slate-300 bg-white px-4 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
         >
           キャンセル
-        </button>
+        </Link>
         <button
           type="submit"
           disabled={busy}
