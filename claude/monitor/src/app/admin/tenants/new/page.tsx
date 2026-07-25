@@ -29,6 +29,7 @@ export default async function NewTenantPage() {
           initial={{
             name: '', plan: 'starter', status: 'trial', slug: null,
             opt_patrol: false, opt_alarm: false, opt_baggage: false,
+            max_stores: null, max_patrol: null, max_alarm: null, max_baggage: null,
           }}
         />
       </div>

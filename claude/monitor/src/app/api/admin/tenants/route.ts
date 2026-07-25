@@ -25,6 +25,11 @@ const Body = z.object({
   opt_patrol:  z.boolean().default(false),
   opt_alarm:   z.boolean().default(false),
   opt_baggage: z.boolean().default(false),
+  // 数量クォータ（null/未指定=無制限）。店舗数と、各オプションを ON にできる店舗数。
+  max_stores:  z.number().int().min(0).max(100000).nullable().optional(),
+  max_patrol:  z.number().int().min(0).max(100000).nullable().optional(),
+  max_alarm:   z.number().int().min(0).max(100000).nullable().optional(),
+  max_baggage: z.number().int().min(0).max(100000).nullable().optional(),
 })
 
 export async function POST(req: NextRequest) {
@@ -44,6 +49,10 @@ export async function POST(req: NextRequest) {
   const insert: Record<string, unknown> = {
     name: body.name, plan: body.plan, status: body.status,
     opt_patrol: body.opt_patrol, opt_alarm: body.opt_alarm, opt_baggage: body.opt_baggage,
+    max_stores:  body.max_stores  ?? null,
+    max_patrol:  body.max_patrol  ?? null,
+    max_alarm:   body.max_alarm   ?? null,
+    max_baggage: body.max_baggage ?? null,
   }
   if (body.slug) insert.slug = body.slug
 

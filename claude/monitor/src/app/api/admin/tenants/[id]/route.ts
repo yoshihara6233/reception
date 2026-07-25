@@ -19,6 +19,11 @@ const Body = z.object({
   opt_patrol:  z.boolean().optional(),
   opt_alarm:   z.boolean().optional(),
   opt_baggage: z.boolean().optional(),
+  // 数量クォータ（null=無制限へ戻す）。
+  max_stores:  z.number().int().min(0).max(100000).nullable().optional(),
+  max_patrol:  z.number().int().min(0).max(100000).nullable().optional(),
+  max_alarm:   z.number().int().min(0).max(100000).nullable().optional(),
+  max_baggage: z.number().int().min(0).max(100000).nullable().optional(),
 })
 
 export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {

@@ -12,6 +12,7 @@ interface Row {
   status: string
   slug: string | null
   created_at: string
+  max_stores: number | null
   stores: { count: number }[]
 }
 
@@ -38,7 +39,7 @@ export default async function TenantsAdmin() {
   const svc = createSupabaseService()
   const { data } = await svc
     .from('tenants')
-    .select('id, name, plan, status, slug, created_at, stores(count)')
+    .select('id, name, plan, status, slug, created_at, max_stores, stores(count)')
     .order('name')
   const rows = (data ?? []) as Row[]
 
@@ -59,7 +60,7 @@ export default async function TenantsAdmin() {
                 <th className="px-3 py-2 text-left">プラン</th>
                 <th className="px-3 py-2 text-left">ステータス</th>
                 <th className="px-3 py-2 text-left">スラッグ</th>
-                <th className="px-3 py-2 text-left">店舗数</th>
+                <th className="px-3 py-2 text-left">店舗数 / 上限</th>
                 <th className="px-3 py-2"></th>
               </tr>
             </thead>
@@ -74,7 +75,10 @@ export default async function TenantsAdmin() {
                     </span>
                   </td>
                   <td className="px-3 py-2 font-mono text-[11px] text-slate-500">{t.slug ?? '—'}</td>
-                  <td className="px-3 py-2 tabular-nums">{t.stores?.[0]?.count ?? 0}</td>
+                  <td className="px-3 py-2 tabular-nums">
+                    {(t.stores?.[0]?.count ?? 0).toLocaleString()}
+                    <span className="text-slate-400"> / {t.max_stores == null ? '∞' : t.max_stores.toLocaleString()}</span>
+                  </td>
                   <td className="px-3 py-2 text-right">
                     <div className="flex items-center justify-end gap-3">
                       <ActAsTenantButton tenantId={t.id} />

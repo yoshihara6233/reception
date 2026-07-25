@@ -18,12 +18,25 @@ export default async function EditTenantPage({ params }: { params: Promise<{ id:
   const svc = createSupabaseService()
   const { data: tenant } = await svc
     .from('tenants')
-    .select('id, name, plan, status, slug, opt_patrol, opt_alarm, opt_baggage, stores(count)')
+    .select('id, name, plan, status, slug, opt_patrol, opt_alarm, opt_baggage, max_stores, max_patrol, max_alarm, max_baggage, stores(count)')
     .eq('id', id)
     .single()
   if (!tenant) notFound()
 
   const storeCount = (tenant.stores as { count: number }[] | null)?.[0]?.count ?? 0
+
+  // 各オプションが ON の店舗数（クォータ表示用）。
+  const countOn = async (col: 'opt_patrol' | 'opt_alarm' | 'opt_baggage') => {
+    const { count } = await svc
+      .from('stores')
+      .select('id', { count: 'exact', head: true })
+      .eq('tenant_id', id)
+      .eq(col, true)
+    return count ?? 0
+  }
+  const [patrolOn, alarmOn, baggageOn] = await Promise.all([
+    countOn('opt_patrol'), countOn('opt_alarm'), countOn('opt_baggage'),
+  ])
 
   return (
     <AdminShell pathname="/admin/tenants" section="admin">
@@ -55,7 +68,12 @@ export default async function EditTenantPage({ params }: { params: Promise<{ id:
             opt_patrol:  !!tenant.opt_patrol,
             opt_alarm:   !!tenant.opt_alarm,
             opt_baggage: !!tenant.opt_baggage,
+            max_stores:  (tenant.max_stores  ?? null) as number | null,
+            max_patrol:  (tenant.max_patrol  ?? null) as number | null,
+            max_alarm:   (tenant.max_alarm   ?? null) as number | null,
+            max_baggage: (tenant.max_baggage ?? null) as number | null,
           }}
+          usage={{ stores: storeCount, patrol: patrolOn, alarm: alarmOn, baggage: baggageOn }}
         />
       </div>
     </AdminShell>
