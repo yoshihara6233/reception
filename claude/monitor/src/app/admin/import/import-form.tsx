@@ -9,6 +9,22 @@ interface Result {
   results: { row: number; ok: boolean; id?: string; error?: string }[]
 }
 
+const OPT_JA: Record<string, string> = { patrol: '巡回', alarm: '発報', baggage: '手荷物検査' }
+
+/** 行エラーコードを日本語に。`code:option` 形式も扱う。 */
+function rowErrorLabel(code?: string): string {
+  if (!code) return 'エラー'
+  const [base, opt] = code.split(':')
+  const optJa = opt ? OPT_JA[opt] ?? opt : ''
+  switch (base) {
+    case 'name_required':          return '店舗名(name)が空です'
+    case 'store_limit_exceeded':   return '店舗数が上限に達しています'
+    case 'option_not_contracted':  return `${optJa}はテナント未契約のため ON にできません`
+    case 'option_limit_exceeded':  return `${optJa}を ON にできる店舗数が上限に達しています`
+    default:                       return code
+  }
+}
+
 export function ImportForm({
   kind,
   title,
@@ -75,7 +91,7 @@ export function ImportForm({
           {res.error > 0 && (
             <ul className="max-h-40 overflow-auto text-[11px] text-red-700">
               {res.results.filter((r) => !r.ok).slice(0, 50).map((r) => (
-                <li key={r.row}>行 {r.row}: {r.error}</li>
+                <li key={r.row}>行 {r.row}: {rowErrorLabel(r.error)}</li>
               ))}
               {res.results.filter((r) => !r.ok).length > 50 && <li>… 他</li>}
             </ul>

@@ -19,12 +19,13 @@ export default async function ImportPage() {
           help={
             <ul className="list-disc pl-4">
               <li><b>必須列:</b> <code>name</code></li>
-              <li><b>任意列:</b> <code>address, area_code, latitude, longitude, timezone, tenant_id, external_id</code></li>
+              <li><b>任意列:</b> <code>address, area_code, latitude, longitude, timezone, tenant_id, external_id, opt_patrol, opt_alarm, opt_baggage</code></li>
               <li><code>external_id</code>（既存 UUID）一致時は更新、なければ新規作成</li>
               <li>緯度経度を空にすると後でジオコーディング</li>
+              <li><code>opt_patrol / opt_alarm / opt_baggage</code>：巡回/発報/検査の ON/OFF（<code>true</code>/<code>false</code>・空=OFF）。列を付けた行だけ反映。ON はテナント契約済み＋上限内が必要（超過行は失敗）</li>
             </ul>
           }
-          example={`name,address,area_code,latitude,longitude\n渋谷南店,東京都渋谷区道玄坂1-2-3,KANTO,35.658,139.701\n大阪梅田店,大阪府大阪市北区梅田1-1-3,KANSAI,34.703,135.498`}
+          example={`name,address,area_code,latitude,longitude,opt_patrol,opt_alarm,opt_baggage\n渋谷南店,東京都渋谷区道玄坂1-2-3,KANTO,35.658,139.701,true,true,false\n大阪梅田店,大阪府大阪市北区梅田1-1-3,KANSAI,34.703,135.498,false,false,true`}
         />
         <ImportForm
           kind="cameras"
