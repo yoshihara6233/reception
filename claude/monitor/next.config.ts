@@ -30,6 +30,17 @@ const config: NextConfig = {
       './node_modules/pdfkit/js/data/**',
       '../../node_modules/.bun/pdfkit@*/node_modules/pdfkit/js/data/**',
     ],
+    // 月次確定レポート PDF（手動確定API・自動 cron）も同フォント/pdfkit data を同梱。
+    '/api/admin/reports/monthly': [
+      './fonts/**',
+      './node_modules/pdfkit/js/data/**',
+      '../../node_modules/.bun/pdfkit@*/node_modules/pdfkit/js/data/**',
+    ],
+    '/api/cron/monthly-report': [
+      './fonts/**',
+      './node_modules/pdfkit/js/data/**',
+      '../../node_modules/.bun/pdfkit@*/node_modules/pdfkit/js/data/**',
+    ],
   },
   images: {
     remotePatterns: [
