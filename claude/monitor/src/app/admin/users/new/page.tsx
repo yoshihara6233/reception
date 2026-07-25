@@ -21,17 +21,21 @@ export default async function NewUserPage() {
 
   // テナント文脈（super_admin=操作中テナント / tenant_admin=自テナント）。
   const ctx = await resolveAdminContext(supa)
+  // super_admin が操作中テナントを選択している間は、そのテナントに固定。
+  const acting = me.role === 'super_admin' && ctx.acting
 
-  // Fetch tenants + stores for picker
+  // Fetch tenants + stores for picker。
+  // テナント分離: 操作中(acting)の間は店舗ピッカーも操作中テナントに絞る
+  // （従来は全テナントの店舗名・IDをクライアントへ送っていた＝他テナント漏洩）。
+  let storesQuery = supa.from('stores').select('id, name, tenant_id').order('name')
+  if (acting && ctx.tenantId) storesQuery = storesQuery.eq('tenant_id', ctx.tenantId)
   const [{ data: tenantsAll }, { data: stores }] = await Promise.all([
     supa.from('tenants').select('id, name').order('name'),
-    supa.from('stores').select('id, name, tenant_id').order('name'),
+    storesQuery,
   ])
 
-  // super_admin が操作中テナントを選択している間は、そのテナントに固定して
-  // 作成する（picker には対象テナントのみ表示・super_admin ロールの作成は不可）。
+  // picker には対象テナントのみ表示（super_admin ロールの作成は不可）。
   // 未選択の super_admin は従来どおり全テナント選択可（運営としての作成）。
-  const acting = me.role === 'super_admin' && ctx.acting
   const tenants = acting
     ? ((tenantsAll ?? []) as TenantOpt[]).filter((t) => t.id === ctx.tenantId)
     : ((tenantsAll ?? []) as TenantOpt[])
