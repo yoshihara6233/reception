@@ -74,7 +74,13 @@ export async function finalizeMonthlyReport(
   const generatedAt = new Date().toISOString()
 
   // PDF 生成 → 保存（reports/monthly/<tenant>/<ym>.pdf・上書き）。
-  const pdf = await buildMonthlyReportPdf({ tenantName, ym, generatedAt, totals, stores, contract, reg })
+  // 例外（フォント/pdfkit 未同梱の ENOENT 等）を握って原因を返す。
+  let pdf: Buffer
+  try {
+    pdf = await buildMonthlyReportPdf({ tenantName, ym, generatedAt, totals, stores, contract, reg })
+  } catch (e) {
+    return { ok: false, error: `pdf build: ${String((e as Error)?.message ?? e)}`, ym }
+  }
   const key = `monthly/${tenantId}/${ym}.pdf`
   const { error: upErr } = await svc.storage.from(BUCKET).upload(key, pdf, { contentType: 'application/pdf', upsert: true })
   if (upErr) return { ok: false, error: `pdf upload: ${upErr.message}`, ym }
