@@ -6,6 +6,7 @@ import { MONITOR_STALE_SECONDS } from '@intereco/shared'
 import { listPatrolCameraIds, buildCaptureCommand } from '@/lib/security/patrol-dispatch'
 import { generateAndStoreRunReport } from '@/lib/security/patrol-report'
 import { recordFootageAccess } from '@/lib/audit/footage-access'
+import { isStoreOptionEnabled } from '@/lib/admin/tenant-quota'
 
 export interface ReportSnapshot { url: string; camera: string; at: string }
 
@@ -119,6 +120,11 @@ async function dispatchManualPatrol(
     .eq('store_id', storeId)
     .maybeSingle()
   if (!edge) return { ok: false, error: 'エッジ未登録／権限なし' }
+
+  // Phase2: 店舗別オプション（巡回）ゲート。opt_patrol=false は手動巡回も不可。
+  if (!(await isStoreOptionEnabled(service, storeId, 'patrol'))) {
+    return { ok: false, error: '巡回オプションが無効です' }
+  }
 
   const staleMs = MONITOR_STALE_SECONDS * 1000
   const fresh = edge.last_seen_at && (Date.now() - new Date(edge.last_seen_at).getTime()) < staleMs

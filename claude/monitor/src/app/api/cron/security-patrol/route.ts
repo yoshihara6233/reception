@@ -47,10 +47,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   const supa = createSupabaseService()
 
+  // Phase2: 店舗別オプション（巡回）ゲート。stores を inner join し opt_patrol=true の
+  // 店舗のみスケジュール対象にする（OFF 店舗はキャプチャを発行しない）。
   const { data: settings, error } = await supa
     .from('security_settings')
-    .select('store_id, enabled, schedule_mode, patrol_interval_min, active_from, active_to, active_days, patrol_times, last_run_at')
+    .select('store_id, enabled, schedule_mode, patrol_interval_min, active_from, active_to, active_days, patrol_times, last_run_at, stores!inner(opt_patrol)')
     .eq('enabled', true)
+    .eq('stores.opt_patrol', true)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   const due = (settings ?? []).filter((s) => isDue(s as PatrolSettings, jst, now, cronWindowMin))

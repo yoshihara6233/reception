@@ -43,10 +43,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const supaUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
   const supa = createSupabaseService()
 
+  // Phase2: 店舗別オプション（巡回）ゲート。opt_patrol=true の店舗のみ日報生成/送信。
   const { data: settings, error } = await supa
     .from('security_settings')
-    .select('store_id, notify_emails, stores ( name )')
+    .select('store_id, notify_emails, stores!inner ( name, opt_patrol )')
     .eq('enabled', true)
+    .eq('stores.opt_patrol', true)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   let generated = 0, skippedNoRuns = 0, skippedExists = 0, mailed = 0
