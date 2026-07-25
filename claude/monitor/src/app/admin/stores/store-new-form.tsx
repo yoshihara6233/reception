@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Globe } from 'lucide-react'
 import { StoreOptionsFieldset, type StoreOptionsAvail, type StoreOptionState } from './StoreOptionsFieldset'
+import { quotaMessage } from '@/lib/admin/quota-messages'
 
 interface FormState {
   name:      string
@@ -46,6 +47,7 @@ export function StoreNewForm({
   })
   const [busy, setBusy] = useState(false)
   const [err,  setErr]  = useState<string | null>(null)
+  const [warn, setWarn] = useState<{ id: string; msgs: string[] } | null>(null)
 
   async function geocode() {
     if (!form.address) return setErr('住所が空です')
@@ -80,9 +82,15 @@ export function StoreNewForm({
     setBusy(false)
     if (!res.ok) {
       const j = await res.json().catch(() => ({}))
-      return setErr(ERR_LABELS[j.error] ?? j.error ?? `保存失敗: ${res.status}`)
+      return setErr(ERR_LABELS[j.error] ?? (quotaMessage(j.error) || `保存失敗: ${res.status}`))
     }
     const j = await res.json()
+    const warns = (j.warnings ?? []) as string[]
+    if (warns.length) {
+      // 登録は完了。上限超過などの警告を表示し、続けて店舗設定へ誘導。
+      setWarn({ id: j.id, msgs: warns.map(quotaMessage) })
+      return
+    }
     router.push(`/admin/stores/${j.id}`)
     router.refresh()
   }
@@ -141,6 +149,21 @@ export function StoreNewForm({
                onChange={(e) => setForm({ ...form, is_active: e.target.checked })} />
         この店舗を有効にする
       </label>
+
+      {warn && (
+        <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <p className="font-bold">店舗を作成しました（警告あり）</p>
+          <ul className="mt-1 list-disc pl-4">
+            {warn.msgs.map((m, i) => <li key={i}>{m}</li>)}
+          </ul>
+          <div className="mt-2 flex gap-3">
+            <button type="button" onClick={() => { router.push(`/admin/stores/${warn.id}`); router.refresh() }}
+                    className="rounded bg-amber-600 px-3 py-1 font-medium text-white">この店舗の設定へ</button>
+            <button type="button" onClick={() => { router.push('/admin/stores'); router.refresh() }}
+                    className="rounded border border-amber-400 px-3 py-1">店舗一覧へ</button>
+          </div>
+        </div>
+      )}
 
       {err && <p className="rounded bg-red-50 px-3 py-2 text-xs text-red-700">{err}</p>}
 

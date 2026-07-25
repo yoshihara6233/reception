@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Globe } from 'lucide-react'
 import { StoreOptionsFieldset, type StoreOptionsAvail, type StoreOptionState } from '../StoreOptionsFieldset'
+import { quotaMessage } from '@/lib/admin/quota-messages'
 
 interface Initial {
   name: string
@@ -40,6 +41,7 @@ export function StoreEditForm({
   const [busy, setBusy]   = useState(false)
   const [err,  setErr]    = useState<string | null>(null)
   const [done, setDone]   = useState(false)
+  const [warn, setWarn]   = useState<string[]>([])
 
   async function geocode() {
     if (!form.address) return setErr('住所が空です')
@@ -53,7 +55,7 @@ export function StoreEditForm({
 
   async function save(e: React.FormEvent) {
     e.preventDefault()
-    setBusy(true); setErr(null); setDone(false)
+    setBusy(true); setErr(null); setDone(false); setWarn([])
     const body = {
       name: form.name, address: form.address, area_code: form.area_code,
       latitude: form.latitude, longitude: form.longitude, timezone: form.timezone,
@@ -68,8 +70,10 @@ export function StoreEditForm({
     setBusy(false)
     if (!res.ok) {
       const j = await res.json().catch(() => ({}))
-      return setErr(ERR_LABELS[j.error] ?? j.error ?? `保存失敗: ${res.status}`)
+      return setErr(ERR_LABELS[j.error] ?? (quotaMessage(j.error) || `保存失敗: ${res.status}`))
     }
+    const j = await res.json().catch(() => ({}))
+    setWarn(((j.warnings ?? []) as string[]).map(quotaMessage))
     setDone(true)
     router.refresh()
   }
@@ -125,7 +129,13 @@ export function StoreEditForm({
       </label>
 
       {err  && <p className="rounded bg-red-50 px-3 py-2 text-xs text-red-700">{err}</p>}
-      {done && <p className="rounded bg-emerald-50 px-3 py-2 text-xs text-emerald-700">保存しました</p>}
+      {done && warn.length === 0 && <p className="rounded bg-emerald-50 px-3 py-2 text-xs text-emerald-700">保存しました</p>}
+      {done && warn.length > 0 && (
+        <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <p className="font-bold">保存しました（警告あり）</p>
+          <ul className="mt-1 list-disc pl-4">{warn.map((m, i) => <li key={i}>{m}</li>)}</ul>
+        </div>
+      )}
 
       <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
         <button type="submit" disabled={busy}

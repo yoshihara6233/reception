@@ -1,12 +1,14 @@
 'use client'
 
 import { useState } from 'react'
+import { quotaMessage } from '@/lib/admin/quota-messages'
 
 interface Result {
-  total: number
-  ok:    number
-  error: number
-  results: { row: number; ok: boolean; id?: string; error?: string }[]
+  total:   number
+  ok:      number
+  error:   number
+  warning?: number
+  results: { row: number; ok: boolean; id?: string; error?: string; warning?: string }[]
 }
 
 export function ImportForm({
@@ -70,14 +72,23 @@ export function ImportForm({
       {res && (
         <div className="mt-3 rounded bg-slate-50 p-3 text-xs">
           <div className="mb-2">
-            合計 <b>{res.total}</b> 件 / 成功 <b className="text-emerald-700">{res.ok}</b> / 失敗 <b className="text-red-700">{res.error}</b>
+            合計 <b>{res.total}</b> 件 / 成功 <b className="text-emerald-700">{res.ok}</b>
+            {!!res.warning && <> / 警告 <b className="text-amber-700">{res.warning}</b></>}
+            {' / '}失敗 <b className="text-red-700">{res.error}</b>
           </div>
           {res.error > 0 && (
             <ul className="max-h-40 overflow-auto text-[11px] text-red-700">
               {res.results.filter((r) => !r.ok).slice(0, 50).map((r) => (
-                <li key={r.row}>行 {r.row}: {r.error}</li>
+                <li key={r.row}>行 {r.row}: {quotaMessage(r.error) || r.error}</li>
               ))}
               {res.results.filter((r) => !r.ok).length > 50 && <li>… 他</li>}
+            </ul>
+          )}
+          {res.results.some((r) => r.ok && r.warning) && (
+            <ul className="mt-2 max-h-40 overflow-auto text-[11px] text-amber-700">
+              {res.results.filter((r) => r.ok && r.warning).slice(0, 50).map((r) => (
+                <li key={r.row}>行 {r.row}（登録済・警告）: {r.warning!.split(' / ').map(quotaMessage).join(' / ')}</li>
+              ))}
             </ul>
           )}
         </div>
