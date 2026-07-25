@@ -9,6 +9,8 @@
  */
 import Link from 'next/link'
 import { createSupabaseServer } from '@/lib/supabase/server'
+import { resolveMonitorScope } from '@/lib/tenant/monitor-scope'
+import { TenantGate } from '@/components/TenantGate'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader, LinkBtn } from '@/components/admin/PageHeader'
 import { getT } from '@/lib/i18n/server'
@@ -39,11 +41,26 @@ export default async function BcpPage() {
   const t    = await getT()
   const tBcp = t.bcpDashboard
 
+  // テナント分離: 操作中テナントの店舗イベント＋エリア全体(store_id null)のみ。未選択はゲート。
+  const scope = await resolveMonitorScope(supa)
+  if (scope.needsTenant) {
+    return (
+      <AdminShell pathname="/bcp" section="bcp">
+        <TenantGate />
+      </AdminShell>
+    )
+  }
+  // 他テナントの店舗イベントは除外。エリア全体アラート(store_id=null)は共有情報として残す。
+  const bcpFilter = scope.storeIds.length
+    ? `store_id.is.null,store_id.in.(${scope.storeIds.join(',')})`
+    : 'store_id.is.null'
+
   // F42: fetch events + reports + total-count in parallel (no more tab branching)
   const [eventsRes, reportsRes, totalRes] = await Promise.all([
     supa
       .from('bcp_events')
       .select('id, alert_type, alert_issued_at, area_code, status, is_test, created_at, stores ( id, name )')
+      .or(bcpFilter)
       .order('created_at', { ascending: false })
       .limit(500),
     supa
@@ -51,11 +68,13 @@ export default async function BcpPage() {
       .select('id, event_id, pdf_url, generated_at, sent_to_emails')
       .order('created_at', { ascending: false })
       .limit(500),
-    supa.from('bcp_events').select('id', { count: 'exact', head: true }),
+    supa.from('bcp_events').select('id', { count: 'exact', head: true }).or(bcpFilter),
   ])
 
   const eventRows  = (eventsRes.data  ?? []) as unknown as BcpEventRow[]
-  const reportRows = (reportsRes.data ?? []) as unknown as ReportRow[]
+  // レポートは可視イベントに紐づくものだけカウント（他テナントのレポートを混ぜない）。
+  const visibleEventIds = new Set(eventRows.map((e) => e.id))
+  const reportRows = ((reportsRes.data ?? []) as unknown as ReportRow[]).filter((r) => visibleEventIds.has(r.event_id))
   const totalEvents = totalRes.count ?? 0
   const generatedReports = reportRows.filter((r) => !!r.pdf_url).length
   const deliveredReports = reportRows.filter((r) => r.sent_to_emails && r.sent_to_emails.length > 0).length

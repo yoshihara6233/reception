@@ -8,6 +8,8 @@ import { createSupabaseServer } from '@/lib/supabase/server'
 import { AdminShell, ALARM_NAV } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
 import { AlarmTimeline, type AlarmEventVM } from './AlarmTimeline'
+import { resolveMonitorScope } from '@/lib/tenant/monitor-scope'
+import { TenantGate } from '@/components/TenantGate'
 
 interface EventRow {
   id: string
@@ -28,9 +30,20 @@ const nameOf = (s: { name: string } | { name: string }[] | null | undefined) =>
 export default async function AlarmsPage() {
   const supa = await createSupabaseServer()
 
+  // テナント分離: 操作中テナントの店舗の発報のみ。未選択はゲート。
+  const scope = await resolveMonitorScope(supa)
+  if (scope.needsTenant) {
+    return (
+      <AdminShell pathname="/alarms" nav={ALARM_NAV} navTitle="ALARM">
+        <TenantGate />
+      </AdminShell>
+    )
+  }
+
   const eventsRes = await supa
     .from('alarm_events')
     .select('id, store_id, source, event_type, occurred_at, snapshot_url, status, notified_at, stores ( name ), recorder_cameras ( name )')
+    .in('store_id', scope.storeIds)
     .order('occurred_at', { ascending: false })
     .limit(300)
 

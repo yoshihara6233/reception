@@ -187,7 +187,7 @@ export async function AdminShell({
 
   return (
     <div className="flex h-screen flex-col">
-      <AppHeader userName={userName} />
+      <AppHeader userName={userName} tenantName={ctx.tenantName} isSuper={ctx.isSuper} />
       <AdminShellClient nav={effectiveNav} title={effectiveTitle} pathname={pathname} initialCollapsed={collapsed}>
         {/* super_admin のみ: ①設定プレーンがどのテナントに固定されているかを常時明示 */}
         {ctx.isSuper && section === 'admin' && (

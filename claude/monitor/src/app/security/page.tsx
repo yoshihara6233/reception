@@ -10,6 +10,8 @@ import { PageHeader } from '@/components/admin/PageHeader'
 import { PatrolLauncher, type LauncherGroup } from './PatrolLauncher'
 import { prefLabel } from '@/lib/jp-prefectures'
 import { getT } from '@/lib/i18n/server'
+import { resolveMonitorScope } from '@/lib/tenant/monitor-scope'
+import { TenantGate } from '@/components/TenantGate'
 
 interface StoreRow { id: string; name: string; area_code: string | null }
 
@@ -17,10 +19,21 @@ export default async function SecurityPage() {
   const supa = await createSupabaseServer()
   const t = await getT()
 
+  // テナント分離: 操作中テナントの店舗のみ。未選択はゲート。
+  const scope = await resolveMonitorScope(supa)
+  if (scope.needsTenant) {
+    return (
+      <AdminShell pathname="/security" section="security">
+        <TenantGate />
+      </AdminShell>
+    )
+  }
+
   const { data: storeRows } = await supa
     .from('stores')
     .select('id, name, area_code')
     .eq('is_active', true)
+    .in('id', scope.storeIds)
     .order('area_code', { ascending: true, nullsFirst: false })
     .order('name')
     .limit(10_000)

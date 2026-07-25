@@ -9,6 +9,8 @@ import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
 import { SecuritySettingsTable, type SecuritySetting } from './SecuritySettingsTable'
 import { getT } from '@/lib/i18n/server'
+import { resolveMonitorScope } from '@/lib/tenant/monitor-scope'
+import { TenantGate } from '@/components/TenantGate'
 
 interface StoreRow { id: string; name: string; area_code: string | null }
 interface SettingRow {
@@ -23,10 +25,19 @@ export default async function SecuritySettingsPage() {
   const t = await getT()
   const ts = t.securitySettings
 
+  const scope = await resolveMonitorScope(supa)
+  if (scope.needsTenant) {
+    return (
+      <AdminShell pathname="/security/settings" section="security">
+        <TenantGate />
+      </AdminShell>
+    )
+  }
+
   const [storesRes, settingsRes] = await Promise.all([
-    supa.from('stores').select('id, name, area_code').eq('is_active', true)
+    supa.from('stores').select('id, name, area_code').eq('is_active', true).in('id', scope.storeIds)
       .order('area_code', { ascending: true, nullsFirst: false }).order('name').limit(10_000),
-    supa.from('security_settings').select('store_id, enabled, patrol_times, notify_emails').limit(10_000),
+    supa.from('security_settings').select('store_id, enabled, patrol_times, notify_emails').in('store_id', scope.storeIds).limit(10_000),
   ])
 
   const stores = (storesRes.data ?? []) as StoreRow[]
