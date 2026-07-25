@@ -14,10 +14,11 @@ import { PageHeader } from '@/components/admin/PageHeader'
 import { jstDateStr } from '@/lib/baggage/unmatch'
 import { missingCriticalEnv } from '@/lib/ops/env-check'
 import {
-  monthBounds, trendBounds, confirmRatePct, prevMonth, WEEKDAY_JA, type UsageMetrics,
+  monthBounds, trendBounds, confirmRatePct, prevMonth, type UsageMetrics,
 } from '@/lib/reports/usage'
 import { UsageStoreTable } from './UsageStoreTable'
 import { MonthlyFinalize } from './MonthlyFinalize'
+import { WeekdayChart } from './WeekdayChart'
 
 interface StoreRow extends UsageMetrics { store_id: string; store_name: string }
 interface WeekdayRow { dow: number; patrol_count: number; alarm_count: number; inspection_count: number; baggage_exit_count: number; baggage_confirmed_count: number; face_auth_attempts: number; video_live_count: number; footage_access_count: number }
@@ -228,7 +229,7 @@ export default async function UsageReportPage({
         {/* 曜日別 */}
         <section>
           <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">曜日別（{monthLabel}・合計）</h2>
-          <WeekdayBars rows={weekday} />
+          <WeekdayChart rows={weekday} />
         </section>
 
         {/* 月次推移 */}
@@ -282,39 +283,6 @@ function RegCard({ label, used, limit }: { label: string; used: number; limit: n
         {used.toLocaleString()} <span className="text-slate-400">/ {limit == null ? '∞' : limit.toLocaleString()}</span>
       </div>
       {over && <div className="text-[11px] font-bold text-amber-600">上限超過</div>}
-    </div>
-  )
-}
-
-function WeekdayBars({ rows }: { rows: { dow: number; patrol_count: number; alarm_count: number; inspection_count: number }[] }) {
-  const by = new Map(rows.map((r) => [r.dow, r]))
-  const days = [0, 1, 2, 3, 4, 5, 6].map((d) => ({
-    dow: d,
-    patrol: Number(by.get(d)?.patrol_count ?? 0),
-    alarm: Number(by.get(d)?.alarm_count ?? 0),
-    inspection: Number(by.get(d)?.inspection_count ?? 0),
-  }))
-  const max = Math.max(1, ...days.map((d) => d.patrol + d.alarm + d.inspection))
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4">
-      <div className="mb-2 flex gap-4 text-[11px] text-slate-500">
-        <span><i className="inline-block h-2 w-2 rounded-sm bg-blue-500" /> 巡回</span>
-        <span><i className="inline-block h-2 w-2 rounded-sm bg-red-500" /> 発報</span>
-        <span><i className="inline-block h-2 w-2 rounded-sm bg-emerald-500" /> 検査</span>
-      </div>
-      <div className="space-y-1.5">
-        {days.map((d) => (
-          <div key={d.dow} className="flex items-center gap-2 text-xs">
-            <span className="w-5 text-slate-500">{WEEKDAY_JA[d.dow]}</span>
-            <div className="flex h-4 flex-1 overflow-hidden rounded bg-slate-50">
-              <div className="bg-blue-500"    style={{ width: `${(d.patrol / max) * 100}%` }} />
-              <div className="bg-red-500"     style={{ width: `${(d.alarm / max) * 100}%` }} />
-              <div className="bg-emerald-500" style={{ width: `${(d.inspection / max) * 100}%` }} />
-            </div>
-            <span className="w-16 text-right tabular-nums text-slate-500">{(d.patrol + d.alarm + d.inspection).toLocaleString()}</span>
-          </div>
-        ))}
-      </div>
     </div>
   )
 }
