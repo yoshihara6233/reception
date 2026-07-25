@@ -37,9 +37,13 @@ export default async function EditUserPage(
     notFound()
   }
 
+  // テナント分離: 店舗ピッカーは編集対象ユーザーのテナントに限定
+  // （store_ids はそのテナント店舗に属す必要があり、他テナント店舗名の送信も防ぐ）。
+  let storesQuery = supa.from('stores').select('id, name, tenant_id').order('name')
+  if (target.tenant_id) storesQuery = storesQuery.eq('tenant_id', target.tenant_id)
   const [{ data: tenants }, { data: stores }] = await Promise.all([
     supa.from('tenants').select('id, name').order('name'),
-    supa.from('stores').select('id, name, tenant_id').order('name'),
+    storesQuery,
   ])
 
   return (

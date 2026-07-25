@@ -9,6 +9,8 @@ import { redirect } from 'next/navigation'
 import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
+import { TenantGate } from '@/components/TenantGate'
+import { resolveMonitorScope } from '@/lib/tenant/monitor-scope'
 import { BAGGAGE_NAV, BAGGAGE_NAV_TITLE } from '../nav'
 import { isLocked } from '@/lib/baggage/kiosk-pin'
 import { IpadSettingsClient, type IpadStore } from './IpadSettingsClient'
@@ -18,10 +20,21 @@ export default async function BaggageIpadPage() {
   const { data: { user } } = await supa.auth.getUser()
   if (!user) redirect('/login')
 
+  // テナント分離: 操作中テナントの店舗のみ。未選択はゲート（他テナント漏洩防止）。
+  const scope = await resolveMonitorScope(supa)
+  if (scope.needsTenant) {
+    return (
+      <AdminShell pathname="/baggage/ipad" nav={BAGGAGE_NAV} navTitle={BAGGAGE_NAV_TITLE}>
+        <TenantGate />
+      </AdminShell>
+    )
+  }
+
   const { data: enabledRows } = await supa
     .from('inspection_settings')
     .select('store_id, stores ( id, name )')
     .eq('enabled', true)
+    .in('store_id', scope.storeIds)
   const stores = (enabledRows ?? [])
     .map((r) => {
       const s = Array.isArray(r.stores) ? r.stores[0] : r.stores
