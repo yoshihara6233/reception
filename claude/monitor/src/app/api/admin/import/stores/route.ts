@@ -21,6 +21,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/admin/guard'
+import { resolveAdminContext } from '@/lib/tenant/acting'
 import { parseCsv } from '@/lib/admin/csv'
 import { createSupabaseService } from '@/lib/supabase/server'
 import {
@@ -28,7 +29,7 @@ import {
   OPTION_KEYS, OPTION_STORE_COL, type OptionKey,
 } from '@/lib/admin/tenant-quota'
 
-interface RowResult { row: number; ok: boolean; id?: string; error?: string; warning?: string }
+interface RowResult { row: number; ok: boolean; id?: string; error?: string; warning?: string; skipped?: boolean }
 
 // テナント毎の見込み（行をまたいで加減算する）。
 interface TenantProjection {
@@ -53,11 +54,30 @@ export async function POST(req: NextRequest) {
   // オプション ON/OFF を扱えるのは super_admin / tenant_admin のみ。
   const canManageOptions = ['super_admin', 'tenant_admin'].includes(guard.profile.role)
 
+  // 実効テナント（super_admin は「操作中テナント」cookie・他ロールは所属テナント）。
+  // CSV の tenant_id 列が空のときの登録先はこれ。profile.tenant_id では super_admin の
+  // 操作中テナントを無視して自テナントへ書いてしまうため resolveAdminContext を使う。
+  const ctx = await resolveAdminContext(guard.supa)
+  const defaultTenantId = ctx.tenantId  // null = super_admin が操作中テナント未選択
+
   const text = await req.text()
   const rows = parseCsv(text)
   if (!rows.length) return NextResponse.json({ error: 'empty_csv' }, { status: 400 })
 
   const svc = createSupabaseService()
+
+  // 同一名称の重複登録を防ぐ: 登録先テナント毎に既存の店舗名を先読みし、名前で弾く。
+  // CSV 内での重複も、この Set に登録済み名を足していくことで 2 行目以降をスキップ。
+  const nameSetByTenant = new Map<string, Set<string>>()
+  async function namesFor(tid: string): Promise<Set<string>> {
+    let s = nameSetByTenant.get(tid)
+    if (!s) {
+      const { data } = await svc.from('stores').select('name').eq('tenant_id', tid).limit(100_000)
+      s = new Set((data ?? []).map((x) => String(x.name).trim()))
+      nameSetByTenant.set(tid, s)
+    }
+    return s
+  }
 
   // 既存 id と、その現在のオプション状態を先読み（更新/挿入の判別＋ON→ON二重計上回避）。
   const extIds = rows.map((r) => r.external_id).filter((v): v is string => !!v)
@@ -94,7 +114,7 @@ export async function POST(req: NextRequest) {
     const r = rows[i]
     const lat = r.latitude  ? parseFloat(r.latitude)  : null
     const lng = r.longitude ? parseFloat(r.longitude) : null
-    const tenantId = r.tenant_id || guard.profile.tenant_id
+    const tenantId = r.tenant_id || defaultTenantId
 
     const payload: Record<string, unknown> = {
       name:       r.name,
@@ -107,10 +127,19 @@ export async function POST(req: NextRequest) {
       geocoded_at: (lat != null && lng != null) ? new Date().toISOString() : null,
     }
     if (!payload.name) { results.push({ row: i + 2, ok: false, error: 'name_required' }); continue }
+    // 登録先テナントが決まらない（super_admin が操作中テナント未選択かつ tenant_id 列も無し）。
+    if (!tenantId) { results.push({ row: i + 2, ok: false, error: 'tenant_unresolved' }); continue }
 
     if (r.external_id) payload.id = r.external_id
     const prev = r.external_id ? existing.get(r.external_id) : undefined
     const isUpdate = !!prev
+
+    // 同一名称スキップ（新規挿入のみ。external_id 指定の更新は名前一致でも通す）。
+    const nm = String(payload.name).trim()
+    if (!isUpdate) {
+      const names = await namesFor(tenantId)
+      if (names.has(nm)) { results.push({ row: i + 2, ok: false, skipped: true, error: 'duplicate_name' }); continue }
+    }
 
     // 希望オプション状態（列があり super/tenant_admin のみ）。列なしは変更しない。
     const wants: Partial<Record<OptionKey, boolean>> = {}
@@ -163,6 +192,8 @@ export async function POST(req: NextRequest) {
     if (error) { results.push({ row: i + 2, ok: false, error: error.message }); continue }
 
     results.push({ row: i + 2, ok: true, id: data.id, warning: rowWarnings.join(' / ') || undefined })
+    // CSV 内の後続行の同名重複を弾くため、登録済み名を記録。
+    if (!isUpdate) (await namesFor(tenantId)).add(nm)
 
     // 見込み数の反映（成功時）。
     if (p) {
@@ -177,8 +208,9 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const okCount   = results.filter((r) => r.ok).length
-  const errCount  = results.length - okCount
-  const warnCount = results.filter((r) => r.ok && r.warning).length
-  return NextResponse.json({ total: results.length, ok: okCount, error: errCount, warning: warnCount, results })
+  const okCount    = results.filter((r) => r.ok).length
+  const skipCount  = results.filter((r) => !r.ok && r.skipped).length
+  const errCount   = results.filter((r) => !r.ok && !r.skipped).length
+  const warnCount  = results.filter((r) => r.ok && r.warning).length
+  return NextResponse.json({ total: results.length, ok: okCount, error: errCount, warning: warnCount, skipped: skipCount, results })
 }

@@ -13,6 +13,8 @@ export function quotaMessage(code?: string): string {
   const optJa = opt ? OPT_JA[opt] ?? opt : ''
   switch (base) {
     case 'name_required':          return '店舗名(name)が空です'
+    case 'duplicate_name':         return '同一名称の店舗が既にあるため登録をスキップしました'
+    case 'tenant_unresolved':      return '登録先テナントが未確定です（操作中テナントを選択するか tenant_id 列を指定）'
     case 'store_limit_exceeded':   return '店舗数が上限を超えています（登録は完了）'
     case 'option_limit_exceeded':  return `${optJa}を ON にした店舗数が上限を超えています（登録は完了）`
     case 'option_not_contracted':  return `${optJa}はテナント未契約のため ON にできません`
