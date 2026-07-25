@@ -10,8 +10,6 @@ import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
 import { MonitorSettingsTable, type MonitorSetting } from './MonitorSettingsTable'
 import { getT } from '@/lib/i18n/server'
-import { resolveMonitorScope } from '@/lib/tenant/monitor-scope'
-import { TenantGate } from '@/components/TenantGate'
 
 interface StoreRow { id: string; name: string; area_code: string | null }
 interface SettingRow {
@@ -30,19 +28,11 @@ export default async function InfraSettingsPage() {
   const t = await getT()
   const ts = t.infraSettings
 
-  const scope = await resolveMonitorScope(supa)
-  if (scope.needsTenant) {
-    return (
-      <AdminShell pathname="/infra/settings" section="infra">
-        <TenantGate />
-      </AdminShell>
-    )
-  }
-
+  // 死活監視は super_admin 専用の全テナント横断ビュー（infra/layout でゲート済）。
   const [storesRes, settingsRes] = await Promise.all([
-    supa.from('stores').select('id, name, area_code').eq('is_active', true).in('id', scope.storeIds)
+    supa.from('stores').select('id, name, area_code').eq('is_active', true)
       .order('area_code', { ascending: true, nullsFirst: false }).order('name').limit(10_000),
-    supa.from('monitor_settings').select('store_id, enabled, edge_offline_threshold_min, check_interval_min, fail_threshold, ok_threshold, notify_emails, maintenance_until').in('store_id', scope.storeIds).limit(10_000),
+    supa.from('monitor_settings').select('store_id, enabled, edge_offline_threshold_min, check_interval_min, fail_threshold, ok_threshold, notify_emails, maintenance_until').limit(10_000),
   ])
 
   const stores = (storesRes.data ?? []) as StoreRow[]
