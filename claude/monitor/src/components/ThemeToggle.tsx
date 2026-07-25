@@ -55,39 +55,26 @@ export function ThemeToggle() {
     apply(m)
   }, [])
 
-  const opts: { m: Mode; label: string; icon: string }[] = [
-    { m: 'light', label: 'ライト', icon: '☀' },
-    { m: 'dark', label: 'ダーク', icon: '☾' },
-    { m: 'auto', label: '自動', icon: '◐' },
+  // F: 3ボタン群 → コンパクトなプルダウン（幅節約・全ユーザ共通）。
+  const opts: { m: Mode; label: string }[] = [
+    { m: 'light', label: '☀ ライト' },
+    { m: 'dark',  label: '☾ ダーク' },
+    { m: 'auto',  label: '◐ 自動' },
   ]
 
   return (
-    <div
-      className="flex overflow-hidden rounded border border-slate-700"
-      role="group"
+    <select
+      value={mode}
+      onChange={(e) => choose(e.target.value as Mode)}
       aria-label="テーマ切替"
       title="ライト / ダーク / 自動（18:00〜06:00 はダーク）"
+      className="rounded border border-slate-700 bg-slate-800 px-1.5 py-1 text-[11px] font-medium text-slate-200 hover:bg-slate-700 focus:outline-none focus:ring-1 focus:ring-slate-500"
     >
-      {opts.map((o) => {
-        const active = mode === o.m
-        return (
-          <button
-            key={o.m}
-            type="button"
-            onClick={() => choose(o.m)}
-            aria-pressed={active}
-            className={
-              'flex items-center gap-1 px-2 py-1 text-[11px] font-medium transition-colors ' +
-              (active
-                ? 'bg-slate-700 text-white'
-                : 'text-slate-300 hover:bg-slate-800')
-            }
-          >
-            <span aria-hidden>{o.icon}</span>
-            <span className="hidden sm:inline">{o.label}</span>
-          </button>
-        )
-      })}
-    </div>
+      {opts.map((o) => (
+        <option key={o.m} value={o.m} className="bg-slate-800 text-slate-100">
+          {o.label}
+        </option>
+      ))}
+    </select>
   )
 }

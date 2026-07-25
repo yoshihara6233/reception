@@ -8,6 +8,8 @@
  */
 import { TriangleAlert, CircleCheck, Video } from 'lucide-react'
 import { createSupabaseServer } from '@/lib/supabase/server'
+import { resolveMonitorScope } from '@/lib/tenant/monitor-scope'
+import { TenantGate } from '@/components/TenantGate'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
 import { getT } from '@/lib/i18n/server'
@@ -47,12 +49,23 @@ export default async function InfraDashboard() {
   const tInfra = t.infraDashboard
   const HEALTH_LABEL = tInfra.healthLabel
 
+  // テナント分離: 操作中テナントの店舗のみ。未選択はゲート。
+  const scope = await resolveMonitorScope(supa)
+  if (scope.needsTenant) {
+    return (
+      <AdminShell pathname="/infra" section="infra">
+        <TenantGate />
+      </AdminShell>
+    )
+  }
+
   const [storesRes, settingsRes, incidentsRes] = await Promise.all([
     supa.from('stores')
       .select('id, name, edge_devices ( id, name, status, last_seen_at, recorders ( id, recorder_cameras ( id ) ) )')
+      .in('id', scope.storeIds)
       .order('name').limit(10_000),
-    supa.from('monitor_settings').select('store_id, enabled, edge_offline_threshold_min, maintenance_until').limit(10_000),
-    supa.from('monitor_incidents').select('store_id, target_type, kind, status').in('status', ['open', 'ack']).limit(10_000),
+    supa.from('monitor_settings').select('store_id, enabled, edge_offline_threshold_min, maintenance_until').in('store_id', scope.storeIds).limit(10_000),
+    supa.from('monitor_incidents').select('store_id, target_type, kind, status').in('status', ['open', 'ack']).in('store_id', scope.storeIds).limit(10_000),
   ])
 
   const stores = (storesRes.data ?? []) as unknown as StoreRow[]

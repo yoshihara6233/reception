@@ -26,12 +26,16 @@ export function AppShellClient({
   selectedStoreId,
   children,
   features,
+  tenantName,
+  isSuper,
 }: {
   userName: string
   groups: Group[]
   selectedStoreId?: string
   children: React.ReactNode
   features?: { patrol: boolean; alarm: boolean; baggage: boolean }
+  tenantName?: string | null
+  isSuper?: boolean
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
 
@@ -44,7 +48,7 @@ export function AppShellClient({
       }}
     >
       {/* Top header */}
-      <AppHeader userName={userName} onMenuClick={() => setDrawerOpen(true)} features={features} />
+      <AppHeader userName={userName} onMenuClick={() => setDrawerOpen(true)} features={features} tenantName={tenantName} isSuper={isSuper} />
 
       {/* Scrollable middle area; on mobile adds bottom padding for nav bar */}
       <div className="flex flex-1 flex-col overflow-hidden pb-0 md:pb-0">

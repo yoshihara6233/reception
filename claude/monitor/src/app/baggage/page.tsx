@@ -9,6 +9,8 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
+import { resolveMonitorScope } from '@/lib/tenant/monitor-scope'
+import { TenantGate } from '@/components/TenantGate'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
 import { BAGGAGE_NAV, BAGGAGE_NAV_TITLE } from './nav'
@@ -40,11 +42,22 @@ export default async function BaggageHistoryPage(
   const { data: { user } } = await supa.auth.getUser()
   if (!user) redirect('/login')
 
-  // 対象店舗 = inspection_settings.enabled の店舗（RLS で可視分のみ返る）
+  // テナント分離: 操作中テナントの店舗のみ。未選択はゲート。
+  const scope = await resolveMonitorScope(supa)
+  if (scope.needsTenant) {
+    return (
+      <AdminShell pathname="/baggage" nav={BAGGAGE_NAV} navTitle={BAGGAGE_NAV_TITLE}>
+        <TenantGate />
+      </AdminShell>
+    )
+  }
+
+  // 対象店舗 = inspection_settings.enabled の店舗（RLS＋テナント分離で可視分のみ）
   const { data: enabledRows } = await supa
     .from('inspection_settings')
     .select('store_id, stores ( id, name )')
     .eq('enabled', true)
+    .in('store_id', scope.storeIds)
   const storeOptions = (enabledRows ?? [])
     .map((r) => {
       const s = Array.isArray(r.stores) ? r.stores[0] : r.stores

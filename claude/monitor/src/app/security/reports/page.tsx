@@ -6,6 +6,8 @@ import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
 import { ReportsTable, type ReportRowVM } from './ReportsTable'
 import { getT } from '@/lib/i18n/server'
+import { resolveMonitorScope } from '@/lib/tenant/monitor-scope'
+import { TenantGate } from '@/components/TenantGate'
 
 interface ReportRow {
   id: string
@@ -67,13 +69,24 @@ export default async function SecurityReportsPage() {
   const supa = await createSupabaseServer()
   const t = await getT()
 
+  // テナント分離: 操作中テナントの店舗のみ。未選択はゲート。
+  const scope = await resolveMonitorScope(supa)
+  if (scope.needsTenant) {
+    return (
+      <AdminShell pathname="/security/reports" section="security">
+        <TenantGate />
+      </AdminShell>
+    )
+  }
+
   const [reportsRes, storesRes, runsRes, findingsRes] = await Promise.all([
     supa.from('security_reports')
       .select('id, store_id, period_from, period_to, pdf_url, generated_at, sent_to_emails, created_at')
+      .in('store_id', scope.storeIds)
       .order('period_from', { ascending: false })
       .limit(500),
-    supa.from('stores').select('id, name').limit(10_000),
-    supa.from('patrol_runs').select('id, store_id, started_at, status, trigger').limit(5_000),
+    supa.from('stores').select('id, name').in('id', scope.storeIds).limit(10_000),
+    supa.from('patrol_runs').select('id, store_id, started_at, status, trigger').in('store_id', scope.storeIds).limit(5_000),
     supa.from('patrol_findings').select('run_id, status').limit(20_000),
   ])
 

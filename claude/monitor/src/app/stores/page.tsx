@@ -11,9 +11,16 @@ import { AppShell } from '@/components/AppShell'
 import { StoresDashboard } from '@/components/StoresDashboard'
 import type { StoreDashRow, AlertRecord } from '@/components/StoresDashboard'
 import { deriveEdgeStatus, isMonitoringDown } from '@/lib/edge-status'
+import { resolveMonitorScope } from '@/lib/tenant/monitor-scope'
+import { TenantGate } from '@/components/TenantGate'
 
 export default async function StoresIndex() {
   const supa = await createSupabaseServer()
+
+  // テナント分離: super_admin も操作中テナント外は見せない。未選択はゲート。
+  const scope = await resolveMonitorScope(supa)
+  if (scope.needsTenant) return <AppShell showDetail={false}><TenantGate /></AppShell>
+  const visibleStoreIds = new Set(scope.storeIds)
 
   // F27: "アラート" の定義を拡張する。従来は edge_devices.status だけだったが、
   // 「直近アラート対象」とは下記いずれかに該当する店舗:
@@ -62,6 +69,7 @@ export default async function StoresIndex() {
           id, name, address, latitude, longitude, area_code,
           edge_devices ( id, status, last_seen_at )
         `)
+        .in('id', scope.storeIds)   // テナント分離: 可視店舗のみ
         .order('area_code', { ascending: true, nullsFirst: false })
         .order('name')
         .limit(10_000) as unknown as PromiseLike<{
@@ -156,12 +164,15 @@ export default async function StoresIndex() {
       kind: 'patrol', occurredAt: r.created_at ?? null, href: '/security' })
   })
 
+  // テナント分離: incidents/bcp/patrol は別テーブル由来のため、可視店舗のアラートのみ残す。
+  const scopedAlerts = alerts.filter((a) => a.storeId && visibleStoreIds.has(a.storeId))
+
   // 新しい順 (occurredAt 降順、null は末尾)
-  alerts.sort((a, b) => (b.occurredAt ?? '').localeCompare(a.occurredAt ?? ''))
+  scopedAlerts.sort((a, b) => (b.occurredAt ?? '').localeCompare(a.occurredAt ?? ''))
 
   return (
     <AppShell showDetail={false}>
-      <StoresDashboard stores={stores} alerts={alerts} />
+      <StoresDashboard stores={stores} alerts={scopedAlerts} />
     </AppShell>
   )
 }

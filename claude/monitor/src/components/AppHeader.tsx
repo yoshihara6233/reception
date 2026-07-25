@@ -16,11 +16,16 @@ export function AppHeader({
   userName: _userName,
   onMenuClick,
   features,
+  tenantName,
+  isSuper,
 }: {
   userName?: string
   onMenuClick?: () => void
   // テナントのオプション機能フラグ。未指定は全表示（後方互換・フェイルオープン）。
   features?: { patrol: boolean; alarm: boolean; baggage: boolean }
+  // 操作中/所属テナント名。super_admin 未選択時は null。
+  tenantName?: string | null
+  isSuper?: boolean
 }) {
   const pathname    = usePathname() ?? ''
   const { t }       = useLang()
@@ -116,6 +121,23 @@ export function AppHeader({
             <ServerClock />
           </div>
         </Link>
+
+        {/* 操作中/所属テナント名バッジ（ロゴ右横）。super_admin 未選択は灰色で明示。 */}
+        {tenantName ? (
+          <span
+            className="ml-1 max-w-[9rem] truncate rounded bg-[#2C4A7E] px-2 py-0.5 text-[11px] font-semibold text-white sm:max-w-[14rem]"
+            title={`テナント: ${tenantName}`}
+          >
+            {tenantName}
+          </span>
+        ) : isSuper ? (
+          <span
+            className="ml-1 rounded border border-slate-600 px-2 py-0.5 text-[11px] font-medium text-slate-400"
+            title="操作中テナント未選択"
+          >
+            テナント未選択
+          </span>
+        ) : null}
       </div>
 
       {/* Center: tab nav — desktop only */}

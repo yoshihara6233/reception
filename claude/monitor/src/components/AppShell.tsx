@@ -83,6 +83,8 @@ export async function AppShell({
       groups={groups}
       selectedStoreId={selectedStoreId}
       features={features}
+      tenantName={ctx.tenantName}
+      isSuper={ctx.isSuper}
     >
       {/* Desktop 3-col layout with a collapsible detail panel (ShellBody) */}
       <ShellBody
