@@ -37,6 +37,7 @@ export function getAdminNav(t: Msg, opts?: { isSuper?: boolean; baggage?: boolea
       ? [{ href: '/admin/baggage', label: '手荷物検査設定', icon: '🧳' }] : []),
     { href: '/admin/bcp',        label: 'BCP発動条件',         icon: '🚨' },
     { href: '/admin/audit',      label: t.adminNav.audit,     icon: '☰' },
+    { href: '/admin/reports/usage', label: '利用状況レポート', icon: '📊' },
   ]
   if (opts?.isSuper) {
     items.push(

@@ -24,6 +24,7 @@ const Body = z.object({
   max_patrol:  z.number().int().min(0).max(100000).nullable().optional(),
   max_alarm:   z.number().int().min(0).max(100000).nullable().optional(),
   max_baggage: z.number().int().min(0).max(100000).nullable().optional(),
+  report_day:  z.number().int().min(1).max(28).nullable().optional(),
 })
 
 export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
