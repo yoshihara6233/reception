@@ -78,7 +78,7 @@ export function AppHeader({
     // 手荷物検査モジュール（M4）。ラベルは ALARM と同様に固定表記。
     ...(features?.baggage !== false
       ? [{ href: '/baggage', label: '検査' }] : []),
-    { href: '/infra',    label: t.nav.infra    },
+    // 死活監視(/infra)は SaaS 運営者向け＝中央タブから外し、②運営管理（/admin）へ移動。
     // F23: /logs タブは削除（マスタ内の監査ログと重複していたため）
     // F24: /admin（設定）は中央タブから外し、右側のアイコンに移動
   ]
