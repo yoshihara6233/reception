@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
 export type Plan   = 'starter' | 'standard' | 'enterprise'
@@ -198,10 +199,10 @@ export function TenantForm({ mode, id, initial, usage }: {
       {done && <p className="rounded bg-emerald-50 px-3 py-2 text-xs text-emerald-700">保存しました</p>}
 
       <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
-        <button type="button" onClick={() => router.push('/admin/tenants')}
-                className="rounded border border-slate-300 bg-white px-4 py-1.5 text-sm text-slate-600">
+        <Link href="/admin/tenants"
+              className="rounded border border-slate-300 bg-white px-4 py-1.5 text-sm text-slate-600 hover:bg-slate-50">
           キャンセル
-        </button>
+        </Link>
         <button type="submit" disabled={busy}
                 className="rounded bg-blue-600 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50">
           {busy ? '保存中…' : mode === 'create' ? '作成' : '保存'}
