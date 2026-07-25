@@ -20,6 +20,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { notifyAlarm } from '@/lib/alarms/notify'
 import { dispatchAlarmTimeline } from '@/lib/alarms/dispatch'
+import { isStoreOptionEnabled } from '@/lib/admin/tenant-quota'
 
 export const runtime = 'nodejs'
 
@@ -36,6 +37,13 @@ export async function POST(req: NextRequest) {
     .eq('device_token', token)
     .maybeSingle()
   if (!edge || !edge.store_id) return NextResponse.json({ error: 'invalid device token' }, { status: 401 })
+
+  // Phase2: 店舗別オプション（発報）ゲート。opt_alarm=false の店舗は発報を
+  // 記録せず通知もしない（エッジが再送しないよう 200 で skipped を返す）。
+  // フェイルオープン: 判別不能時は従来どおり処理を続行。
+  if (!(await isStoreOptionEnabled(supa, edge.store_id, 'alarm'))) {
+    return NextResponse.json({ ok: true, skipped: 'opt_alarm_off' })
+  }
 
   // 2. multipart 解釈
   let form: FormData
