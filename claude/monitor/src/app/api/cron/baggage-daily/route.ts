@@ -50,10 +50,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const today = jstDateStr(now)
   const yesterday = jstDateStr(now, -1)
 
+  // Phase2: 店舗別オプション（検査）ゲート。opt_baggage=true の店舗のみ日次処理。
+  // stores を inner join し opt_baggage で絞る（OFF 店舗はバッチ対象外）。
   const { data: settingsRows, error: sErr } = await svc
     .from('inspection_settings')
-    .select('store_id, tenant_id, stores ( name )')
+    .select('store_id, tenant_id, stores!inner ( name, opt_baggage )')
     .eq('enabled', true)
+    .eq('stores.opt_baggage', true)
   if (sErr) return NextResponse.json({ error: sErr.message }, { status: 500 })
 
   // 保持日数はテナント共通設定（baggage_tenant_settings）から。テナント毎に一度だけ読む。

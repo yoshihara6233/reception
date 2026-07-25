@@ -9,6 +9,7 @@ import type { Metadata } from 'next'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { loadTenantSettings } from '@/lib/baggage/tenant-settings'
 import { resolveKioskOrAdmin } from '@/lib/baggage/kiosk-guard'
+import { isStoreOptionEnabled } from '@/lib/admin/tenant-quota'
 import { KioskClient } from './KioskClient'
 import { KioskPinGate } from './KioskPinGate'
 
@@ -55,6 +56,12 @@ export default async function BaggageKioskPage(
   }
 
   const { svc, store } = auth
+
+  // Phase2: 店舗別オプション（検査）ゲート。opt_baggage=false はキオスクを無効化。
+  if (!(await isStoreOptionEnabled(svc, store.id, 'baggage'))) {
+    return <FullScreenMessage title="この店舗では手荷物検査は利用できません" sub="ご利用にはオプション契約が必要です。管理画面でご確認ください。" />
+  }
+
   const { data: s } = await svc.from('inspection_settings').select('enabled').eq('store_id', store.id).maybeSingle()
   if (!s?.enabled) {
     return <FullScreenMessage title="この店舗では手荷物検査オプションが有効になっていません" sub="管理画面の手荷物検査設定をご確認ください。" />
