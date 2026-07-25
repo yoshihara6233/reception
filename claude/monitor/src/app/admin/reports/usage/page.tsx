@@ -12,6 +12,7 @@ import { resolveAdminContext } from '@/lib/tenant/acting'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
 import { jstDateStr } from '@/lib/baggage/unmatch'
+import { missingCriticalEnv } from '@/lib/ops/env-check'
 import {
   monthBounds, trendBounds, confirmRatePct, prevMonth, WEEKDAY_JA, type UsageMetrics,
 } from '@/lib/reports/usage'
@@ -48,16 +49,69 @@ export default async function UsageReportPage({
   const { from, to } = monthBounds(year, month)
   const trend = trendBounds(year, month, TREND_MONTHS)
 
-  // super_admin は操作中テナント未選択だと全テナント横断になり重い＝選択を促す。
   const scopeTenant = ctx.tenantId
   const scopeStores = ctx.storeIds
+
+  // 旧ダッシュボードから集約: 構成・稼働カウント（RLSでスコープ）＋ env 警告(運営のみ)。
+  // 店舗数は下の「登録数（／契約数）」と重複するためここには出さない。
+  const [edges, recorders, cameras, online, offline] = await Promise.all([
+    supa.from('edge_devices').select('*', { count: 'exact', head: true }),
+    supa.from('recorders').select('*', { count: 'exact', head: true }),
+    supa.from('recorder_cameras').select('*', { count: 'exact', head: true }),
+    supa.from('edge_devices').select('*', { count: 'exact', head: true }).neq('status', 'offline'),
+    supa.from('edge_devices').select('*', { count: 'exact', head: true }).eq('status', 'offline'),
+  ])
+  const infraStats = [
+    { label: 'エッジ',     val: edges.count     ?? 0, href: '/admin/edges' },
+    { label: 'レコーダ',   val: recorders.count ?? 0, href: '/admin/edges' },
+    { label: 'カメラ',     val: cameras.count   ?? 0, href: '/admin/edges' },
+    { label: 'オンライン', val: online.count    ?? 0, href: '/admin/edges?status=online' },
+    { label: 'オフライン', val: offline.count   ?? 0, href: '/admin/edges?status=offline', warn: true },
+  ]
+  const missingEnv = ctx.isSuper ? missingCriticalEnv() : []
+
+  const topSection = (
+    <>
+      {missingEnv.length > 0 && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-amber-700">環境変数の設定漏れ（Vercel → Settings → Environment Variables）</div>
+          <ul className="mt-2 space-y-1 text-xs text-slate-700">
+            {missingEnv.map((i) => (
+              <li key={i.key} className="flex items-baseline gap-2">
+                <span className={'rounded px-1.5 py-px text-[10px] font-bold ' + (i.required ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700')}>{i.required ? '必須' : '推奨'}</span>
+                <code className="font-mono font-semibold">{i.key}</code>
+                <span className="text-slate-500">— {i.purpose}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <section>
+        <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">構成・稼働（現在）</h2>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          {infraStats.map((s) => (
+            <a key={s.label} href={s.href} className="block rounded-lg border border-slate-200 bg-white px-4 py-3 hover:border-blue-400">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{s.label}</div>
+              <div className={'text-2xl font-bold tabular-nums ' + (s.warn ? 'text-red-600' : 'text-slate-900')}>{s.val.toLocaleString()}</div>
+            </a>
+          ))}
+        </div>
+      </section>
+    </>
+  )
+
+  // super_admin は操作中テナント未選択だと全テナント横断になり重い＝選択を促す
+  // （構成・稼働と env 警告は上に出す）。
   if (ctx.role === 'super_admin' && !scopeTenant) {
     return (
       <AdminShell pathname="/admin/reports/usage" section="admin">
         <PageHeader title="利用状況レポート" crumb={[{ href: '/admin', label: 'マスタ' }, { href: '/admin/reports/usage', label: '利用状況レポート' }]} />
-        <div className="max-w-2xl space-y-3 px-5 py-6 text-sm text-slate-600">
-          <p>テナントを選択するとそのテナントのレポートを表示します。</p>
-          <p><Link href="/admin/tenants" className="text-blue-600 underline">運営管理 → テナント</Link> から「このテナントを操作」を押してください。</p>
+        <div className="space-y-5 px-5 py-4">
+          {topSection}
+          <div className="max-w-2xl space-y-2 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600">
+            <p>テナントを選択すると、そのテナントの利用状況（巡回/発報/検査/映像確認率/顔認証・曜日別・月次推移）を表示します。</p>
+            <p><Link href="/admin/tenants" className="text-blue-600 underline">運営管理 → テナント</Link> から「このテナントを操作」を押してください。</p>
+          </div>
         </div>
       </AdminShell>
     )
@@ -117,6 +171,8 @@ export default async function UsageReportPage({
         crumb={[{ href: '/admin', label: 'マスタ' }, { href: '/admin/reports/usage', label: '利用状況レポート' }]}
       />
       <div className="space-y-5 px-5 py-4">
+        {topSection}
+
         {/* 月ナビ */}
         <div className="flex items-center gap-3 text-sm">
           <Link href={`?month=${mstr(prev.year, prev.month)}`} className="rounded border border-slate-200 px-2 py-1 hover:bg-slate-50">← 前月</Link>
@@ -130,7 +186,7 @@ export default async function UsageReportPage({
         {/* 契約 vs 登録 */}
         {contract && reg && (
           <section>
-            <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">契約(上限) vs 登録</h2>
+            <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">登録数（／契約数）</h2>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <RegCard label="店舗数" used={reg.stores} limit={contract.max_stores} />
               <RegCard label="巡回 ON店舗" used={reg.patrol} limit={contract.max_patrol} />

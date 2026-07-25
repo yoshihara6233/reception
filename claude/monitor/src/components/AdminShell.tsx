@@ -28,7 +28,8 @@ export type AdminSection = 'admin' | 'security' | 'bcp' | 'infra'
 // CSV一括投入は店舗ページ右上に導線があるためメニューから除外（直URLは有効）。
 export function getAdminNav(t: Msg, opts?: { isSuper?: boolean; baggage?: boolean }): NavItem[] {
   const items: NavItem[] = [
-    { href: '/admin',            label: t.adminNav.dashboard, icon: '▣', exact: true },
+    // 利用状況レポートを最上部に。旧ダッシュボードは廃止し中身をここへ集約。
+    { href: '/admin/reports/usage', label: '利用状況レポート', icon: '📊', exact: true },
     { href: '/admin/stores',     label: t.adminNav.stores,    icon: '⛬' },
     { href: '/admin/users',      label: t.adminNav.users,     icon: '⚇' },
     // 手荷物検査の「内容設定」（同意文言・STEP等）はテナント側の持ち物＝①。
@@ -37,7 +38,6 @@ export function getAdminNav(t: Msg, opts?: { isSuper?: boolean; baggage?: boolea
       ? [{ href: '/admin/baggage', label: '手荷物検査設定', icon: '🧳' }] : []),
     { href: '/admin/bcp',        label: 'BCP発動条件',         icon: '🚨' },
     { href: '/admin/audit',      label: t.adminNav.audit,     icon: '☰' },
-    { href: '/admin/reports/usage', label: '利用状況レポート', icon: '📊' },
   ]
   if (opts?.isSuper) {
     items.push(
@@ -97,7 +97,7 @@ export interface NavItem {
 // マスタ管理（既定・非i18nフォールバック）。ロール不明のため ①設定 のみ
 // （②運営管理 は getAdminNav(t, {isSuper:true}) 経由でのみ出す）。
 export const ADMIN_NAV: NavItem[] = [
-  { href: '/admin',            label: 'ダッシュボード', icon: '▣', exact: true },
+  { href: '/admin/reports/usage', label: '利用状況レポート', icon: '📊', exact: true },
   { href: '/admin/stores',     label: '店舗',           icon: '⛬' },
   { href: '/admin/users',      label: 'ユーザ',         icon: '⚇' },
   { href: '/admin/baggage',    label: '手荷物検査設定', icon: '🧳' },
