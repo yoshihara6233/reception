@@ -17,6 +17,7 @@ import {
   monthBounds, trendBounds, confirmRatePct, prevMonth, WEEKDAY_JA, type UsageMetrics,
 } from '@/lib/reports/usage'
 import { UsageStoreTable } from './UsageStoreTable'
+import { MonthlyFinalize } from './MonthlyFinalize'
 
 interface StoreRow extends UsageMetrics { store_id: string; store_name: string }
 interface WeekdayRow { dow: number; patrol_count: number; alarm_count: number; inspection_count: number; baggage_exit_count: number; baggage_confirmed_count: number; face_auth_attempts: number; video_live_count: number; footage_access_count: number }
@@ -158,6 +159,16 @@ export default async function UsageReportPage({
     reg = { stores: sc, patrol: pc, alarm: ac, baggage: bc }
   }
 
+  // 月次確定レポート（C）一覧（テナント確定時のみ）。
+  let finalized: { id: string; ym: string; generated_at: string; pdf_url: string | null }[] = []
+  if (scopeTenant) {
+    const { data: fr } = await svc.from('monthly_reports')
+      .select('id, ym, generated_at, pdf_url').eq('tenant_id', scopeTenant)
+      .order('ym', { ascending: false }).limit(12)
+    finalized = (fr ?? []) as typeof finalized
+  }
+  const canFinalize = ctx.role === 'super_admin' || ctx.role === 'tenant_admin'
+
   const monthLabel = `${year}年${month}月`
   const prev = prevMonth(year, month)
   const next = month >= 12 ? { year: year + 1, month: 1 } : { year, month: month + 1 }
@@ -224,6 +235,28 @@ export default async function UsageReportPage({
         <section>
           <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">月次推移（直近{TREND_MONTHS}ヶ月）</h2>
           <TrendTable rows={trendRows} />
+        </section>
+
+        {/* 月次確定レポート（PDF） */}
+        <section>
+          <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">月次確定レポート（PDF）</h2>
+          <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
+            {canFinalize && scopeTenant && <MonthlyFinalize ym={mstr(year, month)} monthLabel={monthLabel} />}
+            {finalized.length === 0
+              ? <p className="text-xs text-slate-400">確定済みのレポートはまだありません。上のボタンで当月を確定できます（毎月の作成日に自動確定＝テナント編集で設定）。</p>
+              : (
+                <ul className="divide-y divide-slate-100 text-sm">
+                  {finalized.map((f) => (
+                    <li key={f.id} className="flex items-center justify-between py-1.5">
+                      <span className="tabular-nums">{f.ym} <span className="ml-2 text-[11px] text-slate-400">確定 {new Date(f.generated_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', dateStyle: 'short', timeStyle: 'short' })}</span></span>
+                      {f.pdf_url
+                        ? <a href={f.pdf_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">PDF ↓</a>
+                        : <span className="text-slate-300">PDFなし</span>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+          </div>
         </section>
       </div>
     </AdminShell>
