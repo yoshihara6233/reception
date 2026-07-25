@@ -11,6 +11,7 @@
 import { cookies } from 'next/headers'
 import { requireBaggageRole } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
+import { isStoreOptionEnabled } from '@/lib/admin/tenant-quota'
 import { type AnnounceStep, type TerminalMode } from './inspection-flow'
 import { loadTenantSettings } from './tenant-settings'
 import { KIOSK_COOKIE, verifyKioskSession } from './kiosk-pin'
@@ -129,6 +130,13 @@ export async function requireKioskStore(storeId: string | null | undefined): Pro
   const access = await resolveKioskOrAdmin(storeId)
   if (!access.ok) return access
   const { svc, store } = access
+
+  // Phase2: 店舗別オプション（検査）ゲート。opt_baggage=false の店舗はキオスク実行を
+  // 停止（設定画面など admin 経路は requireBaggageAccess のままで触れる）。
+  // フェイルオープン: 判別不能は従来どおり続行。
+  if (!(await isStoreOptionEnabled(svc, store.id, 'baggage'))) {
+    return { ok: false, status: 403, error: 'baggage_not_enabled_for_store' }
+  }
 
   const [{ data: s }, tenant] = await Promise.all([
     svc.from('inspection_settings').select('enabled, camera_ids').eq('store_id', storeId).maybeSingle(),
