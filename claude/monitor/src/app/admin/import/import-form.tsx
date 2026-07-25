@@ -8,7 +8,8 @@ interface Result {
   ok:      number
   error:   number
   warning?: number
-  results: { row: number; ok: boolean; id?: string; error?: string; warning?: string }[]
+  skipped?: number
+  results: { row: number; ok: boolean; id?: string; error?: string; warning?: string; skipped?: boolean }[]
 }
 
 export function ImportForm({
@@ -74,14 +75,23 @@ export function ImportForm({
           <div className="mb-2">
             合計 <b>{res.total}</b> 件 / 成功 <b className="text-emerald-700">{res.ok}</b>
             {!!res.warning && <> / 警告 <b className="text-amber-700">{res.warning}</b></>}
+            {!!res.skipped && <> / スキップ <b className="text-slate-600">{res.skipped}</b></>}
             {' / '}失敗 <b className="text-red-700">{res.error}</b>
           </div>
           {res.error > 0 && (
             <ul className="max-h-40 overflow-auto text-[11px] text-red-700">
-              {res.results.filter((r) => !r.ok).slice(0, 50).map((r) => (
+              {res.results.filter((r) => !r.ok && !r.skipped).slice(0, 50).map((r) => (
                 <li key={r.row}>行 {r.row}: {quotaMessage(r.error) || r.error}</li>
               ))}
-              {res.results.filter((r) => !r.ok).length > 50 && <li>… 他</li>}
+              {res.results.filter((r) => !r.ok && !r.skipped).length > 50 && <li>… 他</li>}
+            </ul>
+          )}
+          {!!res.skipped && (
+            <ul className="mt-2 max-h-40 overflow-auto text-[11px] text-slate-500">
+              {res.results.filter((r) => r.skipped).slice(0, 50).map((r) => (
+                <li key={r.row}>行 {r.row}（スキップ）: {quotaMessage(r.error) || r.error}</li>
+              ))}
+              {res.results.filter((r) => r.skipped).length > 50 && <li>… 他</li>}
             </ul>
           )}
           {res.results.some((r) => r.ok && r.warning) && (
