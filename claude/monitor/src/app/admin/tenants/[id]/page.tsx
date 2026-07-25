@@ -18,7 +18,7 @@ export default async function EditTenantPage({ params }: { params: Promise<{ id:
   const svc = createSupabaseService()
   const { data: tenant } = await svc
     .from('tenants')
-    .select('id, name, plan, status, slug, opt_patrol, opt_alarm, opt_baggage, max_stores, max_patrol, max_alarm, max_baggage, stores(count)')
+    .select('id, name, plan, status, slug, opt_patrol, opt_alarm, opt_baggage, max_stores, max_patrol, max_alarm, max_baggage, report_day, stores(count)')
     .eq('id', id)
     .single()
   if (!tenant) notFound()
@@ -72,6 +72,7 @@ export default async function EditTenantPage({ params }: { params: Promise<{ id:
             max_patrol:  (tenant.max_patrol  ?? null) as number | null,
             max_alarm:   (tenant.max_alarm   ?? null) as number | null,
             max_baggage: (tenant.max_baggage ?? null) as number | null,
+            report_day:  (tenant.report_day  ?? null) as number | null,
           }}
           usage={{ stores: storeCount, patrol: patrolOn, alarm: alarmOn, baggage: baggageOn }}
         />

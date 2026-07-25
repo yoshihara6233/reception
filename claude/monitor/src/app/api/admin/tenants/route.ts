@@ -30,6 +30,8 @@ const Body = z.object({
   max_patrol:  z.number().int().min(0).max(100000).nullable().optional(),
   max_alarm:   z.number().int().min(0).max(100000).nullable().optional(),
   max_baggage: z.number().int().min(0).max(100000).nullable().optional(),
+  // 月次レポート作成日（1〜28・null=既定）。
+  report_day:  z.number().int().min(1).max(28).nullable().optional(),
 })
 
 export async function POST(req: NextRequest) {
@@ -53,6 +55,7 @@ export async function POST(req: NextRequest) {
     max_patrol:  body.max_patrol  ?? null,
     max_alarm:   body.max_alarm   ?? null,
     max_baggage: body.max_baggage ?? null,
+    report_day:  body.report_day  ?? null,
   }
   if (body.slug) insert.slug = body.slug
 

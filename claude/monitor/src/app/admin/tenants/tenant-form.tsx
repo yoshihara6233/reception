@@ -19,6 +19,8 @@ export interface TenantInitial {
   max_patrol:  number | null
   max_alarm:   number | null
   max_baggage: number | null
+  // 月次レポート作成日（1〜28・null=既定28）
+  report_day:  number | null
 }
 
 /** 現在の利用数（表示用・任意）。編集時のみ渡す。 */
@@ -72,6 +74,7 @@ export function TenantForm({ mode, id, initial, usage }: {
       max_patrol:  form.max_patrol,
       max_alarm:   form.max_alarm,
       max_baggage: form.max_baggage,
+      report_day:  form.report_day,
     }
 
     const res = await fetch(url, {
@@ -138,6 +141,21 @@ export function TenantForm({ mode, id, initial, usage }: {
           )}
         </div>
         <p className="mt-1 text-[11px] text-slate-500">上限を超えても店舗は作成できます（超過時は警告を表示）。</p>
+      </Field>
+
+      <Field label="月次レポート作成日（毎月・1〜28）">
+        <div className="flex items-center gap-2">
+          <input type="number" min={1} max={28} value={form.report_day ?? ''} placeholder="28"
+            onChange={(e) => {
+              const raw = e.target.value.trim()
+              if (raw === '') return setForm({ ...form, report_day: null })
+              const n = Math.min(28, Math.max(1, Math.trunc(Number(raw))))
+              setForm({ ...form, report_day: Number.isFinite(n) ? n : null })
+            }}
+            className="w-24 rounded border border-slate-300 px-2 py-1.5 text-sm font-mono tabular-nums" />
+          <span className="text-[11px] text-slate-500">空欄＝既定28日</span>
+        </div>
+        <p className="mt-1 text-[11px] text-slate-500">毎月この日に前月分の利用状況レポートを確定・通知します（通知は今後対応）。29〜31日は月により無いため28まで。</p>
       </Field>
 
       <fieldset className="rounded border border-slate-200 p-3">
