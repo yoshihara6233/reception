@@ -134,6 +134,27 @@ export function exceedsStoreLimit(limit: number | null, currentCount: number, ad
   return currentCount + adding > limit
 }
 
+/**
+ * ある店舗でオプション機能が有効か（Phase2 ランタイムゲート用）。
+ * `stores.opt_<opt>` を読む。**フェイルオープン**: 判別不能（列未適用・取得失敗・
+ * 店舗不明）は `true`（有効）を返し、既存の実行フローを壊さない。明示的に
+ * false のときだけ「無効」＝実行スキップにする。必ず service client で呼ぶ。
+ */
+export async function isStoreOptionEnabled(
+  svc: SupabaseClient,
+  storeId: string,
+  opt: OptionKey,
+): Promise<boolean> {
+  try {
+    const col = OPTION_STORE_COL[opt]
+    const { data, error } = await svc.from('stores').select(col).eq('id', storeId).maybeSingle()
+    if (error || !data) return true
+    return !!(data as Record<string, unknown>)[col]
+  } catch {
+    return true
+  }
+}
+
 /** 店舗フォームに渡す、1オプションの利用可否。 */
 export interface OptionAvailability {
   contracted: boolean       // テナントが当該機能を契約しているか
