@@ -4,8 +4,12 @@ import { TenantGate } from '@/components/TenantGate'
 import { resolveMonitorScope } from '@/lib/tenant/monitor-scope'
 import { MapWithToggle } from './MapWithToggle'
 
-export default async function MapPage() {
+export default async function MapPage(
+  { searchParams }: { searchParams: Promise<{ focus?: string }> },
+) {
   const supa = await createSupabaseServer()
+  const sp = await searchParams
+  const focusId = sp.focus ?? null
 
   // テナント分離: 操作中テナントの店舗のみ地図表示。未選択(super_admin)はゲート。
   const scope = await resolveMonitorScope(supa)
@@ -31,7 +35,7 @@ export default async function MapPage() {
         </div>
         <div className="flex-1">
           {/* F26: client wrapper with alert-zoom toggle */}
-          <MapWithToggle stores={(stores ?? []) as never} />
+          <MapWithToggle stores={(stores ?? []) as never} focusId={focusId} />
         </div>
       </main>
     </AppShell>
