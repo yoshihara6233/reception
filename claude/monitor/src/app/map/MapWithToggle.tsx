@@ -25,7 +25,7 @@ type StoreRow = {
   edge_devices: { id: string; status: EdgeStatus; last_seen_at: string | null }[]
 }
 
-export function MapWithToggle({ stores }: { stores: StoreRow[] }) {
+export function MapWithToggle({ stores, focusId }: { stores: StoreRow[]; focusId?: string | null }) {
   const { t } = useLang()
   const [zoomAlerts, setZoomAlerts] = useState(false)
 
@@ -41,7 +41,7 @@ export function MapWithToggle({ stores }: { stores: StoreRow[] }) {
 
   return (
     <div className="relative h-full w-full">
-      <StoreMap stores={stores} highlightIds={zoomAlerts ? geoAlertIds : null} />
+      <StoreMap stores={stores} highlightIds={zoomAlerts ? geoAlertIds : null} focusId={focusId} />
 
       <button
         onClick={() => setZoomAlerts((v) => !v)}

@@ -65,6 +65,7 @@ function makeIcon(
 export default function StoreMap({
   stores,
   highlightIds,
+  focusId,
 }: {
   stores: StoreRow[]
   /**
@@ -75,6 +76,11 @@ export default function StoreMap({
    * When undefined, default behavior (all markers normal).
    */
   highlightIds?: string[] | null
+  /**
+   * 特定店舗にフォーカス（ライブ画面の「地図」ボタンから ?focus=<id> で来る）。
+   * 指定店舗の座標へズームし、ポップアップを開く。
+   */
+  focusId?: string | null
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef       = useRef<L.Map | null>(null)
@@ -220,6 +226,24 @@ export default function StoreMap({
       }
     }
   }, [highlightIds, stores])
+
+  // ── focusId: 特定店舗へズーム＋ポップアップを開く（ライブ画面の「地図」ボタン） ──
+  useEffect(() => {
+    if (!focusId) return
+    const map     = mapRef.current
+    const markers = markersRef.current
+    if (!map || !markers) return
+    const target = stores.find((s) => s.id === focusId)
+    if (!target) return
+    // 初回マウント直後はコンテナサイズが未確定なことがあるので次フレームで実行。
+    const raf = requestAnimationFrame(() => {
+      if (mapRef.current !== map) return
+      map.invalidateSize(false)
+      map.setView([target.latitude, target.longitude], 15, { animate: true })
+      markers.get(focusId)?.openPopup()
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [focusId, stores])
 
   return <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
 }

@@ -282,7 +282,7 @@ export function MonitorWorkspace({
           )}
 
           <Link
-            href="/map"
+            href={`/map?focus=${storeId}`}
             className="hidden rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 sm:inline-block"
           >
             {t.workspace.mapLink}
