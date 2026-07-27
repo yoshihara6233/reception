@@ -35,11 +35,27 @@ import {
   fetchFrigateHistoricalFrame,
   fetchIproNvrHistoricalFrame,
 } from '../security/recording-frame.js'
+import { captureIproNvrJpeg } from '../adapters/i-pro/nvr-live.js'
 import { captureAtMs, normalizeOffsets } from './bcp-timing.js'
+import {
+  hasBcpSnapshotPath,
+  bcpUnavailableReason,
+  type BcpCapabilityInput,
+} from './bcp-capability.js'
 import type { CameraDescriptor } from '../types.js'
 
 const BCP_BUCKET    = 'bcp-clips'
 const CONCURRENCY   = 4
+
+/** NVR の host 設定を http(s) エンドポイントへ正規化する（grid.ts / vod.ts と同じ規則）。 */
+function nvrEndpoint(host: string): string {
+  return host.startsWith('http') ? host : `https://${host}`
+}
+
+/** カメラ記述子から取得可否の判定入力を作る。判定本体は bcp-capability.ts。 */
+function capabilityOf(camera: CameraDescriptor): BcpCapabilityInput {
+  return { vendor: camera.recorder.vendor, vodHost: camera.recorder.vod_host }
+}
 
 // ── Public types ─────────────────────────────────────────────────────────────
 
@@ -115,6 +131,13 @@ async function captureOneSnapshot(
   let source = 'latest'
   const isPast = targetMs < Date.now() - 5_000
 
+  // 取得経路が無い構成は、8 枚すべてを試して毎回同じ理由で落ちる前に打ち切る。
+  // ベンダ名を含めることで、発災後のログから設定不備だと即断できる。
+  const cap = capabilityOf(camera)
+  if (!hasBcpSnapshotPath(cap)) {
+    return { ok: false, error: bcpUnavailableReason(cap) }
+  }
+
   // F70: For Frigate, if the target moment is in the past, try to pull the
   // historical frame from Frigate's recordings first. This makes T-5/T+0/etc.
   // show what the camera was actually seeing at each timestamp instead of
@@ -145,12 +168,9 @@ async function captureOneSnapshot(
     camera.recorder.vod_host &&
     isPast
   ) {
-    const endpoint = camera.recorder.vod_host.startsWith('http')
-      ? camera.recorder.vod_host
-      : `https://${camera.recorder.vod_host}`
     const nvrFrame = await fetchIproNvrHistoricalFrame(
       {
-        endpoint,
+        endpoint: nvrEndpoint(camera.recorder.vod_host),
         username: camera.recorder.vod_username ?? camera.recorder.username,
         password: camera.recorder.vod_password ?? camera.recorder.password,
       },
@@ -158,6 +178,38 @@ async function captureOneSnapshot(
       targetMs,
     )
     if (nvrFrame) { buf = nvrFrame; source = 'ipro-nvr-recording' }
+  }
+
+  // i-pro-nvr: カメラ網が業務網から分離され、エッジから NVR にしか到達できない
+  // 現場向けの構成。ライブ・録画とも NU-100 経由で取る。
+  // vod.ts の対応表どおり、NVR は recorder.host / CH は camera.channel。
+  if (!buf && camera.recorder.vendor === 'i-pro-nvr') {
+    const r = camera.recorder
+    const nvr = {
+      endpoint: nvrEndpoint(r.host),
+      username: r.username,
+      password: r.password,
+    }
+
+    if (isPast) {
+      const nvrFrame = await fetchIproNvrHistoricalFrame(nvr, camera.channel, targetMs)
+      if (nvrFrame) { buf = nvrFrame; source = 'ipro-nvr-recording' }
+    }
+
+    // 録画が引けない場合（未フラッシュ・欠測・NVR 側の保持期間外）は現フレームで
+    // 代替する。8 枚の並びに穴を開けるより、取得時刻付きの現フレームを残す方が
+    // 被害報告の資料として使える。grid と同じ push.cgi の永続ストリームを使う。
+    if (!buf) {
+      try {
+        buf = await captureIproNvrJpeg({ ...nvr, timeoutMs: 10_000 }, camera.channel)
+        source = 'ipro-nvr-latest'
+      } catch (e) {
+        logger.debug(
+          { err: (e as Error).message, channel: camera.channel },
+          'bcp: i-PRO NVR live snapshot failed',
+        )
+      }
+    }
   }
 
   // F106: i-PRO / Uniview dispatch via BCP fetchers. i-PRO v3+ supports
