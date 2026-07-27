@@ -58,3 +58,42 @@ describe('normalizeOffsets', () => {
     expect(normalizeOffsets([3, 30])).toEqual([30])
   })
 })
+
+/**
+ * Regression guard: every vendor must have a BCP snapshot path.
+ *
+ * `i-pro-nvr`（カメラ網が業務網から分離され、エッジから NVR にしか到達できない
+ * 現場向けの構成）が captureOneSnapshot の分岐から丸ごと抜けており、その構成では
+ * BCP が全滅していた。しかも失敗するのは発災した瞬間だけで、平時は気づけない。
+ * 判定は網羅 switch なので新ベンダはコンパイルエラーになるが、各ベンダの答えも
+ * ここで固定しておく。
+ */
+import { hasBcpSnapshotPath, bcpUnavailableReason } from './bcp-capability.js'
+import type { Vendor } from '../types.js'
+
+const ALL_VENDORS: Vendor[] = ['ipro', 'uniview', 'frigate', 'onvif-generic', 'i-pro-nvr']
+
+describe('hasBcpSnapshotPath', () => {
+  it.each(['ipro', 'uniview', 'frigate', 'i-pro-nvr'] as Vendor[])(
+    'has a path for %s without an explicit NVR',
+    (vendor) => {
+      expect(hasBcpSnapshotPath({ vendor, vodHost: null })).toBe(true)
+    },
+  )
+
+  it('requires an NVR for onvif-generic — camera-direct has no recording', () => {
+    expect(hasBcpSnapshotPath({ vendor: 'onvif-generic', vodHost: null })).toBe(false)
+    expect(hasBcpSnapshotPath({ vendor: 'onvif-generic', vodHost: 'nvr.local' })).toBe(true)
+  })
+
+  it('covers every vendor once an NVR is configured', () => {
+    for (const vendor of ALL_VENDORS) {
+      expect(hasBcpSnapshotPath({ vendor, vodHost: 'nvr.local' })).toBe(true)
+    }
+  })
+
+  it('names the vendor in the failure reason so logs are actionable', () => {
+    expect(bcpUnavailableReason({ vendor: 'onvif-generic', vodHost: null }))
+      .toContain('vod_host')
+  })
+})
