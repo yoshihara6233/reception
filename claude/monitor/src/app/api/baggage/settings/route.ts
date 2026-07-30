@@ -1,7 +1,7 @@
 /**
  * PUT /api/baggage/settings — 店舗の手荷物検査設定（有効化・カメラ）を更新
  *
- * 店舗固有は enabled / camera_ids のみ。保持日数・タイムアウト・端末モード・音声・
+ * 店舗固有は enabled / camera_ids のみ（据え付け向きは /api/baggage/kiosk-orientation）。保持日数・タイムアウト・端末モード・音声・
  * STEP文言はテナント共通（/api/admin/baggage-settings）で一元管理する。
  * camera_ids はその店舗配下の recorder_cameras に限定して受理。
  * 変更は admin_audit_log（baggage.settings.update）に記録。

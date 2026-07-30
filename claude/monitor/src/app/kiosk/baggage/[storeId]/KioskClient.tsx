@@ -14,6 +14,8 @@
  *   API 不達は「係員をお呼びください」オーバーレイ。
  *
  * iPad は独自トーン（D11）— Genesis Edge トークン色をインラインで使用。
+ * 画面向き（横置き/縦置き）は店舗別設定。寸法は kiosk-layout.ts の 1 箇所に集約し、
+ * ここでは L.* を参照するだけにする（固定 px を JSX に撒かない）。
  * TTS 既定ON（D5・店舗設定 audio_enabled / audio_volume）。
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -23,6 +25,7 @@ import {
   type AnnounceStep, type FlowAction, type PersonKind, type TerminalMode, type StepPhase,
 } from '@/lib/baggage/inspection-flow'
 import { DEFAULT_ENTRY_GREETING, DEFAULT_EXIT_MESSAGE } from '@/lib/baggage/tenant-settings'
+import { kioskLayout, type KioskOrientation } from '@/lib/baggage/kiosk-layout'
 
 interface Props {
   storeId: string
@@ -42,6 +45,8 @@ interface Props {
   exitMessageText: string
   /** 稼働中ビルドの識別子（デプロイ確認用・アイドル画面に表示）。 */
   buildId: string
+  /** 端末の据え付け向き（店舗別設定）。寸法は lib/baggage/kiosk-layout に集約。 */
+  orientation: KioskOrientation
 }
 
 /** 顔照合の結果（face-auth API 応答）を後続画面へ引き回す。 */
@@ -121,7 +126,10 @@ const FACE_CAPTURE_MAXDIM = 720
 const CARD_CAPTURE_MAXDIM = 900
 
 export function KioskClient(props: Props) {
-  const { storeId, storeName, terminalMode, timeoutSec, audioEnabled, audioVolume, steps, consentText, consentVersion, entryGreetingText, exitMessageText, buildId } = props
+  const { storeId, storeName, terminalMode, timeoutSec, audioEnabled, audioVolume, steps, consentText, consentVersion, entryGreetingText, exitMessageText, buildId, orientation } = props
+  const L = kioskLayout(orientation)
+  const primaryBtn: React.CSSProperties = { ...primaryFullBtn, height: L.primaryBtnH }
+  const ghostBtn: React.CSSProperties = { ...ghostFullBtn, height: L.ghostBtnH }
   const greetingOf = (name: string) => (entryGreetingText.trim() || DEFAULT_ENTRY_GREETING).replaceAll('{name}', name)
   const exitMessage = exitMessageText.trim() || DEFAULT_EXIT_MESSAGE
   const [screen, setScreen] = useState<Screen>({ s: 'idle' })
@@ -514,7 +522,7 @@ export function KioskClient(props: Props) {
 
       {/* ── トップバー ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: '20px 32px', borderBottom: `1px solid ${COL.line}`, gap: 16 }}>
+        padding: `20px ${L.topPadX}px`, borderBottom: `1px solid ${COL.line}`, gap: 16 }}>
         <b style={{ fontSize: 14 }}>Genesis Edge 受付 — {storeName}</b>
         {screen.s === 'idle' && (
           <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 28, letterSpacing: '.04em' }}>{clock}</span>
@@ -538,35 +546,47 @@ export function KioskClient(props: Props) {
 
       {/* ── A: アイドル＝初期画面（区分×動作を1タップ・D17） ── */}
       {screen.s === 'idle' && (
-        <div style={centerBox(24)}>
-          <div style={{ fontSize: 30, fontWeight: 700 }}>手続きを選んでください</div>
+        <div style={centerBox(L.centerPad, 24)}>
+          <div style={{ fontSize: L.h1, fontWeight: 700 }}>手続きを選んでください</div>
           {(['staff', 'visitor'] as PersonKind[]).map((kind) => (
-            <div key={kind} style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-              <span style={{ width: 110, textAlign: 'right', fontSize: 20, fontWeight: 700, paddingRight: 6 }}>
+            // 縦置きは 1 行に並べると 768 px を超えるため、区分ラベルを上に置いてボタンを積む。
+            <div key={kind} style={{ display: 'flex', gap: L.idleStacked ? 10 : 14,
+              flexDirection: L.idleStacked ? 'column' : 'row',
+              alignItems: L.idleStacked ? 'stretch' : 'center' }}>
+              <span style={{
+                width: L.idleStacked ? undefined : L.idleKindLabelWidth,
+                textAlign: L.idleStacked ? 'left' : 'right',
+                fontSize: L.idleStacked ? 17 : 20, fontWeight: 700,
+                paddingRight: L.idleStacked ? 0 : 6, color: L.idleStacked ? COL.ink3 : COL.ink }}>
                 {KIND_LABEL[kind]}
               </span>
-              {actions.map((a) => {
-                const primary = ACTION_LABEL[a].primary
-                return (
-                  <button key={a} onClick={() => startAction(a, kind)} style={{
-                    width: 180, height: 104, background: '#fff',
-                    border: `${primary ? 2 : 1}px solid ${primary ? COL.accent : COL.line}`,
-                    color: primary ? COL.accent : COL.ink, borderRadius: 6, cursor: 'pointer',
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                    gap: 2, fontSize: 22, fontWeight: 700, fontFamily: 'inherit' }}>
-                    {ACTION_LABEL[a].t}
-                    <span style={{ fontSize: 12, fontWeight: 400, color: primary ? COL.accent : COL.ink3 }}>
-                      {actionSub(a, kind)}
-                    </span>
-                  </button>
-                )
-              })}
+              {/* 縦置きは 2 列に折り返す（4 動作を 1 列に積むと縦に溢れる）。 */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12,
+                justifyContent: 'center', maxWidth: L.idleBtnWidth * L.idleBtnPerRow + 12 * (L.idleBtnPerRow - 1) }}>
+                {actions.map((a) => {
+                  const primary = ACTION_LABEL[a].primary
+                  return (
+                    <button key={a} onClick={() => startAction(a, kind)} style={{
+                      width: L.idleBtnWidth, height: L.idleBtnHeight, background: '#fff',
+                      border: `${primary ? 2 : 1}px solid ${primary ? COL.accent : COL.line}`,
+                      color: primary ? COL.accent : COL.ink, borderRadius: 6, cursor: 'pointer',
+                      display: 'flex', flexDirection: 'column',
+                      alignItems: 'center', justifyContent: 'center',
+                      gap: 2, fontSize: 22, fontWeight: 700, fontFamily: 'inherit' }}>
+                      {ACTION_LABEL[a].t}
+                      <span style={{ fontSize: 12, fontWeight: 400, color: primary ? COL.accent : COL.ink3 }}>
+                        {actionSub(a, kind)}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
             </div>
           ))}
           <div style={{ fontSize: 14, color: COL.ink3 }}>
             顔データ: 従業員=登録抹消まで / 来訪者=当日中に自動削除
           </div>
-          <button onClick={openRegList} style={{ ...ghostFullBtn, width: 'auto', minWidth: 260, height: 48, fontSize: 15 }}>
+          <button onClick={openRegList} style={{ ...ghostBtn, width: 'auto', minWidth: 260, height: 48, fontSize: 15 }}>
             はじめての方の顔登録（従業員）
           </button>
         </div>
@@ -574,8 +594,8 @@ export function KioskClient(props: Props) {
 
       {/* ── セルフ顔登録: 名前選択（顔未登録の従業員のみ） ── */}
       {screen.s === 'regList' && (
-        <div style={centerBox(24)}>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>お名前を選んでください</div>
+        <div style={centerBox(L.centerPad, 24)}>
+          <div style={{ fontSize: L.h2 + 2, fontWeight: 700 }}>お名前を選んでください</div>
           {screen.employees === null && <div style={{ fontSize: 15, color: COL.ink3 }}>読み込んでいます…</div>}
           {screen.error && <div style={{ fontSize: 15, color: COL.warn }}>{screen.error}</div>}
           {screen.employees !== null && !screen.error && screen.employees.length === 0 && (
@@ -586,10 +606,10 @@ export function KioskClient(props: Props) {
           )}
           {screen.employees !== null && screen.employees.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center',
-              maxWidth: 780, maxHeight: 360, overflowY: 'auto', padding: 4 }}>
+              maxWidth: L.regListMaxW, maxHeight: L.regListMaxH, overflowY: 'auto', padding: 4 }}>
               {screen.employees.map((e) => (
                 <button key={e.id} onClick={() => startEnroll(e)} style={{
-                  minWidth: 180, height: 72, background: '#fff', border: `1px solid ${COL.line}`,
+                  minWidth: L.regBtnMinW, height: 72, background: '#fff', border: `1px solid ${COL.line}`,
                   borderRadius: 6, fontSize: 20, fontWeight: 700, fontFamily: 'inherit',
                   color: COL.ink, cursor: 'pointer', padding: '0 20px' }}>
                   {e.name}
@@ -600,15 +620,15 @@ export function KioskClient(props: Props) {
           <div style={{ fontSize: 13, color: COL.ink3 }}>
             登録済みの方はここに表示されません。顔の変更は管理者が行います。
           </div>
-          <button onClick={resetToIdle} style={ghostFullBtn}>最初の画面に戻る</button>
+          <button onClick={resetToIdle} style={ghostBtn}>最初の画面に戻る</button>
         </div>
       )}
 
       {/* ── セルフ顔登録: 撮影 → 確認 → 登録 ── */}
       {screen.s === 'regCapture' && (
-        <div style={centerBox(20)}>
-          <div style={{ fontSize: 26, fontWeight: 700 }}>{lastNameOfClient(screen.employee.name)}さんの顔を登録します</div>
-          <div style={{ width: 520, height: 390, background: '#1a1c1f', borderRadius: 6, position: 'relative',
+        <div style={centerBox(L.centerPad, 20)}>
+          <div style={{ fontSize: L.h2, fontWeight: 700 }}>{lastNameOfClient(screen.employee.name)}さんの顔を登録します</div>
+          <div style={{ width: L.faceBoxW, height: L.faceBoxH, background: '#1a1c1f', borderRadius: 6, position: 'relative',
             display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
             {screen.captured
               // eslint-disable-next-line @next/next/no-img-element
@@ -616,8 +636,8 @@ export function KioskClient(props: Props) {
               : <>
                   <video ref={videoRef} autoPlay playsInline muted
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  <div style={{ position: 'absolute', width: 230, height: 300, border: '2px dashed #8a8f96',
-                    borderRadius: '50%/46%' }} />
+                  <div style={{ position: 'absolute', width: L.faceGuideW, height: L.faceGuideH,
+                    border: '2px dashed #8a8f96', borderRadius: '50%/46%' }} />
                 </>}
           </div>
           {screen.error && <div style={{ fontSize: 15, color: COL.warn }}>{screen.error}</div>}
@@ -626,17 +646,17 @@ export function KioskClient(props: Props) {
               <>
                 <button disabled={screen.busy}
                   onClick={() => setScreen({ s: 'regCapture', employee: screen.employee })}
-                  style={{ ...ghostFullBtn, width: 'auto', minWidth: 180 }}>撮り直す</button>
+                  style={{ ...ghostBtn, width: 'auto', minWidth: 180 }}>撮り直す</button>
                 <button disabled={screen.busy} onClick={submitReg}
-                  style={{ ...primaryFullBtn, width: 'auto', minWidth: 260, height: 64, fontSize: 20 }}>
+                  style={{ ...primaryBtn, width: 'auto', minWidth: 260, height: 64, fontSize: 20 }}>
                   {screen.busy ? '登録しています…' : 'この写真で登録'}
                 </button>
               </>
             ) : (
               <>
-                <button onClick={openRegList} style={{ ...ghostFullBtn, width: 'auto', minWidth: 180 }}>名前を選び直す</button>
+                <button onClick={openRegList} style={{ ...ghostBtn, width: 'auto', minWidth: 180 }}>名前を選び直す</button>
                 <button onClick={captureForReg}
-                  style={{ ...primaryFullBtn, width: 'auto', minWidth: 260, height: 64, fontSize: 20 }}>撮影する</button>
+                  style={{ ...primaryBtn, width: 'auto', minWidth: 260, height: 64, fontSize: 20 }}>撮影する</button>
               </>
             )}
           </div>
@@ -646,41 +666,41 @@ export function KioskClient(props: Props) {
 
       {/* ── セルフ顔登録: 完了（3秒→idle） ── */}
       {screen.s === 'regDone' && (
-        <div style={centerBox(36)}>
+        <div style={centerBox(L.centerPad, 36)}>
           <CheckMark />
-          <div style={{ fontSize: 40, fontWeight: 700 }}>{lastNameOfClient(screen.name)}さんの顔を登録しました</div>
+          <div style={{ fontSize: L.hDone, fontWeight: 700 }}>{lastNameOfClient(screen.name)}さんの顔を登録しました</div>
           <div style={{ fontSize: 14, color: COL.ink3 }}>次回から顔認証で入退室できます。3秒後に最初の画面に戻ります</div>
         </div>
       )}
 
       {/* ── 個人情報取扱い同意（来訪者=入室毎／従業員=顔登録時） ── */}
       {screen.s === 'consent' && (
-        <div style={centerBox(24)}>
-          <div style={{ fontSize: 26, fontWeight: 700 }}>個人情報の取扱いについて</div>
-          <div style={{ width: 760, maxHeight: 360, overflowY: 'auto', background: '#fff',
+        <div style={centerBox(L.centerPad, 24)}>
+          <div style={{ fontSize: L.h2, fontWeight: 700 }}>個人情報の取扱いについて</div>
+          <div style={{ width: L.panelWide, maxHeight: L.regListMaxH, overflowY: 'auto', background: '#fff',
             border: `1px solid ${COL.line}`, borderRadius: 6, padding: '20px 24px', textAlign: 'left',
             fontSize: 16, lineHeight: 1.8, color: COL.ink2, whiteSpace: 'pre-wrap' }}>
             {consentText}
           </div>
-          <div style={{ width: 760, display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <button onClick={agreeConsent} style={primaryFullBtn}>同意して進む</button>
-            <button onClick={resetToIdle} style={ghostFullBtn}>同意しない（最初の画面に戻る）</button>
+          <div style={{ width: L.panelWide, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <button onClick={agreeConsent} style={primaryBtn}>同意して進む</button>
+            <button onClick={resetToIdle} style={ghostBtn}>同意しない（最初の画面に戻る）</button>
           </div>
         </div>
       )}
 
       {/* ── C: 顔認証（自動撮影） ── */}
       {screen.s === 'faceAuth' && (
-        <div style={centerBox(24)}>
-          <div style={{ fontSize: 32, fontWeight: 700 }}>
+        <div style={centerBox(L.centerPad, 24)}>
+          <div style={{ fontSize: L.h1 + 2, fontWeight: 700, textAlign: 'center' }}>
             {screen.kind === 'visitor' && screen.action === 'entry' ? '顔をカメラに向けてください（登録）' : '顔をカメラに向けてください'}
           </div>
-          <div style={{ width: 520, height: 390, background: '#1a1c1f', borderRadius: 6, position: 'relative',
+          <div style={{ width: L.faceBoxW, height: L.faceBoxH, background: '#1a1c1f', borderRadius: 6, position: 'relative',
             display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
             <video ref={videoRef} autoPlay playsInline muted
               style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            <div style={{ position: 'absolute', width: 230, height: 300, border: '2px dashed #8a8f96',
-              borderRadius: '50%/46%' }} />
+            <div style={{ position: 'absolute', width: L.faceGuideW, height: L.faceGuideH,
+              border: '2px dashed #8a8f96', borderRadius: '50%/46%' }} />
             <div style={{ position: 'absolute', bottom: 16, left: 0, right: 0, textAlign: 'center',
               color: '#cfd3d9', fontSize: 15 }}>認証しています…</div>
           </div>
@@ -690,69 +710,69 @@ export function KioskClient(props: Props) {
 
       {/* ── F: 顔認証失敗（中立文言・スキップ/再試行。自動では進めない） ── */}
       {screen.s === 'authFail' && (
-        <div style={centerBox(28)}>
-          <div style={{ width: 720, background: COL.warnSoft, border: `1px solid ${COL.warn}`,
+        <div style={centerBox(L.centerPad, 28)}>
+          <div style={{ width: L.panelMid, background: COL.warnSoft, border: `1px solid ${COL.warn}`,
             borderRadius: 6, padding: '20px 24px' }}>
             <div style={{ fontWeight: 700, fontSize: 18 }}>認証できませんでした</div>
             <div style={{ fontSize: 15, color: COL.ink2 }}>
               {screen.action === 'exit' ? 'そのまま検査へお進みください。手続きは通常どおり完了します。' : 'もう一度顔認証するか、スキップして入室できます。'}
             </div>
           </div>
-          <div style={{ width: 720, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ width: L.panelMid, display: 'flex', flexDirection: 'column', gap: 12 }}>
             {screen.action === 'exit' ? (
               <button onClick={() => startInspection(screen.kind, { ...screen.ctx, authSkipped: true })}
-                style={primaryFullBtn}>検査へ進む</button>
+                style={primaryBtn}>検査へ進む</button>
             ) : (
               <button onClick={() => skipEntry(screen.kind, { ...screen.ctx, authSkipped: true })}
-                style={primaryFullBtn}>スキップして入室</button>
+                style={primaryBtn}>スキップして入室</button>
             )}
             <button onClick={() => setScreen({ s: 'faceAuth', action: screen.action, kind: screen.kind })}
-              style={ghostFullBtn}>もう一度顔認証する</button>
+              style={ghostBtn}>もう一度顔認証する</button>
           </div>
         </div>
       )}
 
       {/* ── 従業員入室・認証成功のあいさつ（3秒→idle） ── */}
       {screen.s === 'entryGreeting' && (
-        <div style={centerBox(28)}>
+        <div style={centerBox(L.centerPad, 28)}>
           <CheckMark />
-          <div style={{ fontSize: 34, fontWeight: 700, textAlign: 'center', maxWidth: 820 }}>{greetingOf(lastNameOfClient(screen.name))}</div>
+          <div style={{ fontSize: L.hDone - 6, fontWeight: 700, textAlign: 'center', maxWidth: L.messageMaxW }}>{greetingOf(lastNameOfClient(screen.name))}</div>
           <div style={{ fontSize: 14, color: COL.ink3 }}>入室を記録しました。3秒後に最初の画面に戻ります</div>
         </div>
       )}
 
       {/* ── 来訪者入室: 顔を「撮影」ボタンで撮る ── */}
       {screen.s === 'vcapFace' && (
-        <div style={centerBox(20)}>
-          <div style={{ fontSize: 30, fontWeight: 700 }}>お顔を撮影します</div>
+        <div style={centerBox(L.centerPad, 20)}>
+          <div style={{ fontSize: L.h1, fontWeight: 700 }}>お顔を撮影します</div>
           <div style={{ fontSize: 15, color: COL.ink3 }}>枠に合わせて「撮影」を押してください（退室時の照合に使います）</div>
-          <div style={{ width: 520, height: 390, background: '#1a1c1f', borderRadius: 6, position: 'relative',
+          <div style={{ width: L.faceBoxW, height: L.faceBoxH, background: '#1a1c1f', borderRadius: 6, position: 'relative',
             display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
             <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            <div style={{ position: 'absolute', width: 230, height: 300, border: '2px dashed #8a8f96', borderRadius: '50%/46%' }} />
+            <div style={{ position: 'absolute', width: L.faceGuideW, height: L.faceGuideH, border: '2px dashed #8a8f96', borderRadius: '50%/46%' }} />
           </div>
           {screen.error && <div style={{ color: COL.danger, fontSize: 15 }}>{screen.error}</div>}
-          <div style={{ width: 520, display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <button disabled={screen.busy} onClick={captureVFace} style={primaryFullBtn}>{screen.busy ? '撮影中…' : '撮影'}</button>
-            <button onClick={resetToIdle} style={ghostFullBtn}>最初の画面に戻る</button>
+          <div style={{ width: L.panelNarrow, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <button disabled={screen.busy} onClick={captureVFace} style={primaryBtn}>{screen.busy ? '撮影中…' : '撮影'}</button>
+            <button onClick={resetToIdle} style={ghostBtn}>最初の画面に戻る</button>
           </div>
         </div>
       )}
 
       {/* ── 来訪者入室: 名刺を「撮影」ボタンで撮る（なしでも可） ── */}
       {screen.s === 'vcapCard' && (
-        <div style={centerBox(20)}>
-          <div style={{ fontSize: 30, fontWeight: 700 }}>名刺を撮影します</div>
+        <div style={centerBox(L.centerPad, 20)}>
+          <div style={{ fontSize: L.h1, fontWeight: 700 }}>名刺を撮影します</div>
           <div style={{ fontSize: 15, color: COL.ink3 }}>名刺を枠に合わせて「撮影」を押してください（お持ちでなければ「名刺なしで進む」）</div>
-          <div style={{ width: 560, height: 360, background: '#1a1c1f', borderRadius: 6, position: 'relative',
+          <div style={{ width: L.cardBoxW, height: L.cardBoxH, background: '#1a1c1f', borderRadius: 6, position: 'relative',
             display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
             <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            <div style={{ position: 'absolute', width: 420, height: 250, border: '2px dashed #8a8f96', borderRadius: 8 }} />
+            <div style={{ position: 'absolute', width: L.cardGuideW, height: L.cardGuideH, border: '2px dashed #8a8f96', borderRadius: 8 }} />
           </div>
           {screen.error && <div style={{ color: COL.danger, fontSize: 15 }}>{screen.error}</div>}
-          <div style={{ width: 560, display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <button disabled={screen.busy} onClick={() => captureVCard(false)} style={primaryFullBtn}>{screen.busy ? '記録中…' : '撮影して入室'}</button>
-            <button disabled={screen.busy} onClick={() => captureVCard(true)} style={ghostFullBtn}>名刺なしで進む</button>
+          <div style={{ width: L.cardBoxW, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <button disabled={screen.busy} onClick={() => captureVCard(false)} style={primaryBtn}>{screen.busy ? '記録中…' : '撮影して入室'}</button>
+            <button disabled={screen.busy} onClick={() => captureVCard(true)} style={ghostBtn}>名刺なしで進む</button>
           </div>
         </div>
       )}
@@ -760,7 +780,7 @@ export function KioskClient(props: Props) {
       {/* ── D: 検査 STEP（64pxテキスト主・音声従・無操作タイムアウト） ── */}
       {screen.s === 'step' && screen.phase.kind === 'step' && (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '24px 48px 0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: `24px ${L.stepPadX}px 0` }}>
             <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 14, background: COL.accent,
               color: '#fff', borderRadius: 4, padding: '3px 14px' }}>
               STEP {screen.phase.index + 1} / {screen.phase.total}
@@ -771,14 +791,14 @@ export function KioskClient(props: Props) {
             )}
           </div>
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
-            justifyContent: 'center', gap: 24, padding: '0 48px' }}>
-            <div style={{ fontSize: 64, fontWeight: 700, textAlign: 'center', lineHeight: 1.35,
+            justifyContent: 'center', gap: 24, padding: `0 ${L.stepPadX}px` }}>
+            <div style={{ fontSize: L.stepFontSize, fontWeight: 700, textAlign: 'center', lineHeight: 1.35,
               letterSpacing: '.02em' }}>{screen.phase.text}</div>
             {audioEnabled && (
               <div style={{ fontSize: 13, color: COL.ink3 }}>♪ 音声案内 再生中（店舗設定で OFF・音量変更可）</div>
             )}
           </div>
-          <div style={{ padding: '0 48px 40px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ padding: `0 ${L.stepPadX}px 40px`, display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 13, color: COL.ink3 }}>
               <span>のこり {Math.max(0, remaining)}秒</span>
               <span style={{ flex: 1, height: 4, background: COL.paper3, borderRadius: 2, overflow: 'hidden' }}>
@@ -787,7 +807,7 @@ export function KioskClient(props: Props) {
               </span>
               <span>無操作で検査は中断として記録されます</span>
             </div>
-            <button onClick={nextStep} style={{ height: 80, width: '100%', background: COL.accent, color: '#fff',
+            <button onClick={nextStep} style={{ height: L.primaryBtnH, width: '100%', background: COL.accent, color: '#fff',
               border: 'none', borderRadius: 4, fontSize: 26, fontWeight: 700, fontFamily: 'inherit',
               cursor: 'pointer' }}>次へ</button>
           </div>
@@ -796,9 +816,9 @@ export function KioskClient(props: Props) {
 
       {/* ── B: 途中退室/途中入室 記録完了（2秒→idle） ── */}
       {screen.s === 'recorded' && (
-        <div style={centerBox(36)}>
+        <div style={centerBox(L.centerPad, 36)}>
           <CheckMark />
-          <div style={{ fontSize: 44, fontWeight: 700 }}>
+          <div style={{ fontSize: L.hDone + 4, fontWeight: 700, textAlign: 'center' }}>
             {screen.action === 'temp_exit' ? '途中退室' : '途中入室'}を記録しました
           </div>
           <div style={{ fontSize: 14, color: COL.ink3 }}>
@@ -810,10 +830,10 @@ export function KioskClient(props: Props) {
 
       {/* ── E: 完了（3秒→idle） ── */}
       {screen.s === 'complete' && (
-        <div style={centerBox(28)}>
+        <div style={centerBox(L.centerPad, 28)}>
           <CheckMark />
-          <div style={{ fontSize: 40, fontWeight: 700 }}>{screen.label}</div>
-          {screen.sub && <div style={{ fontSize: 24, fontWeight: 600, textAlign: 'center', maxWidth: 820, color: COL.ink2 }}>{screen.sub}</div>}
+          <div style={{ fontSize: L.hDone, fontWeight: 700, textAlign: 'center' }}>{screen.label}</div>
+          {screen.sub && <div style={{ fontSize: 24, fontWeight: 600, textAlign: 'center', maxWidth: L.messageMaxW, color: COL.ink2 }}>{screen.sub}</div>}
           <div style={{ fontSize: 14, color: COL.ink3 }}>3秒後に最初の画面に戻ります</div>
         </div>
       )}
@@ -831,9 +851,10 @@ export function KioskClient(props: Props) {
   )
 }
 
-function centerBox(gap: number): React.CSSProperties {
+/** 中央寄せ領域。padding は向きで変わる（縦置きは幅が狭いぶん詰める）。 */
+function centerBox(pad: number, gap: number): React.CSSProperties {
   return { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
-    justifyContent: 'center', gap, padding: 32 }
+    justifyContent: 'center', gap, padding: pad, overflowY: 'auto' }
 }
 
 const primaryFullBtn: React.CSSProperties = { height: 80, width: '100%', background: '#2C4A7E', color: '#fff',

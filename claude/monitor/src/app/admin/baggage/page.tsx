@@ -105,7 +105,7 @@ export default async function AdminBaggagePage() {
           />
         </section>
         <section>
-          <h2 className="mb-3 text-[15px] font-bold text-slate-900 dark:text-gedink">店舗別設定（有効化・検査台カメラ・iPad URL）</h2>
+          <h2 className="mb-3 text-[15px] font-bold text-slate-900 dark:text-gedink">店舗別設定（有効化・検査台カメラ）</h2>
           <StoreListClient stores={storeRows} />
         </section>
       </div>
