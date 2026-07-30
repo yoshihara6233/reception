@@ -7,6 +7,7 @@
  * 管理画面を開いてしまう。キオスク画面のみ generateMetadata でこれを参照する。
  */
 import { createSupabaseService } from '@/lib/supabase/server'
+import { manifestOrientation, normalizeOrientation } from '@/lib/baggage/kiosk-layout'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,11 +18,18 @@ export async function GET(
   const { storeId } = await params
 
   // 店名はアイコン名の見栄え用途のみ（取得失敗は既定名で継続）。
+  // 向きは店舗別設定。ホーム画面から起動したときに端末の据え付けと画面がずれないよう
+  // manifest 側でも固定する（UI 側のレイアウト切替と対で効かせる）。
   let storeName = ''
+  let orientation = normalizeOrientation(undefined)
   try {
     const svc = createSupabaseService()
-    const { data } = await svc.from('stores').select('name').eq('id', storeId).maybeSingle()
+    const [{ data }, { data: cfg }] = await Promise.all([
+      svc.from('stores').select('name').eq('id', storeId).maybeSingle(),
+      svc.from('inspection_settings').select('kiosk_orientation').eq('store_id', storeId).maybeSingle(),
+    ])
     if (data?.name) storeName = String(data.name)
+    orientation = normalizeOrientation(cfg?.kiosk_orientation)
   } catch {
     /* cosmetic only */
   }
@@ -34,7 +42,7 @@ export async function GET(
     start_url: base,
     scope: base,
     display: 'standalone',
-    orientation: 'any',
+    orientation: manifestOrientation(orientation),
     background_color: '#F7F5F1',
     theme_color: '#0F0F10',
     categories: ['business', 'security'],

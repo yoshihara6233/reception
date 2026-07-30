@@ -8,6 +8,7 @@
 import type { Metadata } from 'next'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { loadTenantSettings } from '@/lib/baggage/tenant-settings'
+import { normalizeOrientation } from '@/lib/baggage/kiosk-layout'
 import { resolveKioskOrAdmin } from '@/lib/baggage/kiosk-guard'
 import { isStoreOptionEnabled } from '@/lib/admin/tenant-quota'
 import { KioskClient } from './KioskClient'
@@ -62,7 +63,14 @@ export default async function BaggageKioskPage(
     return <FullScreenMessage title="この店舗では手荷物検査は利用できません" sub="ご利用にはオプション契約が必要です。管理画面でご確認ください。" />
   }
 
-  const { data: s } = await svc.from('inspection_settings').select('enabled').eq('store_id', store.id).maybeSingle()
+  // kiosk_orientation は 20260730120000 の migration で追加した列。**migration 適用前に
+  // このコードがデプロイされてもキオスクを止めない**ため、列が無ければ最小列で読み直す。
+  // （select が失敗すると data=null になり、全店舗が「未有効」表示＝全店停止になる。）
+  const first = await svc.from('inspection_settings')
+    .select('enabled, kiosk_orientation').eq('store_id', store.id).maybeSingle()
+  const s = first.error
+    ? (await svc.from('inspection_settings').select('enabled').eq('store_id', store.id).maybeSingle()).data
+    : first.data
   if (!s?.enabled) {
     return <FullScreenMessage title="この店舗では手荷物検査オプションが有効になっていません" sub="管理画面の手荷物検査設定をご確認ください。" />
   }
@@ -83,6 +91,7 @@ export default async function BaggageKioskPage(
       entryGreetingText={tenant.entryGreetingText}
       exitMessageText={tenant.exitMessageText}
       buildId={(process.env.VERCEL_GIT_COMMIT_SHA ?? 'dev').slice(0, 7)}
+      orientation={normalizeOrientation((s as { kiosk_orientation?: string } | null)?.kiosk_orientation)}
     />
   )
 }

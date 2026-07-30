@@ -2,6 +2,7 @@
 
 /**
  * 手荷物検査 店舗別設定（有効化・検査台カメラ）を全店舗まとめて編集。
+ * iPad の据え付け向きは店長が自店舗で設定する項目のため「iPad設定」(/baggage/ipad) に置く。
  * iPadのQR/PIN設定は手荷物検査モジュールの「iPad設定」(/baggage/ipad) へ移設。
  * 共通設定（保持日数・タイムアウト等）は同ページ上部の TenantSettingsClient。
  * 保存は店舗ごと（PUT /api/baggage/settings）。
@@ -86,9 +87,9 @@ export function StoreListClient({ stores }: { stores: StoreRow[] }) {
               </div>
             </div>
 
-            {/* iPad の QR / PIN 設定は「手荷物検査 › iPad設定」へ移設 */}
+            {/* iPad の QR / PIN / 据え付け向きは「手荷物検査 › iPad設定」へ移設 */}
             <div className="mt-3 text-[12px] text-slate-500 dark:text-gedink3">
-              iPad の QRコード・6桁PINは <span className="font-medium text-slate-700 dark:text-gedink2">手荷物検査 › iPad設定</span> で行います。
+              iPad の QRコード・6桁PIN・据え付け向きは <span className="font-medium text-slate-700 dark:text-gedink2">手荷物検査 › iPad設定</span> で行います（店長が自店舗で設定できます）。
             </div>
 
             <div className="mt-3 flex items-center gap-3">

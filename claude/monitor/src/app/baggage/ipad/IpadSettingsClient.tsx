@@ -1,19 +1,24 @@
 'use client'
 
 /**
- * iPad設定（クライアント）— 店舗ごとに QRコード表示と6桁PINの設定/解除。
+ * iPad設定（クライアント）— 店舗ごとに QRコード表示・6桁PINの設定/解除・据え付け向き。
  * QR は origin/kiosk/baggage/<storeId>（マウント後に window.location から生成）。
  * PIN 設定は PUT /api/baggage/kiosk-pin、解除は DELETE。設定後はサーバ状態を再取得。
+ * 据え付け向きは PUT /api/baggage/kiosk-orientation（押した時点で即保存。店長が現物を
+ * 見ながら選ぶ項目なので、保存ボタンを別に押させない）。
  */
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { QRCodeSVG } from 'qrcode.react'
+import { KIOSK_ORIENTATIONS, ORIENTATION_LABEL, type KioskOrientation } from '@/lib/baggage/kiosk-layout'
 
 export interface IpadStore {
   id: string
   name: string
   pinSet: boolean
   locked: boolean
+  /** iPad の据え付け向き。縦置きにするとキオスクが縦型レイアウトになる。 */
+  orientation: KioskOrientation
 }
 
 const ERR_LABEL: Record<string, string> = {
@@ -21,6 +26,13 @@ const ERR_LABEL: Record<string, string> = {
   forbidden: 'この店舗を操作する権限がありません。',
   pin_save_failed: 'PINの保存に失敗しました。',
   pin_delete_failed: 'PINの解除に失敗しました。',
+  settings_not_found: 'この店舗は手荷物検査が有効になっていません。',
+}
+
+/** 向きの選び方（現物の設置状態で選ぶものだと分かるようにする）。 */
+const ORIENTATION_HINT: Record<KioskOrientation, string> = {
+  landscape: '横向きに設置',
+  portrait: '縦向きに設置',
 }
 
 export function IpadSettingsClient({ stores }: { stores: IpadStore[] }) {
@@ -29,6 +41,10 @@ export function IpadSettingsClient({ stores }: { stores: IpadStore[] }) {
   const [pinInput, setPinInput] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<Record<string, string | null>>({})
+  // 向きは押した瞬間に反映したいので、サーバ再取得を待たずローカルにも持つ。
+  const [orientation, setOrientation] = useState<Record<string, KioskOrientation>>(
+    () => Object.fromEntries(stores.map((s) => [s.id, s.orientation])),
+  )
 
   useEffect(() => { setOrigin(window.location.origin) }, [])
 
@@ -50,6 +66,27 @@ export function IpadSettingsClient({ stores }: { stores: IpadStore[] }) {
       }
       setPinInput((prev) => ({ ...prev, [id]: '' }))
       setStoreMsg(id, 'PINを設定しました。')
+      router.refresh()
+    } finally { setBusy(null) }
+  }
+
+  const saveOrientation = async (id: string, next: KioskOrientation) => {
+    if (orientation[id] === next) return
+    const prev = orientation[id]
+    setOrientation((o) => ({ ...o, [id]: next }))   // 楽観更新（失敗時は戻す）
+    setBusy(`orient:${id}`); setStoreMsg(id, null)
+    try {
+      const res = await fetch('/api/baggage/kiosk-orientation', {
+        method: 'PUT', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ storeId: id, orientation: next }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => null) as { error?: string } | null
+        setOrientation((o) => ({ ...o, [id]: prev }))
+        setStoreMsg(id, ERR_LABEL[j?.error ?? ''] ?? '向きの保存に失敗しました。')
+        return
+      }
+      setStoreMsg(id, `${ORIENTATION_LABEL[next]}にしました。iPad の画面を再読込してください。`)
       router.refresh()
     } finally { setBusy(null) }
   }
@@ -122,6 +159,29 @@ export function IpadSettingsClient({ stores }: { stores: IpadStore[] }) {
                 )}
               </div>
               {msg[s.id] && <div className="mt-1.5 text-[12px] text-slate-600 dark:text-gedink2">{msg[s.id]}</div>}
+            </div>
+
+            {/* 据え付け向き（押した時点で保存） */}
+            <div className="mt-4 border-t border-slate-100 pt-3 dark:border-gedline/50">
+              <label className="text-[11px] text-slate-500 dark:text-gedink3">iPad の据え付け向き</label>
+              <div className="mt-1 flex items-center gap-2">
+                {KIOSK_ORIENTATIONS.map((o) => {
+                  const on = (orientation[s.id] ?? s.orientation) === o
+                  return (
+                    <button key={o} onClick={() => saveOrientation(s.id, o)} disabled={busy !== null}
+                      aria-pressed={on}
+                      className={'rounded px-3 py-1.5 text-[13px] disabled:opacity-40 ' + (on
+                        ? 'border-2 border-blue-700 bg-blue-50 font-medium text-blue-800 dark:border-gedaccent dark:bg-gedaccent/15 dark:text-gedaccent'
+                        : 'border border-slate-300 text-slate-700 hover:bg-slate-50 dark:border-gedline dark:text-gedink2 dark:hover:bg-gedbg')}>
+                      {ORIENTATION_LABEL[o]}
+                      <span className="ml-1.5 text-[11px] font-normal opacity-70">{ORIENTATION_HINT[o]}</span>
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="mt-1.5 text-[11px] text-slate-500 dark:text-gedink3">
+                縦置きにすると、キオスクの画面が縦型のレイアウトに変わります。
+              </p>
             </div>
           </div>
         )
