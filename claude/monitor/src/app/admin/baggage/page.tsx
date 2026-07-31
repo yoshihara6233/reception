@@ -59,13 +59,13 @@ export default async function AdminBaggagePage() {
 
   const [{ data: settingsRows }, { data: cams }] = await Promise.all([
     storeIds.length
-      ? svc.from('inspection_settings').select('store_id, enabled, camera_ids').in('store_id', storeIds)
+      ? svc.from('inspection_settings').select('store_id, enabled, camera_ids, notify_emails').in('store_id', storeIds)
       : Promise.resolve({ data: [] }),
     svc.from('recorder_cameras')
       .select('id, name, channel, recorders!inner ( edge_devices!inner ( store_id ) )')
       .eq('enabled', true),
   ])
-  const settingsByStore = new Map((((settingsRows ?? []) as { store_id: string; enabled: boolean; camera_ids: string[] }[]))
+  const settingsByStore = new Map((((settingsRows ?? []) as { store_id: string; enabled: boolean; camera_ids: string[]; notify_emails: string[] | null }[]))
     .map((s) => [s.store_id, s]))
   const camsByStore = new Map<string, { id: string; name: string; channel: number }[]>()
   for (const c of (cams ?? []) as { id: string; name: string; channel: number; recorders: unknown }[]) {
@@ -86,6 +86,7 @@ export default async function AdminBaggagePage() {
       name: s.name,
       enabled: cfg?.enabled ?? false,
       cameraIds: ((cfg?.camera_ids ?? []) as string[]).filter((id) => cameras.some((c) => c.id === id)),
+      notifyEmails: (cfg?.notify_emails ?? []).join(', '),
       cameras,
     }
   })

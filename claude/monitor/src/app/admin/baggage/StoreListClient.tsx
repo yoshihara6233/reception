@@ -15,7 +15,14 @@ export interface StoreRow {
   name: string
   enabled: boolean
   cameraIds: string[]
+  /** 日次アンマッチレポート宛先（カンマ区切りの編集用文字列） */
+  notifyEmails: string
   cameras: { id: string; name: string; channel: number }[]
+}
+
+/** カンマ・空白・改行区切りの入力をメール配列へ（重複除去） */
+function parseEmails(input: string): string[] {
+  return [...new Set(input.split(/[\s,、;]+/).map((s) => s.trim()).filter(Boolean))]
 }
 
 export function StoreListClient({ stores }: { stores: StoreRow[] }) {
@@ -37,11 +44,17 @@ export function StoreListClient({ stores }: { stores: StoreRow[] }) {
     }))
 
   const save = async (r: StoreRow) => {
+    const emails = parseEmails(r.notifyEmails)
+    const bad = emails.filter((e) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))
+    if (bad.length > 0) {
+      setMsg({ id: r.id, ok: false, text: `メールアドレスの形式が不正です: ${bad.join(', ')}` })
+      return
+    }
     setBusy(r.id); setMsg(null)
     try {
       const res = await fetch('/api/baggage/settings', {
         method: 'PUT', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ storeId: r.id, enabled: r.enabled, cameraIds: r.cameraIds }),
+        body: JSON.stringify({ storeId: r.id, enabled: r.enabled, cameraIds: r.cameraIds, notifyEmails: emails }),
       })
       if (!res.ok) {
         const j = await res.json().catch(() => null) as { error?: string } | null
@@ -84,6 +97,21 @@ export function StoreListClient({ stores }: { stores: StoreRow[] }) {
                       <span className="font-mono text-[11px] text-slate-500 dark:text-gedink3">ch{c.channel}</span>
                     </label>
                   ))}
+              </div>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-start gap-3 text-sm">
+              <span className="w-40 pt-1.5 text-[13px] text-slate-600 dark:text-gedink2">日次レポート通知先</span>
+              <div className="min-w-[280px] flex-1">
+                <input
+                  value={r.notifyEmails}
+                  onChange={(e) => patch(r.id, { notifyEmails: e.target.value })}
+                  placeholder="例: tencho@example.com, area-mgr@example.com"
+                  className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm dark:border-gedline dark:bg-gedbg" />
+                <p className="mt-1 text-[12px] text-slate-500 dark:text-gedink3">
+                  前日のアンマッチ一覧メールの宛先（カンマ区切り・BCP/巡回と同方式）。
+                  空欄のときはこの店舗を担当に持つユーザーのメールへ送ります。
+                </p>
               </div>
             </div>
 
