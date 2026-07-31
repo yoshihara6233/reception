@@ -279,7 +279,19 @@ const styles = StyleSheet.create({
   statusFailed:    { color: C.accent  },
 
   // --- Image grid (F64) ---
-  // 4 columns × 2 rows. Each cell: caption above, image below.
+  // カメラごとに 1 グループ（見出し + 4 columns × 2 rows）。
+  cameraGroup: {
+    marginBottom: 8,
+  },
+  cameraHeading: {
+    fontSize: 8,
+    fontWeight: 'bold',
+    color: C.textDark,
+    backgroundColor: C.labelBg,
+    paddingVertical: 3,
+    paddingHorizontal: 6,
+    marginBottom: 3,
+  },
   imageGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -356,12 +368,19 @@ export function BcpReport({ event, store, clips, generatedAt }: BcpReportProps) 
   const pageTitle =
     'BCP ' + (event.isTest ? '[TEST] ' : '') + 'インシデントレポート'
 
-  // Sort clips by offset_min for sensible display order
+  // カメラ別 → オフセット順で並べる（複数カメラの写真が混在してバラバラに
+  // 見えないよう、画面のタイムラインと同じ「カメラごとに 1 段」の構成にする）
   const sortedClips = [...clips].sort((a, b) => {
-    const ao = a.offsetMin ?? 999
-    const bo = b.offsetMin ?? 999
-    return ao - bo
+    const cam = a.cameraName.localeCompare(b.cameraName, 'ja')
+    if (cam !== 0) return cam
+    return (a.offsetMin ?? 999) - (b.offsetMin ?? 999)
   })
+  const cameraGroups: { cameraName: string; clips: typeof sortedClips }[] = []
+  for (const clip of sortedClips) {
+    const last = cameraGroups[cameraGroups.length - 1]
+    if (last && last.cameraName === clip.cameraName) last.clips.push(clip)
+    else cameraGroups.push({ cameraName: clip.cameraName, clips: [clip] })
+  }
 
   return (
     <Document title={pageTitle} author="Intereco BCP System">
@@ -432,29 +451,36 @@ export function BcpReport({ event, store, clips, generatedAt }: BcpReportProps) 
           {sortedClips.length === 0 ? (
             <Text style={styles.noClips}>スナップショットがありません / No snapshots recorded</Text>
           ) : (
-            <View style={styles.imageGrid}>
-              {sortedClips.map((clip) => (
-                <View key={clip.id} style={styles.imageCell}>
-                  <Text style={styles.imageCaption}>
-                    {offsetLabel(clip.offsetMin)}
-                  </Text>
-                  {clip.clipUrl && clip.uploadStatus === 'completed' ? (
-                    // @react-pdf/renderer Image is a PDF primitive, not a DOM <img> — alt does not apply.
-                    // eslint-disable-next-line jsx-a11y/alt-text
-                    <Image src={clip.clipUrl} style={styles.imageBox} />
-                  ) : (
-                    <View style={styles.imageEmpty}>
-                      <Text style={styles.imageEmptyText}>
-                        {uploadStatusLabel(clip.uploadStatus)}
+            cameraGroups.map((group) => (
+              <View key={group.cameraName} style={styles.cameraGroup}>
+                <Text style={styles.cameraHeading}>
+                  カメラ: {group.cameraName}  ({group.clips.length} 枚)
+                </Text>
+                <View style={styles.imageGrid}>
+                  {group.clips.map((clip) => (
+                    <View key={clip.id} style={styles.imageCell}>
+                      <Text style={styles.imageCaption}>
+                        {offsetLabel(clip.offsetMin)}
+                      </Text>
+                      {clip.clipUrl && clip.uploadStatus === 'completed' ? (
+                        // @react-pdf/renderer Image is a PDF primitive, not a DOM <img> — alt does not apply.
+                        // eslint-disable-next-line jsx-a11y/alt-text
+                        <Image src={clip.clipUrl} style={styles.imageBox} />
+                      ) : (
+                        <View style={styles.imageEmpty}>
+                          <Text style={styles.imageEmptyText}>
+                            {uploadStatusLabel(clip.uploadStatus)}
+                          </Text>
+                        </View>
+                      )}
+                      <Text style={styles.imageTimestamp}>
+                        {formatJst(clip.clipFrom)}
                       </Text>
                     </View>
-                  )}
-                  <Text style={styles.imageTimestamp}>
-                    {formatJst(clip.clipFrom)}
-                  </Text>
+                  ))}
                 </View>
-              ))}
-            </View>
+              </View>
+            ))
           )}
         </View>
 
