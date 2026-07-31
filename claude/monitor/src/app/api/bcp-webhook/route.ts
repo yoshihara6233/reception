@@ -306,7 +306,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         })
 
         const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
-        const eventUrl = appUrl ? `${appUrl}/bcp/events/${eventId}` : `/bcp/events/${eventId}`
+        // イベント詳細ページは /bcp/[id]。旧 /bcp/events/[id] はページが存在せず 404 になる
+        const eventUrl = appUrl ? `${appUrl}/bcp/${eventId}` : `/bcp/${eventId}`
 
         const { subject, html } = bcpCompletedEmail({
           storeName:  store.name,
