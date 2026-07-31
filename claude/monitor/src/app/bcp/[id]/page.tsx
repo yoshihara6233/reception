@@ -9,6 +9,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createSupabaseServer } from '@/lib/supabase/server'
+import { jmaIntensityLabel } from '@/lib/bcp/intensity'
 import { recordFootageAccess } from '@/lib/audit/footage-access'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
@@ -21,6 +22,7 @@ interface BcpEvent {
   alert_type: string
   alert_issued_at: string
   area_code: string | null
+  max_intensity: string | null
   status: string
   is_test: boolean
   created_at: string
@@ -121,7 +123,7 @@ export default async function BcpEventDetailPage({
   // Fetch event
   const { data: eventData, error: eventError } = await supa
     .from('bcp_events')
-    .select('id, alert_type, alert_issued_at, area_code, status, is_test, created_at, stores ( id, name )')
+    .select('id, alert_type, alert_issued_at, area_code, max_intensity, status, is_test, created_at, stores ( id, name )')
     .eq('id', id)
     .single()
 
@@ -255,7 +257,7 @@ export default async function BcpEventDetailPage({
               </span>
             </div>
           </div>
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-0 divide-y divide-slate-100 px-4 text-xs md:grid-cols-4 md:divide-y-0 md:divide-x">
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-0 divide-y divide-slate-100 px-4 text-xs md:grid-cols-5 md:divide-y-0 md:divide-x">
             <div className="py-3">
               <dt className="mb-0.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">店舗名</dt>
               <dd className="font-medium text-slate-800">{event.stores?.name ?? '—'}</dd>
@@ -271,6 +273,10 @@ export default async function BcpEventDetailPage({
             <div className="py-3 md:px-4">
               <dt className="mb-0.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">エリアコード</dt>
               <dd className="font-mono text-slate-700">{event.area_code ?? '—'}</dd>
+            </div>
+            <div className="py-3 md:px-4">
+              <dt className="mb-0.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">震度</dt>
+              <dd className="font-medium text-slate-800">{jmaIntensityLabel(event.max_intensity) ?? '—'}</dd>
             </div>
           </dl>
         </div>

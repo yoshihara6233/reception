@@ -18,6 +18,7 @@ import {
   StyleSheet,
   renderToBuffer,
 } from '@react-pdf/renderer'
+import { jmaIntensityLabel } from '@/lib/bcp/intensity'
 
 // ---------------------------------------------------------------------------
 // Font registration (Japanese support)
@@ -70,6 +71,8 @@ export interface BcpReportProps {
     alertType: string
     alertIssuedAt: string // ISO string
     areaCode: string
+    /** JMA MaxInt 生値（'3','5-' 等）。地震以外・不明は null/省略 */
+    maxIntensity?: string | null
     status: string
     isTest: boolean
   }
@@ -422,6 +425,10 @@ export function BcpReport({ event, store, clips, generatedAt }: BcpReportProps) 
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>アラート種別 / Alert Type</Text>
               <Text style={styles.infoValue}>{event.alertType}</Text>
+            </View>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>震度 / Seismic Intensity</Text>
+              <Text style={styles.infoValue}>{jmaIntensityLabel(event.maxIntensity) ?? '-'}</Text>
             </View>
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>地域コード / Area Code</Text>

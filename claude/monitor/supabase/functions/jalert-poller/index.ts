@@ -312,7 +312,7 @@ async function processEntry(
   // 7. 各店舗で自動取得＋通知
   for (const { store, settings } of triggeredStores) {
     try {
-      await processStore(supa, entry, store, settings, alertType, alertIssuedAt, areaCodes)
+      await processStore(supa, entry, store, settings, alertType, alertIssuedAt, areaCodes, maxIntensity)
     } catch (err) {
       console.error(
         `[jalert-poller] Error processing store ${store.id} (${store.name}):`,
@@ -415,6 +415,7 @@ async function processStore(
   alertType: string,
   alertIssuedAt: string,
   areaCodes: string[],
+  maxIntensity: string | null,
 ): Promise<void> {
   // 自動取得モデル: 発令を検知したら、現地レコーダから 8 枚スナップ(T-5〜T+30分)を
   // 自動取得 → アップロード → 自動PDF(bcp_report_sweep) → 完了メール、まで全自動。
@@ -456,6 +457,7 @@ async function processStore(
       alert_type: alertType,
       alert_issued_at: alertIssuedAt,
       area_code: areaCodes[0] ?? null,
+      max_intensity: maxIntensity,
       status: 'pending',
       is_test: false,
     })

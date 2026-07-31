@@ -304,6 +304,7 @@ export interface Msg {
     colAlertType: string
     colIssuedAt: string
     colArea: string
+    colIntensity: string
     colKind: string
     colGeneratedAt: string
     colRecipients: string
@@ -712,6 +713,7 @@ const ja: Msg = {
     colAlertType: 'アラート種別',
     colIssuedAt: '発令日時',
     colArea: 'エリアコード',
+    colIntensity: '震度',
     colKind: '種別',
     colGeneratedAt: '生成日時',
     colRecipients: '送信先',
@@ -1117,6 +1119,7 @@ const en: Msg = {
     colAlertType: 'Alert type',
     colIssuedAt: 'Issued at',
     colArea: 'Area code',
+    colIntensity: 'Intensity',
     colKind: 'Kind',
     colGeneratedAt: 'Generated',
     colRecipients: 'Recipients',
@@ -1522,6 +1525,7 @@ const zh: Msg = {
     colAlertType: '警报类型',
     colIssuedAt: '发布时间',
     colArea: '地区代码',
+    colIntensity: '震度',
     colKind: '类型',
     colGeneratedAt: '生成时间',
     colRecipients: '发送至',
@@ -1927,6 +1931,7 @@ const ko: Msg = {
     colAlertType: '경보 종류',
     colIssuedAt: '발령 시각',
     colArea: '지역 코드',
+    colIntensity: '진도',
     colKind: '종류',
     colGeneratedAt: '생성 시각',
     colRecipients: '발송처',

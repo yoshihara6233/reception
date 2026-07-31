@@ -13,6 +13,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useLang } from '@/lib/i18n/context'
 import type { Msg } from '@/lib/i18n/messages'
+import { jmaIntensityLabel } from '@/lib/bcp/intensity'
 import { FileText } from 'lucide-react'
 
 export interface BcpEventChild {
@@ -22,6 +23,7 @@ export interface BcpEventChild {
   alert_issued_at:  string
   alert_type:       string
   area_code:        string | null
+  max_intensity:    string | null
   store_id:         string | null
   store_name:       string | null
 }
@@ -82,6 +84,7 @@ interface AlertGroup {
   alert_type:        string
   alert_issued_at:   string
   area_code:         string | null
+  max_intensity:     string | null
   is_test:           boolean
   stores:            BcpEventChild[]
   aggregated_status: string
@@ -98,12 +101,15 @@ function groupByAlert(rows: BcpEventChild[]): AlertGroup[] {
         alert_type:        r.alert_type,
         alert_issued_at:   r.alert_issued_at,
         area_code:         r.area_code,
+        max_intensity:     r.max_intensity,
         is_test:           r.is_test,
         stores:            [],
         aggregated_status: 'completed',
       }
       map.set(key, g)
     }
+    // 同一発令でも古い行に震度が無いことがある（バックフィル前）— ある値を優先
+    if (!g.max_intensity && r.max_intensity) g.max_intensity = r.max_intensity
     g.stores.push(r)
   }
   // Compute aggregated status: failed > in_progress > partial > completed
@@ -209,6 +215,7 @@ export function EventsTreeTable({
             <th className="px-3 py-2 text-left">{tBcp.colAlertType}</th>
             <th className="px-3 py-2 text-left">{tBcp.colIssuedAt}</th>
             <th className="px-3 py-2 text-left">{tBcp.colArea}</th>
+            <th className="px-3 py-2 text-left">{tBcp.colIntensity}</th>
             <th className="px-3 py-2 text-left">{tBcp.colStoreCount}</th>
             <th className="px-3 py-2 text-left">{tBcp.colStatus}</th>
             <th className="px-3 py-2 text-left">PDF</th>
@@ -289,6 +296,9 @@ function FragmentRows({
           {fmtJST(g.alert_issued_at)}
         </td>
         <td className="px-3 py-2 font-mono text-slate-500">{g.area_code ?? '—'}</td>
+        <td className="px-3 py-2 font-medium text-slate-700">
+          {jmaIntensityLabel(g.max_intensity) ?? '—'}
+        </td>
         <td className="px-3 py-2 font-mono tabular-nums">
           {/* F40.4: no more function-valued message dereference — pure inline
               format based on lang. Immune to "is not a function" regardless
@@ -335,6 +345,7 @@ function FragmentRows({
               <span className="text-slate-400">└</span>{' '}
               {s.store_name ?? '—'}
             </td>
+            <td className="px-3 py-1.5"></td>
             <td className="px-3 py-1.5"></td>
             <td className="px-3 py-1.5"></td>
             <td className="px-3 py-1.5"></td>
