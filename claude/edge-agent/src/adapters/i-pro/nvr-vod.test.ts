@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
-  toIproUtcStamp, iproVodMinuteRange, extractMp4FromMultipart, iproNvrLogin, downloadIproNvrMp4,
+  toIproUtcStamp, iproVodMinuteRange, extractMp4FromMultipart, iproNvrLogin, downloadIproNvrMp4, nvrPlaybackSemaphore,
 } from './nvr-vod'
 
 const opts = { endpoint: 'https://192.168.0.250', username: 'ADMIN', password: 'Admin123' }
@@ -126,5 +126,38 @@ describe('downloadIproNvrMp4', () => {
       .mockResolvedValueOnce(new Response(body, { status: 200 }))
       .mockResolvedValueOnce(new Response('', { status: 200 }))
     await expect(downloadIproNvrMp4(opts, 1, new Date(), new Date())).rejects.toThrow(/録画なし/)
+  })
+})
+
+describe('nvrPlaybackSemaphore（NVR 1台あたり再生 DL 同時 2 本制限）', () => {
+  it('同一 endpoint は同時 2 本まで・3 本目は待たされる（実測 2026-08-01: 3本目から Satus=3）', async () => {
+    const sem = nvrPlaybackSemaphore('https://10.0.0.9')
+    let active = 0
+    let peak = 0
+    const gate: Array<() => void> = []
+    const task = () => sem.run(async () => {
+      active++; peak = Math.max(peak, active)
+      await new Promise<void>((res) => gate.push(res))
+      active--
+    })
+    const all = Promise.all([task(), task(), task(), task()])
+    // マイクロタスクを消化して開始状態を確定させる
+    await new Promise((r) => setTimeout(r, 10))
+    expect(peak).toBe(2)
+    expect(gate.length).toBe(2)   // 実行中は 2 本だけ・残り 2 本は待機
+    // 1 本終わると 3 本目が開始する
+    gate.shift()!()
+    await new Promise((r) => setTimeout(r, 10))
+    expect(gate.length).toBe(2)
+    while (gate.length) gate.shift()!()
+    await new Promise((r) => setTimeout(r, 10))
+    while (gate.length) gate.shift()!()
+    await all
+    expect(peak).toBe(2)
+  })
+
+  it('endpoint ごとに独立（別 NVR の枠を食わない）・表記ゆれは同一視', () => {
+    expect(nvrPlaybackSemaphore('https://10.0.0.1')).not.toBe(nvrPlaybackSemaphore('https://10.0.0.2'))
+    expect(nvrPlaybackSemaphore('https://10.0.0.3/')).toBe(nvrPlaybackSemaphore('HTTPS://10.0.0.3'))
   })
 })

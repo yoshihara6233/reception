@@ -10,6 +10,7 @@
  *  - NVR は HTTPS 自己署名 → TLS 検証なしで叩く（Bun の tls オプション）。
  */
 import { parseDigestChallenge, buildHttpDigest } from '../onvif/onvif-soap-client'
+import { Semaphore } from '../../util/semaphore'
 
 export interface IproNvrVodOptions {
   endpoint:   string   // 'https://192.168.0.250'
@@ -120,7 +121,38 @@ export async function iproNvrLogout(opts: IproNvrVodOptions, uid: string): Promi
  * @param from/to 取得範囲（差 ≤ 1時間）。内部で UTC に整形して送る。
  * @throws status≠0（録画なし/非対応/同時超過）や HTTP エラー時。
  */
+/**
+ * NVR 1 台あたりの再生ダウンロード同時実行を 2 本に制限するセマフォ。
+ *
+ * 2026-08-01 の NU101 実測で「再生系ダウンロードは同時 2 本まで。3 本目からは
+ * 即時 X-RecData-Satus=3（ビジー）」と確認。VOD・検査クリップ・BCP の録画
+ * 切り出しが重なると 3 本目が確実に失敗しリトライ頼みになるため、エッジ側で
+ * dlogin〜logout のセッション全体を NVR(endpoint) 単位で 2 本に絞って直列化する。
+ */
+const NVR_PLAYBACK_LIMIT = 2
+const playbackSlots = new Map<string, Semaphore>()
+
+export function nvrPlaybackSemaphore(endpoint: string): Semaphore {
+  const key = endpoint.trim().toLowerCase().replace(/\/+$/, '')
+  let sem = playbackSlots.get(key)
+  if (!sem) {
+    sem = new Semaphore(NVR_PLAYBACK_LIMIT)
+    playbackSlots.set(key, sem)
+  }
+  return sem
+}
+
 export async function downloadIproNvrMp4(
+  opts:    IproNvrVodOptions,
+  channel: number,
+  from:    Date,
+  to:      Date,
+): Promise<Buffer> {
+  return nvrPlaybackSemaphore(opts.endpoint).run(() =>
+    downloadIproNvrMp4Inner(opts, channel, from, to))
+}
+
+async function downloadIproNvrMp4Inner(
   opts:    IproNvrVodOptions,
   channel: number,
   from:    Date,
