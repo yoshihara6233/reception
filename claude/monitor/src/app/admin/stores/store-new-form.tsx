@@ -122,9 +122,9 @@ export function StoreNewForm({
       </Field>
 
       <div className="grid grid-cols-3 gap-3">
-        <Field label="エリアコード">
+        <Field label="エリアコード（JIS 市区町村コード）">
           <input value={form.area_code ?? ''} onChange={(e) => setForm({ ...form, area_code: e.target.value || null })}
-                 className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm" placeholder="例: KANTO" />
+                 className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm" placeholder="例: 43100（熊本市）" />
         </Field>
         <Field label="緯度">
           <input type="number" step="0.000001" value={form.latitude ?? ''}

@@ -24,6 +24,12 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import {
+  matchesStoreArea,
+  parseAreaCodes,
+  parseMaxIntensity,
+  shouldTrigger,
+} from './match.ts'
 
 // ---------------------------------------------------------------------------
 // Config
@@ -339,37 +345,6 @@ async function fetchDetail(linkHref: string): Promise<AlertDetail> {
   }
 }
 
-/** JMA 詳細XMLの最大震度 <MaxInt> を抽出（'6+','5-','4' 等の生値。無ければ null） */
-function parseMaxIntensity(xml: string): string | null {
-  const m = xml.match(/<(?:\w+:)?MaxInt[^>]*>([^<]+)<\/(?:\w+:)?MaxInt>/)
-  return m ? m[1].trim() : null
-}
-
-/** Extract JIS X 0402 municipality codes from JMA detail XML */
-function parseAreaCodes(xml: string): string[] {
-  const codes = new Set<string>()
-
-  // Primary pattern: <Area><Code>XXXXXX</Code></Area>
-  const areaRegex = /<Area[^>]*>([\s\S]*?)<\/Area>/g
-  let m: RegExpExecArray | null
-  while ((m = areaRegex.exec(xml)) !== null) {
-    const codeMatch = m[1].match(/<Code[^>]*>(\d+)<\/Code>/)
-    if (codeMatch) {
-      codes.add(codeMatch[1])
-    }
-  }
-
-  // Fallback: bare <Code> elements anywhere (some products use this)
-  if (codes.size === 0) {
-    const codeRegex = /<Code[^>]*>(\d{2,6})<\/Code>/g
-    while ((m = codeRegex.exec(xml)) !== null) {
-      codes.add(m[1])
-    }
-  }
-
-  return [...codes]
-}
-
 // ---------------------------------------------------------------------------
 // Store matching
 // ---------------------------------------------------------------------------
@@ -401,20 +376,8 @@ async function findMatchingStores(
     const store = row.stores as Store | null
     if (!store) continue
 
-    const storeAreaCode = store.area_code
-    if (!storeAreaCode) continue
-
-    // Match: alert area code prefix (first 2 chars) matches store area code,
-    // OR exact match
-    const matches = areaCodes.length === 0
-      ? false // if no area codes parsed, don't match any store (conservative)
-      : areaCodes.some(
-        (alertCode) =>
-          storeAreaCode.startsWith(alertCode.slice(0, 2)) ||
-          storeAreaCode === alertCode,
-      )
-
-    if (matches) {
+    // 照合ルールは match.ts に集約（JIS 都道府県 2 桁プレフィックス一致 or 完全一致）。
+    if (matchesStoreArea(store.area_code, areaCodes)) {
       results.push({
         store,
         settings: {
@@ -453,6 +416,28 @@ async function processStore(
   // 自動取得モデル: 発令を検知したら、現地レコーダから 8 枚スナップ(T-5〜T+30分)を
   // 自動取得 → アップロード → 自動PDF(bcp_report_sweep) → 完了メール、まで全自動。
   // 8 枚は軽量(JPEG)なので災害時でも実用的。連続動画(重い)は別途・手動取得とする。
+
+  // 同一地震の連続電文（震度速報 → 震源・震度情報 → 続報）で BCP が多重起動しないよう、
+  // 前後 15 分以内に同店舗・同種別の実イベントが既にあればスキップする。
+  // （entry.id が電文ごとに異なるため alert_source の dedup では防げない）
+  const DEDUP_WINDOW_MS = 15 * 60_000
+  const issuedMs = new Date(alertIssuedAt).getTime()
+  const { data: recentEvents } = await supa
+    .from('bcp_events')
+    .select('id')
+    .eq('store_id', store.id)
+    .eq('alert_type', alertType)
+    .eq('is_test', false)
+    .gte('alert_issued_at', new Date(issuedMs - DEDUP_WINDOW_MS).toISOString())
+    .lte('alert_issued_at', new Date(issuedMs + DEDUP_WINDOW_MS).toISOString())
+    .limit(1)
+
+  if (recentEvents && recentEvents.length > 0) {
+    console.log(
+      `[jalert-poller] Store ${store.name}: 同一地震の続報とみなしスキップ（既存イベント ${recentEvents[0].id}）`,
+    )
+    return
+  }
 
   // 録画ウィンドウ（プレースホルダclip用。8枚スナップは固定オフセットで撮る）
   const alertTs = new Date(alertIssuedAt)
@@ -606,42 +591,6 @@ async function recordReceipt(
   } else {
     console.log(`[jalert-poller] Receipt recorded: ${entry.title} (matched ${matchedStoreCount} store(s))`)
   }
-}
-
-/** JMA 震度表記を順序ランクへ。未知/未取得は 0（＝条件未満扱い）。 */
-function intensityRank(code: string | null): number {
-  switch (code) {
-    case '1':  return 1
-    case '2':  return 2
-    case '3':  return 3
-    case '4':  return 4
-    case '5-': return 5
-    case '5+': return 6
-    case '6-': return 7
-    case '6+': return 8
-    case '7':  return 9
-    default:   return 0
-  }
-}
-
-/**
- * 店舗の発動条件を満たすか（録画を起動すべきか）。
- *   - 地震   : 最大震度がしきい値以上
- *   - 津波   : tsunami_enabled
- *   - ミサイル: missile_enabled
- *   - その他 : 起動しない
- */
-function shouldTrigger(
-  alertType: string,
-  maxIntensity: string | null,
-  s: BcpSettings,
-): boolean {
-  if (alertType === 'earthquake') {
-    return intensityRank(maxIntensity) >= intensityRank(s.quake_min_intensity)
-  }
-  if (alertType === 'tsunami') return s.tsunami_enabled !== false
-  if (alertType === 'missile') return s.missile_enabled !== false
-  return false
 }
 
 /** Determine alert type string from JMA title text */
