@@ -49,7 +49,10 @@ const JMA_FEED_URLS = [
   'https://www.data.jma.go.jp/developer/xml/feed/extra.xml', // 気象の随時情報（特別警報など将来用）
 ]
 const RESEND_API_URL = 'https://api.resend.com/emails'
-const FROM_ADDRESS = 'bcp@noreply.intareco.jp'
+// from ドメインは Resend で検証済みのものに限る。旧 'bcp@noreply.intareco.jp' は
+// 所有していないドメインで Resend が 403 を返し、取得開始メールが全滅していた
+// （アプリ側 src/lib/email/send.ts は 2026-06-27 是正済み・こちらだけ残っていた）。
+const FROM_ADDRESS = 'bcp@genesis-edge.com'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -625,7 +628,7 @@ async function sendAlertEmail(
     return
   }
 
-  const appUrl = Deno.env.get('NEXT_PUBLIC_APP_URL') ?? 'https://monitor.intareco.jp'
+  const appUrl = Deno.env.get('NEXT_PUBLIC_APP_URL') ?? 'https://intereco-monitor.vercel.app'
   const eventUrl = `${appUrl}/bcp/${eventId}`
   const alertTime = new Date(alertIssuedAt).toLocaleString('ja-JP', {
     timeZone: 'Asia/Tokyo',
