@@ -36,6 +36,7 @@ interface BcpEventRow {
   alert_type:       string
   alert_issued_at:  string
   area_code:        string | null
+  max_intensity:    string | null
   status:           string
   is_test:          boolean
   stores: {
@@ -91,6 +92,7 @@ export async function POST(
         alert_type,
         alert_issued_at,
         area_code,
+        max_intensity,
         status,
         is_test,
         stores ( name, address )
@@ -167,6 +169,7 @@ export async function POST(
         alertType:      event.alert_type,
         alertIssuedAt:  event.alert_issued_at,
         areaCode:       event.area_code ?? '',
+        maxIntensity:   event.max_intensity,
         status:         event.status,
         isTest:         event.is_test,
       },
