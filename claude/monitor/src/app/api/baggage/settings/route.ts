@@ -1,7 +1,8 @@
 /**
- * PUT /api/baggage/settings — 店舗の手荷物検査設定（有効化・カメラ）を更新
+ * PUT /api/baggage/settings — 店舗の手荷物検査設定（有効化・カメラ・日次レポート宛先）を更新
  *
- * 店舗固有は enabled / camera_ids のみ（据え付け向きは /api/baggage/kiosk-orientation）。保持日数・タイムアウト・端末モード・音声・
+ * 店舗固有は enabled / camera_ids / notify_emails（据え付け向きは /api/baggage/kiosk-orientation）。
+ * 保持日数・タイムアウト・端末モード・音声・
  * STEP文言はテナント共通（/api/admin/baggage-settings）で一元管理する。
  * camera_ids はその店舗配下の recorder_cameras に限定して受理。
  * 変更は admin_audit_log（baggage.settings.update）に記録。
@@ -15,6 +16,9 @@ const Body = z.object({
   storeId: z.string().uuid(),
   enabled: z.boolean(),
   cameraIds: z.array(z.string().uuid()).max(2),
+  // 日次アンマッチレポートの宛先（省略時は既存値を保持）。空配列 = 明示クリア
+  // （クリア時は cron が店舗担当 admin_users へフォールバック）。
+  notifyEmails: z.array(z.string().trim().email()).max(10).optional(),
 })
 
 export async function PUT(req: NextRequest) {
@@ -46,6 +50,7 @@ export async function PUT(req: NextRequest) {
     tenant_id: store.tenantId,
     enabled: body.enabled,
     camera_ids: body.cameraIds,
+    ...(body.notifyEmails !== undefined ? { notify_emails: body.notifyEmails } : {}),
     updated_at: new Date().toISOString(),
   }, { onConflict: 'store_id' })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -56,7 +61,7 @@ export async function PUT(req: NextRequest) {
     targetType: 'inspection_settings',
     targetId: store.id,
     storeId: store.id,
-    changes: { enabled: body.enabled, cameraIds: body.cameraIds },
+    changes: { enabled: body.enabled, cameraIds: body.cameraIds, notifyEmails: body.notifyEmails },
   })
   return NextResponse.json({ ok: true })
 }

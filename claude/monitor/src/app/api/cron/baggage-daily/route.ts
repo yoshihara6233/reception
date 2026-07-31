@@ -54,7 +54,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   // stores を inner join し opt_baggage で絞る（OFF 店舗はバッチ対象外）。
   const { data: settingsRows, error: sErr } = await svc
     .from('inspection_settings')
-    .select('store_id, tenant_id, stores!inner ( name, opt_baggage )')
+    .select('store_id, tenant_id, notify_emails, stores!inner ( name, opt_baggage )')
     .eq('enabled', true)
     .eq('stores.opt_baggage', true)
   if (sErr) return NextResponse.json({ error: sErr.message }, { status: 500 })
@@ -70,7 +70,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   const results: StoreResult[] = []
 
-  for (const row of (settingsRows ?? []) as { store_id: string; tenant_id: string; stores: unknown }[]) {
+  for (const row of (settingsRows ?? []) as { store_id: string; tenant_id: string; notify_emails: string[] | null; stores: unknown }[]) {
     const storeId = row.store_id
     const storeRel = Array.isArray(row.stores) ? row.stores[0] : row.stores
     const storeName = (storeRel as { name?: string } | null)?.name ?? storeId.slice(0, 8)
@@ -124,20 +124,25 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         }
       })
       if (items.length > 0) {
-        const { data: managers } = await svc
-          .from('admin_users')
-          .select('email')
-          .contains('store_ids', [storeId])
-          .not('email', 'is', null)
-        const to = ((managers ?? []) as { email: string | null }[])
-          .map((m) => m.email).filter(Boolean) as string[]
+        // 宛先: 店舗別 inspection_settings.notify_emails（/admin/baggage で設定。
+        // BCP・巡回と同方式）。未設定時は従来どおり店舗担当の admin_users へフォールバック。
+        let to = (row.notify_emails ?? []).filter(Boolean)
+        if (to.length === 0) {
+          const { data: managers } = await svc
+            .from('admin_users')
+            .select('email')
+            .contains('store_ids', [storeId])
+            .not('email', 'is', null)
+          to = ((managers ?? []) as { email: string | null }[])
+            .map((m) => m.email).filter(Boolean) as string[]
+        }
         r.mailRecipients = to.length
         if (to.length > 0) {
           const { subject, html } = buildUnmatchEmail(storeName, yesterday, items)
           const sent = await sendEmail(to, subject, html)
           r.mailSent = sent.ok
         } else {
-          r.errors.push('no manager email (store_ids)')
+          r.errors.push('no recipient (notify_emails / store_ids)')
         }
       }
     } catch (e) {
