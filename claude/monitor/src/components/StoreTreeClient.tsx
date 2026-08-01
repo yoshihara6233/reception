@@ -47,14 +47,18 @@ export function TreeClient({
   groups,
   selectedId,
   alertStoreIds = [],
+  alertGroups = [],
 }: {
   groups: Group[]
   selectedId?: string
   alertStoreIds?: string[]
+  /** 地震（Jアラート発令）単位のグループ。群発時に対象店舗を地震で絞る。 */
+  alertGroups?: { key: string; label: string; storeIds: string[] }[]
 }) {
   const [query, setQuery] = useState('')
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [alertFilter, setAlertFilter] = useState(false)
+  const [quakeKey, setQuakeKey] = useState('all')
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Restore saved scroll position on mount.
@@ -67,13 +71,20 @@ export function TreeClient({
 
   const alertSet = useMemo(() => new Set(alertStoreIds), [alertStoreIds])
 
+  // 地震絞り込み中は選択した地震の対象店舗だけを有効集合にする。
+  const activeAlertSet = useMemo(() => {
+    if (quakeKey === 'all') return alertSet
+    const g = alertGroups.find((x) => x.key === quakeKey)
+    return g ? new Set(g.storeIds) : alertSet
+  }, [quakeKey, alertGroups, alertSet])
+
   const filtered = useMemo(() => {
     let base = groups
 
     // Alert filter: show only stores that received a BCP alert in the last 24 h
-    if (alertFilter && alertSet.size > 0) {
+    if (alertFilter && activeAlertSet.size > 0) {
       base = base
-        .map((g) => ({ ...g, stores: g.stores.filter((s) => alertSet.has(s.id)) }))
+        .map((g) => ({ ...g, stores: g.stores.filter((s) => activeAlertSet.has(s.id)) }))
         .filter((g) => g.stores.length > 0)
     }
 
@@ -86,7 +97,7 @@ export function TreeClient({
     }
 
     return base
-  }, [groups, query, alertFilter, alertSet])
+  }, [groups, query, alertFilter, activeAlertSet])
 
   return (
     <>
@@ -95,7 +106,7 @@ export function TreeClient({
         <div className="border-b border-slate-200 px-2 py-1.5">
           <button
             type="button"
-            onClick={() => setAlertFilter((v) => !v)}
+            onClick={() => { setAlertFilter((v) => !v); setQuakeKey('all') }}
             className={
               'flex w-full items-center gap-1.5 rounded px-2 py-1 text-[11px] font-semibold transition-colors ' +
               (alertFilter
@@ -114,6 +125,23 @@ export function TreeClient({
               {alertSet.size}
             </span>
           </button>
+
+          {/* 群発時: どの地震（発令時刻・震度）の対象店舗かを選んで絞り込む */}
+          {alertFilter && alertGroups.length >= 2 && (
+            <select
+              value={quakeKey}
+              onChange={(e) => setQuakeKey(e.target.value)}
+              aria-label="地震で絞り込み"
+              className="mt-1.5 w-full rounded border border-red-200 bg-white px-2 py-1 text-[11px] text-slate-700 outline-none focus:border-red-400"
+            >
+              <option value="all">すべての地震（{alertSet.size} 店舗）</option>
+              {alertGroups.map((g) => (
+                <option key={g.key} value={g.key}>
+                  {g.label}（{g.storeIds.length} 店舗）
+                </option>
+              ))}
+            </select>
+          )}
         </div>
       )}
 

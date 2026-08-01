@@ -6,6 +6,7 @@
  */
 import { redirect } from 'next/navigation'
 import { createSupabaseServer } from '@/lib/supabase/server'
+import { jmaIntensityLabel } from '@/lib/bcp/intensity'
 import { resolveTenantFeatures } from '@/lib/tenant/features'
 import { resolveAdminContext } from '@/lib/tenant/acting'
 import { AppHeader } from './AppHeader'
@@ -54,7 +55,7 @@ export async function AppShell({
     storesQuery,
     supa
       .from('bcp_events')
-      .select('store_id')
+      .select('store_id, alert_type, alert_issued_at, area_code, max_intensity, is_test')
       .gte('created_at', since24h)
       .not('store_id', 'is', null),
   ])
@@ -68,13 +69,52 @@ export async function AppShell({
   const groups = [...byArea.entries()].map(([area, stores]) => ({ area, stores }))
 
   // Deduplicated store IDs that received a BCP alert in the last 24 h
+  type AlertEventRow = {
+    store_id: string | null
+    alert_type: string
+    alert_issued_at: string
+    area_code: string | null
+    max_intensity: string | null
+    is_test: boolean
+  }
+  const alertEventRows = (alertRes.data ?? []) as AlertEventRow[]
   const alertStoreIds = [
     ...new Set(
-      (alertRes.data ?? [])
-        .map((e: { store_id: string | null }) => e.store_id)
+      alertEventRows
+        .map((e) => e.store_id)
         .filter((id): id is string => id !== null)
     ),
   ]
+
+  // 地震単位のグループ (/bcp と同じ alert_type+alert_issued_at+area_code キー)。
+  // 群発時に「どの地震の対象店舗か」をツリーで絞り込めるようにする。
+  const quakeMap = new Map<string, { issuedAt: string; maxIntensity: string | null; isTest: boolean; storeIds: Set<string> }>()
+  for (const e of alertEventRows) {
+    if (!e.store_id) continue
+    const key = `${e.alert_type}|${e.alert_issued_at}|${e.area_code ?? ''}`
+    let g = quakeMap.get(key)
+    if (!g) {
+      g = { issuedAt: e.alert_issued_at, maxIntensity: e.max_intensity, isTest: e.is_test, storeIds: new Set() }
+      quakeMap.set(key, g)
+    }
+    g.storeIds.add(e.store_id)
+    if (!g.maxIntensity && e.max_intensity) g.maxIntensity = e.max_intensity
+  }
+  const fmtIssued = (iso: string) =>
+    new Date(iso).toLocaleString('ja-JP', {
+      timeZone: 'Asia/Tokyo', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+    })
+  const alertGroups = [...quakeMap.entries()]
+    .sort((a, b) => b[1].issuedAt.localeCompare(a[1].issuedAt))
+    .map(([key, g]) => ({
+      key,
+      label: [
+        fmtIssued(g.issuedAt),
+        jmaIntensityLabel(g.maxIntensity),
+        g.isTest ? 'テスト' : null,
+      ].filter(Boolean).join(' '),
+      storeIds: [...g.storeIds],
+    }))
 
   return (
     // AppShellClient manages the drawer open/close state
@@ -88,7 +128,7 @@ export async function AppShell({
     >
       {/* Desktop 3-col layout with a collapsible detail panel (ShellBody) */}
       <ShellBody
-        tree={<StoreTree selectedId={selectedStoreId} groups={groups} alertStoreIds={alertStoreIds} />}
+        tree={<StoreTree selectedId={selectedStoreId} groups={groups} alertStoreIds={alertStoreIds} alertGroups={alertGroups} />}
         content={children}
         detail={showDetail && selectedStoreId ? <StoreDetail storeId={selectedStoreId} /> : null}
       />
