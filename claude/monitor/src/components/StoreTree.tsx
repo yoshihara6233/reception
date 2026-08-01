@@ -21,10 +21,13 @@ export function StoreTree({
   selectedId,
   groups,
   alertStoreIds = [],
+  alertGroups = [],
 }: {
   selectedId?: string
   groups: Group[]
   alertStoreIds?: string[]
+  /** 地震（Jアラート発令）単位のグループ。群発時の絞り込み用。 */
+  alertGroups?: { key: string; label: string; storeIds: string[] }[]
 }) {
   const totalStores = groups.reduce((n, g) => n + g.stores.length, 0)
 
@@ -34,7 +37,7 @@ export function StoreTree({
         <span>店舗ツリー</span>
         <span className="font-mono text-slate-900">{totalStores}</span>
       </div>
-      <TreeClient groups={groups} selectedId={selectedId} alertStoreIds={alertStoreIds} />
+      <TreeClient groups={groups} selectedId={selectedId} alertStoreIds={alertStoreIds} alertGroups={alertGroups} />
     </aside>
   )
 }
