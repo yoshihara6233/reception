@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>手荷物検査システム リプレイスのご提案（100 店舗）｜Recorder Monitor</title>
+<style>
+  :root{
+    --paper:#F7F5F1; --paper2:#FFFFFF; --paper3:#E4DED3;
+    --ink:#0F0F10; --ink2:#2A2A2C; --ink3:#5B5B5F;
+    --line:#D6CFC1; --line2:#B9B0A0;
+    --accent:#2C4A7E; --accent-soft:#E4EAF3;
+    --ok:#2F7A4F; --ok-soft:#E5F0E9; --warn:#B5761A; --warn-soft:#F6EFE2; --danger:#A3332B; --danger-soft:#F5E4E2;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--paper);color:var(--ink);
+    font-family:"Noto Sans JP","Hiragino Sans",sans-serif;
+    font-size:14px;line-height:1.8;-webkit-font-smoothing:antialiased}
+  .mono{font-family:"IBM Plex Mono","SF Mono",Menlo,monospace;font-variant-numeric:tabular-nums}
+  .wrap{max-width:1040px;margin:0 auto;padding:0 32px 120px}
+
+  header.cover{background:var(--ink);color:#F2F0EC;margin:0 -32px;padding:52px 40px 40px;border-radius:0 0 6px 6px}
+  header.cover .kicker{font-family:"Inter Tight",sans-serif;font-size:12px;letter-spacing:.22em;color:#9aa7bf;margin-bottom:14px}
+  header.cover h1{font-size:30px;font-weight:700;line-height:1.4}
+  header.cover .sub{font-size:14px;color:#B9B0A0;margin-top:10px;line-height:1.7}
+  .meta{display:flex;flex-wrap:wrap;gap:28px;margin-top:26px}
+  .meta div{min-width:110px}
+  .meta .k{font-size:11px;color:#8b8b90;margin-bottom:2px}
+  .meta .v{font-size:15px;font-weight:700}
+
+  h2{font-size:21px;font-weight:700;margin:64px 0 14px;display:flex;align-items:center;gap:12px;
+     border-bottom:2px solid var(--accent);padding-bottom:8px}
+  h2 .no{flex:none;width:26px;height:26px;border-radius:4px;background:var(--accent);color:#fff;
+     font-family:"Inter Tight",monospace;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center}
+  h3{font-size:15px;font-weight:700;margin:30px 0 8px}
+  h4{font-size:13px;font-weight:700;margin:18px 0 6px;color:var(--ink2)}
+  p{margin:0 0 12px}
+  ul,ol{margin:0 0 14px;padding-left:1.5em}
+  li{margin-bottom:5px}
+  code{font-family:"IBM Plex Mono",Menlo,monospace;font-size:12px;background:var(--paper);
+       border:1px solid var(--line);border-radius:4px;padding:1px 6px;white-space:nowrap}
+  .small{font-size:12px;color:var(--ink3);line-height:1.7}
+  strong{font-weight:700}
+
+  .card{background:var(--paper2);border:1px solid var(--line);border-radius:6px;padding:18px 22px;margin:16px 0}
+  .card.warn{background:var(--warn-soft);border-color:var(--warn)}
+  .card.new{background:var(--accent-soft);border-color:var(--accent)}
+  .card h4{margin-top:0}
+
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:20px 0}
+  @media(max-width:720px){.stats{grid-template-columns:1fr}}
+  .stat{background:var(--paper2);border:1px solid var(--line);border-radius:6px;padding:16px 20px}
+  .stat .k{font-size:11px;color:var(--ink3)}
+  .stat .v{font-size:24px;font-weight:700;margin:3px 0;line-height:1.3}
+  .stat .v.ok{color:var(--ok)} .stat .v.accent{color:var(--accent)}
+  .stat .d{font-size:11.5px;color:var(--ink3);line-height:1.6}
+
+  table{width:100%;border-collapse:collapse;margin:12px 0 20px;background:var(--paper2);
+        border:1px solid var(--line);border-radius:6px;overflow:hidden;font-size:13px}
+  th{background:var(--paper);text-align:left;font-weight:700;font-size:12px;color:var(--ink2);
+     padding:9px 13px;border-bottom:1px solid var(--line);vertical-align:top}
+  td{padding:9px 13px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td.num,th.num{text-align:right;font-family:"IBM Plex Mono",Menlo,monospace;font-variant-numeric:tabular-nums;white-space:nowrap}
+  tbody tr:nth-child(even){background:#FCFBF9}
+  .yes{color:var(--ok);font-weight:700}
+  .no{color:var(--ink3)}
+  .plus{color:var(--accent);font-weight:700}
+
+  .flow{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:18px 0}
+  @media(max-width:720px){.flow{grid-template-columns:1fr}}
+  .flow .box{background:var(--paper2);border:1px solid var(--line);border-radius:6px;padding:16px 20px}
+  .flow .box h4{margin-top:0;padding-bottom:8px;border-bottom:1px solid var(--line)}
+  .flow .box.after{border-color:var(--accent)}
+  .flow .box.after h4{color:var(--accent);border-bottom-color:var(--accent)}
+  .chain{font-family:"IBM Plex Mono",Menlo,monospace;font-size:12px;line-height:2.1;color:var(--ink2)}
+  .chain .hl{color:var(--accent);font-weight:600}
+  .chain .gone{color:var(--ink3);text-decoration:line-through}
+
+  .steps{counter-reset:s;list-style:none;padding:0;margin:16px 0}
+  .steps li{counter-increment:s;position:relative;padding-left:44px;margin-bottom:16px}
+  .steps li::before{content:counter(s);position:absolute;left:0;top:1px;width:28px;height:28px;border-radius:4px;
+    background:var(--accent);color:#fff;font-family:"Inter Tight",monospace;font-size:13px;font-weight:600;
+    display:flex;align-items:center;justify-content:center}
+  .steps .t{font-weight:700;display:block}
+
+  .tag{display:inline-block;font-size:11px;font-weight:700;padding:1px 8px;border-radius:3px;
+    border:1px solid var(--line2);color:var(--ink3);background:var(--paper);vertical-align:1px}
+  .tag.new{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+  .tag.chk{border-color:var(--warn);color:var(--warn);background:var(--warn-soft)}
+
+  footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--line);font-size:12px;color:var(--ink3)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="cover">
+  <div class="kicker">MIGRATION PROPOSAL</div>
+  <h1>手荷物検査システム リプレイスのご提案</h1>
+  <div class="sub">既設のレコーダーと中継機をそのまま活かし、クラウド録画サービスを不要にします。<br>
+    店舗レコーダー遠隔監視サービス「Recorder Monitor」</div>
+  <div class="meta">
+    <div><div class="k">対象店舗</div><div class="v mono">100 店舗</div></div>
+    <div><div class="k">既設レコーダー</div><div class="v">i-PRO WJ-NU101</div></div>
+    <div><div class="k">既設中継機</div><div class="v">FutureNet MA-E320</div></div>
+    <div><div class="k">中継機の新規調達</div><div class="v mono">0 台</div></div>
+    <div><div class="k">作成日</div><div class="v mono">2026-07-30</div></div>
+  </div>
+</header>
+
+<!-- ============================================================ -->
+<h2><span class="no">1</span>ご提案の要旨</h2>
+
+<p>現在ご利用中の手荷物検査システムを、当社「Recorder Monitor」へ移行するご提案です。
+<strong>既設の i-PRO WJ-NU101（レコーダー）と FutureNet MA-E320（中継機）をそのまま流用します。</strong>
+新たに設置する機器はありません。</p>
+
+<div class="stats">
+  <div class="stat">
+    <div class="k">クラウド録画サービス</div>
+    <div class="v ok">不要</div>
+    <div class="d">証跡は既設レコーダーから切り出して当社クラウドへ保管します</div>
+  </div>
+  <div class="stat">
+    <div class="k">店舗回線の上り通信量</div>
+    <div class="v ok">約 97 % 削減</div>
+    <div class="d">16.6 GB／日・店 → 約 460 MB／日・店</div>
+  </div>
+  <div class="stat">
+    <div class="k">検査証跡の保持期間</div>
+    <div class="v accent">14 日 → 60 日</div>
+    <div class="d">検査のたびにクラウドへ退避します</div>
+  </div>
+</div>
+
+<p>加えて、現在ご利用のシステムには無い機能が標準で付きます。</p>
+
+<ul>
+  <li><strong>レコーダー・カメラの死活監視</strong> — 機器の異常を本部で検知できます</li>
+  <li><strong>BCP（災害時映像の自動取得）</strong> — 標準機能として無償で同梱します</li>
+  <li><strong>本部からの全店映像確認</strong> — 店舗を選ぶだけで、その店舗のカメラを確認できます</li>
+</ul>
+
+<div class="card new">
+  <h4>この提案の考え方</h4>
+  <p style="margin-bottom:0">御社は既に、100 店舗すべてに録画装置（WJ-NU101）と中継機（MA-E320）をお持ちです。
+  <strong>本提案は、新しい機器を売るものではありません。</strong>
+  既にお持ちの資産の使い方を変えることで、毎月お支払いのクラウド録画費用をなくし、
+  同時に監視・BCP の機能を追加するものです。</p>
+</div>
+
+<!-- ============================================================ -->
+<h2><span class="no">2</span>現状の構成と課題</h2>
+
+<div class="flow">
+  <div class="box">
+    <h4>現行</h4>
+    <div class="chain">
+      カメラ 2 台（768 kbps）<br>
+      　├→ WJ-NU101 に常時録画（14 日）<br>
+      　└→ MA-E320 →<span class="hl"> クラウド録画サービス</span><br>
+      　　　　　　　　　└→ 手荷物検査の証跡
+    </div>
+  </div>
+  <div class="box after">
+    <h4>ご提案</h4>
+    <div class="chain">
+      カメラ 2 台（768 kbps）<br>
+      　└→ WJ-NU101 に常時録画（14 日）<br>
+      　　　　└→ MA-E320 →<span class="hl"> Recorder Monitor</span><br>
+      　　　　　　　　<span class="gone">常時転送</span> → <span class="hl">検査時のみ切り出し</span>
+    </div>
+  </div>
+</div>
+
+<h3>2-1. 課題</h3>
+
+<table>
+  <thead><tr><th style="width:22%">課題</th><th>内容</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>クラウド録画の月額費用</strong></td>
+      <td>手荷物検査の証跡を残すためだけに、カメラ映像を 24 時間クラウドへ送り続けています。
+        実際に確認するのは検査の前後わずか数分です。</td>
+    </tr>
+    <tr>
+      <td><strong>店舗回線の常時占有</strong></td>
+      <td>768 kbps × 2 台 ＝ 1.536 Mbps を、営業時間外も含めて常に消費しています。
+        1 店舗あたり 1 日 16.6 GB、100 店舗で月あたり約 49.8 TB になります。</td>
+    </tr>
+    <tr>
+      <td><strong>レコーダーの異常に気づけない</strong></td>
+      <td>証跡がクラウド側にあるため、<strong>店舗のレコーダーが故障していても顕在化しません。</strong>
+        必要になったときに初めて「録画が無い」と分かる構造です。</td>
+    </tr>
+    <tr>
+      <td><strong>手荷物検査以外の機能がない</strong></td>
+      <td>現行システムは手荷物検査専用です。本部からの映像確認、機器の監視、災害時対応は含まれていません。</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ -->
+<h2><span class="no">3</span>ご提案する構成</h2>
+
+<p>映像を「常に送る」のをやめ、<strong>「必要なときだけ取りに行く」</strong>方式に変えます。</p>
+
+<ol class="steps">
+  <li><span class="t">検査台の iPad で検査を実施します</span>
+    従業員の入室・退室に合わせて、顔認証と手順の読み上げを行います。</li>
+  <li><span class="t">検査の時刻が記録されます</span>
+    どの従業員が、いつ、どの操作をしたかがクラウドに残ります。</li>
+  <li><span class="t">中継機が、その時間帯の映像だけをレコーダーから切り出します</span>
+    既設の WJ-NU101 に録画されている映像から、検査の前後だけを取得します。</li>
+  <li><span class="t">証跡クリップがクラウドへ保管されます</span>
+    検査から数分でクラウドに保管され、<strong>60 日間</strong>保持されます。</li>
+  <li><span class="t">管理画面で、検査記録と映像を一緒に確認できます</span>
+    店舗・日付・従業員で絞り込み、該当する検査の映像をその場で再生できます。</li>
+</ol>
+
+<h3>3-1. 既設機器の役割</h3>
+
+<table>
+  <thead><tr><th style="width:26%">機器</th><th style="width:30%">現行の役割</th><th>ご提案での役割</th></tr></thead>
+  <tbody>
+    <tr><td><strong>カメラ 2 台</strong><br><span class="small">768 kbps / H.264</span></td>
+      <td>レコーダーと中継機の両方へ送出</td>
+      <td>変更なし。<strong>設定変更も不要です。</strong></td></tr>
+    <tr><td><strong>i-PRO WJ-NU101</strong><br><span class="small">4ch / 14 日保存</span></td>
+      <td>常時録画（回線断時の予備）</td>
+      <td><strong>証跡の取得元</strong>。録画設定は変更しません。</td></tr>
+    <tr><td><strong>FutureNet MA-E320</strong><br><span class="small">100 台</span></td>
+      <td>クラウド録画への常時転送</td>
+      <td><strong>当社ソフトへ入れ替え</strong>。検査時のみ切り出して送信します。</td></tr>
+    <tr><td><strong>検査端末</strong></td>
+      <td>現行システムの端末</td>
+      <td>iPad（ブラウザで動作）。既存端末の流用可否は別途確認します。</td></tr>
+  </tbody>
+</table>
+
+<p class="small">中継機の入れ替えは、当社が用意した SD カードを差し替えていただくだけで完了します。
+店舗のご担当者様で作業でき、技術者の訪問は不要です。</p>
+
+<!-- ============================================================ -->
+<h2><span class="no">4</span>移行によって得られる効果</h2>
+
+<h3>4-1. 店舗回線の通信量が約 97 % 減ります</h3>
+
+<table>
+  <thead><tr><th style="width:34%">項目</th><th class="num">現行</th><th class="num">ご提案</th><th class="num">削減率</th></tr></thead>
+  <tbody>
+    <tr><td>1 店舗・定常時</td><td class="num">1.536 Mbps</td><td class="num">ほぼ 0</td><td class="num">—</td></tr>
+    <tr><td>1 店舗・ピーク時</td><td class="num">1.536 Mbps</td><td class="num">約 1.0 Mbps</td><td class="num">−35 %</td></tr>
+    <tr><td>1 店舗・1 日</td><td class="num">16.6 GB</td><td class="num">約 460 MB</td><td class="num">−97 %</td></tr>
+    <tr><td><strong>100 店舗・1 ヶ月</strong></td><td class="num">約 49.8 TB</td><td class="num"><strong>約 1.4 TB</strong></td><td class="num"><strong>−97 %</strong></td></tr>
+  </tbody>
+</table>
+
+<p class="small">試算前提: 768 kbps × 2 台。1 検査あたり 1 分 × 2 台 ＝ 約 11.5 MB。1 店舗 1 日 40 件。
+ピークは開店前・閉店後の 1 時間に集中すると想定。実測値で補正いたします。</p>
+
+<div class="card">
+  <h4>ピーク時でも、現在の常時通信量を下回ります</h4>
+  <p style="margin-bottom:0">検査が集中する開店前・閉店後でも、1 店舗あたり約 1.0 Mbps です。
+  現在 24 時間流れ続けている 1.536 Mbps を下回るため、<strong>回線設備の増強は不要です。</strong>
+  なお、100 店舗のピークが重ならないよう、送信タイミングを自動で分散させます。</p>
+</div>
+
+<h3>4-2. 検査証跡が、より確実に残ります</h3>
+
+<table>
+  <thead><tr><th style="width:34%">観点</th><th>現行</th><th>ご提案</th></tr></thead>
+  <tbody>
+    <tr><td>保管先</td><td>クラウド録画サービス</td><td>当社クラウド（国内リージョン）</td></tr>
+    <tr><td>保持期間</td><td>ご契約による</td><td><strong>60 日</strong>（店舗ごとに設定変更可）</td></tr>
+    <tr><td>クラウドへ渡る契機</td><td>常時転送</td><td><strong>検査ごとに即時</strong>（数分以内）</td></tr>
+    <tr><td>レコーダー故障時</td><td>クラウド側に依存</td><td><strong>退避済みのため、過去分は残ります</strong></td></tr>
+    <tr><td>回線断とレコーダー故障の同時発生</td><td>証跡が失われます</td><td><strong>退避済みのため影響ありません</strong></td></tr>
+  </tbody>
+</table>
+
+<h3>4-3. レコーダーの故障を検知できるようになります <span class="tag new">新規</span></h3>
+
+<p>現在は証跡がクラウド側にあるため、<strong>店舗のレコーダーが故障していても気づけません。</strong>
+本提案では、レコーダーとカメラの死活監視が<strong>基本機能として標準で入ります。</strong></p>
+
+<div class="card warn">
+  <h4>あわせてご検討いただきたいこと</h4>
+  <p>100 店舗のレコーダーは、設置から一定の年数が経過しているものと思われます。
+  ハードディスクは消耗品のため、<strong>移行の初年度に故障が集中する可能性があります。</strong></p>
+  <p style="margin-bottom:0">移行にあたり、次の 3 点をあわせてご検討ください。当社からご提案いたします。</p>
+  <ul style="margin-top:8px;margin-bottom:0">
+    <li>100 台のハードディスク稼働時間の棚卸し</li>
+    <li>年間の交換台数を見込んだ予算化</li>
+    <li>異常検知時の通知先と、交換手配を行う体制の取り決め</li>
+  </ul>
+</div>
+
+<h3>4-4. BCP が標準機能として付きます <span class="tag new">新規・無償</span></h3>
+
+<p>J アラートを受信すると、発令時刻を基準に、次の 8 時点の店内映像を現地レコーダーから自動で取得します。</p>
+
+<table>
+  <thead><tr><th class="num">1</th><th class="num">2</th><th class="num">3</th><th class="num">4</th><th class="num">5</th><th class="num">6</th><th class="num">7</th><th class="num">8</th></tr></thead>
+  <tbody><tr>
+    <td class="num">5 分前</td><td class="num">発生時</td><td class="num">5 分後</td><td class="num">10 分後</td>
+    <td class="num">15 分後</td><td class="num">20 分後</td><td class="num">25 分後</td><td class="num">30 分後</td>
+  </tr></tbody>
+</table>
+
+<p>取得した映像は、報告書 PDF として自動生成されます。全画像の一括ダウンロードも可能です。
+<strong>人が操作して間に合うものではないため、自動化しています。</strong>追加費用はいただきません。</p>
+
+<h3>4-5. 本部から全店の映像を確認できます <span class="tag new">新規</span></h3>
+
+<p>店舗を選ぶと、その店舗のカメラ映像を本部から確認できます。エリアマネージャー様が移動する前に、
+担当店舗の状況を把握できます。</p>
+
+<!-- ============================================================ -->
+<h2><span class="no">5</span>機能比較</h2>
+
+<table>
+  <thead><tr><th style="width:38%">機能</th><th style="width:16%">現行</th><th>Recorder Monitor</th></tr></thead>
+  <tbody>
+    <tr><td>従業員の入退室記録</td><td class="yes">あり</td><td class="yes">あり</td></tr>
+    <tr><td>顔認証による本人確認</td><td class="yes">あり</td><td class="yes">あり</td></tr>
+    <tr><td>検査手順の音声読み上げ</td><td class="yes">あり</td><td class="yes">あり（文言は店舗ごとに設定可）</td></tr>
+    <tr><td>検査時の映像証跡</td><td class="yes">あり</td><td class="yes">あり（<strong>60 日保管</strong>）</td></tr>
+    <tr><td>一時退室・一時入室の記録</td><td class="yes">あり</td><td class="yes">あり</td></tr>
+    <tr><td>日次の集計・レポート</td><td class="yes">あり</td><td class="yes">あり</td></tr>
+    <tr><td>個人情報取扱い同意の記録</td><td class="no">—</td><td class="plus">あり（同意文言と版を記録）</td></tr>
+    <tr><td>レコーダー・カメラの死活監視</td><td class="no">—</td><td class="plus">標準搭載</td></tr>
+    <tr><td>BCP（災害時映像の自動取得・報告書）</td><td class="no">—</td><td class="plus">標準搭載・無償</td></tr>
+    <tr><td>本部からの全店映像確認</td><td class="no">—</td><td class="plus">あり</td></tr>
+    <tr><td>巡回点検＋レポート</td><td class="no">—</td><td class="plus">オプション</td></tr>
+    <tr><td>警報装置との連携</td><td class="no">—</td><td class="plus">オプション</td></tr>
+    <tr><td>クラウド録画（24 時間の全映像保管）</td><td class="yes">あり</td><td class="no">対象外<span class="small">（検査以外のご利用が無いため）</span></td></tr>
+    <tr><td>高画質ライブ配信</td><td class="no">—</td><td class="no">本構成では対象外<span class="small">（下記 7-2）</span></td></tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ -->
+<h2><span class="no">6</span>ご費用</h2>
+
+<h3>6-1. 月額（税別・1 店舗あたり）</h3>
+
+<table>
+  <thead><tr><th style="width:44%">項目</th><th class="num" style="width:18%">単価</th><th>内容</th></tr></thead>
+  <tbody>
+    <tr><td><strong>基本</strong></td><td class="num">3,200 円</td><td>レコーダー・カメラ死活監視、本部からの映像確認、<strong>BCP</strong></td></tr>
+    <tr><td><strong>手荷物検査オプション</strong></td><td class="num">12,800 円</td><td>顔認証、検査フロー、証跡クリップ、日次レポート</td></tr>
+    <tr style="background:var(--accent-soft)"><td><strong>ご提案構成 合計</strong></td><td class="num"><strong>16,000 円</strong></td><td><strong>現行機能のすべて＋監視＋BCP</strong></td></tr>
+    <tr><td>巡回点検＋レポート<span class="small">（任意）</span></td><td class="num">+1,500 円</td><td>定期的な店内状況の記録とレポート化</td></tr>
+    <tr><td>警報装置連携<span class="small">（任意）</span></td><td class="num">+1,000 円</td><td>発報時の映像自動取得と通知</td></tr>
+    <tr><td>フル構成<span class="small">（すべて含む）</span></td><td class="num">18,500 円</td><td>—</td></tr>
+  </tbody>
+</table>
+
+<h3>6-2. 100 店舗での月額・年額</h3>
+
+<table>
+  <thead><tr><th style="width:34%">構成</th><th class="num">1 店舗・月</th><th class="num">100 店舗・月</th><th class="num">100 店舗・年</th></tr></thead>
+  <tbody>
+    <tr style="background:var(--accent-soft)"><td><strong>ご提案構成</strong><br><span class="small">基本＋手荷物検査</span></td>
+      <td class="num"><strong>16,000 円</strong></td><td class="num"><strong>1,600,000 円</strong></td><td class="num"><strong>19,200,000 円</strong></td></tr>
+    <tr><td>フル構成<br><span class="small">＋巡回点検＋警報連携</span></td>
+      <td class="num">18,500 円</td><td class="num">1,850,000 円</td><td class="num">22,200,000 円</td></tr>
+  </tbody>
+</table>
+
+<h3>6-3. 初期費用</h3>
+
+<table>
+  <thead><tr><th style="width:44%">項目</th><th class="num" style="width:22%">金額</th><th>備考</th></tr></thead>
+  <tbody>
+    <tr><td>中継機の調達</td><td class="num ok">0 円</td><td><strong>既設 MA-E320 を流用します</strong></td></tr>
+    <tr><td>レコーダー・カメラの調達</td><td class="num ok">0 円</td><td>既設 WJ-NU101 とカメラをそのまま使用します</td></tr>
+    <tr><td>設置工事</td><td class="num ok">0 円</td><td>SD カードの差し替えのみ。技術者の訪問は不要です</td></tr>
+    <tr><td>中継機の入れ替え用 SD カード</td><td class="num">別途お見積り</td><td>100 店舗分＋予備</td></tr>
+    <tr><td>検査端末（iPad）</td><td class="num">別途お見積り</td><td>既存端末の流用可否を確認のうえ確定します</td></tr>
+    <tr><td>初期設定・従業員の顔登録支援</td><td class="num">別途お見積り</td><td>段階移行のため、まとめて行う必要はありません</td></tr>
+  </tbody>
+</table>
+
+<h3>6-4. 現行費用との比較</h3>
+
+<table>
+  <thead><tr><th style="width:34%">区分</th><th class="num">現行</th><th class="num">ご提案</th><th class="num">差引き</th></tr></thead>
+  <tbody>
+    <tr><td>手荷物検査サービス</td><td class="num">15,000 円</td><td class="num">12,800 円<br><span class="small">手荷物検査オプション</span></td><td class="num" style="color:var(--ok);font-weight:700">− 2,200 円</td></tr>
+    <tr><td>映像基盤<br><span class="small">現行: クラウド録画（2,500 円 × 2 台）→ ご提案: 死活監視・本部映像確認・BCP</span></td><td class="num">5,000 円</td><td class="num">3,200 円<br><span class="small">基本</span></td><td class="num" style="color:var(--ok);font-weight:700">− 1,800 円</td></tr>
+    <tr style="background:var(--accent-soft)"><td><strong>合計（1 店舗・月額）</strong></td><td class="num"><strong>20,000 円</strong></td><td class="num"><strong>16,000 円</strong></td><td class="num" style="color:var(--ok);font-weight:700"><strong>− 4,000 円（− 20 %）</strong></td></tr>
+    <tr><td>100 店舗・月額</td><td class="num">2,000,000 円</td><td class="num">1,600,000 円</td><td class="num" style="color:var(--ok);font-weight:700">− 400,000 円</td></tr>
+    <tr><td><strong>100 店舗・年額</strong></td><td class="num">24,000,000 円</td><td class="num">19,200,000 円</td><td class="num" style="color:var(--ok);font-weight:700"><strong>− 4,800,000 円</strong></td></tr>
+  </tbody>
+</table>
+
+<div class="card new">
+  <h4>どちらの区分でも、現行を下回ります</h4>
+  <p style="margin-bottom:0">検査サービス同士（15,000 円 → 12,800 円）、映像基盤同士（5,000 円 → 3,200 円）の
+  同じ区分の比較で、いずれも現行より低い価格です。合計で <strong>年間 4,800,000 円の削減</strong>となり、
+  死活監視・BCP・本部からの映像確認が加わります。
+  巡回点検と警報連携を加えたフル構成（18,500 円）でも、現行合計を下回ります。</p>
+</div>
+
+<!-- ============================================================ -->
+<h2><span class="no">7</span>移行の進め方</h2>
+
+<h3>7-1. スケジュール</h3>
+
+<table>
+  <thead><tr><th style="width:8%">段階</th><th style="width:22%">内容</th><th style="width:14%" class="num">期間</th><th>完了の目安</th></tr></thead>
+  <tbody>
+    <tr><td class="num">1</td><td><strong>技術検証</strong></td><td class="num">約 4 週間</td>
+      <td>1 店舗で、中継機の入れ替えから証跡の再生までを通します</td></tr>
+    <tr><td class="num">2</td><td><strong>パイロット</strong></td><td class="num">約 4 週間</td>
+      <td>3〜5 店舗で日常運用を行い、現場の手順を確定します</td></tr>
+    <tr><td class="num">3</td><td><strong>段階展開</strong></td><td class="num">約 8〜12 週間</td>
+      <td>週 10〜20 店舗ずつ切り替えます</td></tr>
+    <tr><td class="num">4</td><td><strong>現行システム停止</strong></td><td class="num">—</td>
+      <td>全店の切替完了後、クラウド録画サービスを解約します</td></tr>
+  </tbody>
+</table>
+
+<p><strong>合計で約 5〜6 ヶ月を想定しています。</strong></p>
+
+<div class="card new">
+  <h4>店舗単位で切り替えられます</h4>
+  <p style="margin-bottom:0">手荷物検査の有効・無効は<strong>店舗ごとの設定</strong>です。
+  100 店舗を一斉に切り替える必要はありません。数店舗ずつ移行し、
+  問題があればその店舗だけ現行に戻せます。<strong>全社停止のリスクを負わない進め方が可能です。</strong></p>
+</div>
+
+<h3>7-2. 従業員の顔データについて</h3>
+
+<p>顔認証のデータは、システムごとに形式が異なるため、そのままの移行ができない場合があります。
+現行システムが<strong>顔写真</strong>の形で保管していれば一括登録が可能です。
+特徴量データのみの場合は、再登録が必要になります。</p>
+
+<p>ただし、<strong>顔登録が済んでいなくても検査の運用は止まりません。</strong>
+未登録の従業員様は認証をスキップして検査フローを継続する設計です。
+<strong>先にシステムを切り替え、顔登録は後から進めることができます。</strong></p>
+
+<h3>7-3. 本構成で対象外とする機能</h3>
+
+<div class="card warn">
+  <p><strong>高画質のライブ映像配信は、本構成では提供いたしません。</strong></p>
+  <p>御社のネットワークは出口が 1 箇所に集約されており、映像のリアルタイム配信に必要な通信方式を
+  通せないためです。また既設中継機に映像変換の処理能力がありません。</p>
+  <p style="margin-bottom:0">代わりに、<strong>静止画を短い間隔で更新する方式</strong>で店舗の状況を確認いただきます。
+  現行のカメラ設定（768 kbps）では実用上の差は小さいと考えておりますが、
+  <strong>ご要望がある場合は別途ご相談ください。</strong></p>
+</div>
+
+<!-- ============================================================ -->
+<h2><span class="no">8</span>前提条件と確認事項</h2>
+
+<p>本提案は、以下の確認が取れることを前提としています。
+<span class="tag chk">要確認</span> の項目は、技術検証（段階 1）で確定いたします。</p>
+
+<table>
+  <thead><tr><th style="width:30%">項目</th><th style="width:14%">状態</th><th>内容</th></tr></thead>
+  <tbody>
+    <tr><td>レコーダーの常時録画</td><td class="yes">確認済</td><td>各店舗で常時録画・14 日保存</td></tr>
+    <tr><td>録画の映像形式</td><td class="yes">確認済</td><td>H.264。変換処理は発生しません</td></tr>
+    <tr><td>クラウド録画の用途</td><td class="yes">確認済</td><td>手荷物検査の証跡のみ。他用途でのご利用なし</td></tr>
+    <tr><td>検査台のカメラ</td><td class="yes">確認済</td><td>2 台あり</td></tr>
+    <tr><td>中継機の再構築</td><td class="yes">確認済</td><td>当社ソフトのみの構成が可能</td></tr>
+    <tr><td>中継機の起動方式</td><td><span class="tag chk">要確認</span></td><td>SD カードからの起動可否（メーカーへ照会中）</td></tr>
+    <tr><td>プロキシの認証方式</td><td><span class="tag chk">要確認</span></td><td>認証方式によっては、当社宛先の認証除外設定をお願いする場合があります</td></tr>
+    <tr><td>プロキシの通信制限</td><td><span class="tag chk">要確認</span></td><td>SSL 復号の有無、送信データサイズの上限</td></tr>
+    <tr><td>レコーダーの HDD 状態</td><td><span class="tag chk">要確認</span></td><td>100 台の稼働時間と健全性（4-3 参照）</td></tr>
+    <tr><td>検査端末の流用可否</td><td><span class="tag chk">要確認</span></td><td>現行端末のブラウザ動作可否</td></tr>
+    <tr><td>現行の顔データ形式</td><td><span class="tag chk">要確認</span></td><td>写真か特徴量か（7-2 参照）</td></tr>
+  </tbody>
+</table>
+
+<h3>8-1. あわせてご相談したいこと</h3>
+
+<div class="card warn">
+  <h4>災害時の通信経路について</h4>
+  <p>御社のネットワークは出口が 1 箇所に集約されています。
+  <strong>その拠点が被災した場合、100 店舗すべてがクラウドから見えなくなります。</strong></p>
+  <p style="margin-bottom:0">これは現行システムでも同じ構造ですが、BCP 機能をご提供する以上、
+  お伝えしておくべき事項と考えております。BCP 用途に限った副回線（店舗ごとの LTE 等）の要否について、
+  情報システムご担当者様とご相談させてください。</p>
+</div>
+
+<!-- ============================================================ -->
+<h2><span class="no">9</span>次のお願い</h2>
+
+<ol class="steps">
+  <li><span class="t">中継機 MA-E320 を 1 台お貸しください</span>
+    当社ソフトの動作を確認いたします。SD カードからの起動のため、本体は改変しません。</li>
+  <li><span class="t">技術検証にご協力いただける店舗を 1 店舗ご指定ください</span>
+    ネットワークの疎通確認のため、1 回の訪問をお願いいたします。</li>
+  <li><span class="t">プロキシの設定情報をご開示ください</span>
+    ホスト・ポート・認証方式・通信制限について、情報システムご担当者様へお取次ぎください。</li>
+</ol>
+
+<p>3 は書面のやり取りのみで完了いたします。1 と 2 は技術検証の開始に必要です。</p>
+
+<footer>
+  <p><strong>Recorder Monitor</strong>｜株式会社ジェネシス・エッジ<br>
+  本提案書は 2026-07-30 時点の情報に基づく暫定版です。
+  <span class="tag chk">要確認</span> の項目は技術検証の完了をもって確定いたします。</p>
+</footer>
+
+</div>
+</body>
+</html>
