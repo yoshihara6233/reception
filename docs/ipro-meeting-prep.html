@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>i-PRO 技術面談 準備資料｜映像取得実装の整理と質問・確認事項</title>
+<style>
+  :root{
+    --paper:#F7F5F1; --paper2:#FFFFFF; --paper3:#E4DED3;
+    --ink:#0F0F10; --ink2:#2A2A2C; --ink3:#5B5B5F;
+    --line:#D6CFC1; --line2:#B9B0A0;
+    --accent:#2C4A7E; --accent-soft:#E4EAF3;
+    --ok:#2F7A4F; --ok-soft:#E5F0E9; --warn:#B5761A; --warn-soft:#F6EFE2; --danger:#A3332B; --danger-soft:#F5E4E2;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--paper);color:var(--ink);
+    font-family:"Noto Sans JP","Hiragino Sans",sans-serif;
+    font-size:14px;line-height:1.8;-webkit-font-smoothing:antialiased}
+  .mono{font-family:"IBM Plex Mono","SF Mono",Menlo,monospace;font-variant-numeric:tabular-nums}
+  .wrap{max-width:1040px;margin:0 auto;padding:0 32px 120px}
+
+  header.cover{background:var(--ink);color:#F2F0EC;margin:0 -32px;padding:52px 40px 40px;border-radius:0 0 6px 6px}
+  header.cover .kicker{font-family:"Inter Tight",sans-serif;font-size:12px;letter-spacing:.22em;color:#9aa7bf;margin-bottom:14px}
+  header.cover h1{font-size:28px;font-weight:700;line-height:1.4}
+  header.cover .sub{font-size:14px;color:#B9B0A0;margin-top:10px;line-height:1.7}
+  .meta{display:flex;flex-wrap:wrap;gap:28px;margin-top:26px}
+  .meta div{min-width:110px}
+  .meta .k{font-size:11px;color:#8b8b90;margin-bottom:2px}
+  .meta .v{font-size:15px;font-weight:700}
+
+  h2{font-size:21px;font-weight:700;margin:64px 0 14px;display:flex;align-items:center;gap:12px;
+     border-bottom:2px solid var(--accent);padding-bottom:8px}
+  h2 .no{flex:none;width:26px;height:26px;border-radius:4px;background:var(--accent);color:#fff;
+     font-family:"Inter Tight",monospace;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center}
+  h3{font-size:15px;font-weight:700;margin:30px 0 8px}
+  h4{font-size:13px;font-weight:700;margin:18px 0 6px;color:var(--ink2)}
+  p{margin:0 0 12px}
+  ul,ol{margin:0 0 14px;padding-left:1.5em}
+  li{margin-bottom:5px}
+  code{font-family:"IBM Plex Mono",Menlo,monospace;font-size:12px;background:var(--paper);
+       border:1px solid var(--line);border-radius:4px;padding:1px 6px;white-space:nowrap}
+  .small{font-size:12px;color:var(--ink3);line-height:1.7}
+  strong{font-weight:700}
+
+  .card{background:var(--paper2);border:1px solid var(--line);border-radius:6px;padding:18px 22px;margin:16px 0}
+  .card.warn{background:var(--warn-soft);border-color:var(--warn)}
+  .card.new{background:var(--accent-soft);border-color:var(--accent)}
+  .card.ok{background:var(--ok-soft);border-color:var(--ok)}
+  .card h4{margin-top:0}
+
+  table{width:100%;border-collapse:collapse;margin:12px 0 20px;background:var(--paper2);
+        border:1px solid var(--line);border-radius:6px;overflow:hidden;font-size:13px}
+  th{background:var(--paper);text-align:left;font-weight:700;font-size:12px;color:var(--ink2);
+     padding:9px 13px;border-bottom:1px solid var(--line);vertical-align:top}
+  td{padding:9px 13px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  tbody tr:nth-child(even){background:#FCFBF9}
+  .yes{color:var(--ok);font-weight:700}
+  .tag{display:inline-block;font-size:11px;font-weight:700;padding:1px 8px;border-radius:3px;
+    border:1px solid var(--line2);color:var(--ink3);background:var(--paper);vertical-align:1px;white-space:nowrap}
+  .tag.a{border-color:var(--danger);color:var(--danger);background:var(--danger-soft)}
+  .tag.b{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+  .tag.c{border-color:var(--ok);color:var(--ok);background:var(--ok-soft)}
+  .tag.chk{border-color:var(--warn);color:var(--warn);background:var(--warn-soft)}
+
+  .qa{background:var(--paper2);border:1px solid var(--line);border-radius:6px;margin:14px 0;overflow:hidden}
+  .qa .qhead{display:flex;gap:10px;align-items:flex-start;padding:12px 18px;border-bottom:1px solid var(--line);background:var(--paper)}
+  .qa .qno{flex:none;font-family:"IBM Plex Mono",Menlo,monospace;font-size:13px;font-weight:700;color:var(--accent)}
+  .qa .qt{font-weight:700}
+  .qa .qbody{padding:12px 18px}
+  .qa .qbody p:last-child{margin-bottom:0}
+
+  footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--line);font-size:12px;color:var(--ink3)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="cover">
+  <div class="kicker">MEETING PREPARATION — INTERNAL</div>
+  <h1>i-PRO 技術面談 準備資料<br>カメラ・レコーダーからの映像取得の整理と確認事項</h1>
+  <div class="sub">Recorder Monitor（店舗レコーダー遠隔監視サービス）の i-PRO 連携実装を整理し、面談で確認したい事項を優先度つきでまとめる。</div>
+  <div class="meta">
+    <div><div class="k">面談相手</div><div class="v">i-PRO 技術責任者</div></div>
+    <div><div class="k">当社実績機</div><div class="v">WJ-NU101 / NU100（実機）</div></div>
+    <div><div class="k">控える案件</div><div class="v">NU101 × 100 店舗</div></div>
+    <div><div class="k">作成日</div><div class="v mono">2026-07-31</div></div>
+  </div>
+</header>
+
+<!-- ============================================================ -->
+<h2><span class="no">1</span>面談の目的（3 つ）</h2>
+
+<ol>
+  <li><strong>実装の答え合わせ</strong> — 当社は NU101/NU100 実機に対して CGI・ONVIF で映像取得を実装し本番稼働している。実機挙動から逆算した理解が多いため、正式仕様との差分を潰したい（§4・§5-B）。</li>
+  <li><strong>100 店舗案件の技術裏付け</strong> — WJ-NU101 が全店に入っている大型リプレイス案件が進行中。検査クリップの常時切り出しという使い方（1 店舗 1 日 200 回 × 100 店舗）が製品想定内か、負荷・寿命・ライフサイクルを確認したい（§5-A）。</li>
+  <li><strong>正式な技術情報ルートの確立</strong> — CGI 仕様書の正式入手、技術問い合わせ窓口、パートナープログラムの有無（§5-C）。</li>
+</ol>
+
+<div class="card warn">
+  <h4>⚠ 面談で出さない情報</h4>
+  <p class="small" style="margin:0">顧客名・現行サービスの事業者名・当社の受注前提の金額は出さない。案件は「NU101 を全店導入済みの 100 店舗チェーンのリプレイス検討」とだけ伝える。競業避止に関わる旧来経緯にも触れない。</p>
+</div>
+
+<!-- ============================================================ -->
+<h2><span class="no">2</span>当社サービスの概要（先方への説明用・1 分）</h2>
+
+<p>「Recorder Monitor」は、店舗の既設レコーダー・カメラをそのままクラウド監視化するサービス。店舗にエッジ端末を 1 台置き、<strong>店舗から外向きの接続のみ</strong>で動作する（ポート開放・VPN 不要）。機能は 全店ライブ表示・録画再生・死活監視・BCP（発災前後の自動取得）・巡回点検レポート・警報連携・手荷物検査（検査時刻の録画クリップを証跡としてクラウド保全）。</p>
+<p>i-PRO 機とは<strong>エッジ端末が LAN 内で通信</strong>する。クラウドから直接レコーダーへはアクセスしない。</p>
+
+<!-- ============================================================ -->
+<h2><span class="no">3</span>映像取得の整理 — 機能 × 取得経路の対応表</h2>
+
+<p>当社実装が i-PRO 機に対して使っている API の全体像。<strong>すべて LAN 内・エッジ端末から</strong>の呼び出し。認証は HTTP Digest（MD5）、ONVIF は WS-Security UsernameToken（機器時刻とのずれを補正して送信）。</p>
+
+<table>
+  <thead><tr>
+    <th style="width:20%">機能</th>
+    <th style="width:26%">使用 API（i-PRO 側）</th>
+    <th style="width:54%">当社実装の要点</th>
+  </tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>ライブ監視（グリッド/単画面・低 fps JPEG）</strong></td>
+      <td>NVR: <code>push.cgi</code>（COMP=JPEG, multipart MJPEG）<br>カメラ直: ONVIF <code>GetSnapshotUri</code></td>
+      <td>push.cgi はカメラごとに 1 本だけ開いて常時受信し最新フレームをキャッシュ（毎回 START/STOP するとセッション枯渇で 204 になるため）。事前に <code>hdrctl.cgi?SCREEN=1X</code>。UID は NVR 1 台につき 1 つを全カメラで共有し、<code>status.cgi</code> を 60 秒間隔で keepalive。</td>
+    </tr>
+    <tr>
+      <td><strong>高画質ライブ（H.264 HLS）</strong></td>
+      <td>カメラ直: ONVIF <code>GetProfiles</code>→<code>GetStreamUri</code>→RTSP</td>
+      <td>RTSP URL は静的に組まず ONVIF で取得（NU 配下カメラは <code>rtsp://&lt;ip&gt;/ONVIF/MediaInput?profile=…</code> の動的形式）。go2rtc 経由で HLS 配信。H.265 はエッジで H.264 に変換。<strong>NVR 経由の高画質ライブは未使用</strong>。</td>
+    </tr>
+    <tr>
+      <td><strong>録画再生（VOD）・検査クリップ切り出し</strong></td>
+      <td>NVR: <code>dlogin.cgi</code> → <code>httpdl.cgi</code>（KIND=MP4）→ <code>logout.cgi</code></td>
+      <td>時刻は UTC・分単位（秒 00 固定）で指定。同一分内に収まる短い窓は START==END で空応答になるため、開始切り捨て・終了切り上げの分丸めを実装。multipart 応答の <code>X-RecData-Satus</code>（0=正常/1=録画なし/2=コーデック/3=ビジー）で判定し、複数パートは連結。VOD 用 UID は都度取得・都度 logout（ライブ用 UID と分離）。</td>
+    </tr>
+    <tr>
+      <td><strong>過去時刻の静止画（BCP 8 枚・発報前タイムライン）</strong></td>
+      <td>NVR: <code>httpdl.cgi</code>（上と同じ）</td>
+      <td>対象時刻 −1 秒〜+10 秒の窓 MP4 を取得し ffmpeg で先頭フレームを JPEG 化（窓が短いと GOP が不完全で demux 不可のため広めに取る）。録画から引けない場合はライブの現フレームで代替。</td>
+    </tr>
+    <tr>
+      <td><strong>現在時刻の静止画（巡回点検・発報後タイムライン・死活監視）</strong></td>
+      <td>カメラ直: ONVIF <code>GetSnapshotUri</code>（JPEG プロファイル優先）</td>
+      <td>RTSP セッションを消費しないため、NVR がメインストリームを占有していても取得できる。ONVIF 非対応機のみ RTSP キーフレーム切り出し（ffmpeg, TCP）にフォールバック。</td>
+    </tr>
+    <tr>
+      <td><strong>発報（センサー・接点入力）の受信</strong></td>
+      <td>カメラ/NVR の <strong>独自 HTTP アラーム通知</strong>（通知先＝エッジ端末）<br>補助: ONVIF PullPoint</td>
+      <td>エッジが LAN 内で HTTP 受け口を立て、i-PRO 側のアラーム通知先に設定。通知がタイムアウトしないよう即 200 応答→非同期処理。動体検知ではなく接点/通知のみを使用。ONVIF PullPoint（CreatePullPointSubscription→PullMessages）も実装・検証済み。</td>
+    </tr>
+    <tr>
+      <td><strong>録画期間・構成の確認</strong></td>
+      <td>NVR: <code>recordedtime.cgi</code>（UID 不要）/ <code>as_getinfo.cgi?FILE=2</code></td>
+      <td>録画期間の裏取りと接続カメラ CH の確認に使用。表示はローカル時刻（httpdl の UTC 入力と混在する点に注意して実装）。</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="card">
+  <h4>NU101 実機で確認済みの機器側前提</h4>
+  <ul style="margin-bottom:0">
+    <li>NVR は <strong>HTTPS のみ（80 閉・自己署名証明書）</strong>、Digest realm は <code>Network disk recorder</code>。</li>
+    <li>NVR の <strong>RTSP(554) は閉</strong>・<strong>ONVIF サーバ非提供</strong>（<code>/onvif/device_service</code> が 404）→ 録画取得は CGI 一択。</li>
+    <li>配下カメラは標準 ONVIF/RTSP で成立（カメラごとに認証情報が異なるケースあり）。コーデックはカメラ混在（H.264 / H.265）。</li>
+    <li>そのため当社構成は「<strong>ライブ・静止画＝カメラ直 ONVIF、録画＝NVR の httpdl.cgi</strong>」のハイブリッド。</li>
+  </ul>
+</div>
+
+<!-- ============================================================ -->
+<h2><span class="no">4</span>実機で判明した i-PRO 固有仕様と当社の回避策（答え合わせ用）</h2>
+
+<p>実機運用で踏んだ挙動と、当社が実装した回避策。<span class="tag chk">要確認</span> は §5 の質問番号に対応。</p>
+
+<table>
+  <thead><tr>
+    <th style="width:34%">事象（実機で確認）</th>
+    <th style="width:44%">当社の理解・回避策</th>
+    <th style="width:22%">確認</th>
+  </tr></thead>
+  <tbody>
+    <tr>
+      <td><code>httpdl.cgi</code> の STARTTIME/ENDTIME は <strong>UTC</strong>。一方 <code>recordedtime.cgi</code> の録画期間表示は<strong>ローカル(JST)</strong></td>
+      <td>JST で送ると +9h ずれて「録画なし(Satus:1)」になる。UTC 変換を実装して解決</td>
+      <td><span class="tag chk">Q7</span> 仕様として正か</td>
+    </tr>
+    <tr>
+      <td>時刻指定は分単位（秒 00 固定）。同一分内の短い窓は空応答</td>
+      <td>開始切り捨て / 終了切り上げの分丸め＋最短 1 分保証を実装</td>
+      <td><span class="tag chk">Q8</span> 秒単位対応の予定</td>
+    </tr>
+    <tr>
+      <td><code>push.cgi</code> を短時間に START/STOP 連打するとセッションが飽和し、以後 START が <strong>204（空応答）</strong></td>
+      <td>カメラごとに 1 本を開きっぱなしにする永続ストリーム方式に変更して解決</td>
+      <td><span class="tag chk">Q11</span> 204 の条件</td>
+    </tr>
+    <tr>
+      <td>UID 寿命 90 秒・同時最大 16・同一カメラ 2 本不可・ライブと再生は同一 UID 不可・コマンド間隔 3 秒目安（CGI 資料 V15R1 の記載）</td>
+      <td>ライブは NVR 1 台 = 1 UID を全カメラで共有（60 秒 keepalive）、VOD は都度 UID。503/401 は UID 破棄→再取得。<strong>3 秒間隔は未実装だが実運用で問題は出ていない</strong></td>
+      <td><span class="tag chk">Q3</span> 制約の正確な単位</td>
+    </tr>
+    <tr>
+      <td>NU101 では WJ-NX 系 CGI（<code>getsysteminfo</code>・<code>snapshot.cgi</code>・<code>playback</code> 等）が軒並み 404。<code>dlogin/httpdl/recordedtime</code> 系のみ有効</td>
+      <td>NX/NU 共通とされる CGI 資料に対し、NU の実装範囲が異なると理解。実機総当たりで判明</td>
+      <td><span class="tag a">Q1</span> 機種別対応表</td>
+    </tr>
+    <tr>
+      <td><code>snapshot.cgi?time=</code>（過去時刻指定）は FW v3+ のみ有効。旧 FW は<strong>黙って最新フレームを返す</strong>（判別不能）</td>
+      <td>time 付き 200 を暫定的に「過去フレーム」とみなすしかない</td>
+      <td><span class="tag chk">Q12</span> 対応可否の判別法</td>
+    </tr>
+    <tr>
+      <td>カメラ CGI 直叩きで Accept ヘッダを付けると <strong>400 Bad Request</strong> になる機種がある</td>
+      <td>Accept を付けない、または <code>get_randomnum</code>→<code>&amp;Randomnum=</code> 付与で回避</td>
+      <td><span class="tag chk">Q13</span> 正式仕様か</td>
+    </tr>
+    <tr>
+      <td>録画 MP4 は moov アトムが末尾にある（ストリーミング処理不可）</td>
+      <td>一時ファイルに書いてから ffmpeg に渡す方式で解決。標準的な MP4 なので remux は不要</td>
+      <td><span class="tag chk">Q9</span> MP4 生成方式</td>
+    </tr>
+    <tr>
+      <td>応答ヘッダの綴りが <code>X-RecData-Satus</code>（Status ではない）</td>
+      <td>原文ママでパース。共有まで（笑い話として）</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td>NVR がカメラのメイン H.264/H.265 RTSP を占有しており、外部からの RTSP SETUP が 503 になりがち</td>
+      <td>静止画は ONVIF GetSnapshotUri（RTSP 非消費）を最優先にして回避</td>
+      <td><span class="tag chk">Q14</span> 同時接続の考え方</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ -->
+<h2><span class="no">4.5</span>PoC 実機での事前実測（2026-08-01・WJ-NU101 + カメラ2台）</h2>
+
+<p>面談前に自社 PoC 環境で実測済み。「教えてください」ではなく<strong>「実測ではこうでした。この理解・使い方で正しいですか」</strong>と確認する。</p>
+
+<table>
+  <thead><tr>
+    <th style="width:30%">試験</th>
+    <th style="width:48%">実測結果</th>
+    <th style="width:22%">関連する質問</th>
+  </tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>常用負荷</strong>: httpdl 2分クリップ × 50回（72秒間隔・CAM1/2交互）</td>
+      <td class="mono">50/50 成功・ビジー 0 件・取得時間 中央値 4.6 秒（min 2.9 / max 6.5）・総転送 0.88 GB</td>
+      <td><span class="tag chk">Q2</span> この負荷は想定内か</td>
+    </tr>
+    <tr>
+      <td><strong>録画整合性</strong>: 負荷試験時間帯を事後に抜き取り再取得</td>
+      <td>6 点（3 時刻 × 2 CAM）すべて Satus=0・録画期間の欠落なし → <strong>常用負荷で録画への影響は観測されず</strong></td>
+      <td><span class="tag chk">Q2-①</span></td>
+    </tr>
+    <tr>
+      <td><strong>並列度</strong>: httpdl を 2 / 3 / 4 並列で同時実行</td>
+      <td><strong>同時 2 本まで成功。3 本目以降は即時 Satus=3（ビジー）</strong>（約 1 秒で返るためリトライは容易）</td>
+      <td><span class="tag chk">Q2-③④</span> 制約値=2 の確認</td>
+    </tr>
+    <tr>
+      <td><strong>コマンド間隔</strong>: 待ち時間ゼロで 10 連続取得</td>
+      <td>10/10 成功・性能劣化なし → 「間隔 3 秒目安」は実効的な強制ではない</td>
+      <td><span class="tag chk">Q3</span></td>
+    </tr>
+    <tr>
+      <td><strong>UID 上限</strong>: dlogin を logout せず連続取得</td>
+      <td><strong>17 本すべて取得成功</strong>（＋常駐ライブ UID 1 本）→ 「同時最大 16」は dlogin 数の上限としては現れず</td>
+      <td><span class="tag chk">Q3</span> 16 の実体は何か</td>
+    </tr>
+    <tr>
+      <td><strong>KIND=MP4 の生成方式</strong>: 出力を ffprobe で解析</td>
+      <td>H.265 カメラ → hevc のまま / H.264 → h264 のまま・実時間の約 26 倍速で転送 → <strong>無劣化のコンテナ詰め替え（トランスコードなし）と確認</strong></td>
+      <td><span class="tag chk">Q9</span> 公式にも保証されるか</td>
+    </tr>
+    <tr>
+      <td><strong>窓長・秒粒度</strong></td>
+      <td>59 分窓 OK / <strong>61 分窓は生の HTTP 500</strong>（Satus でなくサーバエラー）/ <strong>STARTTIME 秒≠00 が実質有効</strong>（直前キーフレーム 約6秒前から開始・未文書挙動）</td>
+      <td><span class="tag chk">Q8</span></td>
+    </tr>
+    <tr>
+      <td><strong>Accept ヘッダ 400</strong>: カメラ 2 機種に Accept 有/無で送信</td>
+      <td>WV-U1132A / WV-SW158 とも <strong>再現せず</strong>（全 200・get_randomnum 自体なし）</td>
+      <td><span class="tag chk">Q13</span> 対象世代の確認</td>
+    </tr>
+    <tr>
+      <td><strong>カメラ RTSP 同時接続</strong>: NVR 録画中に追加セッション</td>
+      <td>H.265 メイン <strong>4 本同時まで確認</strong>（すべて成功・上限未到達）</td>
+      <td><span class="tag chk">Q14</span></td>
+    </tr>
+    <tr>
+      <td><strong>死活監視の外部取得</strong>: 状態系 CGI 掃引 + SNMP</td>
+      <td>UID 不要で <span class="mono">recordedtime.cgi</span>（<strong>HDD 容量/残量</strong>・録画期間）/ <span class="mono">as_getinfo.cgi?FILE=2</span>（<strong>CH別カメラ接続状態</strong>）/ <span class="mono">FILE=3</span>（CH別録画状態）が取得可。SNMP は応答なし・エラー状態系 CGI は 404</td>
+      <td><span class="tag chk">Q5</span> 残る質問は機器エラー/S.M.A.R.T/能動通知のみ</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="card new">
+  <h4>実測から得た当社側の設計指針（面談と独立に確定）</h4>
+  <ul style="margin-bottom:0">
+    <li>検査クリップ 1 日 200 回運用は<strong>この実測ペースなら余裕</strong>（1 回 5 秒・逐次処理で 1 日合計 約 33 分の NVR 占有）。</li>
+    <li>エッジの httpdl 呼び出しは <strong>NVR 1 台あたり並列 2 に制限</strong>する（3 本目から即ビジー）。VOD・検査クリップ・BCP が重なる時は直列化。</li>
+    <li>死活監視は上記 3 CGI の定期ポーリングで実装可能（HDD 残量トレンド・カメラ断・録画停止の検知）。</li>
+  </ul>
+</div>
+
+<!-- ============================================================ -->
+<h2><span class="no">5</span>質問・確認事項（優先度つき）</h2>
+
+<p><span class="tag a">A 最優先</span> 100 店舗案件の成立に直結　<span class="tag b">B 仕様確認</span> 実装の答え合わせ　<span class="tag c">C 関係構築</span> 今後のルート</p>
+
+<h3><span class="tag a">A</span> 100 店舗案件に直結（この 6 問は必ず聞く）</h3>
+
+<div class="qa">
+  <div class="qhead"><span class="qno">Q1</span><div class="qt">WJ-NU101 の CGI 実装範囲を機種別に示す正式資料はあるか</div></div>
+  <div class="qbody">
+    <p>「i-PRO NVR CGI-IF(NXNU) V15R1」を参照して実装したが、NU101 実機では <code>dlogin.cgi / httpdl.cgi / recordedtime.cgi / push.cgi / hdrctl.cgi / status.cgi</code> 系のみ有効で、NX 系で使える <code>getsysteminfo / snapshot.cgi / playback</code> 等は 404 だった。<strong>NU シリーズの対応 CGI 一覧、または機種×CGI の対応表</strong>はあるか。より新しい版の資料はあるか。</p>
+  </div>
+</div>
+
+<div class="qa">
+  <div class="qhead"><span class="qno">Q2</span><div class="qt">httpdl.cgi の常用（クリップ切り出しの高頻度利用）は製品想定内か</div></div>
+  <div class="qbody">
+    <p>手荷物検査の証跡として、<strong>1 店舗 1 日 200 回 × 2 カメラ × 100 店舗</strong>の頻度で数分単位のクリップを httpdl.cgi で切り出す運用を計画している。①NVR 側の処理負荷と録画への影響（取りこぼしは起きないか）②HDD 寿命への影響 ③推奨される並列度・呼び出し間隔 ④<code>X-RecData-Satus=3</code>（ビジー）になる条件、を確認したい。</p>
+    <p><strong>実測（§4.5）</strong>: 50 回×2 分の連続取得は全成功・録画欠落なし・同時 3 本目から Satus=3。→ 聞き方は「<strong>この使い方と負荷で長期運用して問題ないか。並列 2 が仕様上の上限か</strong>」。残る未知は ②HDD 寿命への長期影響のみ。</p>
+  </div>
+</div>
+
+<div class="qa">
+  <div class="qhead"><span class="qno">Q3</span><div class="qt">セッション制約の正確な単位（当社運用の妥当性確認）</div></div>
+  <div class="qbody">
+    <p>資料記載の「UID 同時最大 16・同一カメラ 2 本不可・ライブと再生は同一 UID 不可・コマンド間隔 3 秒目安」について、制約の単位は UID か TCP 接続かカメラか。当社は<strong>ライブ＝NVR 1 台 1 UID を全カメラ共有（keepalive 60 秒）、再生＝都度別 UID</strong> で運用し安定しているが、これは想定された正しい使い方か。</p>
+    <p><strong>実測（§4.5）</strong>: UID は 17 本同時取得できた／間隔ゼロの連続取得も問題なし／実効の壁は「再生 DL 同時 2 本」だった。→「<strong>『同時最大 16』『3 秒間隔』の実体は何か。再生同時 2 本が正式仕様か</strong>」を確認。</p>
+  </div>
+</div>
+
+<div class="qa">
+  <div class="qhead"><span class="qno">Q4</span><div class="qt">WJ-NU101 の製品ライフサイクル</div></div>
+  <div class="qbody">
+    <p>販売終了・修理/サポート終了時期、ファームウェア（特にセキュリティ修正）の提供方針。<strong>既設 100 台を今後 5 年程度使い続ける前提</strong>で、リスクと後継機種（リプレイス時の互換性）を確認したい。</p>
+  </div>
+</div>
+
+<div class="qa">
+  <div class="qhead"><span class="qno">Q5</span><div class="qt">NVR 死活監視・HDD 健全性を外部から取る公式手段</div></div>
+  <div class="qbody">
+    <p>当社は NVR/カメラの死活監視を標準機能として提供している。NU101 で①機器状態・エラー状態の取得 CGI ②HDD の S.M.A.R.T / 劣化状態の外部取得 ③障害発生時の能動通知（メール・HTTP 通知・SNMP trap）は何が使えるか。<span class="small">（現行の顧客運用では NVR 故障の検知手段がなく、ここを商品価値にしたい）</span></p>
+    <p><strong>実測（§4.5）</strong>: HDD 容量/残量・CH別カメラ接続・CH別録画状態は既存 CGI で取得できることを確認済み。SNMP は応答なし。→ 残る質問は「<strong>機器エラー・HDD S.M.A.R.T・能動通知の公式手段</strong>」に絞り込み。</p>
+  </div>
+</div>
+
+<div class="qa">
+  <div class="qhead"><span class="qno">Q6</span><div class="qt">独自 HTTP アラーム通知の正式仕様</div></div>
+  <div class="qbody">
+    <p>カメラ/NVR のアラーム通知先を当社エッジ端末に向けて発報連携している。通知の<strong>リトライ有無・タイムアウト・同報数の上限・HTTPS(TLS) 対応</strong>の正式仕様を確認したい。（当社は通知を取りこぼさないよう即 200 応答で受けている）</p>
+  </div>
+</div>
+
+<h3><span class="tag b">B</span> 仕様の答え合わせ（時間があれば順に）</h3>
+
+<div class="qa">
+  <div class="qhead"><span class="qno">Q7</span><div class="qt">時刻系の確認</div></div>
+  <div class="qbody">
+    <p>①httpdl.cgi の STARTTIME/ENDTIME が UTC、recordedtime.cgi の表示がローカル、という理解で正しいか ②NVR の NTP 同期の推奨設定 ③<strong>機器時刻と実時刻のオフセットを外部から取得する手段</strong>はあるか（切り出しクリップと実時刻の突合精度に効く）。</p>
+  </div>
+</div>
+
+<div class="qa">
+  <div class="qhead"><span class="qno">Q8</span><div class="qt">httpdl.cgi の時刻粒度</div></div>
+  <div class="qbody"><p>分単位（秒 00 固定）の仕様確認。ENDTIME−STARTTIME ≤ 1 時間の制約と、応答が複数パートに分割される条件も確認したい。</p>
+  <p><strong>実測（§4.5）</strong>: 61 分窓は生の HTTP 500。<strong>秒≠00 指定が実質動作した</strong>（直前キーフレームから開始・未文書）。→「秒指定は公式サポートか、依存してよいか」を確認。</p></div>
+</div>
+
+<div class="qa">
+  <div class="qhead"><span class="qno">Q9</span><div class="qt">KIND=MP4 の生成方式</div></div>
+  <div class="qbody"><p>録画ストリームのコンテナ詰め替え（無劣化）か、トランスコードか。JPEG 録画が KIND=MP4 で取れない（Satus=2）ことの確認も。</p>
+  <p><strong>実測（§4.5）</strong>: H.265/H.264 ともコーデックそのまま・26 倍速転送 → <strong>無劣化詰め替えと確認済み</strong>。→「この理解で正しいか（全機種・全 FW で同じか）」の確認のみ。</p></div>
+</div>
+
+<div class="qa">
+  <div class="qhead"><span class="qno">Q10</span><div class="qt">ONVIF 対応方針</div></div>
+  <div class="qbody"><p>NU101 は ONVIF サーバ非提供（Profile-G/Replay なし）で正しいか。NX 系での Profile-G 対応機種はどれか。配下カメラの ONVIF は NVR 接続中でも外部利用してよい設計か（当社はカメラ直 ONVIF＋NVR 録画のハイブリッドで運用中）。</p></div>
+</div>
+
+<div class="qa">
+  <div class="qhead"><span class="qno">Q11</span><div class="qt">push.cgi の挙動</div></div>
+  <div class="qbody"><p>COMP=JPEG の解像度・フレームレートは何で決まるか（制御手段はあるか）。INTERNETMODE=ON の意味。START が 204（空）を返す条件（当社はセッション枯渇と推定し永続ストリーム化で回避）。</p></div>
+</div>
+
+<div class="qa">
+  <div class="qhead"><span class="qno">Q12</span><div class="qt">snapshot.cgi の time パラメータ</div></div>
+  <div class="qbody"><p>過去時刻指定が FW v3+ のみ、旧 FW は無視して最新フレームを返す、という理解で正しいか。<strong>対応可否を機械的に判別する方法</strong>はあるか。</p></div>
+</div>
+
+<div class="qa">
+  <div class="qhead"><span class="qno">Q13</span><div class="qt">カメラ CGI の Accept ヘッダ 400 問題</div></div>
+  <div class="qbody"><p>仕様書 §1.3 に Accept ヘッダ付きで 400 になる旨と <code>get_randomnum</code>→<code>&amp;Randomnum=</code> の回避策の記載がある。</p>
+  <p><strong>実測（§4.5）</strong>: 手元の WV-U1132A / WV-SW158 では<strong>再現せず</strong>（Accept 付きでも 200・get_randomnum 自体なし）。→「どの機種/FW 世代で必要な対策か」を確認。</p></div>
+</div>
+
+<div class="qa">
+  <div class="qhead"><span class="qno">Q14</span><div class="qt">カメラ RTSP の同時接続数</div></div>
+  <div class="qbody"><p>過去に NVR がメインストリームを掴んでいる状態で外部から RTSP SETUP すると 503 になる事象があった。カメラのストリーム同時接続数の考え方（プロファイル別の枠、JPEG 系は別枠か）を確認したい。</p>
+  <p><strong>実測（§4.5）</strong>: 現行 FW では NVR 録画中でも H.265 メイン <strong>4 本同時に成功</strong>（上限未到達）。→「同時接続数の正式仕様と、503 が出る条件」を確認。</p></div>
+</div>
+
+<h3><span class="tag c">C</span> 今後・関係構築</h3>
+
+<div class="qa">
+  <div class="qhead"><span class="qno">Q15</span><div class="qt">技術情報の正式ルート</div></div>
+  <div class="qbody"><p>CGI/API 仕様書の正式入手方法（開発パートナー登録・NDA）。実装で詰まった際の技術問い合わせ窓口。i-PRO のパートナー/インテグレータープログラムへの参加条件。</p></div>
+</div>
+
+<div class="qa">
+  <div class="qhead"><span class="qno">Q16</span><div class="qt">今後の API 方向性</div></div>
+  <div class="qbody"><p>新機種・新 FW での外部連携 API の方向性（REST API? ONVIF Profile-G/M?）。AI カメラの解析メタデータ（人物・車両検知等）を外部システムから利用する公式手段。</p></div>
+</div>
+
+<div class="qa">
+  <div class="qhead"><span class="qno">Q17</span><div class="qt">機器調達・保守の相談先</div></div>
+  <div class="qbody"><p>100 店舗規模での機器保守（先出しセンドバック等）や、当社経由での機器提案を行う場合の販売ルートの相談先。</p></div>
+</div>
+
+<!-- ============================================================ -->
+<h2><span class="no">6</span>当日の準備・持ち物</h2>
+
+<ul>
+  <li><strong>本資料の §3・§4 を印刷 or 画面共有できる形で</strong>（当社実装の透明性を見せると技術者同士の話が早い）。</li>
+  <li>NU101 実機の挙動ログ（404 になった CGI 一覧・X-RecData-Satus の実例）— 必要ならその場で提示できるように。</li>
+  <li><strong>§4.5 の実測データ一式</strong>（2026-08-01 実施・負荷 50 回の CSV・並列度/セッション/窓長の生ログ）。</li>
+  <li>参照した資料名を控えておく: <code>i-PRO NVR CGI-IF(NXNU) V15R1jp</code>。</li>
+  <li>デモ環境（intereco-monitor 本番）をその場で見せられる準備 — ライブ・録画再生・BCP を実機で。</li>
+</ul>
+
+<div class="card ok">
+  <h4>✓ 面談のゴール（持ち帰りたい成果）</h4>
+  <ul style="margin-bottom:0">
+    <li>Q1（NU101 の CGI 実装範囲）と Q2（httpdl 常用の可否）に確度の高い回答、または回答してくれる窓口。</li>
+    <li>技術問い合わせの継続ルート（担当者名・連絡先）。</li>
+    <li>できれば: NU シリーズ向け最新技術資料の入手。</li>
+  </ul>
+</div>
+
+<footer>
+  Genesis Edge — internal use only ｜ 本資料の §3・§4 は当社エッジ実装（edge-agent）のコードとベンダーノート（docs/vendor/ipro-cgi-notes.md）に基づく。
+</footer>
+
+</div>
+</body>
+</html>

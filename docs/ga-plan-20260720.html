@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Intereco v1 GA 開発 進捗 &amp; 実行計画（2026-07-20 更新）</title>
+<style>
+  :root{
+    --paper:#F7F5F1; --paper2:#FFFFFF; --paper3:#E4DED3;
+    --ink:#0F0F10; --ink2:#2A2A2C; --ink3:#5B5B5F;
+    --line:#D6CFC1; --line2:#B9B0A0;
+    --accent:#2C4A7E; --accent-soft:#E4EAF3;
+    --ok:#2F7A4F; --ok-soft:#E5F0E9; --warn:#B5761A; --warn-soft:#F6EFE2; --danger:#A3332B; --danger-soft:#F5E4E2;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--paper);color:var(--ink);
+    font-family:"Noto Sans JP","Hiragino Sans",sans-serif;
+    font-size:14px;line-height:1.8;-webkit-font-smoothing:antialiased}
+  .mono{font-family:"IBM Plex Mono","SF Mono",Menlo,monospace;font-variant-numeric:tabular-nums}
+  .wrap{max-width:1040px;margin:0 auto;padding:0 32px 120px}
+
+  header.cover{background:var(--ink);color:#F2F0EC;margin:0 -32px;padding:52px 40px 40px;border-radius:0 0 6px 6px}
+  header.cover .kicker{font-family:"Inter Tight",sans-serif;font-size:12px;letter-spacing:.22em;color:#9aa7bf;margin-bottom:14px}
+  header.cover h1{font-size:30px;font-weight:700;line-height:1.4}
+  header.cover .sub{font-size:14px;color:#B9B0A0;margin-top:8px}
+  .meta{display:flex;flex-wrap:wrap;gap:28px;margin-top:26px}
+  .meta div{min-width:110px}
+  .meta .k{font-size:11px;color:#8b8b90;margin-bottom:2px}
+  .meta .v{font-size:15px;font-weight:700}
+  .meta .v.mono{font-size:15px}
+
+  h2{font-size:21px;font-weight:700;margin:64px 0 14px;display:flex;align-items:center;gap:12px;
+     border-bottom:2px solid var(--accent);padding-bottom:8px}
+  h2 .no{flex:none;width:26px;height:26px;border-radius:4px;background:var(--accent);color:#fff;
+     font-family:"Inter Tight",monospace;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center}
+  h3{font-size:15px;font-weight:700;margin:28px 0 8px}
+  p{margin:0 0 12px}
+  ul{margin:0 0 14px;padding-left:1.5em}
+  li{margin-bottom:4px}
+  code{font-family:"IBM Plex Mono",Menlo,monospace;font-size:12px;background:var(--paper2);
+       border:1px solid var(--line);border-radius:4px;padding:1px 6px;white-space:nowrap}
+  .small{font-size:12px;color:var(--ink3)}
+
+  .card{background:var(--paper2);border:1px solid var(--line);border-radius:6px;padding:18px 22px;margin:14px 0}
+  .card.hero{border-left:none}
+  .card.warn{background:var(--warn-soft);border-color:var(--warn)}
+  .card.new{background:var(--accent-soft);border-color:var(--accent)}
+
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:18px 0}
+  @media(max-width:720px){.stats{grid-template-columns:1fr}}
+  .stat{background:var(--paper2);border:1px solid var(--line);border-radius:6px;padding:16px 20px}
+  .stat .k{font-size:11px;color:var(--ink3)}
+  .stat .v{font-size:22px;font-weight:700;margin:2px 0}
+  .stat .v.ok{color:var(--ok)} .stat .v.warn{color:var(--warn)} .stat .v.accent{color:var(--accent)}
+  .stat .d{font-size:11.5px;color:var(--ink3);line-height:1.6}
+
+  table{width:100%;border-collapse:collapse;margin:12px 0 20px;background:var(--paper2);
+        border:1px solid var(--line);border-radius:6px;overflow:hidden;font-size:13px}
+  th{background:var(--paper);text-align:left;font-weight:700;font-size:12px;color:var(--ink2);
+     padding:8px 13px;border-bottom:1px solid var(--line)}
+  td{padding:8px 13px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+
+  .badge{display:inline-block;font-size:11px;font-weight:500;border-radius:4px;padding:1px 9px;white-space:nowrap}
+  .b-done{background:var(--ok-soft);color:var(--ok)}
+  .b-new{background:var(--accent-soft);color:var(--accent)}
+  .b-todo{background:var(--paper3);color:var(--ink3)}
+  .b-wait{background:var(--warn-soft);color:var(--warn)}
+  .b-risk{background:var(--danger-soft);color:var(--danger)}
+  .strike{text-decoration:line-through;color:var(--ink3)}
+
+  .gates{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:18px 0}
+  @media(max-width:860px){.gates{grid-template-columns:1fr 1fr}}
+  @media(max-width:560px){.gates{grid-template-columns:1fr}}
+  .gate{background:var(--paper2);border:1px solid var(--line);border-radius:6px;padding:16px}
+  .gate.hit{border:2px solid var(--ok)}
+  .gate.run{border:2px solid var(--warn)}
+  .gate .t{font-weight:700;font-size:13.5px;margin-bottom:2px}
+  .gate .w{font-size:11px;color:var(--ink3);margin-bottom:10px}
+  .gate ul{padding-left:0;list-style:none;font-size:12px}
+  .gate li{margin-bottom:4px;line-height:1.55}
+
+  footer{margin-top:72px;border-top:1px solid var(--line);padding-top:18px;font-size:12px;color:var(--ink3)}
+  @media print{
+    body{font-size:11.5px}
+    .wrap{max-width:none;padding:0 8mm}
+    h2{break-before:page;margin-top:12px}
+    header.cover{margin:0;border-radius:0}
+    .card,table,.gate,.stat{break-inside:avoid}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="cover">
+  <div class="kicker">INTERECO RECORDER MONITOR</div>
+  <h1>v1 GA 開発 進捗 &amp; 実行計画</h1>
+  <div class="sub">本部集中監視 SaaS ／ 第1号店本番リリース（GA）まで 〜 2026年10月</div>
+  <div class="meta">
+    <div><div class="k">作成日</div><div class="v mono">2026-06-14</div></div>
+    <div><div class="k">進捗更新</div><div class="v mono">2026-07-20</div></div>
+    <div><div class="k">GA目標</div><div class="v">2026年10月</div></div>
+    <div><div class="k">第1号店</div><div class="v">i-PRO NVR</div></div>
+    <div><div class="k">コア価値</div><div class="v">本部ライブ監視 + BCP</div></div>
+    <div><div class="k">体制</div><div class="v">3〜5名</div></div>
+    <div><div class="k">SLA</div><div class="v">best-effort（GA後数値化）</div></div>
+  </div>
+</header>
+
+<!-- 1 ============================================================ -->
+<h2><span class="no">1</span>エグゼクティブサマリー</h2>
+
+<div class="card hero">
+<p>6/23時点で <strong>Phase A（製品化基盤）と Phase B（i-PRO本番化）のコード実装が完了</strong>（i-PRO実機 WJ-NU101 検証・VODスパイク「go」・go2rtc H.265→H.264・認証一体化 LL-HLS・QRウィザード・ONVIF探索・セッション上限・レコーダUI・Vault化・SAST常設）。</p>
+<p><strong>7月の進捗（6/23以降）</strong>: (a) 運用系の残を大幅消化 — <em>自律OTA＋known-good 2層ロールバックの本番化</em>・<em>monitor DB 東京移行＋migrationベースライン整理（7/19）</em>・<em>鍵/PW再ローテ完了（7/7）</em>・<em>G1残2点=トンネル断の実プローブ監視＋ロール別UI到達smoke（PR #198・7/20）</em>。(b) GAスコープ外の<strong>商品拡張を追加出荷</strong> — 巡回（Patrol）・発報（Alarm）・手荷物検査（iPad＋顔認証・7/20実機確認済）の3モジュールが本番稼働＝オプション商材の実体が先行して揃った。</p>
+<p style="margin-bottom:0"><strong>現在地: G1 実質達成</strong>（残りは運用作業のみ）。GAまで約3ヶ月。最大リスクは引き続き<strong>容量</strong> — 7月は商品拡張に容量を割いたため、8月以降は G2/G3/G4 の GA必須項目（ONVIF探索実機検証・外部診断判断・1店構築）へ集中する。</p>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="k">現在地</div><div class="v ok">G1 実質達成</div>
+    <div class="d">Phase A/B 実装済＋G1残2点も7/20完了。残=migration適用・ALERT_EMAILS確認・staging確認</div></div>
+  <div class="stat"><div class="k">GAまで</div><div class="v accent">約3ヶ月</div>
+    <div class="d">7/20 → 10月末。8月からPhase C/D集中</div></div>
+  <div class="stat"><div class="k">最大リスク</div><div class="v warn">容量（＋分散）</div>
+    <div class="d">商品拡張（巡回/発報/検査）は完了。以後GA必須へ集中し、契約テスト死守は不可侵のまま</div></div>
+</div>
+
+<!-- 2 ============================================================ -->
+<h2><span class="no">2</span>進捗ダッシュボード</h2>
+
+<table>
+  <tr><th style="width:150px">区分</th><th>項目</th><th style="width:90px">状態</th></tr>
+  <tr><td rowspan="4">✅ 完了<br><span class="small">（計画策定〜6月）</span></td>
+      <td>本番公開（PoC実機1台・ローカル/リモート視聴・認証・再起動自動復帰）／ admin_users 越権バグ修正 ／ パスワードリセット ／ v1 GA計画（eng-review→CEO→差分再審査）</td><td><span class="badge b-done">DONE</span></td></tr>
+  <tr><td>i-PRO実機（WJ-NU101）検証・VODスパイク「go」（Profile-G非依存・httpdl.cgiで録画MP4）・<strong>VOD録画再生 実機完成（前倒し）</strong></td><td><span class="badge b-done">DONE</span></td></tr>
+  <tr><td>i-PRO本部ライブ（16分割＋単体高画質 go2rtc H.265→H.264・LL-HLS 認証一体化=monitorログインのみ）</td><td><span class="badge b-done">DONE</span></td></tr>
+  <tr><td>CIゲート＋RLS全表監査＋テナント×ロール authz契約テスト／QR自己登録ウィザード／ONVIF自動探索＋接続テスト／セッション上限／MJPEG帯域自動劣化／レコーダ管理UI（SQL直編集撤廃）＋監査ログ／Vault化／内部脆弱性診断（SAST常設）／C3計測スキーマ day1／鍵ローテ無停止同期</td><td><span class="badge b-done">DONE</span></td></tr>
+
+  <tr><td rowspan="6">✅ 完了<br><span class="small">（7月・6/23以降）</span></td>
+      <td><strong>自律OTA 本番化</strong>: クラウド宣言型 desired_version・known-good 2層ロールバック・admin OTAパネル・実機適用（Phase C残の「軽量OTA」を前倒し完了）</td><td><span class="badge b-new">DONE 7月</span></td></tr>
+  <tr><td><strong>monitor DB 東京移行</strong>（ap-northeast-1 <code>vywvpcjbicrtcyvzmrwh</code>）＋ migrationベースライン整理（repair運用確立）＝「環境分離の本番adopt」実行済み</td><td><span class="badge b-new">DONE 7/19</span></td></tr>
+  <tr><td>鍵・PW再ローテ完了（service_role/ログインPW・無停止・7/7）／発報:9080 共有トークン検証／発報スプール再送／alarm_frames 31日pruning／本番env必須チェック＋通知複線化（是正1〜5）</td><td><span class="badge b-new">DONE 7月</span></td></tr>
+  <tr><td><strong>G1残2点（PR #198）</strong>: ①トンネル断の実プローブ監視（go2rtcへCF Accessプローブ・フラップ吸収3分・5分内通知・復旧通知）②ロール別可視範囲のUI到達smoke 29件をCI常設 <span class="small">※6/23版で「死活監視DONE」とした行は heartbeat のみ＝トンネル実プローブは本日実体化</span></td><td><span class="badge b-new">DONE 7/20</span></td></tr>
+  <tr><td><strong>商品拡張（GAスコープ外・オプション商材）</strong>: 巡回=定時撮影証跡＋日次PDF ／ 発報=イベント全記録＋通知＋8コマタイムライン ／ <strong>手荷物検査</strong>=iPadキオスク＋顔認証＋2カメラ検査映像（PIN・PWA・同意版管理・7/20実機E2E確認）</td><td><span class="badge b-new">DONE 7月</span></td></tr>
+  <tr><td>手荷物検査 改良出荷 #181〜#197（master-detail履歴・倍速/シーク不可・アンマッチ方針・同意画面・店舗別PWA manifest ほか）</td><td><span class="badge b-new">DONE 7/19-20</span></td></tr>
+
+  <tr><td rowspan="5">⬜ 残</td>
+      <td>G1運用作業: migration 150000 の本番適用・Vercel env <code>ALERT_EMAILS</code> 設定確認 ／ staging常設の有無確認</td><td><span class="badge b-wait">実行待ち</span></td></tr>
+  <tr><td>ライブ画面の操作機能（PTZ/プリセット/AUX/録画再生同画面/JPEG1枚保存 — Phase B追加スコープ 6/23）: 実機 ONVIF PTZ スパイク→VOD統合→backend→UI</td><td><span class="badge b-todo">計画済</span></td></tr>
+  <tr><td>ONVIF探索/接続テストの<strong>実機検証</strong>（beelink＋実カメラ・コードは実装済）</td><td><span class="badge b-todo">P1</span></td></tr>
+  <tr><td>Phase C 残: 外部診断1回の扱い再決定（内製切替済→GA前に課すなら8月発注）／ DR訓練（スキーマ28秒実績あり・データ復旧訓練は未）／ SLA定義書・データ保持の顧客合意 ／ TC3 中断見える化 ／ bootstrapスコープ鍵</td><td><span class="badge b-todo">TODO</span></td></tr>
+  <tr><td>Phase D: 1店実地構築・顧客UAT・canary 72h・OTAロールバック実機検証</td><td><span class="badge b-todo">TODO</span></td></tr>
+</table>
+
+<!-- 3 ============================================================ -->
+<h2><span class="no">3</span>確定した戦略（不変）</h2>
+<div class="card">
+<ul style="margin-bottom:0">
+  <li><strong>コア価値＝本部集中ライブ監視 + BCP</strong>。録画再生(VOD)は付加価値（防犯の生命線=録画は i-PRO NVR 本体が担う）→ VODは実機完成済みで前倒し回収。</li>
+  <li><strong>1号店=i-PRO は顧客制約</strong>（既設NVR）。SaaS GA として貫く（有償PoC扱いにしない）。</li>
+  <li><strong>エッジは Frigate を1号店から外し i-PRO 直結</strong>（ONVIF/RTSP中継 + Cloudflare Tunnel）。拠点構成は3種のうち<strong>②中継ユニット（N100級・¥1.5〜3万）が本命=GAスコープ</strong>、①本部直結/③Frigate録画はGA外。</li>
+  <li><strong>SLAは1号店 best-effort</strong>。録画（エッジ自律）と監視プレーン（99% SaaS）を分離定義、数値はGA後実測。</li>
+  <li><strong>ロール別/テナント次元の authz 契約テスト常設は不可侵</strong>（＋7/20からUI到達smokeも常設）。</li>
+  <li>スケール目標: 2026/11 1店 → 2027/06 5,000店・同時最大300（代理店経由）。流通検証（代理店が売るか/支払額）は別トラックで並行。</li>
+  <li><span class="badge b-new">7月追記</span> オプション商材（巡回・発報・手荷物検査）が本番実体化 → 価格は「基本(Monitor+BCP)＋オプション」構成の検討たたき台を <code>monitor-system-handbook.html</code> §16 に整備。</li>
+</ul>
+</div>
+
+<!-- 4 ============================================================ -->
+<h2><span class="no">4</span>ゲート・ロードマップ（現在地: G1 実質達成）</h2>
+
+<div class="gates">
+  <div class="gate hit">
+    <div class="t">G1 製品化基盤 ✅実質達成</div>
+    <div class="w">計画7月末 → 実質 7/20</div>
+    <ul>
+      <li>✅ CIゲート緑必須</li>
+      <li>✅ RLS全表監査クリア</li>
+      <li>✅ authz契約テスト緑（不可侵）</li>
+      <li>✅ 鍵ローテ無停止</li>
+      <li>✅ i-PRO VODスパイク=go</li>
+      <li>✅ エッジ断5分内通知</li>
+      <li>✅ <b>トンネル断 実プローブ（7/20）</b></li>
+      <li>✅ <b>UI到達smoke 29件（7/20）</b></li>
+      <li>⬜ 運用: migration適用・ALERT_EMAILS確認</li>
+      <li>⬜ staging常設の確認</li>
+    </ul>
+  </div>
+  <div class="gate hit">
+    <div class="t">G2 i-PRO本番化 ほぼ達成</div>
+    <div class="w">計画9月中旬 → 前倒し進行</div>
+    <ul>
+      <li>✅ i-PRO実機 grid/live/VOD 成立</li>
+      <li>✅ QR初回登録（ウィザード）</li>
+      <li>✅ 計測スキーマ / セッション上限</li>
+      <li>✅ レコーダUI（SQL撤廃）</li>
+      <li>✅ grid失敗時UX（プレースホルダ+再試行）</li>
+      <li>⬜ ONVIF探索の<b>実機検証</b>（P1）</li>
+      <li>⬜ 追加スコープ: PTZ/プリセット/AUX/VOD同画面/JPEG保存</li>
+    </ul>
+  </div>
+  <div class="gate run">
+    <div class="t">G3 セキュリティ/運用 進行中</div>
+    <div class="w">9月末</div>
+    <ul>
+      <li>✅ Vault化（平文撤廃）</li>
+      <li>✅ 内部診断常設（CI SAST）</li>
+      <li>✅ 軽量OTA＋ロールバック<b>（7月前倒し完了）</b></li>
+      <li>✅ 鍵/PW再ローテ（7/7）</li>
+      <li>⬜ 外部診断1回の扱い再決定（課すなら8月発注）</li>
+      <li>⬜ DR訓練（データ復旧編）/ Runbook整備</li>
+      <li>⬜ SLA定義書・保持方針 顧客合意</li>
+      <li>⬜ TC3 中断見える化 / bootstrapスコープ鍵</li>
+    </ul>
+  </div>
+  <div class="gate">
+    <div class="t">G4 = GA</div>
+    <div class="w">10月末（目標）</div>
+    <ul>
+      <li>⬜ 1店実地構築（i-PRO中継＋tunnel＋Access）</li>
+      <li>⬜ 顧客UAT合格</li>
+      <li>⬜ canary 72h 異常なし</li>
+      <li>⬜ OTAロールバック実機検証</li>
+    </ul>
+  </div>
+</div>
+<p class="small">6/23版からの変化: G1のトンネル断・UI到達smokeが実装で埋まり<strong>実質達成</strong>。OTAがPhase Cから前倒し完了。G2は「ONVIF探索の実機検証」と「ライブ操作機能（追加スコープ）」のみ。</p>
+
+<!-- 5 ============================================================ -->
+<h2><span class="no">5</span>詳細実行計画（残タスクのみ・依存/受入つき）</h2>
+<p class="small">完了タスクは §2 に集約。ここでは「これからやること」だけを列挙する。</p>
+
+<h3>今すぐ（G1クローズ・運用）</h3>
+<table>
+  <tr><th style="width:46px">P</th><th>タスク</th><th style="width:170px">依存/メモ</th><th style="width:120px">受入</th></tr>
+  <tr><td><span class="badge b-wait">運用</span></td><td>migration <code>20260720150000</code>（tunnel列）本番適用</td><td>いつもの <code>db push</code></td><td>up to date</td></tr>
+  <tr><td><span class="badge b-wait">運用</span></td><td>Vercel env <code>ALERT_EMAILS</code>（通知先）確認・必要なら <code>ALERT_WEBHOOK_URL</code> 追加</td><td>未設定だと検知しても通知ゼロ（レスポンス unnotified:true）</td><td>テスト通知受信</td></tr>
+  <tr><td><span class="badge b-wait">運用</span></td><td>staging常設（Supabase staging＋seed）の有無確認・無ければ整備判断</td><td>C1テストの前提は CI ephemeral で担保済</td><td>方針確定</td></tr>
+</table>
+
+<h3>Phase B 残（8月）</h3>
+<table>
+  <tr><th style="width:46px">P</th><th>タスク</th><th style="width:170px">依存/メモ</th><th style="width:120px">受入</th></tr>
+  <tr><td><span class="badge b-todo">P1</span></td><td>ONVIF探索/接続テストの実機検証（beelink＋実カメラ）</td><td>コードは実装済・実機操作のみ</td><td>探索→割当→到達OK</td></tr>
+  <tr><td><span class="badge b-todo">P1</span></td><td>実機 ONVIF PTZ スパイク（go/no-go）: GetNodes/GetPresets/GotoPreset/SetAuxiliaryCommand 疎通</td><td>全PTZ作業の前提</td><td>preset移動・AUX疎通</td></tr>
+  <tr><td><span class="badge b-todo">P1</span></td><td>録画再生(VOD)の単画面統合（ツールバー「録画再生」モード＋時間ピッカー）</td><td>既存 /api/vod・VodPlayer再利用＝低リスク・PTZ非依存で先行可</td><td>同画面で録画再生</td></tr>
+  <tr><td><span class="badge b-todo">P1</span></td><td>JPEG1枚保存（単画=既存snapshot流用・16分割=grid.jpgそのままDL）</td><td>最小コスト・go/no-go非依存</td><td>1クリックで保存</td></tr>
+  <tr><td><span class="badge b-todo">P2</span></td><td>ONVIF PTZ binding 実装＋capability永続化＋命令経路(/api/cameras/[id]/ptz・監査記録)＋操作UI（PTZパッド・プリセットチップ・AUXトグル）</td><td>スパイクgo後</td><td>非エンジニアが操作可</td></tr>
+  <tr><td><span class="badge b-todo">P1</span></td><td>実機UAT（PTZ/preset/aux/VOD/JPEG保存 通し確認）</td><td>—</td><td>全機能疎通</td></tr>
+</table>
+<p class="small">工数目安（6/23版と同じ）: スパイク0.5〜1人日／VOD統合〜2人日／PTZ backend 3〜4人日／PTZ・AUX UI 2〜3人日／JPEG保存〜0.5人日／UAT 0.5人日。推奨順=JPEG保存＆スパイク＆VOD先行→PTZ backend→UI→UAT。</p>
+
+<h3>Phase C 残（8〜9月・並行）</h3>
+<table>
+  <tr><th style="width:46px">P</th><th>タスク</th><th style="width:170px">依存/メモ</th><th style="width:120px">受入</th></tr>
+  <tr><td><span class="badge b-todo">P1</span></td><td><strong>外部脆弱性診断の扱いを再決定</strong>（内製常設に切替済。GA前に外部1回を課すなら往復2〜3週の逆算で8月発注）</td><td>経営判断</td><td>方針確定・(実施なら)重大ゼロ</td></tr>
+  <tr><td><span class="badge b-todo">P2</span></td><td>DR復旧訓練（データ復旧編）1回 / Runbook・構築手順・オペレータマニュアル</td><td>スキーマ編は28秒実績</td><td>訓練完了</td></tr>
+  <tr><td><span class="badge b-todo">P2</span></td><td>SLA定義書・データガバナンス（保持31日・アクセス記録）の顧客合意</td><td>1号店契約と同時</td><td>顧客合意</td></tr>
+  <tr><td><span class="badge b-todo">P2</span></td><td>TC3 監視中断の見える化（heartbeat単一源・監視/録画区別の顧客向け表示）</td><td>DR4</td><td>顧客に中断を明示</td></tr>
+  <tr><td><span class="badge b-todo">P2</span></td><td>bootstrap のエッジ専用スコープ鍵化（device_token 漏洩時の影響限定）</td><td>CSO残</td><td>master鍵を返さない</td></tr>
+</table>
+
+<h3>Phase D（9〜10月・GA）</h3>
+<table>
+  <tr><th style="width:46px">P</th><th>タスク</th><th style="width:170px">依存/メモ</th><th style="width:120px">受入</th></tr>
+  <tr><td><span class="badge b-todo">P1</span></td><td>1店実地構築（i-PRO中継＋named tunnel＋Access・手動構築でOK）</td><td>機材・回線</td><td>全機能疎通</td></tr>
+  <tr><td><span class="badge b-todo">P1</span></td><td>顧客UAT（ライブ/グリッド/BCP/アラート/再起動復帰の実機チェック）</td><td>—</td><td>UAT合格</td></tr>
+  <tr><td><span class="badge b-todo">P1</span></td><td>canary 72h監視 ／ OTAロールバック実機検証</td><td>G3是正後</td><td>異常なし</td></tr>
+  <tr><td><span class="badge b-todo">P2</span></td><td>単画ライブの操作機能UAT（PTZ/プリセット/AUX/録画再生の同画面統合）</td><td>Phase B追加スコープ</td><td>顧客操作で疎通</td></tr>
+</table>
+
+<!-- 6 ============================================================ -->
+<h2><span class="no">6</span>クリティカルパス &amp; 並列レーン</h2>
+<div class="card new">
+<p style="margin-bottom:0"><strong>更新（7/20）</strong>: Phase A/B 実装完了に加え、7月で <strong>OTA・DB東京移行・鍵ローテ・G1残2点（トンネル断プローブ／UI到達smoke）を消化し、オプション3商材（巡回・発報・手荷物検査）を追加出荷</strong>。新たな律速は <strong>Phase B残の実機系（ONVIF探索実機検証・PTZスパイク）と Phase C/D の運用硬化（外部診断判断・DR訓練・SLA合意・1店構築）</strong>。8月以降はGA必須項目へ容量を集中する。</p>
+</div>
+<table>
+  <tr><th style="width:140px">レーン</th><th>内容（おおまかな順）</th><th style="width:130px">依存</th></tr>
+  <tr><td>Lane A Edge/Infra</td><td>✅ VODスパイク→grid/live → ✅ QRエンロール → ✅ OTA本番化 ／ 残: <strong>ONVIF探索/接続テスト実機検証 → PTZスパイク</strong></td><td>i-PRO実機・beelink</td></tr>
+  <tr><td>Lane B Platform</td><td>✅ CI→RLS監査→authz契約→C3計測→死活監視→鍵同期→<strong>トンネル断プローブ・UI到達smoke（7/20）</strong> ／ 残: staging方針</td><td>—</td></tr>
+  <tr><td>Lane C Frontend</td><td>✅ レコーダUI→セッション上限→MJPEG劣化 ／ 残: VOD同画面統合・JPEG保存・PTZ UI・TC3見える化 → UAT</td><td>B(authz/CI)</td></tr>
+  <tr><td>Lane D Sec/Ops</td><td>✅ 内部診断(CI SAST)→Vault→鍵ローテ ／ 残: 外部診断判断 → Runbook → DR訓練(データ編) → SLA定義 → bootstrapスコープ鍵</td><td>並行</td></tr>
+</table>
+
+<!-- 7 ============================================================ -->
+<h2><span class="no">7</span>テスト &amp; セキュリティ計画</h2>
+<div class="card">
+<h3 style="margin-top:0">テスト（ゲート直結）— G1高価値3本 すべて緑</h3>
+<ul>
+  <li>✅ CIゲート（typecheck/lint/build/unit）必須緑・branch protection</li>
+  <li>✅ テナント×ロール authz 契約テスト（実DB統合・不可侵・CI常設）＋ <strong>ロール別可視範囲のUI到達 smoke 29件（7/20〜CI常設・middleware行列）</strong>。実ブラウザE2E（Playwright＋Supabase local）はG2までのフォローアップ</li>
+  <li>✅ edge-agent 状態機械 unit（heartbeat/grid・鍵ローテ後再接続回帰）</li>
+  <li>broad coverage は継続（G1ゲートにしない）。実機UAT（i-PRO grid/live/BCP/再起動復帰）は G2・G4 の二段。性能: 1店/同時3はトリビアル、負荷試験はGA後スケール時</li>
+</ul>
+<h3>セキュリティ（リリースブロッカー）</h3>
+<ul style="margin-bottom:0">
+  <li>✅ 鍵ローテ（service_role/PW）完了（7/7 再ローテ実績）</li>
+  <li>✅ RLS全表監査＋authz契約テスト常設 ／ ✅ QRエンロールトークン（単一使用・短期TTL・テナント束縛）</li>
+  <li>✅ 脆弱性診断=内部実装（CI Semgrep SAST＋secrets＋bun audit＋Dependabot）。<strong>外部1回の扱いはGA前に再決定</strong>（8月発注が締切目安）</li>
+  <li>✅ Vault化（カメラ/VODパスワード AES-256-GCM・平文撤廃）／ 公開面（Access）の継続外形監視</li>
+  <li>⬜ bootstrapスコープ鍵（P2・G3）</li>
+</ul>
+</div>
+
+<!-- 8 ============================================================ -->
+<h2><span class="no">8</span>リスク登録簿</h2>
+<table>
+  <tr><th style="width:66px"></th><th style="width:260px">リスク</th><th>影響</th><th>対策</th></tr>
+  <tr><td><span class="badge b-risk">最大</span></td><td>容量超過（3〜5名・10月に C残/D＋PTZ追加スコープ）</td><td>日程滑り→契約テストが削られる最悪経路</td><td><strong>契約テスト死守は不可侵</strong>。7月の商品拡張は完了済＝8月以降GA必須へ集中。圧迫時はPTZ追加スコープをGA後へ送る（JPEG保存/VOD統合は低コストなので先行）</td></tr>
+  <tr><td><span class="badge b-new">新規</span></td><td>オプション商材の運用負荷がGA準備と競合（手荷物検査の閾値調整・問い合わせ等）</td><td>GA必須タスクの中断</td><td>検査は「運用調整のみ」フェーズに移行済。定例で様子見し、機能追加は原則GA後</td></tr>
+  <tr><td><span class="badge b-done">解消</span></td><td class="strike">i-PRO実機の入手遅延</td><td>—</td><td>WJ-NU101 入手・実機検証完了</td></tr>
+  <tr><td><span class="badge b-done">解消</span></td><td class="strike">i-PRO ONVIF VOD 実装難航</td><td>—</td><td>スパイクgo・VOD録画再生 実機完成（httpdl.cgi・H.265自動変換）</td></tr>
+  <tr><td><span class="badge b-done">緩和</span></td><td class="strike">脆弱性診断の往復リードタイム</td><td>—</td><td>内部実装(CI SAST常時)に切替。外部はGA前1回の要否を8月に判断</td></tr>
+  <tr><td><span class="badge b-done">緩和</span></td><td class="strike">i-PRO grid スナップ単一依存（Frigate除外の代償）</td><td>—</td><td>失敗時UX（プレースホルダ＋再試行・各カメラ個別ライブ可）実装済</td></tr>
+</table>
+
+<!-- 9 ============================================================ -->
+<h2><span class="no">9</span>前提・未解決</h2>
+<div class="card">
+<ul style="margin-bottom:0">
+  <li>✅ <strong>確定</strong>: 1号店のコア価値＝本部ライブ監視＋BCP（VODは付加価値）。買い手タイプ確定済み。</li>
+  <li><strong>並行検証（別トラック）</strong>: 5,000店の最大の不確実性は「流通（代理店が売るか/支払額）」。この入口は主に i-PRO 中継技術しか学ばないため、流通検証は別途進める。</li>
+  <li><strong>GA日程</strong>: 10月は目標（VODスパイク goで維持確定済み。以後の変動要因は容量のみ）。</li>
+  <li><strong>SLA数値</strong>: 1号店 best-effort。GA後の実測でエラーバジェット把握後に数値提示。</li>
+  <li><strong>価格</strong>: 基本（Monitor＋BCP=¥3,200/店/月アンカー）＋オプション（巡回/発報/検査）の検討たたき台を <code>monitor-system-handbook.html</code> §16 に整備 → 経営判断待ち。</li>
+  <li><span class="badge b-new">7/20追記</span> 6/23版の「エッジ/トンネル死活監視 DONE」は heartbeat（エッジ断）のみだった。トンネル自体の実プローブ監視は 7/20（PR #198）で実体化 — 記載と実体の差分は本版で解消。</li>
+</ul>
+</div>
+
+<footer>
+  Intereco Recorder Monitor ／ v1 GA 進捗 &amp; 実行計画 ／ 2026-06-14 作成・<strong>2026-07-20 進捗更新</strong>（G1実質達成・OTA/DB東京移行/商品拡張3モジュールを反映）。
+  本書は <code>docs/release-plan-v1-ga.md</code>（eng-review＋CEOレビュー＋差分再審査反映）と 6/23版 PDF（<code>Intereco_v1-GA実行計画_20260623.pdf</code>）の後継サマリー。
+  全体像・価格案・残課題の詳細は <code>docs/monitor-system-handbook.html</code>。本番: https://intereco-monitor.vercel.app（monitor-prod 自動デプロイ・PR #198 時点で最新）。
+</footer>
+
+</div>
+</body>
+</html>

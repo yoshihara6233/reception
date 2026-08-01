@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Intereco Monitor — システムハンドブック（新規メンバー向け）</title>
+<style>
+  :root{
+    --paper:#F7F5F1; --paper2:#FFFFFF; --paper3:#E4DED3;
+    --ink:#0F0F10; --ink2:#2A2A2C; --ink3:#5B5B5F;
+    --line:#D6CFC1; --line2:#B9B0A0;
+    --accent:#2C4A7E; --accent-soft:#E4EAF3;
+    --ok:#2F7A4F; --warn:#B5761A; --warn-soft:#F6EFE2; --danger:#A3332B;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--paper);color:var(--ink);
+    font-family:"Noto Sans JP","Hiragino Sans",sans-serif;
+    font-size:14px;line-height:1.85;-webkit-font-smoothing:antialiased}
+  .mono{font-family:"IBM Plex Mono","SF Mono",Menlo,monospace;font-variant-numeric:tabular-nums}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 32px 120px}
+
+  /* 章扉 */
+  header.cover{border-bottom:1px solid var(--line);padding:72px 0 40px;margin-bottom:48px}
+  header.cover .brand{display:flex;align-items:center;gap:12px;margin-bottom:28px}
+  header.cover h1{font-size:32px;font-weight:700;letter-spacing:.01em;line-height:1.4}
+  header.cover .sub{font-size:15px;color:var(--ink3);margin-top:10px}
+  header.cover .meta{display:flex;gap:24px;margin-top:24px;font-size:12px;color:var(--ink3)}
+  header.cover .meta b{color:var(--ink2);font-weight:500}
+
+  /* 見出し */
+  h2{font-size:24px;font-weight:700;margin:72px 0 8px;padding-top:24px;border-top:1px solid var(--line);
+     display:flex;align-items:baseline;gap:14px}
+  h2 .no{font-family:"Inter Tight","IBM Plex Mono",monospace;font-size:14px;color:var(--accent);font-weight:600}
+  h3{font-size:16px;font-weight:700;margin:36px 0 10px}
+  h4{font-size:14px;font-weight:700;margin:24px 0 6px;color:var(--ink2)}
+  .lead{color:var(--ink3);font-size:13px;margin-bottom:20px}
+  p{margin:0 0 14px}
+  ul,ol{margin:0 0 16px;padding-left:1.5em}
+  li{margin-bottom:4px}
+  strong{font-weight:700}
+  em{font-style:normal;background:var(--accent-soft);padding:0 4px;border-radius:2px}
+  code{font-family:"IBM Plex Mono",Menlo,monospace;font-size:12px;background:var(--paper2);
+       border:1px solid var(--line);border-radius:4px;padding:1px 6px;white-space:nowrap}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  /* カード（影なし・1pxボーダー） */
+  .card{background:var(--paper2);border:1px solid var(--line);border-radius:6px;padding:20px 24px;margin:16px 0}
+  .card.warn{background:var(--warn-soft);border-color:var(--warn)}
+  .card h4{margin-top:0}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+  @media(max-width:820px){.grid2,.grid3{grid-template-columns:1fr}}
+
+  /* テーブル */
+  table{width:100%;border-collapse:collapse;margin:14px 0 22px;background:var(--paper2);
+        border:1px solid var(--line);border-radius:6px;overflow:hidden;font-size:13px}
+  th{background:var(--paper);text-align:left;font-weight:700;font-size:12px;color:var(--ink2);
+     padding:9px 14px;border-bottom:1px solid var(--line)}
+  td{padding:9px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td.num,th.num{text-align:right;font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .small{font-size:12px;color:var(--ink3)}
+
+  /* バッジ */
+  .badge{display:inline-block;font-size:11px;font-weight:500;border-radius:4px;padding:1px 9px;white-space:nowrap}
+  .b-ok{background:#E5F0E9;color:var(--ok)}
+  .b-warn{background:var(--warn-soft);color:var(--warn)}
+  .b-plan{background:var(--paper3);color:var(--ink3)}
+  .b-opt{background:var(--accent-soft);color:var(--accent)}
+  .b-danger{background:#F5E4E2;color:var(--danger)}
+
+  /* 目次 */
+  nav.toc{background:var(--paper2);border:1px solid var(--line);border-radius:6px;padding:24px 28px;margin:0 0 24px}
+  nav.toc .t{font-size:12px;font-weight:700;color:var(--ink3);letter-spacing:.08em;margin-bottom:12px}
+  nav.toc ol{columns:2;gap:40px;padding-left:1.4em;margin:0}
+  nav.toc li{margin-bottom:6px;font-size:13px}
+  @media(max-width:820px){nav.toc ol{columns:1}}
+
+  /* 図 */
+  .fig{background:var(--paper2);border:1px solid var(--line);border-radius:6px;padding:24px;margin:18px 0;overflow-x:auto}
+  .fig .cap{font-size:12px;color:var(--ink3);margin-top:10px;text-align:center}
+  svg text{font-family:"Noto Sans JP",sans-serif}
+
+  /* フロー箇条 */
+  .flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0 18px}
+  .flow span{background:var(--paper2);border:1px solid var(--line);border-radius:4px;padding:4px 12px;font-size:12.5px}
+  .flow i{color:var(--line2);font-style:normal}
+  .flow span.hi{border-color:var(--accent);color:var(--accent)}
+
+  /* 価格カード */
+  .price{display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr;gap:16px;margin:20px 0}
+  @media(max-width:900px){.price{grid-template-columns:1fr 1fr}}
+  @media(max-width:560px){.price{grid-template-columns:1fr}}
+  .pcard{background:var(--paper2);border:1px solid var(--line);border-radius:6px;padding:20px}
+  .pcard.base{border:2px solid var(--accent)}
+  .pcard .name{font-weight:700;font-size:15px;margin-bottom:2px}
+  .pcard .tag{font-size:11px;color:var(--ink3);margin-bottom:12px}
+  .pcard .yen{font-family:"IBM Plex Mono",monospace;font-size:26px;font-weight:600;letter-spacing:-.01em}
+  .pcard .yen small{font-size:12px;color:var(--ink3);font-weight:400}
+  .pcard ul{padding-left:1.2em;margin-top:12px;font-size:12.5px;color:var(--ink2)}
+  .pcard li{margin-bottom:3px}
+
+  footer{margin-top:80px;border-top:1px solid var(--line);padding-top:20px;
+         font-size:12px;color:var(--ink3);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+
+  @media print{
+    body{font-size:11.5px}
+    .wrap{max-width:none;padding:0 8mm}
+    h2{break-before:page;margin-top:0}
+    header.cover{padding-top:24px}
+    nav.toc ol{columns:2}
+    .card,.fig,table{break-inside:avoid}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="cover">
+  <div class="brand">
+    <!-- 録画モニターアイコン（右下切り欠き＋藍ドット・正本§6準拠の簡易再現） -->
+    <svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true">
+      <path d="M4 4h26v18h-9l0 8H4z" fill="none" stroke="#0F0F10" stroke-width="2"/>
+      <circle cx="26" cy="27" r="3.4" fill="#2C4A7E"/>
+    </svg>
+    <span style="font-family:'Inter Tight',sans-serif;font-weight:600;font-size:15px;letter-spacing:.02em">Intereco Monitor</span>
+  </div>
+  <h1>レコーダ統合監視システム<br>システムハンドブック</h1>
+  <div class="sub">新規加入メンバー向け — システム仕様・基本設計・詳細設計・開発計画・コスト・価格案（BCP / 巡回 / 発報 / 手荷物検査 を含む全体像）</div>
+  <div class="meta">
+    <span>版: <b class="mono">v1.1</b>（GAゲート突合・検査不足整理を追記）</span>
+    <span>作成日: <b class="mono">2026-07-20</b></span>
+    <span>本番: <b class="mono">intereco-monitor.vercel.app</b></span>
+    <span>本番ブランチ: <b class="mono">monitor-prod</b></span>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="t">目次</div>
+  <ol>
+    <li><a href="#s1">この資料について / プロダクト概要</a></li>
+    <li><a href="#s2">システム全体像（アーキテクチャ）</a></li>
+    <li><a href="#s3">技術スタック</a></li>
+    <li><a href="#s4">基本設計（クラウド / エッジ / 映像経路 / OTA）</a></li>
+    <li><a href="#s5">詳細設計 — Monitor コア</a></li>
+    <li><a href="#s6">詳細設計 — BCP（Jアラート連動）</a></li>
+    <li><a href="#s7">詳細設計 — 巡回（Patrol）</a></li>
+    <li><a href="#s8">詳細設計 — 発報（Alarm）</a></li>
+    <li><a href="#s9">詳細設計 — 手荷物検査（Baggage）</a></li>
+    <li><a href="#s10">データモデル概要</a></li>
+    <li><a href="#s11">セキュリティ・プライバシー</a></li>
+    <li><a href="#s12">運用・SLA</a></li>
+    <li><a href="#s13">開発計画と現在地</a></li>
+    <li><a href="#s14">残課題一覧</a></li>
+    <li><a href="#s15">コスト試算</a></li>
+    <li><a href="#s16">価格案（基本＋オプション）※検討たたき台</a></li>
+    <li><a href="#s17">開発の始め方 / 参照資料</a></li>
+  </ol>
+</nav>
+
+<!-- ============================================================ -->
+<h2 id="s1"><span class="no">01</span>この資料について / プロダクト概要</h2>
+<p class="lead">最初に読む1枚。詳細は各章と<a href="#s17">参照資料</a>へ。</p>
+
+<p><strong>Intereco Monitor</strong> は、多店舗チェーン向けの<strong>レコーダ統合監視 SaaS</strong>（本部一元監視プラットフォーム）です。各店舗の既設レコーダ（NVR）・カメラを小型エッジ端末経由でクラウドに接続し、本部からライブ・録画・地図・死活をひとつの画面で監視します。その基盤の上に、4つの業務モジュールが載っています。</p>
+
+<table>
+  <tr><th style="width:170px">モジュール</th><th>ひとことで</th><th style="width:110px">状態</th></tr>
+  <tr><td><strong>Monitor コア</strong></td><td>ライブ（16分割グリッド／単カメラ4方式）・録画再生（VOD／4ch同期）・店舗地図・エッジ死活・視聴監査</td><td><span class="badge b-ok">本番稼働</span></td></tr>
+  <tr><td><strong>BCP</strong>（Jアラート連動）</td><td>地震・津波・ミサイル情報の受信時に前後スナップショットを自動保全し、証跡PDFを自動生成・メール送付</td><td><span class="badge b-ok">本番稼働</span></td></tr>
+  <tr><td><strong>巡回</strong>（Patrol）</td><td>全カメラを定時（既定4時間毎）に自動撮影して証跡化。日次PDFレポート・手動トリアージ</td><td><span class="badge b-ok">本番稼働</span></td></tr>
+  <tr><td><strong>発報</strong>(Alarm)</td><td>カメラ/NVRのイベント通知を受けて全記録・メール/Webhook通知・前後8コマのフォレンジックタイムライン</td><td><span class="badge b-ok">本番稼働</span></td></tr>
+  <tr><td><strong>手荷物検査</strong></td><td>iPadキオスク＋顔認証（AWS Rekognition）で従業員/来訪者の入退室と退室時手荷物検査を記録。2カメラ同期映像で本部確認</td><td><span class="badge b-ok">本番稼働（2026-07-20 実機確認済）</span></td></tr>
+</table>
+
+<div class="card">
+  <h4>対象市場と販売ストーリー（5カ年計画より）</h4>
+  <p style="margin:0">家電量販店・倉庫業・衣料品・警備会社・ビル管理。2026 パイロット（3店）→ 2027（100店）→ 2028（1,000店）→ 2029（3,000店）→ 2030（10,000店）。既存の価格前提は<strong>月額 ¥3,200/店（税抜）</strong>（<code>docs/5year_sales_plan.xlsx</code>）。本書 <a href="#s16">§16</a> でこれを「基本＋オプション」に再構成した価格案を提示します。</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="s2"><span class="no">02</span>システム全体像（アーキテクチャ）</h2>
+<p class="lead">3つの面（クラウド制御面 / データ面 / エッジ面）＋カメラ・NVR。エッジは<strong>アウトバウンド接続のみ</strong>（インバウンドポート/VPN不要）。</p>
+
+<div class="fig">
+<svg viewBox="0 0 940 420" width="100%" style="min-width:760px">
+  <!-- クラウド -->
+  <rect x="20" y="20" width="900" height="150" rx="6" fill="#FFFFFF" stroke="#D6CFC1"/>
+  <text x="40" y="48" font-size="13" font-weight="700" fill="#0F0F10">クラウド</text>
+  <rect x="40" y="64" width="270" height="86" rx="4" fill="#F7F5F1" stroke="#D6CFC1"/>
+  <text x="55" y="90" font-size="12.5" font-weight="700" fill="#0F0F10">Vercel / Next.js 16</text>
+  <text x="55" y="110" font-size="11" fill="#5B5B5F">操作UI・API・Cron（巡回/発報/BCP/検査）</text>
+  <text x="55" y="128" font-size="11" fill="#5B5B5F">映像プロキシ（認証付き署名URL）</text>
+  <rect x="330" y="64" width="270" height="86" rx="4" fill="#F7F5F1" stroke="#D6CFC1"/>
+  <text x="345" y="90" font-size="12.5" font-weight="700" fill="#0F0F10">Supabase（東京）</text>
+  <text x="345" y="110" font-size="11" fill="#5B5B5F">Postgres＋RLS（46テーブル全有効）</text>
+  <text x="345" y="128" font-size="11" fill="#5B5B5F">Storage（映像/写真）・Realtime（指令）</text>
+  <rect x="620" y="64" width="280" height="86" rx="4" fill="#F7F5F1" stroke="#D6CFC1"/>
+  <text x="635" y="90" font-size="12.5" font-weight="700" fill="#0F0F10">外部サービス</text>
+  <text x="635" y="110" font-size="11" fill="#5B5B5F">LiveKit（SFU β）/ AWS Rekognition（顔）</text>
+  <text x="635" y="128" font-size="11" fill="#5B5B5F">Cloudflare Tunnel＋Access / Resend（メール）</text>
+
+  <!-- 矢印 クラウド⇔エッジ -->
+  <line x1="470" y1="170" x2="470" y2="230" stroke="#2C4A7E" stroke-width="1.6"/>
+  <polygon points="470,170 465,180 475,180" fill="#2C4A7E"/>
+  <polygon points="470,230 465,220 475,220" fill="#2C4A7E"/>
+  <text x="482" y="196" font-size="11" fill="#2C4A7E">HTTPSアウトバウンドのみ（心拍/指令ポーリング/アップロード）</text>
+  <text x="482" y="212" font-size="11" fill="#2C4A7E">遠隔ライブは cloudflared トンネル経由</text>
+
+  <!-- 店舗 -->
+  <rect x="20" y="230" width="900" height="170" rx="6" fill="#FFFFFF" stroke="#D6CFC1"/>
+  <text x="40" y="258" font-size="13" font-weight="700" fill="#0F0F10">店舗（構成②: 中継ユニット＝本命）</text>
+  <rect x="40" y="274" width="300" height="106" rx="4" fill="#F7F5F1" stroke="#D6CFC1"/>
+  <text x="55" y="300" font-size="12.5" font-weight="700" fill="#0F0F10">エッジ端末（N100 miniPC・Bun agent）</text>
+  <text x="55" y="320" font-size="11" fill="#5B5B5F">グリッド合成 / スナップ / VOD切出 / go2rtc変換</text>
+  <text x="55" y="338" font-size="11" fill="#5B5B5F">自律OTA（known-good 2層ロールバック）</text>
+  <text x="55" y="356" font-size="11" fill="#5B5B5F">:9080 発報受け口（共有トークン）</text>
+  <rect x="360" y="274" width="260" height="106" rx="4" fill="#F7F5F1" stroke="#D6CFC1"/>
+  <text x="375" y="300" font-size="12.5" font-weight="700" fill="#0F0F10">既設 NVR / カメラ</text>
+  <text x="375" y="320" font-size="11" fill="#5B5B5F">i-PRO（カメラ直 ONVIF/RTSP）</text>
+  <text x="375" y="338" font-size="11" fill="#5B5B5F">Uniview（NVR RTSP）/ Frigate（自前録画）</text>
+  <text x="375" y="356" font-size="11" fill="#5B5B5F">録画・検知は NVR 側（エッジは軽量中継）</text>
+  <rect x="640" y="274" width="260" height="106" rx="4" fill="#F7F5F1" stroke="#D6CFC1"/>
+  <text x="655" y="300" font-size="12.5" font-weight="700" fill="#0F0F10">手荷物検査 iPad（PWA）</text>
+  <text x="655" y="320" font-size="11" fill="#5B5B5F">店舗別6桁PIN／キオスク状態機</text>
+  <text x="655" y="338" font-size="11" fill="#5B5B5F">顔認証・検査STEP・音声案内</text>
+  <text x="655" y="356" font-size="11" fill="#5B5B5F">クラウドAPIへ直接（エッジ非経由）</text>
+</svg>
+<div class="cap">図1 — 全体アーキテクチャ（映像・指令・検査の3経路）</div>
+</div>
+
+<h3>店舗トポロジ3構成</h3>
+<table>
+  <tr><th style="width:60px">構成</th><th>内容</th><th style="width:150px">位置づけ</th></tr>
+  <tr><td class="mono">①</td><td>本部直収（店舗ハード無し・本部がRTSP直取得）</td><td>少カメラ限定</td></tr>
+  <tr><td class="mono">②</td><td><strong>中継ユニット</strong> — 既設NVRが録画/検知を継続、エッジは合成・スナップ・VOD取得・クラウド公開のみ</td><td><span class="badge b-opt">本命</span></td></tr>
+  <tr><td class="mono">③</td><td>Frigate録画ユニット（NVR無し客向け・多TBストレージ必要）</td><td>まれ</td></tr>
+</table>
+<p class="small">1台のエッジに複数エッジ論理・複数店舗・複数カメラが同居する構成もある（PoC実績: MINI-S 1台に2エッジ/2店舗/3カメラ）。</p>
+
+<!-- ============================================================ -->
+<h2 id="s3"><span class="no">03</span>技術スタック</h2>
+<table>
+  <tr><th style="width:180px">レイヤ</th><th>採用技術</th></tr>
+  <tr><td>フロント/API</td><td>Next.js <span class="mono">16.2.9</span>（App Router / RSC）・React <span class="mono">19.2</span>・TypeScript 5・Tailwind CSS 4・zod 4・lucide-react</td></tr>
+  <tr><td>DB/ストレージ</td><td>Supabase（東京 <code>vywvpcjbicrtcyvzmrwh</code>）: Postgres＋RLS・Storage（非公開バケット＋署名URL）・Realtime</td></tr>
+  <tr><td>映像</td><td>hls.js 1.6・LiveKit（SFU β: client 2.13 / server-sdk 2.13）・go2rtc（H.265→H.264）・ffmpeg（xstack合成）・Frigate</td></tr>
+  <tr><td>地図</td><td>Leaflet 1.9＋react-leaflet＋markercluster</td></tr>
+  <tr><td>帳票</td><td>@react-pdf/renderer / pdfkit（BCP・巡回レポート）</td></tr>
+  <tr><td>顔認証</td><td>AWS Rekognition（@aws-sdk/client-rekognition・サーバ側のみ）</td></tr>
+  <tr><td>エッジ</td><td>Bun 実行の TypeScript agent（<code>claude/edge-agent</code>）・pino・sharp・外部バイナリ: ffmpeg / go2rtc。systemd サービス名は <code>intereco-edge</code></td></tr>
+  <tr><td>共有パッケージ</td><td><code>@intereco/shared</code>（アダプタIF・指令型・定数・secret-codec）— monorepo（bun workspace）</td></tr>
+  <tr><td>メール</td><td>Resend（BCP完了・巡回日報・発報・アンマッチ通知）</td></tr>
+  <tr><td>トンネル</td><td>cloudflared 名前付きトンネル＋Cloudflare Access（サービストークンはサーバ側付与）</td></tr>
+  <tr><td>デザイン</td><td>Genesis Edge デザインシステム（紙×墨×藍・正本 <code>docs/GENESIS_EDGE_USAGE.md</code>）</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="s4"><span class="no">04</span>基本設計</h2>
+
+<h3>4.1 デプロイと CI</h3>
+<ul>
+  <li>Vercel プロジェクト <code>intereco-monitor</code>・本番ブランチ <code>monitor-prod</code>（保護・PR経由必須）。</li>
+  <li>CI（GitHub Actions）: paths-filter で変更アプリのみ typecheck/test/build/lint。<strong><code>authz</code> ジョブ＝実DB＋RLSのテナント×ロール契約テスト</strong>。集約チェック <code>ci-passed</code> がマージ必須ゲート。</li>
+  <li>Vercel Cron: エッジ死活 2分毎 / VODクリーンアップ 03:00 / 巡回 10分毎 / 巡回日報 05:00 JST / 発報再ディスパッチ 2分毎 / 手荷物検査日次 05:00 JST。</li>
+</ul>
+
+<h3>4.2 エッジ agent（状態機械と接続）</h3>
+<ul>
+  <li>状態機械: <strong>Idle → Grid | Live | VOD</strong>（同時1モード）＋ SFU-publish / BCP capture。Idle は心拍のみ。</li>
+  <li>接続: Supabase へアウトバウンドのみ。指令は Realtime broadcast＋<code>edge_devices.pending_command</code> ポーリング（〜2秒）。心拍 <code>last_seen_at</code> 60秒毎、3分無応答で監視中断扱い。</li>
+  <li>登録: QRワンタイムトークンで自己登録（enroll→device_token→bootstrap で鍵/設定取得）。</li>
+</ul>
+
+<h3>4.3 自律 OTA（エッジ遠隔更新）</h3>
+<ul>
+  <li>クラウド宣言型: 管理画面で端末毎に <code>desired_agent_version</code>（gitショートSHA）を指定 → エッジが bootstrap ポーリング（〜5分）で検知 → checkout / bun install / typecheck プリフライト → <code>current</code> シンボリックリンク切替 → 再起動。</li>
+  <li><strong>2層ロールバック</strong>: (1) 起動後ヘルスプローブ不合格 → known-good へ自動復帰 / (2) クラッシュループは systemd <code>OnFailure</code> でロールバックサービス起動。</li>
+  <li>実機レイアウト: <code>/home/intereco/edge/releases/&lt;sha&gt;/</code>・秘密は <code>shared/agent.env</code>（systemd EnvironmentFile）が正。</li>
+</ul>
+
+<h3>4.4 映像経路（ライブ / 録画）</h3>
+<table>
+  <tr><th style="width:120px">経路</th><th>仕組み</th><th style="width:130px">位置づけ</th></tr>
+  <tr><td>jpeg</td><td>エッジが1fpsスナップショットをStorageへ、ブラウザがポーリング。輻輳時は自動間引き</td><td>最も堅牢（既定Fallback）</td></tr>
+  <tr><td>hq (HLS)</td><td>go2rtc が H.265→H.264 変換、<code>/api/live-proxy</code> 同一オリジンプロキシ（Cloudflare Access サービストークンをサーバ側付与）</td><td>高画質・既定優先</td></tr>
+  <tr><td>iframe</td><td>Frigate 内蔵 UI / 遠隔MJPEG（短TTL署名トンネルURL）</td><td>第2候補</td></tr>
+  <tr><td>sfu</td><td>LiveKit 購読。H.264 サブ秒遅延</td><td><span class="badge b-warn">β（flag制御）</span></td></tr>
+  <tr><td>VOD</td><td><code>POST /api/vod</code> → エッジが Frigate clip.mp4 組立 → Storage → 署名URL再生。同一区間は再利用（F81）</td><td>Frigate対応済・i-PRO/Uniview は計画</td></tr>
+</table>
+
+<h3>4.5 i-PRO NVR（httpdl.cgi）の実測制約と設計指針 — 2026-08-01 負荷試験</h3>
+<p>PoC 実機（WJ-NU101・カメラ2台）で httpdl.cgi の常用可否を実測した（生データ:
+<code>docs/ipro-loadtest-20260801.csv</code>・詳細: <code>docs/ipro-meeting-prep.html</code> §4.5）。
+録画切り出しを使う全機能（VOD・手荷物検査クリップ・BCP・発報前フレーム）の設計前提になる。</p>
+<table>
+  <tr><th style="width:220px">実測項目</th><th>結果</th></tr>
+  <tr><td>常用負荷（2分クリップ×50回・72秒間隔）</td><td><strong>50/50 成功・ビジー0</strong>・取得時間 中央値 4.6 秒・総転送 0.88GB。試験中の録画に欠落なし → <strong>検査 1日200回運用は余裕</strong>（NVR占有 計約33分/日）</td></tr>
+  <tr><td><strong>再生 DL の同時実行上限</strong></td><td><strong>2 本まで</strong>。3本目からは即時 <code>X-RecData-Satus=3</code>（ビジー・約1秒で返る）。→ エッジは <code>downloadIproNvrMp4</code> を <strong>NVR(endpoint) 単位のセマフォで並列2に制限</strong>（超過は失敗でなく順番待ち・PR #241）</td></tr>
+  <tr><td>UID・コマンド間隔</td><td>UID は 17 本同時取得可（仕様書の「同時最大16」は dlogin 数の上限ではない）。間隔ゼロ連続10回も劣化なし（「3秒間隔」は実効強制でない）</td></tr>
+  <tr><td>KIND=MP4 の生成方式</td><td><strong>無劣化のコンテナ詰め替え</strong>（H.265/H.264 ともコーデックそのまま・実時間の約26倍速）＝画質劣化なし・NVR側トランスコード負荷なし</td></tr>
+  <tr><td>窓長・秒粒度</td><td>≤1時間制約は実在（61分窓は生の HTTP 500）。STARTTIME の秒≠00 指定は<strong>実質動作する</strong>（直前キーフレームから開始）が<strong>未文書のため依存しない</strong>（現行の分丸め実装を維持）</td></tr>
+  <tr><td>死活監視の外部取得</td><td>UID 不要 CGI で <strong>HDD 容量/残量</strong>（recordedtime.cgi）・<strong>CH別カメラ接続</strong>（as_getinfo.cgi?FILE=2）・<strong>CH別録画状態</strong>（FILE=3）が取得可。SNMP は応答なし → NVR 死活監視はこの3本のポーリングで実装する</td></tr>
+</table>
+<p><strong>運用上の教訓（同日の実弾BCPより）:</strong> BCP・発報前コマ・検査クリップは「レコーダのタイムライン」から切り出すため、<strong>NVR の時計ズレがそのまま証跡に乗る</strong>（実例: NTP 未設定で +3分）。開通チェックリストで <strong>NVR・カメラ・エッジの NTP 統一を必須</strong>とする。</p>
+
+<!-- ============================================================ -->
+<h2 id="s5"><span class="no">05</span>詳細設計 — Monitor コア</h2>
+<p class="lead">場所: <code>claude/monitor/src/app/stores・map・infra ほか</code></p>
+
+<h3>5.1 画面と機能</h3>
+<table>
+  <tr><th style="width:190px">画面</th><th>内容</th></tr>
+  <tr><td><code>/stores</code></td><td>ログイン後ランディング。店舗一覧→店舗詳細で 4×4（モバイル2×2）グリッド。エッジ合成JPEG（約0.5fps）を5秒毎再取得。マウントで <code>start_grid</code>、離脱で <code>stop_grid</code>（グリッド↔ライブ競合はstop-registryで回避）</td></tr>
+  <tr><td><code>…/cam/[id]/live</code></td><td>単カメラ4方式プレイヤー（hq &gt; iframe &gt; jpeg の優先・カメラ毎にlocalStorage記憶・失敗時セッション内自動フォールバック）</td></tr>
+  <tr><td><code>…/cam/[id]/vod</code></td><td>録画再生。クリップ生成状況をポーリング（queued→uploading→ready）→10分署名URLで再生。Rangeシーク対応</td></tr>
+  <tr><td><code>…/multi-vod</code></td><td>最大4カメラ同期再生（UTC時刻ベースHLS・共有シークバー）</td></tr>
+  <tr><td><code>/map</code></td><td>Leaflet 店舗地図。エッジ状態を色分け（監視中断/停止/未設置/idle/grid/live/vod）・クラスタリング</td></tr>
+  <tr><td><code>/infra</code></td><td>テナント健全性ロールアップ（店舗×機器）・インシデント・SLO・ネットワーク障害バナー</td></tr>
+  <tr><td><code>/admin</code></td><td>エッジCRUD/登録・NVR設定（監視ユーザーからは非表示 F47）・ユーザー/ロール・視聴監査</td></tr>
+</table>
+
+<h3>5.2 視聴の制限と監査</h3>
+<ul>
+  <li><code>live_sessions</code> に視聴セッションを全記録（開始/終了/時間）→ <code>/admin/audit</code>。</li>
+  <li>同時視聴上限（既定5・HTTP 429）と連続視聴上限（既定120分・オーバーレイで停止）。グリッドは対象外（軽量なため）。</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="s6"><span class="no">06</span>詳細設計 — BCP（Jアラート連動）</h2>
+<p class="lead">目的: Jアラート（震度・津波・ミサイル）受信時に、前後の映像スナップショットを自動保全し、保険・監督対応の証跡PDFを自動生成する。場所: <code>src/app/bcp</code>・<code>api/bcp-webhook</code>・エッジ <code>modes/bcp.ts</code></p>
+
+<div class="flow">
+  <span>JMAフィードをポーリング<br><small class="small">(Edge Function jalert-poller)</small></span><i>→</i>
+  <span>対象地域の店舗に<br><code>bcp_events</code> 起票</span><i>→</i>
+  <span class="hi">エッジが8コマ撮影<br><small class="small">T-5〜T+30分・4並列</small></span><i>→</i>
+  <span>PDF自動生成<br><small class="small">(bcp-webhook)</small></span><i>→</i>
+  <span>メール送付・完了</span>
+</div>
+
+<ul>
+  <li><strong>スナップ取得元</strong>: Frigate 履歴フレーム / i-PRO NVR履歴 / Uniview / フォールバック latest.jpg（Univiewは時刻指定不可＝常に最新）。</li>
+  <li><strong>状態遷移</strong>: <code>pending → recording → clips_uploaded → report_generated → completed</code>（DBトリガ＋スイープで前進・失敗は failed）。</li>
+  <li><strong>画面</strong>: 統合ダッシュボード（統計カード＋アラート→店舗ツリー）/ イベント詳細（カメラ別8サムネイル・ZIP・PDF再生成・手動再取得）/ Jアラート受信履歴 / テスト発行（is_test・テストのみ削除可）。</li>
+  <li><strong>設定</strong>: 店舗毎に通知先メール・スナップオフセット・震度しきい値・津波/ミサイル有効化。</li>
+  <li><strong>通知</strong>: メールのみ（PDF添付）。LINE/SMSは未実装。</li>
+  <li><strong>保存</strong>: 非公開バケット <code>bcp-clips</code> / <code>bcp-reports</code>＋署名URLプロキシ。閲覧は視聴監査ログ（bcp_view）に記録。</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="s7"><span class="no">07</span>詳細設計 — 巡回（Patrol）</h2>
+<p class="lead">目的: 警備員の巡回に相当する「全カメラ定時撮影」を自動化し、改ざん耐性のある証跡と日次PDFを残す。Phase A は<strong>証跡特化</strong>（撮影と記録のみ・AI比較はP2/P3計画）。場所: <code>src/app/security</code></p>
+
+<div class="flow">
+  <span>スケジューラ判定<br><small class="small">(Vercel Cron 10分毎)</small></span><i>→</i>
+  <span><code>patrol_runs</code> 起票→<br>エッジへ capture 指令</span><i>→</i>
+  <span class="hi">エッジ全カメラ撮影<br><small class="small">Frigate→ONVIF→go2rtc の順で取得</small></span><i>→</i>
+  <span>ingest（Bearer device_token）→<br><code>patrol_findings</code></span><i>→</i>
+  <span>日次PDF（05:00 JST）<br>メール送付</span>
+</div>
+
+<ul>
+  <li><strong>スケジュール</strong>: 店舗毎に fixed（1日最大4回の時刻指定）または interval（既定240分）。「今すぐ巡回」は都道府県グルーピングで複数店舗一括発火。</li>
+  <li><strong>トリアージ</strong>: 監視者が所見を confirmed / false_positive / review に手動フラグ。</li>
+  <li><strong>保持</strong>: 巡回run/所見/スナップは31日で自動削除。<strong>PDFレポートは長期保存</strong>（証跡）。</li>
+  <li><strong>備考</strong>: <code>pending_command</code> は巡回/発報/BCPで1スロット共有（競合時はリトライ側が吸収）。AI列（ai_status等）はスキーマに存在するが未使用。</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="s8"><span class="no">08</span>詳細設計 — 発報（Alarm）</h2>
+<p class="lead">目的: カメラ/NVRの接点・通知イベント（動体・妨害等）を全記録し、通知とフォレンジックタイムラインを提供。検知はデバイス側に委譲（エッジは自前検知しない）。場所: <code>src/app/alarms</code>・エッジ <code>src/alarm/</code></p>
+
+<div class="flow">
+  <span>カメラ/NVRのHTTP通知</span><i>→</i>
+  <span class="hi">エッジ :9080 受け口<br><small class="small">共有トークン検証・即200応答</small></span><i>→</i>
+  <span>スナップ撮影→<br><code>/api/alarms/ingest</code></span><i>→</i>
+  <span>dedup（既定120秒窓）→記録<br>→メール/Webhook通知</span><i>→</i>
+  <span>全カメラ×8オフセット<br>フレーム収集（〜3分）</span>
+</div>
+
+<ul>
+  <li><strong>タイムライン</strong>: オフセット <span class="mono">[-5, 0, +5, +10, +20, +30, +60, +180]</span> 秒。マイナスは録画から抽出、0以降はライブ撮影（遅延時は録画抽出にフォールバック）。詳細画面からライブ単体 / 16分割 / 録画（±5分）/ 4ch同期VODへ遷移。</li>
+  <li><strong>確認ワークフロー</strong>: <code>new → ack → closed</code>（再オープン可）・reviewed_by/at 記録。</li>
+  <li><strong>通知制御</strong>: 二重送信ガード（notified_at）・店舗別 enabled・静穏時間（JST・日跨ぎ対応）。抑止時も記録は残る。</li>
+  <li><strong>耐障害</strong>: クラウド不達はエッジ側スプール（24h/200件・oldest-first）で復旧時再送。タイムライン指令競合は 2分毎cronが30分間再ディスパッチ。</li>
+  <li><strong>保持</strong>: alarm_frames は31日でプルーニング。イベント行は監査として恒久保持（スナップのみ削除）。</li>
+  <li><strong>注意</strong>: <code>ALARM_SHARED_TOKEN</code> 未設定だと受け口が無認証になる（起動時警告あり）。実配備では必ず設定。ONVIF PullPoint購読はアダプタ実装済みだが本経路には未接続（現行はHTTPプッシュ受け）。</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="s9"><span class="no">09</span>詳細設計 — 手荷物検査（Baggage）</h2>
+<p class="lead">目的: 店舗の入退室（従業員/来訪者）と退室時の手荷物検査を、iPadキオスク＋顔認証＋2カメラ映像で記録し、本部が事後確認する。場所: <code>src/app/kiosk/baggage</code>・<code>src/app/baggage</code>・<code>src/lib/baggage</code>・エッジ <code>workers/clip-jobs.ts</code></p>
+
+<h3>9.1 iPad キオスク（PWA）</h3>
+<table>
+  <tr><th style="width:150px">区分×動作</th><th>フロー</th></tr>
+  <tr><td>従業員 入室</td><td>自動顔認証 → 成功: あいさつ表示（文言変更可・TTS）／失敗: スキップボタン（自動では進めない・authSkippedで記録）</td></tr>
+  <tr><td>来訪者 入室</td><td>個人情報同意（毎回・文言設定時のみ）→ <strong>顔撮影</strong>（手動シャッター・照合なし・当日コレクションへ登録）→ 名刺撮影（なしでも可）→ 受付記録</td></tr>
+  <tr><td>両区分 途中退室/入室</td><td>顔認証のみの軽量イベント（2秒で戻る）</td></tr>
+  <tr><td>両区分 退室</td><td><strong>顔認証＋手荷物検査</strong>: 照合 →（不一致は「検査へ進む」導線）→ 検査STEP（64px大型文言・音声・各STEP無操作タイムアウトで interrupted）→ 完了メッセージ（文言変更可）</td></tr>
+</table>
+<ul>
+  <li><strong>ログイン</strong>: 店舗別6桁PIN（scryptハッシュ・5回失敗15分ロック・原子的失敗加算RPC）→ HMAC署名 httpOnly cookie <code>bgk_session</code>（12h・店舗スコープ）。QR＋PIN設定画面は <code>/baggage/ipad</code>。</li>
+  <li><strong>PWA</strong>: 店舗別 manifest（<code>…/manifest.webmanifest</code>）で「ホーム画面に追加」がその店舗のキオスクを開く。アイドル画面にビルドSHA＋「更新」ボタン（デプロイ後は再読込が必要）。</li>
+  <li><strong>顔登録</strong>: 未登録従業員のみ端末上でセルフ登録可（上書き不可＝なりすまし防止・差し替えは管理画面）。登録時に同意画面。</li>
+</ul>
+
+<h3>9.2 顔認証設計（AWS Rekognition）</h3>
+<ul>
+  <li><strong>コレクション</strong>: 従業員=店舗常設 <code>baggage-emp-&lt;store&gt;</code> / 来訪者=当日限り <code>baggage-&lt;store&gt;-&lt;ymd&gt;</code>（日次バッチで削除）。ExternalImageId は employees.id / session id。</li>
+  <li><strong>しきい値 72</strong>（80から引き下げ・実環境の角度/照明で正当な顔が落ちたため）。撮影は中央クロップ2.6倍・長辺512pxで高速化、アップロードと照合は並行実行。</li>
+  <li><strong>authSkipped の意味論</strong>: true は「認証を実行できなかった」（AWS未設定/タイムアウト/カメラ不可）のみ。照合できたが該当なし（no_match）は false のまま＝未特定。</li>
+  <li><strong>アンマッチ方針</strong>: 顔で本人特定できた時だけ入室セッションに紐づけ。推測紐づけはしない → <code>unmatched_entry/exit</code> として翌日メールで管理者へ通知。UI にも「同一人物である保証はありません」警告。</li>
+</ul>
+
+<h3>9.3 本部確認（/baggage）と映像パイプライン</h3>
+<ul>
+  <li>左一覧×右詳細のマスター・ディテール。詳細=2カメラ同期プレイヤー（倍速1/2/4/8×・<strong>シーク不可</strong>）＋顔比較3列（入室/退出/従業員マスタ or 名刺・タップ拡大）。<strong>映像を最後まで再生しないと「確認済み」ボタンが押せない</strong>。</li>
+  <li>クリップ切出: 退室時に <code>inspection_clip_jobs</code> 起票（検査窓±15秒・NVR確定待ち5分・保持期限-2日が締切）→ エッジが15秒ポーリングで取得→検証（長さ80%以上）→ <code>baggage-clips</code> へアップロード。失敗は指数バックオフ [1,5,30,120,360]分。</li>
+  <li>日次バッチ（05:00 JST）: 前日アンマッチ確定→管理者メール / 来訪者当日コレクション削除（7日ぶん掃引）/ 保持期限超過の削除（既定60日・従業員マスタ顔は対象外）/ ジョブ掃除。</li>
+</ul>
+
+<h3>9.4 ロールとプライバシー</h3>
+<ul>
+  <li><strong>手荷物検査店長</strong>（<code>baggage_manager</code>）: middleware で <code>/baggage・/kiosk・/api/baggage</code>＋認証系のみ許可。ライブ視聴には一切入れない（LIVE視聴時間を増やさない設計判断）。</li>
+  <li><strong>同意の版管理</strong>: 文言変更で consent_version+1。従業員=顔登録時 / 来訪者=入室毎に版を記録。文言未設定なら同意画面は出ない。</li>
+  <li>来訪者の顔は当日中に自動削除（キオスクにも明記）。閲覧・クリップ・写真は視聴監査ログ（baggage_view/clip/photo）へ記録。キオスク表示は姓のみ。</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="s10"><span class="no">10</span>データモデル概要</h2>
+<p class="lead">46テーブル・全テーブルRLS有効。SELECTはテナント×ロールスコープ（super_admin=全て / tenant_admin=自テナント / それ以外=admin_users.store_ids）。<strong>業務テーブルへの書込はサービスロール経由のみ</strong>（書込ポリシー無し=拒否）が基本パターン。</p>
+
+<table>
+  <tr><th style="width:120px">領域</th><th>主要テーブル</th></tr>
+  <tr><td>共有マスタ</td><td><code>tenants</code> / <code>stores</code> / <code>edge_devices</code>（pending_command・desired_agent_version）/ <code>recorders</code> / <code>recorder_cameras</code> / <code>admin_users</code>（role・store_ids）</td></tr>
+  <tr><td>Monitor</td><td><code>live_sessions</code>（視聴監査）/ <code>vod_clips</code> / <code>monitor_settings</code> / <code>monitor_incidents</code> / <code>footage_access_log</code>（180日）</td></tr>
+  <tr><td>BCP</td><td><code>bcp_events</code> / <code>bcp_clips</code>（offset_min・storage_path）/ <code>bcp_reports</code> / <code>bcp_settings</code> / <code>jalert_receipts</code></td></tr>
+  <tr><td>巡回</td><td><code>patrol_runs</code> / <code>patrol_findings</code> / <code>security_settings</code> / <code>security_reports</code> / <code>security_camera_config</code></td></tr>
+  <tr><td>発報</td><td><code>alarm_events</code>（dedup_key・status）/ <code>alarm_frames</code>（8オフセット）/ <code>alarm_settings</code>（quiet・notify）</td></tr>
+  <tr><td>手荷物検査</td><td><code>inspection_sessions</code>（入退ペア・consent）/ <code>inspection_session_events</code> / <code>inspection_clip_jobs</code> / <code>inspection_clips</code> / <code>inspection_settings</code> / <code>baggage_kiosk_pins</code> / <code>baggage_tenant_settings</code> / <code>employees</code>（顔・同意列を拡張）</td></tr>
+</table>
+
+<div class="card warn">
+  <h4>⚠ 新規メンバーがはまりやすい罠</h4>
+  <ul style="margin-bottom:0">
+    <li><strong><code>employees</code> のレガシーRLS</strong>: reception世代のRLS（JWTのtenant依存）が残っており、monitor管理者（JWT tenant=NULL）ではJOINが空になる。→ RLS検証済みクライアントでセッション可視性を確認した後、<strong>サービスクライアントで別途氏名/顔を解決</strong>するのが正パターン。</li>
+    <li><code>edge_devices.pending_command</code> は<strong>1スロット</strong>を巡回/発報/BCPで共有。占有時は各機能のリトライ機構が吸収する設計。</li>
+    <li>iPadはPWAのため<strong>デプロイ後に再読込しないと旧コードのまま</strong>。キオスクの「更新」ボタン＋ビルドSHA表示で確認。</li>
+  </ul>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="s11"><span class="no">11</span>セキュリティ・プライバシー</h2>
+<ul>
+  <li><strong>RLS</strong>: 本番46テーブル全て有効。CIの authz 契約テスト（実DB）がマージゲート。クロステナント読出脆弱性は2026-06-21に発見・修正済み。</li>
+  <li><strong>鍵と秘密</strong>: カメラ/VODパスワードは Vault（AES-256-GCM）。本番JWTは ES256 非対称。鍵・PWは 2026-07-07 に再ローテ完了。エッジ鍵は <code>shared/agent.env</code> が正。</li>
+  <li><strong>映像アクセス</strong>: 常に認証付きプロキシ＋署名URL経由。エッジ/カメラは直接インターネット非公開。遠隔閲覧は Cloudflare Access のメール許可リスト。</li>
+  <li><strong>監査</strong>: 映像閲覧は footage_access_log（180日）・視聴セッションは live_sessions・操作は audit ログ（恒久）。</li>
+  <li><strong>SAST/依存</strong>: Semgrep・bun audit・Dependabot が CI 常設。</li>
+  <li><strong>顔データの扱い</strong>: 従業員=登録抹消まで / 来訪者=当日中削除。同意文言は版管理し記録に紐付け。第三者提供なし。</li>
+  <li><strong>既知の残リスク</strong>: <code>/api/edge/bootstrap</code> が device_token 保持者に service_role 鍵を返す（対策計画: エッジ毎スコープ付きトークン）。発報 :9080 はトークン未設定だと無認証（設定必須運用）。第三者ペネトレーションテストを5,000店スケール前に1回実施予定。</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="s12"><span class="no">12</span>運用・SLA</h2>
+<table>
+  <tr><th style="width:220px">項目</th><th>内容</th></tr>
+  <tr><td>可用性目標</td><td>月間 <span class="mono">99%</span>（クラウド面のみ・店舗内エッジ/カメラ/LANは対象外）。死活cron 2分毎</td></tr>
+  <tr><td>データ保持</td><td>映像・録画・巡回生データ・発報フレーム: <span class="mono">31日</span>で自動削除 ／ 検査クリップ: 既定<span class="mono">60日</span>（テナント設定） ／ PDF証跡: 恒久 ／ メトリクス90日 ／ 視聴ログ180日 ／ 監査ログ恒久</td></tr>
+  <tr><td>RTO / RPO</td><td>App: RTO&lt;15分・RPO 0 ／ DBスキーマ: RTO&lt;30分・RPO 0（訓練実績28秒）／ <strong>DBデータ: RTO 1〜4h・RPO≤24h</strong>（日次バックアップ。PITRは未購入=有償化でRPO短縮可）／ エッジ機: RTO 2〜4h ／ 鍵漏洩: RTO&lt;1h</td></tr>
+  <tr><td>バックアップ</td><td>Supabase 日次＋スキーマは git ベースライン（migration 11本・repair運用）</td></tr>
+  <tr><td>削除cron</td><td>VOD/発報 03:00・手荷物検査/巡回日報 05:00 JST（CRON_SECRET 認証）</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="s13"><span class="no">13</span>開発計画と現在地</h2>
+
+<h3>13.1 現在地（2026-07-20）</h3>
+<ul>
+  <li>本番公開済み・実機PoC 1店舗（ローカル/リモート・認証・再起動耐性）。全5モジュールが本番稼働。手荷物検査は 2026-07-20 に実機E2E確認完了。</li>
+  <li>スケール計画は2系統の資料が併存: 新版=5,000店/同時視聴300（<code>scale-plan-quantified.md</code>）と旧版=10,000店（spec v6.0）。<strong>数字を引用する時はどちらの系かを明示すること</strong>。</li>
+</ul>
+
+<h3>13.2 残り実装（優先順）</h3>
+<table>
+  <tr><th style="width:36px">#</th><th>項目</th><th style="width:110px" class="num">概算工数</th></tr>
+  <tr><td class="mono">1</td><td><strong>ベンダ統合（構成②の核・最大ギャップ）</strong>: Uniview/i-PRO のグリッドスナップ（現状Frigate以外null）・VODアダプタ統合（i-PRO ONVIF Profile-G）・Univiewアダプタ・3社実機検証</td><td class="num">〜24人日</td></tr>
+  <tr><td class="mono">2</td><td>基盤（M0）: エッジ/トンネル死活監視+アラート強化・鍵ローテ同期自動化</td><td class="num">—</td></tr>
+  <tr><td class="mono">3</td><td>マルチグリッド 16/32/48（〜16人日）＋ユニット別ティア課金（〜13人日）＋テスト（〜7人日）</td><td class="num">〜36人日</td></tr>
+  <tr><td class="mono">4</td><td>SFU（LiveKit）β→本番・エッジ量産（ゴールデンイメージ・QR登録・ONVIF探索ウィザード）・N100 48ch検証</td><td class="num">—</td></tr>
+</table>
+<p class="small">開発計画全体: <code>wbs-dev-test-plan.md</code> で M0〜M5 合計 <strong>約218人日</strong>（約6ヶ月・3〜5名・2週スプリント想定）。GA計画は <code>release-plan-v1-ga.md</code>（GA目標 2026年10月・初号店=i-PRO）。i-PRO WJ-NU101K は NVR CGI 非互換が実機検証で確定（カメラ直 ONVIF/RTSP は動作）→ NVR経由VODはGA後のファストフォロー。</p>
+
+<h3>13.3 GA計画 ゲート別の充足状況（2026-07-20 突合）</h3>
+<p class="lead">凡例: <span class="badge b-ok">済</span> 完了 ／ <span class="badge b-danger">不足</span> 未着手・クリティカル ／ <span class="badge b-warn">要確認</span> 部分的・実施記録なし</p>
+
+<h4>G1 製品化基盤 — 期限 7月末（直近・最優先）</h4>
+<table>
+  <tr><th style="width:70px">判定</th><th>項目</th><th>状態</th></tr>
+  <tr><td><span class="badge b-ok">済</span></td><td>CIゲート必須緑 / RLS全表監査 / authz契約テスト / 鍵ローテ無停止同期 / i-PRO VODスパイク判定</td><td>鍵ローテは2026-07-07実績・スパイクは6/19判定済（GA日程不変）</td></tr>
+  <tr><td><span class="badge b-ok">済</span></td><td><strong>エッジ/トンネル断の5分内アラート通知</strong>（PR #198）</td><td>エッジ断=実装済みを確認（メール+Webhook・重複抑止・復旧通知）。<strong>トンネル断を新規実装</strong>: go2rtcへのCF Accessプローブ・フラップ吸収3分・cron2分＝5分内通知。<span class="badge b-warn">運用</span> migration 150000 の適用と Vercel env <code>ALERT_EMAILS</code> の設定確認が必要</td></tr>
+  <tr><td><span class="badge b-ok">済</span></td><td><strong>ロール別可視範囲の UI到達 smoke</strong>（PR #198・高価値3本の1つ）</td><td>実物 middleware() に NextRequest を通す行列テスト29件をCI常設（baggage_manager遮断・API 403・<code>/api/*.png</code>迂回防止・許可パス最適化の固定）。実ブラウザE2E（Playwright＋Supabase local）はG2までのフォローアップ</td></tr>
+  <tr><td><span class="badge b-warn">要確認</span></td><td>staging分離（常設 Supabase staging＋seed）</td><td>dev local / CI ephemeral / prod は整備済。常設stagingの有無を確認</td></tr>
+</table>
+
+<h4>G2 i-PRO本番化 — 9月中旬</h4>
+<table>
+  <tr><th style="width:70px">判定</th><th>項目</th><th>状態</th></tr>
+  <tr><td><span class="badge b-ok">済</span></td><td>QR初回登録 / 計測スキーマ / セッション上限 / レコーダ管理UI / MJPEG帯域劣化 / テナント分離</td><td>—</td></tr>
+  <tr><td><span class="badge b-danger">不足</span></td><td><strong>i-PROグリッドスナップ</strong>（Frigate外し＝単一依存・現状Frigate以外null）</td><td>ベンダ統合〜24人日の中核。G2の最重量項目</td></tr>
+  <tr><td><span class="badge b-danger">不足</span></td><td>grid失敗時のプレースホルダ＋再試行UX</td><td>計画書§7で「新規クリティカルギャップ」と明記済・未着手</td></tr>
+  <tr><td><span class="badge b-warn">要確認</span></td><td>i-PRO実機の最終確定（<code>spike:ipro-discover</code> をLinux機で実行→RTSP URI/ONVIF認証）</td><td>実施記録なし</td></tr>
+</table>
+
+<h4>G3 セキュリティ硬化/運用 — 9月末</h4>
+<table>
+  <tr><th style="width:70px">判定</th><th>項目</th><th>状態</th></tr>
+  <tr><td><span class="badge b-ok">済</span></td><td>Vault化 / DR訓練（スキーマ復旧28秒実績）</td><td>—</td></tr>
+  <tr><td><span class="badge b-danger">不足</span></td><td><strong>脆弱性診断の扱いを再決定</strong></td><td>計画=外部発注（6月）→ 実際=内製継続＋外部は5,000店前へ方針変更。GAゲートとして外部診断を課すなら往復2〜3週の逆算で8月中の発注が必要</td></tr>
+  <tr><td><span class="badge b-warn">要確認</span></td><td>SLA定義書・保持方針の顧客合意</td><td>文書はdraft済。合意は1号店契約と同時に実施</td></tr>
+</table>
+
+<h4>G4 GA — 10月（目標）</h4>
+<table>
+  <tr><th style="width:70px">判定</th><th>項目</th><th>状態</th></tr>
+  <tr><td><span class="badge b-danger">不足</span></td><td>1号店実地構築（i-PRO中継＋named tunnel＋Access）/ 顧客UAT / canary 72h / OTAロールバックの実機検証</td><td>すべて未・G2完了が前提</td></tr>
+</table>
+
+<div class="card warn">
+  <h4>GA計画自体の改訂が必要な点（計画6/14作成 → 現実とのズレ）</h4>
+  <ul style="margin-bottom:0">
+    <li><strong>手荷物検査がGA計画に存在しない</strong>（検査は7/19-20に出荷済）。GA回帰テスト範囲に含めるか、オプション別トラックとして明記するかを決めて改訂する。</li>
+    <li>是正済み項目の反映（鍵・PW再ローテ完了等）と、スケール2系統（5,000店系/10,000店系）の一本化。</li>
+    <li><strong>PITR未購入</strong>（DBデータRPO≤24h）と <strong>bootstrap の service_role 鍵配布</strong>を、GA前に顧客リスクとして明示するか判断。</li>
+  </ul>
+</div>
+<p><strong>結論</strong>: G1のクリティカル2点（トンネル断アラート・UI到達smoke）は <strong>2026-07-20 実装完了（PR #198）</strong>。G1残りは運用作業（migration適用・ALERT_EMAILS確認）とstaging確認のみ。次の最重量は G2「i-PROグリッドスナップ＋失敗時UX」。</p>
+
+<!-- ============================================================ -->
+<h2 id="s14"><span class="no">14</span>残課題一覧</h2>
+<p class="lead">モジュール別の既知ギャップ。<span class="badge b-danger">要対応</span>=運用リスク / <span class="badge b-warn">改善</span>=品質向上 / <span class="badge b-plan">計画</span>=ロードマップ項目</p>
+
+<table>
+  <tr><th style="width:110px">モジュール</th><th>課題</th><th style="width:80px">区分</th></tr>
+  <tr><td>共通</td><td><code>/api/edge/bootstrap</code> の service_role 鍵配布 → エッジ毎スコープ付きトークンへ</td><td><span class="badge b-danger">要対応</span></td></tr>
+  <tr><td>共通</td><td>PITR 未購入（DBデータ RPO≤24h）。契約規模に応じ購入判断</td><td><span class="badge b-warn">改善</span></td></tr>
+  <tr><td>Monitor</td><td>Uniview/i-PRO のグリッド・VOD アダプタ未統合（Frigate 以外）</td><td><span class="badge b-plan">計画</span></td></tr>
+  <tr><td>Monitor</td><td>マルチグリッド16/32/48・ティア課金・SFU本番化・エッジ量産体制</td><td><span class="badge b-plan">計画</span></td></tr>
+  <tr><td>BCP</td><td>通知がメールのみ（LINE/SMS未対応）。Univiewは時刻指定スナップ不可（常に最新）</td><td><span class="badge b-warn">改善</span></td></tr>
+  <tr><td>巡回</td><td>AI差分/異常判定（P2/P3）未実装（スキーマのみ存在）。<code>patrol_enabled</code> フラグが撮影対象の絞り込みに未反映</td><td><span class="badge b-plan">計画</span></td></tr>
+  <tr><td>発報</td><td>ONVIF PullPoint 購読が本経路未接続（現行はHTTPプッシュ受け）。<code>sources/event_types/debounce</code> 設定列が未執行</td><td><span class="badge b-warn">改善</span></td></tr>
+  <tr><td>発報</td><td><code>ALARM_SHARED_TOKEN</code> 未設定時は受け口が無認証（配備チェックリスト化）</td><td><span class="badge b-danger">要対応</span></td></tr>
+  <tr><td>手荷物検査</td><td>詳細は下表（14.1）に分離</td><td><span class="badge b-opt">→14.1</span></td></tr>
+</table>
+
+<h3>14.1 手荷物検査の不足整理（詳細）</h3>
+
+<h4>🔴 店舗展開前に潰すべき（導入ブロッカー）</h4>
+<table>
+  <tr><th style="width:36px">#</th><th>項目</th><th>内容</th></tr>
+  <tr><td class="mono">1</td><td><strong>対象店舗のNVRベンダ確認</strong></td><td>クリップ切出は <code>supportsWindowMp4</code> 対応ベンダのみ。非対応だと検査映像が全件「取得失敗」になる</td></tr>
+  <tr><td class="mono">2</td><td><strong>AWS環境チェックの手順化</strong></td><td>AWS未設定でも止まらず「認証省略」記録になる設計（サイレント劣化）。店舗追加時のenv検証チェックリストが必要</td></tr>
+  <tr><td class="mono">3</td><td><strong>同意文言の法務レビュー</strong></td><td>顔情報は個人識別符号。現行文言は社内作成のまま（版管理の仕組みは実装済）</td></tr>
+</table>
+
+<h4>🟡 実装ギャップ（既知・優先度中）</h4>
+<table>
+  <tr><th style="width:36px">#</th><th>内容</th></tr>
+  <tr><td class="mono">4</td><td><span class="badge b-ok">済 PR #200</span> 確認済みゲートの抜け道を解消 — 単独ページにもゲート適用＋切り出し中は解禁しない（全映像取得＋再生完了が必須に）</td></tr>
+  <tr><td class="mono">5</td><td>NVR時刻差（clock_offset_sec）未実測 — 常に「—」表示。映像と検査時刻のズレ検知ができない</td></tr>
+  <tr><td class="mono">6</td><td>来訪者の氏名・会社が手入力任意 — アンマッチメールが「未特定」だらけになりうる（名刺OCRは未実装）</td></tr>
+  <tr><td class="mono">7</td><td>保持削除の1回500セッション上限 — 大規模店で削除が追いつかない可能性（監視項目化）</td></tr>
+</table>
+
+<h4>⚪ 運用検証（本番で確認中/未確認）</h4>
+<table>
+  <tr><th style="width:36px">#</th><th>内容</th></tr>
+  <tr><td class="mono">8</td><td>Rekognition閾値72の誤一致/未一致チューニング（様子見中）</td></tr>
+  <tr><td class="mono">9</td><td>日次バッチ（05:00 JST）の初回サイクル実働確認 — 来訪者当日コレクション削除・アンマッチメール受信</td></tr>
+  <tr><td class="mono">10</td><td>authSkipped（認証省略）記録の運用ルール — 誰が・いつ映像確認するか</td></tr>
+  <tr><td class="mono">11</td><td>PIN運用ガバナンス — ロック解除手順・PIN変更周期・複数iPad/店の扱い</td></tr>
+</table>
+
+<h4>💰 価格・コスト連動（§16.5と同根）</h4>
+<table>
+  <tr><th style="width:36px">#</th><th>内容</th></tr>
+  <tr><td class="mono">12</td><td>従量上限なし — Rekognition/Storage費が店舗規模に比例して青天井。検査件数・従業員数の上限設計が価格確定の前提</td></tr>
+  <tr><td class="mono">13</td><td>クリップ60日保持のストレージ増加監視（720p・1024Kbps 前提で ≈360GB/店@退室200件/日・§15.3）。R2移行（PR #199）後は R2 バケットの使用量を監視対象に追加</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="s15"><span class="no">15</span>コスト試算</h2>
+<p class="lead">出典: <code>scale-plan-quantified.md</code>（5,000店系）・<code>recorder-monitoring-spec.html</code> §4（10,000店系・1USD=155円）・<code>edge-configs-and-relay-hardware.md</code>。</p>
+
+<h3>15.1 クラウド費用（店舗あたり月額）— 最重要カーブ</h3>
+<table>
+  <tr><th></th><th class="num">100店</th><th class="num">1,000店</th><th class="num">10,000店</th></tr>
+  <tr><td>クラウド費用合計/月</td><td class="num">¥33,175</td><td class="num">¥208,900</td><td class="num">¥578,500</td></tr>
+  <tr><td><strong>店舗あたり/月</strong></td><td class="num"><strong>¥332</strong></td><td class="num"><strong>¥209</strong></td><td class="num"><strong>¥58</strong></td></tr>
+</table>
+<p class="small">内訳（10,000店時）: Vercel Enterprise ¥150,000 / Supabase（Team+Compute+Replica）¥220,000 / LiveKit Scale ¥107,000 / Cloudflare ¥31,000 / 監視・ログ ¥40,000 / Sentry ¥12,000 ほか。コストは<strong>店舗数でなく同時視聴数</strong>（想定最大300・視聴は店舗の6〜10%）に比例するのが構造上のポイント。SFU帯域は LiveKit Cloud 約$0.12/GB → 5,000店時 約$1,400/月（自前SFU化で約$600+VM に低減可）。</p>
+
+<h3>15.2 ハードウェア（初期費）</h3>
+<table>
+  <tr><th>品目</th><th class="num">単価</th><th>備考</th></tr>
+  <tr><td>エッジ端末（N100/8GB/128GB・Linux込）</td><td class="num">¥45,000</td><td>単一SKUで16/32/48chティアを賄う。5,000台超のOEMで¥30,000台へ</td></tr>
+  <tr><td>設置作業</td><td class="num">¥20,000</td><td>店舗あたり</td></tr>
+  <tr><td>UPS 500VA（任意）</td><td class="num">¥12,000</td><td>店舗の約30%想定</td></tr>
+  <tr><td>LTEバックアップSIM（任意）</td><td class="num">¥3,500/月</td><td>店舗の約10%想定</td></tr>
+</table>
+<p class="small">構成③（Frigate録画）は多TBストレージが必要で高額（例: 8ch×4Mbps×31日≒10TB）— 標準提案しない。Tier-3（中央集約・店舗ハード¥0）モードも実装済み。</p>
+
+<h3>15.3 手荷物検査オプションの変動費（前提: 退室200件/日・<strong>店長が全件確認再生</strong>）</h3>
+<p class="small">前提シナリオ: 退室200件/日（従業員150名×入退各1回＋来訪50名/日）。<strong>クリップは 720p・1024Kbps</strong>・検査窓約2分（±15秒バッファ込み）≒ <strong>約15MB/本</strong>（カメラ毎）。定常在庫 = 200件×2カメラ×15MB×保持60日 ≒ <strong>360GB/店</strong>。運用は<strong>店長による全件確認再生</strong>（各クリップ1回再生）＝ 再生転送量 200×2×15MB×30日 ≒ <strong>180GB/月/店</strong>。為替 1USD=155円。<span class="badge b-warn">訂正 7/21</span> 旧版はビットレートを約4Mbps（60MB/本）と過大に置いていた — 仕様の 1024Kbps 正で全体が1/4に。</p>
+<table>
+  <tr><th>項目</th><th class="num">概算/店/月</th><th>前提</th></tr>
+  <tr><td>AWS Rekognition（照合/登録）</td><td class="num">¥1,900前後</td><td>従業員入退各1回×150名＋来訪50名の登録/照合 ≒ 12,000 API/月 × $0.001</td></tr>
+  <tr><td>クリップ保管 — 現行（Supabase Storage）</td><td class="num">¥1,200前後</td><td>360GB × $0.021/GB</td></tr>
+  <tr><td>確認再生（全件）のエグレス — 現行</td><td class="num">¥2,500前後</td><td>180GB/月 × $0.09/GB — 全件再生では転送費が最大項目</td></tr>
+  <tr><td>写真・メール</td><td class="num">¥300前後</td><td>顔/名刺写真・日次メール</td></tr>
+  <tr><td><strong>合計（現行構成のまま）</strong></td><td class="num"><strong>≈ ¥5,900</strong></td><td>価格 +¥13,400 に対し<strong>現行のままでも黒字</strong>。R2移行（PR #199 実装済み）でさらに半減</td></tr>
+</table>
+
+<h4>クリップ保存先の比較 — <strong>全件確認再生（180GB/月）込み</strong>の総額</h4>
+<table>
+  <tr><th>保存先</th><th class="num">保管費/月</th><th class="num">確認再生費/月<br><span class="small">(取り出し+転送)</span></th><th class="num">クリップ計</th><th class="num">検査変動費 合計</th><th>備考</th></tr>
+  <tr><td>Supabase Storage（現行）</td><td class="num">¥1,200</td><td class="num">¥2,500</td><td class="num">¥3,700</td><td class="num">≈ ¥5,900</td><td>エグレス $0.09/GB</td></tr>
+  <tr><td>AWS S3 Standard（東京）</td><td class="num">¥1,400</td><td class="num">¥3,200</td><td class="num">¥4,600</td><td class="num">≈ ¥6,800</td><td>エグレス $0.114/GB で現行より悪化</td></tr>
+  <tr><td>S3 Standard-IA</td><td class="num">¥1,060</td><td class="num">¥3,480</td><td class="num">¥4,540</td><td class="num">≈ ¥6,700</td><td>取り出し$0.01＋エグレス$0.114</td></tr>
+  <tr><td>S3 Glacier Instant Retrieval</td><td class="num">¥420</td><td class="num">¥4,040</td><td class="num">¥4,460</td><td class="num">≈ ¥6,700</td><td>保管最安でも取り出し$0.03＋エグレスで逆転</td></tr>
+  <tr><td><strong>Cloudflare R2</strong></td><td class="num"><strong>¥840</strong></td><td class="num"><strong>¥0</strong></td><td class="num"><strong>¥840</strong></td><td class="num"><strong>≈ ¥3,000</strong></td><td><strong>エグレス完全無料</strong>（$0.015/GB保管・読出しリクエスト費は誤差）</td></tr>
+</table>
+<div class="card">
+  <h4>結論（720p・1024Kbps 正・全件確認再生）</h4>
+  <ul style="margin-bottom:0">
+    <li><strong>正しい前提では現行（Supabase）でも黒字</strong>（≈¥5,900 &lt; ¥13,400）。緊急性は下がったが、序列は変わらず <strong>R2 が最安（クリップ費 ¥3,700→¥840・▲77%）</strong>。S3系はエグレス費で現行より悪化＝候補外。</li>
+    <li><strong>R2 の価値はコストに加えて「転送費リスクの消滅」</strong>: 見返し・倍速でない等速再生・複数人レビュー・監査での再視聴が何度あっても費用が増えない。従量の不確実性が価格設計から消える。</li>
+    <li><strong>再生速度は遅くならない</strong>: Cloudflareエッジ配信＋署名URL＋Range再生で現行と体感同等。</li>
+    <li>R2移行は実装済み（PR #199・env設定だけで切替・未設定時は従来動作）。</li>
+    <li>参考・小規模店（退室40件/日・全件再生）: 現行 ≈¥1,300 ／ R2 ≈<strong>¥800</strong>。</li>
+  </ul>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="s16"><span class="no">16</span>価格案（基本＋オプション）</h2>
+<div class="card warn">
+  <p style="margin:0"><strong>※ 検討たたき台。</strong>既存資料に存在する価格アンカーは「¥3,200/店/月（5カ年計画）」と「カメラ数ティア16/32/48で課金差別化（設計のみ・金額未定）」の2点のみ。オプション別の価格はどこにも存在しないため、本章は原価カーブ（§15）から新規に設計した提案値です。決定には経営判断が必要です。</p>
+</div>
+
+<h3>16.1 提案パッケージ</h3>
+<div class="price">
+  <div class="pcard base">
+    <div class="name">基本パック</div>
+    <div class="tag">Monitor コア ＋ BCP</div>
+    <div class="yen">¥3,200<small> /店/月（税抜）</small></div>
+    <ul>
+      <li>ライブ監視（16分割＋単カメラ）</li>
+      <li>録画再生（VOD・4ch同期）</li>
+      <li>店舗地図・死活監視・視聴監査</li>
+      <li>BCP: Jアラート連動 証跡PDF自動生成</li>
+      <li>カメラ16chまで（S ティア）</li>
+    </ul>
+  </div>
+  <div class="pcard">
+    <div class="name">巡回オプション</div>
+    <div class="tag">Patrol — 自動巡回証跡</div>
+    <div class="yen">＋¥800<small> /店/月</small></div>
+    <ul>
+      <li>定時全カメラ撮影（既定4時間毎）</li>
+      <li>今すぐ巡回・トリアージ</li>
+      <li>日次PDFレポート＋メール</li>
+    </ul>
+  </div>
+  <div class="pcard">
+    <div class="name">発報オプション</div>
+    <div class="tag">Alarm — イベント通知・記録</div>
+    <div class="yen">＋¥1,000<small> /店/月</small></div>
+    <ul>
+      <li>カメラ/NVRイベント全記録</li>
+      <li>メール/Webhook 通知・静穏時間</li>
+      <li>前後8コマ フォレンジックタイムライン</li>
+    </ul>
+  </div>
+  <div class="pcard">
+    <div class="name">手荷物検査オプション</div>
+    <div class="tag">Baggage — iPad＋顔認証</div>
+    <div class="yen">＋¥13,400<small> /店/月</small></div>
+    <ul>
+      <li>iPadキオスク（PIN・PWA・音声案内）</li>
+      <li>顔認証（従業員/来訪者・同意管理）</li>
+      <li>2カメラ検査映像の自動切出・本部確認</li>
+      <li>店長の全件確認再生に対応（R2保存・転送費ゼロ）</li>
+      <li>アンマッチ日次通知・60日保持</li>
+      <li><span class="small">iPad本体は顧客調達</span></li>
+    </ul>
+  </div>
+</div>
+
+<h3>16.2 カメラ数ティア（基本パックへの加算）</h3>
+<table>
+  <tr><th style="width:110px">ティア</th><th class="num" style="width:120px">カメラ数</th><th class="num" style="width:140px">加算/店/月</th><th>備考</th></tr>
+  <tr><td>S（標準）</td><td class="num">〜16ch</td><td class="num">＋¥0</td><td>基本パックに含む</td></tr>
+  <tr><td>M</td><td class="num">〜32ch</td><td class="num">＋¥800</td><td rowspan="2">単一HWでソフト切替（<code>camera_tier</code>）・監査ログ付き。多グリッド実装（〜36人日）が前提</td></tr>
+  <tr><td>L</td><td class="num">〜48ch</td><td class="num">＋¥1,600</td></tr>
+</table>
+
+<h3>16.3 初期費（全パッケージ共通）</h3>
+<table>
+  <tr><th>項目</th><th class="num">金額</th><th>備考</th></tr>
+  <tr><td>エッジ端末 買切り</td><td class="num">¥60,000</td><td>原価¥45,000＋マージン。量産時に見直し</td></tr>
+  <tr><td>（代替）エッジ端末 レンタル</td><td class="num">¥1,500/月</td><td>48ヶ月で¥72,000回収・故障交換込みにできる</td></tr>
+  <tr><td>設置・導入支援</td><td class="num">¥30,000</td><td>実費¥20,000＋設定作業</td></tr>
+</table>
+
+<h3>16.4 採算性チェック（100店チェーン・フル装備の例）</h3>
+<table>
+  <tr><th>項目</th><th class="num">/店/月</th><th>備考</th></tr>
+  <tr><td>売上（基本3,200＋巡回800＋発報1,000＋検査13,400）</td><td class="num">¥18,400</td><td>Mティアならさらに＋¥800</td></tr>
+  <tr><td>クラウド原価（100店時）</td><td class="num">−¥332</td><td>§15.1。1,000店で¥209、10,000店で¥58へ低減</td></tr>
+  <tr><td>検査変動費（全件確認再生・720p/1024Kbps・R2移行後）</td><td class="num">−¥800 〜 −¥3,000</td><td>検査オプション契約店のみ。小規模店（退室40件/日）≈¥800 ／ 大規模店（200件/日）≈¥3,000（§15.3）。現行Supabaseのままでも ¥1,300〜5,900 で黒字</td></tr>
+  <tr><td><strong>粗利（インフラベース）</strong></td><td class="num"><strong>≈ ¥15,070〜17,270（82〜94%）</strong></td><td>開発費・サポート・販管費は別途。大規模店比率が高いほど下限側</td></tr>
+</table>
+
+<h3>16.5 価格決定に必要な残論点</h3>
+<ul>
+  <li>ティアの粒度: 単純なカメラ数列 vs プラン表（保持日数・同時視聴数の差別化を含めるか）。</li>
+  <li>請求サイクル・日割り・最低契約期間（現状は月次のテナント×ティア集計→CSV/PDFを請求根拠とする手動運用。Stripe等の決済統合は将来スコープ）。</li>
+  <li><strong>手荷物検査の従量設計</strong>: 運用は<strong>店長の全件確認再生</strong>が前提（S3系はエグレス費で候補外）。前提訂正（720p・1024Kbps＝約15MB/本）により、大規模店（退室200件/日）の変動費は現行Supabaseでも ≈¥5,900・<strong>R2移行後（PR #199 実装済み）は ≈¥3,000</strong>。価格 <strong>+¥13,400</strong> での採算分岐は <strong>R2で ≈890件/日</strong>（Supabaseのままでも ≈450件/日）— 大規模店ティアは不要。従量上限は安全弁として規約に明記する。</li>
+  <li>エッジHWの買切り/レンタルの標準をどちらにするか（保守・故障交換の責任分界）。</li>
+  <li>ボリュームディスカウント（100店/1,000店の階段）と5カ年計画（¥3,200前提）との整合。</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="s17"><span class="no">17</span>開発の始め方 / 参照資料</h2>
+
+<h3>17.1 最初の1週間でやること</h3>
+<ol>
+  <li>worktree <code>/Users/junji.y/claude/Intereco/monitor-recover</code> を確認し、<code>docs/SESSION-HANDOFF.md</code> を読む（現在地と次タスクの正）。</li>
+  <li>UI を触る前に <code>docs/GENESIS_EDGE_USAGE.md</code>（デザイン正本）を読む。独自の色・余白を発明しない。</li>
+  <li>実装の落とし穴集 <code>.claude/skills/intereco-patterns/SKILL.md</code> に目を通す。</li>
+  <li>ローカル起動: <code>claude/monitor</code> で <code>bun install → bun run dev</code>（port 3200）。DB は <code>bun run db:start</code>（ローカルSupabase）。</li>
+  <li>PR フロー: <code>monitor-prod</code> へ直接pushは不可。ブランチ→PR→<code>ci-passed</code> 緑→squash merge→Vercel自動デプロイ。</li>
+</ol>
+
+<h3>17.2 参照資料マップ</h3>
+<table>
+  <tr><th style="width:300px">資料</th><th>内容</th></tr>
+  <tr><td><code>docs/recorder-monitoring-spec.html</code></td><td>システム仕様 v6.0（10,000店系・詳細機能票 F番号）</td></tr>
+  <tr><td><code>docs/bcp-spec.html</code></td><td>BCP 設計仕様 v1.0</td></tr>
+  <tr><td><code>docs/scale-plan-quantified.md</code></td><td>定量スケール計画（5,000店系・帯域/コストモデル）</td></tr>
+  <tr><td><code>docs/release-plan-v1-ga.md</code></td><td>GA計画（2026年10月・エンジニアリングレビュー済）</td></tr>
+  <tr><td><code>docs/wbs-dev-test-plan.md</code> / <code>wbs-config2-features.md</code></td><td>WBS（計218人日）・構成②機能WBS（〜60人日）</td></tr>
+  <tr><td><code>docs/edge-ota-design.md</code></td><td>自律OTA・2層ロールバック設計</td></tr>
+  <tr><td><code>docs/edge-configs-and-relay-hardware.md</code></td><td>店舗3構成・エッジHW選定</td></tr>
+  <tr><td><code>docs/decision-sfu-and-edge.md</code></td><td>SFU採用判断（LiveKit Cloud→自前化の損益分岐）</td></tr>
+  <tr><td><code>docs/data-governance-sla.md</code> / <code>dr-runbook.md</code></td><td>データ保持・SLA・DR手順</td></tr>
+  <tr><td><code>docs/security-assessment.md</code> / <code>rls-audit.md</code></td><td>セキュリティ評価・RLS監査</td></tr>
+  <tr><td><code>docs/5year_sales_plan.xlsx</code></td><td>5カ年販売計画（¥3,200/店/月 前提）</td></tr>
+</table>
+
+<footer>
+  <span>Intereco Monitor システムハンドブック v1.1 — 2026-07-20</span>
+  <span>本書の価格章（§16）は検討たたき台であり、確定価格ではありません。</span>
+</footer>
+
+</div>
+</body>
+</html>

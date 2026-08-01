@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Intereco オンボーディング・ランブック — テナント開通 & Beelink 構築</title>
+<style>
+  :root{
+    --paper:#F7F5F1; --paper2:#FFFFFF; --paper3:#E4DED3;
+    --ink:#0F0F10; --ink2:#2A2A2C; --ink3:#5B5B5F;
+    --line:#D6CFC1; --line2:#B9B0A0;
+    --accent:#2C4A7E; --accent-soft:#E4EAF3;
+    --ok:#2F7A4F; --ok-soft:#E5F0E9; --warn:#B5761A; --warn-soft:#F6EFE2; --danger:#A3332B; --danger-soft:#F5E4E2;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--paper);color:var(--ink);
+    font-family:"Noto Sans JP","Hiragino Sans",sans-serif;
+    font-size:14px;line-height:1.8;-webkit-font-smoothing:antialiased}
+  .mono{font-family:"IBM Plex Mono","SF Mono",Menlo,monospace;font-variant-numeric:tabular-nums}
+  .wrap{max-width:1040px;margin:0 auto;padding:0 32px 120px}
+
+  header.cover{background:var(--ink);color:#F2F0EC;margin:0 -32px;padding:52px 40px 40px;border-radius:0 0 6px 6px}
+  header.cover .kicker{font-family:"Inter Tight",sans-serif;font-size:12px;letter-spacing:.22em;color:#9aa7bf;margin-bottom:14px}
+  header.cover h1{font-size:30px;font-weight:700;line-height:1.4}
+  header.cover .sub{font-size:14px;color:#B9B0A0;margin-top:8px}
+  .meta{display:flex;flex-wrap:wrap;gap:28px;margin-top:26px}
+  .meta div{min-width:110px}
+  .meta .k{font-size:11px;color:#8b8b90;margin-bottom:2px}
+  .meta .v{font-size:15px;font-weight:700}
+  .meta .v.mono{font-size:15px}
+
+  h2{font-size:21px;font-weight:700;margin:64px 0 14px;display:flex;align-items:center;gap:12px;
+     border-bottom:2px solid var(--accent);padding-bottom:8px}
+  h2 .no{flex:none;width:26px;height:26px;border-radius:4px;background:var(--accent);color:#fff;
+     font-family:"Inter Tight",monospace;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center}
+  h3{font-size:15px;font-weight:700;margin:28px 0 8px}
+  p{margin:0 0 12px}
+  ul{margin:0 0 14px;padding-left:1.5em}
+  li{margin-bottom:4px}
+  code{font-family:"IBM Plex Mono",Menlo,monospace;font-size:12px;background:var(--paper);
+       border:1px solid var(--line);border-radius:4px;padding:1px 6px;white-space:nowrap}
+  .small{font-size:12px;color:var(--ink3)}
+
+  .card{background:var(--paper2);border:1px solid var(--line);border-radius:6px;padding:18px 22px;margin:14px 0}
+  .card.warn{background:var(--warn-soft);border-color:var(--warn)}
+  .card.danger{background:var(--danger-soft);border-color:var(--danger)}
+  .card.new{background:var(--accent-soft);border-color:var(--accent)}
+  .card h3{margin-top:0}
+
+  pre{background:var(--ink);color:#E8E6E1;border-radius:6px;padding:14px 16px;margin:12px 0;overflow-x:auto;
+      font-family:"IBM Plex Mono",Menlo,monospace;font-size:12px;line-height:1.7}
+  pre code{background:none;border:none;padding:0;white-space:pre;color:inherit}
+
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:18px 0}
+  @media(max-width:720px){.stats{grid-template-columns:1fr}}
+  .stat{background:var(--paper2);border:1px solid var(--line);border-radius:6px;padding:16px 20px}
+  .stat .k{font-size:11px;color:var(--ink3)}
+  .stat .v{font-size:22px;font-weight:700;margin:2px 0}
+  .stat .v.ok{color:var(--ok)} .stat .v.warn{color:var(--warn)} .stat .v.accent{color:var(--accent)}
+  .stat .d{font-size:11.5px;color:var(--ink3);line-height:1.6}
+
+  table{width:100%;border-collapse:collapse;margin:12px 0 20px;background:var(--paper2);
+        border:1px solid var(--line);border-radius:6px;overflow:hidden;font-size:13px}
+  th{background:var(--paper);text-align:left;font-weight:700;font-size:12px;color:var(--ink2);
+     padding:8px 13px;border-bottom:1px solid var(--line)}
+  td{padding:8px 13px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td .step{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;
+     background:var(--accent);color:#fff;font-weight:700;font-size:12px;flex:none}
+
+  .badge{display:inline-block;font-size:11px;font-weight:500;border-radius:4px;padding:1px 9px;white-space:nowrap}
+  .b-done{background:var(--ok-soft);color:var(--ok)}
+  .b-new{background:var(--accent-soft);color:var(--accent)}
+  .b-todo{background:var(--paper3);color:var(--ink3)}
+  .b-wait{background:var(--warn-soft);color:var(--warn)}
+  .b-risk{background:var(--danger-soft);color:var(--danger)}
+
+  .flow{display:flex;flex-wrap:wrap;align-items:stretch;gap:0;margin:20px 0}
+  .flow .node{background:var(--paper2);border:1px solid var(--line);border-radius:6px;padding:12px 14px;min-width:150px;flex:1}
+  .flow .node .n{font-size:11px;color:var(--accent);font-weight:700}
+  .flow .node .t{font-size:13px;font-weight:700;margin:2px 0}
+  .flow .node .w{font-size:11px;color:var(--ink3)}
+  .flow .arr{display:flex;align-items:center;color:var(--line2);font-size:20px;padding:0 8px}
+  @media(max-width:760px){.flow{flex-direction:column}.flow .arr{transform:rotate(90deg);padding:4px 0}}
+
+  .check{list-style:none;padding-left:0}
+  .check li{display:flex;gap:10px;align-items:flex-start;padding:7px 0;border-bottom:1px dashed var(--line)}
+  .check li:last-child{border-bottom:none}
+  .check .box{flex:none;width:16px;height:16px;border:1.5px solid var(--line2);border-radius:3px;margin-top:4px}
+
+  .toc{background:var(--paper2);border:1px solid var(--line);border-radius:6px;padding:16px 22px;margin:26px 0}
+  .toc ol{margin:0;padding-left:1.4em}
+  .toc a{color:var(--accent);text-decoration:none}
+  .toc a:hover{text-decoration:underline}
+
+  footer{margin-top:60px;padding-top:20px;border-top:1px solid var(--line);font-size:12px;color:var(--ink3)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="cover">
+  <div class="kicker">INTERECO MONITOR — ONBOARDING RUNBOOK</div>
+  <h1>テナント開通 &amp; Beelink 構築 手順書</h1>
+  <div class="sub">新規メンバー向け — PoC / 新規店舗を「ゼロから手荷物検査が動く」まで通す実務ランブック</div>
+  <div class="meta">
+    <div><div class="k">対象構成</div><div class="v">② 中継ユニット（relay）</div></div>
+    <div><div class="k">実機</div><div class="v">Beelink Mini-S</div></div>
+    <div><div class="k">サービス名</div><div class="v mono">intereco-edge</div></div>
+    <div><div class="k">更新日</div><div class="v mono">2026-08-02</div></div>
+  </div>
+</header>
+
+<div class="toc">
+  <strong>目次</strong>
+  <ol>
+    <li><a href="#s0">はじめに — 前提と用語</a></li>
+    <li><a href="#s1">全体像 — 開通の流れ</a></li>
+    <li><a href="#s2">A. テナント開通手順（本部→現地）</a></li>
+    <li><a href="#s3">B. Beelink 構築手順（②中継ユニット）</a></li>
+    <li><a href="#s3b">B-2. AI201 本番機セットアップ（実機確定機）</a></li>
+    <li><a href="#s3c">B-3. 時刻同期（NTP）標準構成 — エッジ＝店舗の時刻源</a></li>
+    <li><a href="#s4">開通前チェックリスト</a></li>
+    <li><a href="#s5">残課題まとめ（GA前に効く運用ギャップ）</a></li>
+    <li><a href="#s6">トラブル初動 — よくある落とし穴</a></li>
+  </ol>
+</div>
+
+<h2 id="s0"><span class="no">0</span>はじめに — 前提と用語</h2>
+<p>Intereco Monitor は Next.js（Vercel）＋ Supabase（東京）＋ 現地エッジ（Beelink）で動く、既存NVRを活かした録画モニタリング基盤です。手荷物検査はその1モジュールです。<strong>録画・物体検知はNVRに任せ、エッジは「RTSP取得→合成/ライブ/VOD/検査クリップ→クラウド配信」だけ</strong>を担う軽量構成（②relay）が本命です。</p>
+
+<table>
+  <tr><th>用語</th><th>意味</th></tr>
+  <tr><td class="mono">テナント</td><td>契約単位（＝顧客企業）。この配下に店舗・ユーザー・エッジがぶら下がる。RLSで完全分離。</td></tr>
+  <tr><td class="mono">② relay / 中継ユニット</td><td>店舗に置く小型PC（N100級・Beelink等）。録画せず中継のみ＝安価・軽量・アウトバウンド通信のみ。<strong>本命構成</strong>。</td></tr>
+  <tr><td class="mono">エンロール</td><td>エッジの初回自己登録。本部発行のQR/トークンを現地で読ませ、<code>device_token</code>とSFU資格を払い出す。手貼り不要。</td></tr>
+  <tr><td class="mono">OTA</td><td>エッジの自律自己更新。本部が目標版SHAを宣言→エッジがpull→preflight→切替→健全性確認→昇格 or ロールバック。</td></tr>
+  <tr><td class="mono">baggage_manager</td><td>手荷物検査の店長ロール。ライブ視聴は不可、<code>/baggage</code>・<code>/kiosk</code>・検査APIのみ許可。</td></tr>
+</table>
+
+<div class="card new">
+  <h3>この手順書のスコープ</h3>
+  <p style="margin:0">PoC〜初期店舗を <strong>② relay 構成</strong> で開通する実務に絞っています。① 本部直結 / ③ Frigate録画 はGA後の別構成のため対象外です。DB本体は東京Supabase <code class="mono">vywvpcjbicrtcyvzmrwh</code>。</p>
+</div>
+
+<h2 id="s1"><span class="no">1</span>全体像 — 開通の流れ</h2>
+<p>「本部がテナントと店舗を用意 → 現地でエッジを繋ぐ → 手荷物検査を使える状態にする」の3ブロックです。</p>
+
+<div class="flow">
+  <div class="node"><div class="n">本部 A-1〜2</div><div class="t">テナント・店舗</div><div class="w">tenant / stores / 管理者</div></div>
+  <div class="arr">→</div>
+  <div class="node"><div class="n">本部 A-3</div><div class="t">エッジ登録</div><div class="w">QR/トークン発行</div></div>
+  <div class="arr">→</div>
+  <div class="node"><div class="n">現地 B</div><div class="t">Beelink 構築</div><div class="w">agent / tunnel / enroll</div></div>
+  <div class="arr">→</div>
+  <div class="node"><div class="n">A-4</div><div class="t">NVR/カメラ</div><div class="w">ONVIF探索・grid・接続テスト</div></div>
+  <div class="arr">→</div>
+  <div class="node"><div class="n">A-5〜7</div><div class="t">手荷物検査 開通</div><div class="w">PIN・顔登録・同意・実機E2E</div></div>
+</div>
+
+<h2 id="s2"><span class="no">2</span>A. テナント開通手順（本部→現地）</h2>
+<p>super_admin（本部）が主体。手荷物検査を使う店舗を「ゼロから使える」状態にするまでの7ステップです。</p>
+
+<table>
+  <tr><th style="width:36px">#</th><th>手順</th><th>実施場所 / 実体</th><th style="width:120px">状態</th></tr>
+  <tr>
+    <td><span class="step">1</span></td>
+    <td><strong>テナント作成 ＋ テナント管理者ユーザー作成</strong><br><span class="small">契約単位を作り、その管理者を1名用意する。</span></td>
+    <td>super_admin が <code class="mono">tenants</code> とユーザーを <strong>SQL / seed で直接作成</strong>（専用UIなし）。</td>
+    <td><span class="badge b-risk">UI未整備</span></td>
+  </tr>
+  <tr>
+    <td><span class="step">2</span></td>
+    <td><strong>店舗の登録</strong><br><span class="small">name / 住所 / 緯度経度 / timezone / tenant_id。</span></td>
+    <td><code>/admin/stores</code>（既存編集）または CSV一括インポート <code class="mono">POST /api/admin/import/stores</code>。</td>
+    <td><span class="badge b-wait">新規フォーム無</span></td>
+  </tr>
+  <tr>
+    <td><span class="step">3</span></td>
+    <td><strong>エッジ登録（②relay）</strong><br><span class="small">エッジ行を作り、現地に渡すQR/トークンを発行。</span></td>
+    <td><code>/admin/edges/new</code> → 構成 relay ＋ tier(16/32/48) ＋ 名前 → <code class="mono">edge_devices</code>行 ＋ <strong>エンロールトークン発行 → QR表示</strong>。</td>
+    <td><span class="badge b-done">実装済</span></td>
+  </tr>
+  <tr>
+    <td><span class="step">4</span></td>
+    <td><strong>NVR / カメラ登録</strong><br><span class="small">現地Beelink構築（B）後、ウィザードで接続確認まで。</span></td>
+    <td>NVR接続(host/creds) → <strong>ONVIF自動探索</strong> → ch列挙 → <strong>grid割当(0–15)</strong> → 接続テスト（RTSP/snapshot到達＝緑）。</td>
+    <td><span class="badge b-done">実装済</span></td>
+  </tr>
+  <tr>
+    <td><span class="step">5</span></td>
+    <td><strong>キオスクPIN発行</strong><br><span class="small">iPadを店舗に紐づけるログイン情報。</span></td>
+    <td><code>/baggage/ipad</code> で店舗別6桁PIN＋QR発行 → iPadでPINログイン。</td>
+    <td><span class="badge b-done">実装済</span></td>
+  </tr>
+  <tr>
+    <td><span class="step">6</span></td>
+    <td><strong>従業員の顔登録・同意設定</strong><br><span class="small">退室時の顔照合に必須の元データ。</span></td>
+    <td>管理UIで従業員登録＋顔登録（同意記録）。来訪者同意文言・入退室あいさつ文言は <code>/admin/baggage</code> で編集。</td>
+    <td><span class="badge b-risk">事前完了が前提</span></td>
+  </tr>
+  <tr>
+    <td><span class="step">7</span></td>
+    <td><strong>iPad 実機E2E</strong><br><span class="small">現場で入室/退室が一巡することを確認。</span></td>
+    <td>PWA「ホーム画面に追加」→ 店舗キオスクが起動 → 入室（顔撮影）/退室（顔認証＋手荷物検査）疎通。</td>
+    <td><span class="badge b-new">再読込必須</span></td>
+  </tr>
+</table>
+
+<div class="card warn">
+  <h3>⚠️ A-6 の要注意点 — 顔登録は開通の前提</h3>
+  <p style="margin:0">開通前に <strong>全従業員の顔登録が完了していないと、退室照合がすべてアンマッチ</strong>になります（バグではなく元データ不足）。店舗ごとに「従業員名簿 → 顔登録 → 件数突合」を開通チェックリスト（§4）で必ず消し込むこと。</p>
+</div>
+
+<div class="card">
+  <h3>店舗CSVインポートの形（A-2）</h3>
+  <p class="small" style="margin:0 0 8px">ヘッダ行必須。<code class="mono">tenant_id</code> は新規挿入時に必須（省略時は実行者の所属テナント）。<code class="mono">external_id</code> にUUIDを入れると id 一致でupsert。</p>
+<pre><code>name,address,area_code,latitude,longitude,timezone,tenant_id,external_id
+○○店,東京都…,13,35.68,139.76,Asia/Tokyo,&lt;tenant-uuid&gt;,</code></pre>
+</div>
+
+<h2 id="s3"><span class="no">3</span>B. Beelink 構築手順（②中継ユニット）</h2>
+<div class="card danger">
+  <h3>🔴 実機のサービス名は <code class="mono" style="background:rgba(255,255,255,.4)">intereco-edge</code></h3>
+  <p style="margin:0">配布テンプレート（<code class="mono">edge-agent</code> / <code class="mono">node dist</code> / ユーザー <code class="mono">edge</code>）とは<strong>別構成</strong>です。PoC実機は <strong>Bun直実行・ユーザー <code class="mono">intereco</code>・Frigateは同居Docker</strong>。<code>systemctl status edge-agent</code> は "Unit not found" になります。必ず <code class="mono">intereco-edge</code> を使うこと。</p>
+</div>
+
+<table>
+  <tr><th style="width:36px">#</th><th>手順</th><th>内容</th></tr>
+  <tr>
+    <td><span class="step">1</span></td>
+    <td><strong>ハード</strong></td>
+    <td>Beelink Mini-S（Intel N系 iGPU / QuickSync）。本番本命は産業用ファンレスN100・16GB・2NIC。録画/検知はNVR任せで軽量。</td>
+  </tr>
+  <tr>
+    <td><span class="step">2</span></td>
+    <td><strong>OS / 前提</strong></td>
+    <td>Ubuntu。<code class="mono">ffmpeg</code>、<strong>Bun</strong>（<code class="mono">/home/intereco/.bun/bin/bun</code>）。実行ユーザー <code class="mono">intereco</code>（home <code class="mono">/home/intereco</code>）。</td>
+  </tr>
+  <tr>
+    <td><span class="step">3</span></td>
+    <td><strong>エージェント配置</strong></td>
+    <td>リポジトリ配置 → <code class="mono">bun install</code> → <code class="mono">agent.env</code> 作成（Supabase URL/anon、<code class="mono">MONITOR_URL</code> 等。<code class="mono">device_token</code> は §7エンロールで払出）。</td>
+  </tr>
+  <tr>
+    <td><span class="step">4</span></td>
+    <td><strong>systemd 常駐</strong></td>
+    <td><code class="mono">/etc/systemd/system/intereco-edge.service</code> → <code class="mono">enable --now</code>。状態・ログは下のコマンド参照。</td>
+  </tr>
+  <tr>
+    <td><span class="step">5</span></td>
+    <td><strong>Cloudflare Tunnel</strong></td>
+    <td><code class="mono">cloudflared-intereco</code> 常駐。高画質固定URL <code class="mono">poc-beelink.genesis-edge.com</code> ＋ Cloudflare Access（許可メール制）。go2rtc公開オリジンを配下カメラが継承。</td>
+  </tr>
+  <tr>
+    <td><span class="step">6</span></td>
+    <td><strong>Frigate（必要時のみ）</strong></td>
+    <td>同一Beelink上のDockerで常駐（<code class="mono">docker ps/restart/logs -f frigate</code>）。②relayでは基本不要。</td>
+  </tr>
+  <tr>
+    <td><span class="step">7</span></td>
+    <td><strong>エンロール</strong></td>
+    <td>A-3のQR/トークンを読取 → <code class="mono">POST /api/edge/enroll{token}</code> → <code class="mono">device_token</code> ＋ SFU資格を払出（単一使用・TTL・テナント/店舗束縛を検証）。</td>
+  </tr>
+  <tr>
+    <td><span class="step">8</span></td>
+    <td><strong>OTA 自己更新</strong></td>
+    <td>本部が <code class="mono">desired_agent_version</code>（gitショートSHA）を宣言 → 約5分でpull → preflight → 切替 → 健全性（再起動後90秒以内heartbeat＋90秒安定）→ 昇格 or 既知良好版へロールバック。</td>
+  </tr>
+  <tr>
+    <td><span class="step">9</span></td>
+    <td><strong>疎通確認</strong></td>
+    <td>16分割グリッド／単一ライブ／VOD取得／手荷物検査クリップ切出し を <code class="mono">intereco-edge</code> ログで確認。</td>
+  </tr>
+</table>
+
+<h3>実機の運用コマンド（Beelink に SSH 後）</h3>
+<pre><code>sudo systemctl status  intereco-edge          # 状態確認
+sudo systemctl restart intereco-edge          # 再起動（必要時のみ）
+sudo journalctl -u     intereco-edge -f          # ログ追尾（q で抜ける）
+sudo journalctl -u     intereco-edge -f -o cat   # JSON ログを全幅表示
+
+docker ps | grep frigate     # Frigate 稼働確認（同居時）
+docker restart frigate       # Frigate 再起動</code></pre>
+<p class="small">※ SSH・エッジ操作は現地担当（人）が実行。本手順書はコマンドを提示するのみ。</p>
+
+<h2 id="s3b"><span class="no" style="width:auto;padding:0 6px">B2</span>AI201 本番機セットアップ手順（実機確定機）</h2>
+<div class="card new">
+  <h3>本番機を <span class="mono">AIOPCWA AI201</span> に確定（2026-07-23 購入）</h3>
+  <p style="margin:0">②中継ユニットの本番候補として <strong>AIOPCWA AI201</strong>（Intel N100・<strong>ファンレス</strong>・<strong>2×2.5GbE i226V</strong>・16GB / 256GB・RS232/485・7/24無音）を採用。<a href="https://www.amazon.co.jp/AIOPCWA-2-5GbE-Fanless-%E5%9E%8B%E7%95%AAAI201-Windows/dp/B0D44SVY8S">Amazon.co.jp B0D44SVY8S</a>。本節は上の B 手順を<strong>この機に合わせて具体化</strong>したもの。選定根拠は <code>docs/edge-configs-and-relay-hardware.md</code> §2-B。</p>
+</div>
+
+<div class="card danger">
+  <h3>🔴 この機の固有ポイント（先に押さえる）</h3>
+  <ul style="margin:0">
+    <li><strong>プリインは Windows 11 Pro</strong> → <strong>Ubuntu を上書きインストール</strong>（用途はUbuntu relay。Windowsは使わない）。</li>
+    <li><strong>NIC が新しめの i226-V（2.5GbE×2）</strong> → <strong>カーネルの新しい Ubuntu を使う</strong>（<span class="mono">22.04.4 以降</span> もしくは <span class="mono">24.04 LTS</span>）。古いISOだと NIC 認識で詰まる。</li>
+    <li><strong>ファンレス筐体</strong> → 放熱スペースを確保（積み重ね・密閉を避ける）。24/7 で温度を監視。</li>
+    <li>当面 <strong>Tier S＝最大16カメラ</strong>なので <strong>2.5GbE は1口（WAN）で成立</strong>。将来カメラ網を分離するとき2口目を使う。</li>
+  </ul>
+</div>
+
+<table>
+  <tr><th style="width:36px">#</th><th>手順</th><th>内容（AI201 具体）</th></tr>
+  <tr>
+    <td><span class="step">1</span></td>
+    <td><strong>開梱・設置</strong></td>
+    <td>放熱スペース確保して設置。LAN を <span class="mono">enp*(2.5GbE)</span> の1口目に接続。電源投入。<span class="small">(所要15分)</span></td>
+  </tr>
+  <tr>
+    <td><span class="step">2</span></td>
+    <td><strong>Ubuntu 上書き</strong></td>
+    <td>USBインストーラ（<strong>Ubuntu 24.04 LTS 推奨</strong>）で Windows を上書き。ユーザー <code>intereco</code>（home <code>/home/intereco</code>）を作成。SSH有効化。</td>
+  </tr>
+  <tr>
+    <td><span class="step">3</span></td>
+    <td><strong>iGPU / NIC 確認</strong></td>
+    <td><strong>ここを最初に緑にする</strong>。QuickSync(VAAPI)と 2.5GbE×2 の認識を下のコマンドで確認（詰まりの主因を先に潰す）。</td>
+  </tr>
+  <tr>
+    <td><span class="step">4</span></td>
+    <td><strong>前提パッケージ</strong></td>
+    <td><code>ffmpeg</code> と <strong>Bun</strong>（<code>/home/intereco/.bun/bin/bun</code>）を導入。</td>
+  </tr>
+  <tr>
+    <td><span class="step">5</span></td>
+    <td><strong>エージェント配置</strong></td>
+    <td>リポジトリ配置 → <code>bun install</code> → <code>agent.env</code> 作成（Supabase URL/anon・<code>MONITOR_URL</code> 等。<code>device_token</code> は §7 エンロールで払出）。</td>
+  </tr>
+  <tr>
+    <td><span class="step">6</span></td>
+    <td><strong>systemd 常駐</strong></td>
+    <td><code>/etc/systemd/system/intereco-edge.service</code> → <code>enable --now</code>。サービス名は必ず <code>intereco-edge</code>。</td>
+  </tr>
+  <tr>
+    <td><span class="step">7</span></td>
+    <td><strong>Cloudflare Tunnel</strong></td>
+    <td><code>cloudflared-intereco</code> 常駐。高画質固定URL＋Cloudflare Access（許可メール制）。<span class="small">§B-5 と同一手順。</span></td>
+  </tr>
+  <tr>
+    <td><span class="step">8</span></td>
+    <td><strong>エンロール</strong></td>
+    <td>A-3 の QR/トークンを読取 → <code>device_token</code> ＋ SFU資格を払出。</td>
+  </tr>
+  <tr>
+    <td><span class="step">9</span></td>
+    <td><strong>疎通＋ベンチ</strong></td>
+    <td>16分割／単一ライブ／VOD取得／検査クリップを確認。同時に下の<strong>ベンチ観点</strong>で §2-B 選定チェックを消し込む。</td>
+  </tr>
+</table>
+
+<h3>#3 の確認コマンド（iGPU QuickSync ＋ 2.5GbE）</h3>
+<pre><code># QuickSync(VAAPI) が見えるか
+sudo apt update &amp;&amp; sudo apt install -y intel-media-va-driver vainfo intel-gpu-tools
+ls -l /dev/dri/renderD128           # 存在すること
+vainfo                              # H264 / HEVC の Encode/Decode エントリが出ること
+
+# 2.5GbE(i226-V) が2口とも見えるか
+ip -br link                         # enp* / eth* が2つ（2.5GbE×2）
+ethtool enp1s0 | grep -i speed      # 2500Mb/s でリンクすること（口名は環境依存）</code></pre>
+<p class="small">※ <code>/dev/dri/renderD128</code> が無い／<code>vainfo</code> がエラー＝VAAPI未設定。ここが緑にならないと合成/ライブ/VODが CPU 処理に落ちて重くなる。先に解決してから #4 以降へ。</p>
+
+<h3>#9 のベンチ観点（§2-B 選定チェックの消し込み）</h3>
+<div class="card">
+<ul class="check">
+  <li><span class="box"></span><div><strong>16ch合成(0.5fps)＋高画質ライブ1本＋VOD1本 同時</strong>を回して安定表示</div></li>
+  <li><span class="box"></span><div><strong>iGPUデコード負荷</strong>を <code>intel_gpu_top</code> で確認（合成がHWデコードに載っている）</div></li>
+  <li><span class="box"></span><div><strong>筐体温度</strong>を <code>sensors</code> で継続監視＝<strong>サーマルスロットリングが起きない</strong>（ファンレスの要）</div></li>
+  <li><span class="box"></span><div><strong>24時間連続</strong>で heartbeat 安定・プロセス無再起動</div></li>
+  <li><span class="box"></span><div>（可能なら）ワットチェッカーで<strong>消費電力</strong>を実測</div></li>
+</ul>
+</div>
+<p class="small">満たせば「N100 / 16GB / 2NIC の1SKU」を本番SKUとして確定（<code>edge-configs-and-relay-hardware.md</code> §2-B へ結果を反映）。</p>
+
+<h2 id="s3c"><span class="no" style="width:auto;padding:0 6px">B3</span>時刻同期（NTP）標準構成 — エッジ＝店舗の時刻源</h2>
+
+<div class="card danger">
+  <h3>🔴 なぜ必須か（2026-08-01 実弾BCPの教訓）</h3>
+  <p style="margin:0">BCP・発報前コマ・検査クリップはすべて<strong>NVRのタイムライン</strong>から切り出すため、<strong>NVRの時計ズレがそのまま証跡に乗る</strong>（実例: NTP未設定のNU101が+3分進み、電波時計と映像の取得時刻が食い違った）。i-PRO NVRの公開CGIに時刻を書き込むAPIは存在しないため、<strong>NTPが唯一のプログラマティックな時刻補正手段</strong>。開通時に必ずこの節を消し込む。</p>
+</div>
+
+<p><strong>標準構成:</strong> エッジ（Beelink/AI201）に chrony を立てて<strong>店舗LANのNTPサーバ</strong>にし、NVR・カメラはエッジを参照する。エッジ自身は Ubuntu 標準の chrony がインターネットの公開NTP（Canonical プール）に<strong>常時同期</strong>（64秒〜約17分の適応間隔・ズレは常時ミリ秒単位）。これにより <strong>NVR/カメラがインターネットに出られないLANでも時刻が揃う</strong>。</p>
+
+<div class="flow">
+  <div class="node"><div class="n">公開NTP</div><div class="t">Canonical プール</div><div class="w">インターネット</div></div>
+  <div class="arr">→ 常時（chrony）</div>
+  <div class="node"><div class="n">エッジ</div><div class="t">chrony = NTPサーバ</div><div class="w">UDP 123 をLANに開放</div></div>
+  <div class="arr">→ NVRのポーリング間隔</div>
+  <div class="node"><div class="n">NVR</div><div class="t">NTPクライアント設定</div><div class="w">サーバ=エッジIP</div></div>
+  <div class="arr">→</div>
+  <div class="node"><div class="n">カメラ</div><div class="t">NVR/エッジを参照</div><div class="w">OSD時刻も揃う</div></div>
+</div>
+
+<h3>手順（エッジ側 — SSH で3分）</h3>
+<pre><code># 1) chrony 導入（Ubuntu は大抵プリイン。念のため）
+sudo apt-get install -y chrony
+
+# 2) 店舗LANセグメントへの配信を許可（★セグメントは店舗に合わせる）
+echo 'allow 192.168.0.0/24' | sudo tee -a /etc/chrony/chrony.conf
+
+# 3) ファイアウォール開放（ufw 有効機は必須 — これを忘れると無応答）
+sudo ufw allow 123/udp
+
+# 4) 反映
+sudo systemctl restart chrony</code></pre>
+
+<h3>検証（LAN内の別マシンから）</h3>
+<pre><code>sntp &lt;エッジIP&gt;          # macOS の例。Linux は chronyc / ntpdate -q
+# → 「-0.023632 +/- 0.234156 192.168.0.100」のような1行が返ればOK</code></pre>
+<ul>
+  <li><strong>「Exchange failed: Timeout」</strong> → ufw で UDP 123 が塞がっている（手順3）。</li>
+  <li><strong>「Server not synchronized」</strong> → chrony 再起動直後で上位と同期中。<strong>1〜2分待って再実行</strong>。</li>
+</ul>
+
+<h3>機器側の設定</h3>
+<table>
+  <tr><th>機器</th><th>設定</th></tr>
+  <tr><td>i-PRO NVR（NU101等）</td><td>設定画面 → 日時 → NTP を「使用する」、サーバアドレス＝<strong>エッジのLAN IP</strong>。タイムゾーン JST を確認。</td></tr>
+  <tr><td>カメラ</td><td>NVR の NTP 配布機能があれば NVR 参照、なければ各カメラの NTP をエッジIPに。OSD 表示時刻が揃うことを目視確認。</td></tr>
+  <tr><td>エッジ本体</td><td>設定不要（Ubuntu 既定で公開NTPに常時同期）。<code>chronyc tracking</code> で Stratum 3 前後・Ref time が現在時刻なら健全。</td></tr>
+</table>
+
+<div class="card">
+  <h3>設計メモ</h3>
+  <ul style="margin:0">
+    <li><strong>ネット断時の挙動:</strong> chrony は上位と同期できない間、既定では「未同期」として配信を止める（誤時刻の拡散防止）。長期オフラインでも配信を続けたい店舗のみ <code>local stratum 10</code> を chrony.conf に追記（自走時計を配る設計判断。通常は不要）。</li>
+    <li><strong>実績:</strong> 2026-08-02 beelink-demo + NU101 で実証（+3分ズレ → 公共NTPで±6秒 → エッジ配信構成へ切替）。Mac からの検証値 -0.02秒。</li>
+    <li><strong>時刻設定APIについて:</strong> i-PRO 公開CGI（httpdl / recordedtime / as_getinfo / snapshot）に時刻設定は無い。設定画面裏の非公開CGI直叩きはFW更新で壊れるため禁止。外部からの時刻設定/オフセット取得APIの有無は i-PRO 面談 Q7 で確認中。</li>
+  </ul>
+</div>
+
+<h2 id="s4"><span class="no">4</span>開通前チェックリスト</h2>
+<p>店舗ごとに、開通の「Go」を出す前に消し込む。</p>
+
+<div class="card">
+<ul class="check">
+  <li><span class="box"></span><div><strong>テナント・管理者</strong> が作成済み（該当テナントでログイン可）</div></li>
+  <li><span class="box"></span><div><strong>店舗行</strong> が登録済み（tenant_id・timezone=Asia/Tokyo）</div></li>
+  <li><span class="box"></span><div><strong>エッジがエンロール完了</strong>（<code class="mono">device_token</code> 払出済・heartbeat受信）</div></li>
+  <li><span class="box"></span><div><strong>NVR/カメラ接続テストが緑</strong>（ONVIF探索→grid割当→RTSP/snapshot到達）</div></li>
+  <li><span class="box"></span><div>🔴 <strong>NTP 統一が完了</strong>（B-3: エッジ chrony 配信 → NVR・カメラがエッジ参照。OSD時刻と実時刻の一致を目視確認）</div></li>
+  <li><span class="box"></span><div><strong>16分割グリッド・単一ライブ</strong> が本部画面で表示できる</div></li>
+  <li><span class="box"></span><div><strong>キオスクPIN発行済</strong>・iPadでPINログインできる</div></li>
+  <li><span class="box"></span><div>🔴 <strong>全従業員の顔登録が完了</strong>（名簿件数と登録件数が一致）</div></li>
+  <li><span class="box"></span><div><strong>同意文言・あいさつ文言</strong> が店舗向けに設定済</div></li>
+  <li><span class="box"></span><div><strong>iPad実機E2E</strong>：入室（顔撮影）→退室（顔認証＋検査）が一巡・クリップ再生できる</div></li>
+  <li><span class="box"></span><div><strong>クリップ保存先</strong> が確定（R2 / 回線制約店はSupabase継続。§6参照）</div></li>
+</ul>
+</div>
+
+<h2 id="s5"><span class="no">5</span>残課題まとめ（GA前に効く運用ギャップ）</h2>
+<div class="stats">
+  <div class="stat"><div class="k">運用ギャップ</div><div class="v warn">4</div><div class="d">多店舗GA前に効く</div></div>
+  <div class="stat"><div class="k">主要機能</div><div class="v ok">開通可</div><div class="d">PoC/単店は実働確認済</div></div>
+  <div class="stat"><div class="k">クリップ保存</div><div class="v accent">R2/Supabase</div><div class="d">回線で自動フォールバック</div></div>
+</div>
+
+<table>
+  <tr><th>#</th><th>残課題</th><th>影響</th><th>暫定対処</th></tr>
+  <tr><td>1</td><td><strong>テナント作成／新規店舗作成のUIが無い</strong></td><td>代理店経由の多店舗展開でボトルネック</td><td>SQL・CSVで運用（PoC/単店は支障なし）</td></tr>
+  <tr><td>2</td><td><strong>顔登録の事前チェックリストが仕組み化されていない</strong></td><td>未登録だと退室が全アンマッチ</td><td>本§4チェックリストで消し込む</td></tr>
+  <tr><td>3</td><td><strong>Vault（NVR資格情報の本格復号）未実装</strong></td><td>秘密情報の運用強度</td><td>現行の暗号運用で継続</td></tr>
+  <tr><td>4</td><td><strong>NVR時刻差 <code class="mono">clock_offset_sec</code> 未実測</strong></td><td>検査詳細で「—」表示</td><td>実測は今後（クリップ取得自体は成立）</td></tr>
+</table>
+
+<div class="card new">
+  <h3>クリップ保存の設計状況（参考）</h3>
+  <p style="margin:0">検査クリップは <strong>Cloudflare R2</strong> へ直上げ（エッジ presigned PUT）が正。未設定・到達不可時は <strong>Supabase へ自動フォールバック</strong>し運用は止まらない。<br>
+  🔴 <strong>PoC Beelink店はeo光回線が <code class="mono">*.r2.cloudflarestorage.com</code> をSNI遮断</strong>のため、この店だけ Supabase継続（案B確定）。コード/設計は正常で、<strong>フィルタの無い本番店ではR2が自動有効</strong>になる。</p>
+</div>
+
+<h2 id="s6"><span class="no">6</span>トラブル初動 — よくある落とし穴</h2>
+<table>
+  <tr><th>症状</th><th>真因</th><th>初動</th></tr>
+  <tr>
+    <td>OTAが更新されずロールバックになる</td>
+    <td>目標版SHAに<strong>末尾スペース混入</strong> → <code class="mono">git worktree add</code> が invalid reference → 恒久 stage_failed → cooldownで同SHA再指定もスキップ</td>
+    <td>空白なしで再入力（別文字列扱いでcooldown回避）。入力trimは#203で恒久修正済</td>
+  </tr>
+  <tr>
+    <td>特定時刻の検査クリップが両カメラとも取得できない</td>
+    <td>i-PRO <code class="mono">httpdl.cgi</code> は<strong>分単位・秒00固定</strong>。同一分内の短い検査窓で START==END → 空応答 → 恒久失敗</td>
+    <td><code class="mono">iproVodMinuteRange</code>（START分切捨/END分切上）で修正済（#202）。手動「映像を再取得」ボタンも有</td>
+  </tr>
+  <tr>
+    <td>退室の顔照合が合わない</td>
+    <td>その人が<strong>未登録</strong> or 閾値未達（バグではない）</td>
+    <td>顔登録の有無を確認。閾値は72で様子見中</td>
+  </tr>
+  <tr>
+    <td>iPadに新機能が反映されない</td>
+    <td>PWA SPAのためデプロイ後に自動更新されない</td>
+    <td><strong>アプリを再読込</strong>（ホーム画面アイコンから開き直す）</td>
+  </tr>
+  <tr>
+    <td>Safariでホーム画面追加すると管理画面が開く</td>
+    <td>共通manifestの <code class="mono">start_url</code> は本部監視用（/stores）</td>
+    <td>店舗別manifest（#196）で対策済。店舗キオスクURLから追加すること</td>
+  </tr>
+  <tr>
+    <td>「確認済み」が動画を見る前に押せてしまう</td>
+    <td>—</td>
+    <td>再生完了までゲート（#200）で封鎖済。仕様どおり</td>
+  </tr>
+</table>
+
+<div class="card">
+  <h3>障害切り分けの初手（エッジ側）</h3>
+<pre><code>sudo systemctl status  intereco-edge              # 落ちていないか
+sudo journalctl -u intereco-edge -n 100 -o cat    # 直近ログ
+# トンネル: poc-beelink.genesis-edge.com へ到達するか（Cloudflare Access）
+# クリップ: "R2 path error → supabase fallback" は警告のみで無害</code></pre>
+</div>
+
+<footer>
+  <p>Intereco Monitor — オンボーディング・ランブック / 更新 2026-07-23 / 対象構成 ② relay（Beelink）<br>
+  関連: <code class="mono">docs/edge-configs-and-relay-hardware.md</code>・<code class="mono">docs/spec-edge-registration-wizard.md</code>・<code class="mono">docs/edge-ota-design.md</code>・<code class="mono">docs/monitor-system-handbook.html</code>・<code class="mono">docs/ga-plan-20260720.html</code>／実機詳細 <code class="mono">claude/edge-agent/README.md</code></p>
+</footer>
+
+</div>
+</body>
+</html>
