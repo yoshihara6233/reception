@@ -30,6 +30,13 @@ const ACTION_STYLE: Record<string, string> = {
   'recorder.delete':  'bg-red-100 text-red-700',
   'recorder.cameras': 'bg-violet-100 text-violet-700',
   'edge.update':      'bg-amber-100 text-amber-700',
+  'edge.create':      'bg-emerald-100 text-emerald-700',
+  'user.create':      'bg-emerald-100 text-emerald-700',
+  'user.update':      'bg-blue-100 text-blue-700',
+  'user.delete':      'bg-red-100 text-red-700',
+  'store.update':     'bg-blue-100 text-blue-700',
+  'store.import':     'bg-violet-100 text-violet-700',
+  'camera.import':    'bg-violet-100 text-violet-700',
 }
 
 function fmtJST(iso: string) {
@@ -91,7 +98,7 @@ export default async function AuditChangesPage({
       <div className="space-y-4 px-5 py-4">
         <div className="flex items-center justify-between">
           <div className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs text-slate-600">
-            設定変更 {count ?? 0} 件（recorder / camera / edge）
+            設定変更 {count ?? 0} 件（レコーダ / カメラ / エッジ / 店舗 / ユーザ / 設定）
           </div>
           <Link href="/admin/audit" className="rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100">
             ← 視聴ログ

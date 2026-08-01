@@ -8,6 +8,7 @@
 import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
+import { recordAudit } from '@/lib/admin/audit'
 
 export interface SessionLimitInput {
   tenantId:      string
@@ -44,6 +45,16 @@ export async function upsertSessionLimit(
     { onConflict: 'tenant_id' },
   )
   if (error) return { ok: false, error: error.message }
+
+  await recordAudit(guard.supa, {
+    actorUserId: guard.user.id,
+    action:      'limit.update',
+    targetType:  'session_limit',
+    targetId:    input.tenantId,
+    storeId:     null,
+    changes:     { tenant_id: input.tenantId, max_session_min: sessionMin, max_concurrent: concurrent },
+  })
+
   revalidatePath('/admin/limits')
   return { ok: true }
 }

@@ -14,6 +14,7 @@ import {
   getTenantQuota, getOptionOnCount, exceedsStoreLimit,
   OPTION_KEYS, OPTION_STORE_COL, type OptionKey,
 } from '@/lib/admin/tenant-quota'
+import { recordAudit } from '@/lib/admin/audit'
 
 const Body = z.object({
   name:       z.string().min(1).optional(),
@@ -84,5 +85,15 @@ export async function PUT(
 
   const { error } = await guard.supa.from('stores').update(patch).eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  await recordAudit(guard.supa, {
+    actorUserId: guard.user.id,
+    action:      'store.update',
+    targetType:  'store',
+    targetId:    id,
+    storeId:     id,
+    changes:     patch,
+  })
+
   return NextResponse.json({ ok: true, warnings })
 }

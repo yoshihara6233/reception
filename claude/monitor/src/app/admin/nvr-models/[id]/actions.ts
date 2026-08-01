@@ -7,6 +7,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { requireSuperAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
+import { recordAudit } from '@/lib/admin/audit'
 
 export interface SaveResult {
   ok:       boolean
@@ -63,6 +64,15 @@ export async function updateNvrModel(formData: FormData): Promise<SaveResult> {
         .eq('nvr_model', (model as { model_number: string }).model_number)
     }
   }
+
+  await recordAudit(guard.supa, {
+    actorUserId: guard.user.id,
+    action:      'nvr_model.update',
+    targetType:  'nvr_model',
+    targetId:    id,
+    storeId:     null,
+    changes:     { display_name, released_at, eol_date, eos_date, max_channels, max_resolution, source_url, notes },
+  })
 
   revalidatePath('/admin/nvr-models')
   revalidatePath('/infra')
