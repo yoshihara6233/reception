@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { randomBytes } from 'node:crypto'
 import { z } from 'zod'
 import { requireSuperAdmin } from '@/lib/admin/guard'
+import { recordAudit } from '@/lib/admin/audit'
 
 const Body = z.object({
   store_id: z.string().uuid(),
@@ -28,6 +29,16 @@ export async function POST(req: NextRequest) {
     .select('id')
     .single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // 監査: device_token は記録しない。
+  await recordAudit(guard.supa, {
+    actorUserId: guard.user.id,
+    action:      'edge.create',
+    targetType:  'edge',
+    targetId:    data.id,
+    storeId:     parsed.data.store_id,
+    changes:     { name: parsed.data.name },
+  })
 
   // Return the token ONCE — we won't surface it again.
   return NextResponse.json({ id: data.id, device_token })

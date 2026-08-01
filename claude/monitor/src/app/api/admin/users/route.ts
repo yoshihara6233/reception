@@ -15,6 +15,7 @@ import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { storeIdsBelongToTenant } from '@/lib/admin/user-scope'
+import { recordAudit } from '@/lib/admin/audit'
 
 const Body = z.object({
   email:        z.string().email(),
@@ -104,6 +105,16 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     )
   }
+
+  // 監査: パスワードは記録しない。
+  await recordAudit(guard.supa, {
+    actorUserId: guard.user.id,
+    action:      'user.create',
+    targetType:  'user',
+    targetId:    row.id,
+    storeId:     null,
+    changes:     { email: body.email, role: body.role, tenant_id: effTenantId, store_ids: effStoreIds },
+  })
 
   return NextResponse.json({ ok: true, id: row.id, auth_user_id: authUserId })
 }

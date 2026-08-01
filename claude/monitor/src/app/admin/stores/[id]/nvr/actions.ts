@@ -12,6 +12,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { z } from 'zod'
+import { recordAudit } from '@/lib/admin/audit'
 
 const FormSchema = z.object({
   storeId:  z.string().uuid(),
@@ -100,6 +101,24 @@ export async function saveNvrConfig(formData: FormData): Promise<SaveResult> {
       ok:      false,
       message: `保存失敗: ${error.message}`,
     }
+  }
+
+  // 監査: nvr_options には認証情報が入り得るため、値は残さずキー名のみ記録する。
+  const { data: { user } } = await supa.auth.getUser()
+  if (user) {
+    await recordAudit(supa, {
+      actorUserId: user.id,
+      action:      'store.nvr_update',
+      targetType:  'store',
+      targetId:    raw.storeId,
+      storeId:     raw.storeId,
+      changes:     {
+        nvr_vendor:   raw.vendor || null,
+        nvr_model:    raw.model || null,
+        nvr_endpoint: raw.endpoint || null,
+        nvr_options_keys: Object.keys(nvr_options),
+      },
+    })
   }
 
   // EOL/EOS は nvr_model 変更時のトリガで自動同期される (F46.7)

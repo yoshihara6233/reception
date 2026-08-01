@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServer } from '@/lib/supabase/server'
+import { recordAudit } from '@/lib/admin/audit'
 
 const ALLOWED_INTENSITY = ['1', '2', '3', '4', '5-', '5+', '6-', '6+', '7']
 const ALLOWED_OFFSETS = [-5, 0, 5, 10, 15, 20, 25, 30]
@@ -68,6 +69,16 @@ export async function upsertBcpSettings(input: BcpSettingInput): Promise<{ ok: b
     .upsert(mapped.row, { onConflict: 'store_id' })
 
   if (error) return { ok: false, error: error.message }
+
+  await recordAudit(supa, {
+    actorUserId: user.id,
+    action:      'bcp_settings.update',
+    targetType:  'bcp_settings',
+    targetId:    input.storeId,
+    storeId:     input.storeId,
+    changes:     { ...mapped.row },
+  })
+
   revalidatePath('/admin/bcp')
   return { ok: true }
 }
@@ -97,6 +108,17 @@ export async function bulkUpsertBcpSettings(
     .upsert(rows, { onConflict: 'store_id' })
 
   if (error) return { ok: false, error: error.message }
+
+  // 監査: 一括適用は 1 操作 = 1 行（件数＋共通設定のみ。store 毎の行は出さない）。
+  await recordAudit(supa, {
+    actorUserId: user.id,
+    action:      'bcp_settings.bulk_update',
+    targetType:  'bcp_settings',
+    targetId:    null,
+    storeId:     null,
+    changes:     { count: rows.length },
+  })
+
   revalidatePath('/admin/bcp')
   return { ok: true, count: rows.length }
 }

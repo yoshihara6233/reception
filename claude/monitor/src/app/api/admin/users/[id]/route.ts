@@ -11,6 +11,7 @@ import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { storeIdsBelongToTenant } from '@/lib/admin/user-scope'
+import { recordAudit } from '@/lib/admin/audit'
 
 const UpdateBody = z.object({
   display_name: z.string().min(1).optional(),
@@ -105,6 +106,18 @@ export async function PUT(
     }
   }
 
+  // 監査: パスワードは値を残さず「変更あり」のみ。
+  const auditChanges: Record<string, unknown> = { ...patch }
+  if (body.password) auditChanges.password = '(changed)'
+  await recordAudit(guard.supa, {
+    actorUserId: guard.user.id,
+    action:      'user.update',
+    targetType:  'user',
+    targetId:    id,
+    storeId:     null,
+    changes:     auditChanges,
+  })
+
   return NextResponse.json({ ok: true })
 }
 
@@ -125,7 +138,7 @@ export async function DELETE(
   // Load target to check tenant scope and to find auth_user_id
   const { data: target, error: loadErr } = await svc
     .from('admin_users')
-    .select('id, auth_user_id, tenant_id, role')
+    .select('id, auth_user_id, tenant_id, role, email')
     .eq('id', id)
     .single()
   if (loadErr || !target) {
@@ -159,6 +172,15 @@ export async function DELETE(
       console.error('[admin/users DELETE] auth user deletion failed:', authErr.message)
     }
   }
+
+  await recordAudit(guard.supa, {
+    actorUserId: guard.user.id,
+    action:      'user.delete',
+    targetType:  'user',
+    targetId:    id,
+    storeId:     null,
+    changes:     { email: target.email, role: target.role, tenant_id: target.tenant_id },
+  })
 
   return NextResponse.json({ ok: true })
 }

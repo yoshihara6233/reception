@@ -28,6 +28,7 @@ import {
   getTenantQuota, getStoreCount, getOptionOnCount,
   OPTION_KEYS, OPTION_STORE_COL, type OptionKey,
 } from '@/lib/admin/tenant-quota'
+import { recordAudit } from '@/lib/admin/audit'
 
 interface RowResult { row: number; ok: boolean; id?: string; error?: string; warning?: string; skipped?: boolean }
 
@@ -212,5 +213,18 @@ export async function POST(req: NextRequest) {
   const skipCount  = results.filter((r) => !r.ok && r.skipped).length
   const errCount   = results.filter((r) => !r.ok && !r.skipped).length
   const warnCount  = results.filter((r) => r.ok && r.warning).length
+
+  // 監査: 一括投入は 1 操作 = 1 行（件数サマリのみ）。
+  if (okCount > 0) {
+    await recordAudit(guard.supa, {
+      actorUserId: guard.user.id,
+      action:      'store.import',
+      targetType:  'store',
+      targetId:    null,
+      storeId:     null,
+      changes:     { total: results.length, ok: okCount, error: errCount, skipped: skipCount, tenant_id: defaultTenantId },
+    })
+  }
+
   return NextResponse.json({ total: results.length, ok: okCount, error: errCount, warning: warnCount, skipped: skipCount, results })
 }

@@ -11,6 +11,7 @@ export interface AuditEntry {
   actorUserId: string
   action:      string                 // 'recorder.update' / 'edge.update' / 'enrollment.issue' など
   targetType:  'recorder' | 'recorder_cameras' | 'edge' | 'enrollment' | 'inspection_settings' | 'employee' | 'tenant' | 'store'
+             | 'user' | 'nvr_model' | 'session_limit' | 'bcp_settings'
   targetId:    string | null
   storeId:     string | null          // RLS スコープ用
   changes?:    Record<string, unknown>
