@@ -49,6 +49,9 @@ export function getAdminNav(t: Msg, opts?: { isSuper?: boolean; baggage?: boolea
       // F49.J: NVR 機種マスタ (EOL/EOS 管理)
       { href: '/admin/nvr-models', label: 'NVR 機種',   icon: '🛰' },
       { href: '/admin/limits',     label: t.adminNav.limits, icon: '⏱' },
+      // 運営(super_admin)自身の行動履歴。テナント側/admin/auditには運営の行を出さない
+      // （PR#213）ため、運営の説明責任はこのページで担保する。全テナント横断。
+      { href: '/admin/ops-audit',  label: '運営アクセスログ', icon: '☰' },
       // 死活監視(/infra)は SaaS 運営者向け＝中央タブから②運営管理へ移設。全テナント横断。
       { href: '/infra',            label: '死活監視',   icon: '🩺' },
     )
