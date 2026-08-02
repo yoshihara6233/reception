@@ -281,16 +281,6 @@ export default async function BcpEventDetailPage({
           </dl>
         </div>
 
-        {/* 現地レコーダ 録画取得（発令時に自動・このボタンは手動再取得用） */}
-        <div className="overflow-hidden rounded-lg border border-red-200 bg-red-50/40">
-          <div className="border-b border-red-100 px-4 py-3">
-            <h2 className="text-sm font-bold text-slate-900">現地レコーダ 録画取得（手動・再取得用）</h2>
-          </div>
-          <div className="px-4 py-4">
-            <RetrieveRecordingButton eventId={event.id} alreadyHasClips={clips.length > 0} offsets={snapshotOffsets} />
-          </div>
-        </div>
-
         {/* F40: Snapshot timeline section (1 card per camera, 8 thumbnails each) */}
         <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
@@ -317,7 +307,7 @@ export default async function BcpEventDetailPage({
 
           {cameraGroups.length === 0 ? (
             <div className="px-4 py-8 text-center text-xs text-slate-400">
-              スナップショットはまだありません。発令時に自動取得されますが、表示されない場合は上の「現地レコーダの録画を取得」で手動取得できます。
+              スナップショットはまだありません。発令時に自動取得されますが、表示されない場合はページ下部の「現地レコーダの録画を再取得」で手動取得できます。
             </div>
           ) : (
             <div className="divide-y divide-slate-100">
@@ -482,6 +472,17 @@ export default async function BcpEventDetailPage({
                 }
               />
             </div>
+          </div>
+        </div>
+
+        {/* 現地レコーダ 録画取得（発令時に自動・このボタンは手動再取得用）。
+            通常操作では使わないため最下部に置く（誤タップ防止・2026-08-03 要望）。 */}
+        <div className="overflow-hidden rounded-lg border border-red-200 bg-red-50/40">
+          <div className="border-b border-red-100 px-4 py-3">
+            <h2 className="text-sm font-bold text-slate-900">現地レコーダ 録画取得（手動・再取得用）</h2>
+          </div>
+          <div className="px-4 py-4">
+            <RetrieveRecordingButton eventId={event.id} alreadyHasClips={clips.length > 0} offsets={snapshotOffsets} />
           </div>
         </div>
       </div>
