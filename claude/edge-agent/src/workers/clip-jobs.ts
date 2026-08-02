@@ -21,6 +21,7 @@ import { getSupabase } from '../supabase.js'
 import { loadCameras } from '../cameras.js'
 import { config } from '../config.js'
 import { fetchWindowMp4, probeDurationSec, supportsWindowMp4 } from '../util/window-mp4.js'
+import { measureNvrClockOffsetSec } from '../util/nvr-clock.js'
 import { validateClipReport, nextRetryAt, isPastDeadline } from '@intereco/shared/baggage'
 import type { CameraDescriptor } from '../types.js'
 
@@ -177,6 +178,12 @@ async function processJob(supa: SupabaseClient, job: ClipJob, camera: CameraDesc
     return
   }
 
+  // NVR 時計と実時刻の差を切り出し時点で実測（検査時刻と映像のズレ検知用）。
+  // 測定失敗やレコーダ非経由（Frigate=エッジ自身）は null のまま。切り出しは止めない。
+  const clockOffsetSec = camera.recorder.vendor === 'frigate'
+    ? null
+    : await measureNvrClockOffsetSec(camera.recorder.vod_host ?? camera.recorder.host)
+
   // 健全性: 尺 80% 未満は未確定録画の疑い → done にせず後で再試行。
   const durationSec = (await probeDurationSec(buf, id)) ?? 0
   const check = validateClipReport(
@@ -184,7 +191,7 @@ async function processJob(supa: SupabaseClient, job: ClipJob, camera: CameraDesc
       windowFrom: new Date(job.window_from),
       windowTo: new Date(job.window_to),
       reportedDurationSec: durationSec,
-      clockOffsetSec: 0,   // NVR 埋め込み時刻の厳密計測は未実装（詳細画面は「—」表示）
+      clockOffsetSec: 0,   // 判定は従来どおり（実測値は記録のみ・判定条件は変えない）
     },
   )
   if (!check.ok) {
@@ -209,7 +216,7 @@ async function processJob(supa: SupabaseClient, job: ClipJob, camera: CameraDesc
       camera_id: job.camera_id,
       storage_path: path,
       duration_sec: durationSec,
-      clock_offset_sec: null,
+      clock_offset_sec: clockOffsetSec,
       upload_status: 'done',
     },
     { onConflict: 'session_id,camera_id' },

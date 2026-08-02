@@ -13,6 +13,9 @@ interface EdgePayload {
   last_seen_at: string | null
   store_id: string
   go2rtc_host: string | null
+  // NVR 時計ズレ（エッジ実測・正=NVR が進んでいる）
+  nvr_clock_offset_sec: number | null
+  nvr_clock_checked_at: string | null
   // 自律OTA（docs/edge-ota-design.md）
   cloudflared_version: string | null
   desired_agent_version: string | null
@@ -60,6 +63,7 @@ export default async function EdgeEditPage(
     .from('edge_devices')
     .select(`
       id, name, status, agent_version, last_seen_at, store_id, go2rtc_host,
+      nvr_clock_offset_sec, nvr_clock_checked_at,
       cloudflared_version, desired_agent_version, desired_cloudflared_version,
       ota_status, ota_updated_at, ota_last_error,
       stores ( name, area_code ),

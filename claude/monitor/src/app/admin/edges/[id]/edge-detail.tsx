@@ -37,6 +37,8 @@ interface EdgePayload {
   id: string; name: string; status: string; agent_version: string | null; last_seen_at: string | null;
   store_id: string
   go2rtc_host: string | null
+  nvr_clock_offset_sec: number | null
+  nvr_clock_checked_at: string | null
   cloudflared_version: string | null
   desired_agent_version: string | null
   desired_cloudflared_version: string | null
@@ -88,6 +90,19 @@ export function EdgeDetail({ edge }: { edge: EdgePayload }) {
           <Row k="状態"        v={edge.status} />
           <Row k="バージョン"  v={edge.agent_version ?? '—'} />
           <Row k="最終接続"    v={edge.last_seen_at ? new Date(edge.last_seen_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : '—'} />
+          {/* NVR 時計ズレ（エッジ実測・30分毎）。±10 秒超は証跡の時刻精度に影響するため警告色。 */}
+          <Row k="NVR 時刻差" v={
+            edge.nvr_clock_offset_sec == null ? '—' : (
+              <span className={Math.abs(edge.nvr_clock_offset_sec) >= 10 ? 'font-semibold text-amber-700' : undefined}>
+                {edge.nvr_clock_offset_sec > 0 ? '+' : ''}{edge.nvr_clock_offset_sec} 秒
+                {edge.nvr_clock_checked_at && (
+                  <span className="ml-1 font-normal text-slate-400">
+                    （{new Date(edge.nvr_clock_checked_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })} 実測）
+                  </span>
+                )}
+              </span>
+            )
+          } />
         </dl>
 
         {/* go2rtc 公開オリジン（高画質ライブ・従来はSQL直編集） */}

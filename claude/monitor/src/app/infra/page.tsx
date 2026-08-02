@@ -27,7 +27,11 @@ type Health = keyof typeof HEALTH_COLOR
 
 interface CamRow { id: string }
 interface RecRow { id: string; recorder_cameras: CamRow[] | null }
-interface EdgeRow { id: string; name: string; status: string; last_seen_at: string | null; recorders: RecRow[] | null }
+interface EdgeRow {
+  id: string; name: string; status: string; last_seen_at: string | null
+  nvr_clock_offset_sec: number | null
+  recorders: RecRow[] | null
+}
 interface StoreRow { id: string; name: string; edge_devices: EdgeRow[] | null }
 interface SettingRow { store_id: string; enabled: boolean; edge_offline_threshold_min: number; maintenance_until: string | null }
 interface IncidentRow { store_id: string | null; target_type: string; kind: string; status: string }
@@ -50,7 +54,7 @@ export default async function InfraDashboard() {
   // 死活監視は super_admin 専用の全テナント横断ビュー（layout でゲート済）。RLS 任せで全社。
   const [storesRes, settingsRes, incidentsRes] = await Promise.all([
     supa.from('stores')
-      .select('id, name, edge_devices ( id, name, status, last_seen_at, recorders ( id, recorder_cameras ( id ) ) )')
+      .select('id, name, edge_devices ( id, name, status, last_seen_at, nvr_clock_offset_sec, recorders ( id, recorder_cameras ( id ) ) )')
       .order('name').limit(10_000),
     supa.from('monitor_settings').select('store_id, enabled, edge_offline_threshold_min, maintenance_until').limit(10_000),
     supa.from('monitor_incidents').select('store_id, target_type, kind, status').in('status', ['open', 'ack']).limit(10_000),
@@ -111,9 +115,18 @@ export default async function InfraDashboard() {
     // recorder/camera: P1 は能動チェック未実装 → 未検証（メンテ中は maint）
     const devHealth: Health = inMaint ? 'maint' : 'unk'
 
+    // NVR 時計ズレ（エッジ実測）: ±10 秒超を警告。証跡（BCP/発報/検査）の時刻精度を守る。
+    const skews = edges
+      .map((e) => e.nvr_clock_offset_sec)
+      .filter((v): v is number => v != null && Math.abs(v) >= 10)
+    const clockSkewSec = skews.length
+      ? skews.reduce((worst, v) => (Math.abs(v) > Math.abs(worst) ? v : worst))
+      : null
+    if (clockSkewSec != null && edgeHealth === 'ok') edgeHealth = 'warn'
+
     return {
       id: st.id, name: st.name, enabled, inMaint,
-      edgeHealth, edgeLabel, recordingContinues, devHealth, recCount, camCount,
+      edgeHealth, edgeLabel, recordingContinues, devHealth, recCount, camCount, clockSkewSec,
       open: openByStore.get(st.id) ?? 0,
       lastSeen: edges[0]?.last_seen_at ?? null,
     }
@@ -210,6 +223,13 @@ export default async function InfraDashboard() {
                     {/* TC3: 監視/録画区別 — 監視が止まっても録画は NVR 本体で継続する旨を明示。 */}
                     {r.recordingContinues && (
                       <div className="mt-0.5 flex items-center gap-1 text-[10px] text-slate-400 dark:text-gedink3"><Video size={11} strokeWidth={1.5} aria-hidden />{t.status.recordingNote}</div>
+                    )}
+                    {/* NVR 時計ズレ警告（エッジ実測・±10 秒超のみ） */}
+                    {r.clockSkewSec != null && (
+                      <div className="mt-0.5 flex items-center gap-1 text-[10px] font-semibold" style={{ color: HEALTH_COLOR.warn }}>
+                        <TriangleAlert size={11} strokeWidth={1.5} aria-hidden />
+                        {tInfra.clockSkew(`${r.clockSkewSec > 0 ? '+' : ''}${r.clockSkewSec}`)}
+                      </div>
                     )}
                   </td>
                   <td className="px-3 py-2"><span className="inline-flex items-center gap-1.5"><Dot h={r.devHealth} /><span className="font-mono tabular-nums text-slate-600 dark:text-gedink2">{r.recCount}</span></span></td>
