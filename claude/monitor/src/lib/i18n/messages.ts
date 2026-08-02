@@ -215,6 +215,7 @@ export interface Msg {
     notMonitored: string
     inMaintenance: string
     incidentCount: (n: number) => string
+    clockSkew: (sec: string) => string
     emptyStores: string
     footerNote: string
   }
@@ -630,6 +631,7 @@ const ja: Msg = {
     notMonitored: '（未監視）',
     inMaintenance: 'メンテ中',
     incidentCount: (n) => `障害${n}`,
+    clockSkew: (sec) => `NVR時計ズレ ${sec}秒`,
     emptyStores: '店舗がありません。先に管理画面で店舗を登録してください。',
     footerNote: 'P1: エッジ死活は last_seen_at から判定。レコーダ/カメラの能動チェック（ping/映像受信確認）は P2 で有効化されます。',
   },
@@ -1036,6 +1038,7 @@ const en: Msg = {
     notMonitored: '(not monitored)',
     inMaintenance: 'In maintenance',
     incidentCount: (n) => `${n} issues`,
+    clockSkew: (sec) => `NVR clock off by ${sec}s`,
     emptyStores: 'No stores yet. Register stores in admin first.',
     footerNote: 'P1: Edge liveness is derived from last_seen_at. Active checks for recorders/cameras (ping/frame verification) are enabled in P2.',
   },
@@ -1442,6 +1445,7 @@ const zh: Msg = {
     notMonitored: '（未监控）',
     inMaintenance: '维护中',
     incidentCount: (n) => `故障 ${n}`,
+    clockSkew: (sec) => `NVR时钟偏差 ${sec}秒`,
     emptyStores: '尚未注册门店。请先在管理界面添加门店。',
     footerNote: 'P1: 边缘死活基于 last_seen_at 判定。录像机/摄像头的主动检查（ping/收帧验证）在 P2 启用。',
   },
@@ -1848,6 +1852,7 @@ const ko: Msg = {
     notMonitored: '(미모니터링)',
     inMaintenance: '점검 중',
     incidentCount: (n) => `장애${n}`,
+    clockSkew: (sec) => `NVR 시계 오차 ${sec}초`,
     emptyStores: '매장이 없습니다. 먼저 관리 화면에서 매장을 등록해주세요.',
     footerNote: 'P1: 엣지 사활은 last_seen_at 기반으로 판정. 레코더/카메라의 능동 체크(ping/영상 수신 확인)는 P2에서 활성화됩니다.',
   },

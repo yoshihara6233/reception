@@ -18,13 +18,15 @@ import { logger } from '../logger.js'
 import { downloadIproNvrMp4 } from '../adapters/i-pro/nvr-vod.js'
 
 /**
- * MP4 バッファの先頭フレームを JPEG 化する。失敗時 null。
+ * MP4 バッファの先頭（または seekSec 秒地点）のフレームを JPEG 化する。失敗時 null。
  * Frigate / i-PRO NVR の過去フレーム経路で共有。
  *
  * MP4 を一時ファイルに書き `-i <file>` でシーク可能に読む（stdin パイプは非シーク＝
  * moov が末尾の NU-100 録画を demux できない）。
+ * seekSec は出力シーク（`-i` の後の `-ss`）＝先頭からデコードしてフレーム精度で
+ * 拾う。クリップは高々 1〜2 分なのでコストは無視できる。
  */
-export async function extractFirstFrame(mp4: Buffer): Promise<Buffer | null> {
+export async function extractFirstFrame(mp4: Buffer, seekSec = 0): Promise<Buffer | null> {
   const dir    = join(tmpdir(), 'intereco-edge-frame')
   const inPath = join(dir, `${crypto.randomUUID()}.mp4`)
   try {
@@ -36,6 +38,7 @@ export async function extractFirstFrame(mp4: Buffer): Promise<Buffer | null> {
         '-hide_banner',
         '-loglevel', 'error',
         '-i', inPath,
+        ...(seekSec > 0 ? ['-ss', String(seekSec)] : []),
         '-frames:v', '1',
         '-q:v', '3',          // JPEG quality (2-31, lower is better)
         '-f', 'image2',
@@ -117,8 +120,14 @@ export async function fetchIproNvrHistoricalFrame(
   targetMs: number,
 ): Promise<Buffer | null> {
   try {
-    // 対象時刻から約10秒の窓。短すぎる(±数秒)と完全なGOPが入らず demux 不可になるため広めに取る。
-    const from = new Date(targetMs - 1_000)
+    // httpdl.cgi の開始指定は分単位（切り捨て）。従来は t-1秒 から窓を取っていたため、
+    // t が分ちょうど（BCP スナップ）のとき開始が 1 分前へ丸まり、先頭フレーム
+    // （＝対象の約60〜65秒前）が採用されていた。対象を含む分から窓を取り、クリップ内で
+    // 対象時刻までシークして「対象時刻のフレーム」を拾う（残差は直前キーフレーム分の
+    // 1〜2秒以内）。窓は +10 秒で GOP 欠けも防げる。
+    const MINUTE_MS = 60_000
+    const windowStartMs = Math.floor(targetMs / MINUTE_MS) * MINUTE_MS
+    const from = new Date(windowStartMs)
     const to   = new Date(targetMs + 10_000)
     const mp4  = await downloadIproNvrMp4(
       { endpoint: nvr.endpoint, username: nvr.username, password: nvr.password, timeoutMs: 30_000 },
@@ -127,7 +136,9 @@ export async function fetchIproNvrHistoricalFrame(
       to,
     )
     if (!mp4 || mp4.length < 1024) return null
-    return await extractFirstFrame(mp4)
+    const seekSec = (targetMs - windowStartMs) / 1000
+    // シーク位置が録画の切れ目等で取れない場合は先頭フレームにフォールバック。
+    return (await extractFirstFrame(mp4, seekSec)) ?? (await extractFirstFrame(mp4))
   } catch (e) {
     logger.debug({ err: (e as Error).message, channel }, 'frame: i-PRO NVR historical frame failed')
     return null

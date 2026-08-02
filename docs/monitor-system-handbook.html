@@ -569,7 +569,7 @@
 <table>
   <tr><th style="width:36px">#</th><th>内容</th></tr>
   <tr><td class="mono">4</td><td><span class="badge b-ok">済 PR #200</span> 確認済みゲートの抜け道を解消 — 単独ページにもゲート適用＋切り出し中は解禁しない（全映像取得＋再生完了が必須に）</td></tr>
-  <tr><td class="mono">5</td><td>NVR時刻差（clock_offset_sec）未実測 — 常に「—」表示。映像と検査時刻のズレ検知ができない</td></tr>
+  <tr><td class="mono">5</td><td><s>NVR時刻差（clock_offset_sec）未実測 — 常に「—」表示。映像と検査時刻のズレ検知ができない</s> → <strong>解消（2026-08-03）</strong>: エッジが HTTP Date ヘッダで NVR 時計差を実測。検査クリップに clock_offset_sec を記録、30分毎に edge_devices へ報告し /infra と エッジ詳細が ±10 秒超を警告</td></tr>
   <tr><td class="mono">6</td><td>来訪者の氏名・会社が手入力任意 — アンマッチメールが「未特定」だらけになりうる（名刺OCRは未実装）</td></tr>
   <tr><td class="mono">7</td><td>保持削除の1回500セッション上限 — 大規模店で削除が追いつかない可能性（監視項目化）</td></tr>
 </table>

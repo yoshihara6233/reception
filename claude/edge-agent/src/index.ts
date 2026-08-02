@@ -15,6 +15,7 @@ import { refreshSupabaseKey, startKeySync } from './supabase.js'
 import { subscribeCommands } from './realtime.js'
 import { startEdgeJobWorker } from './workers/edge-jobs.js'
 import { startClipJobWorker } from './workers/clip-jobs.js'
+import { startNvrClockWatch } from './scheduler/nvr-clock-cron.js'
 import { StateMachine } from './state-machine.js'
 import { heartbeat } from './upload/storage.js'
 import { startWhipProxy } from './whip-proxy.js'
@@ -239,9 +240,13 @@ async function main() {
     heartbeat(fsm.current()).catch(() => {})
   }, config.HEARTBEAT_INTERVAL_MS)
 
+  // NVR 時計ズレの定期実測（30分毎）→ edge_devices へ報告。証跡時刻の守り。
+  const stopNvrClockWatch = startNvrClockWatch()
+
   const shutdown = async (sig: string) => {
     logger.info({ sig }, 'shutdown')
     clearInterval(hb)
+    stopNvrClockWatch()
     await rt.close()
     jobs.close()
     clipJobs.close()
