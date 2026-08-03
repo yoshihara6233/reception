@@ -65,8 +65,8 @@ EDGE_IMAGES_BASE_URL = https://img.genesis-edge.com
 cd claude/cloudflare/edge-images && npx wrangler deploy
 ```
 
-5. DNS: `img.genesis-edge.com` を Cloudflare の**プロキシ有効（オレンジ雲）**で作成
-   （ルートの `zone_name` と一致させる）。
+`custom_domain = true` にしているため、**DNS レコードは wrangler が自動作成する**（手作業不要）。
+初回は `npx wrangler login` でブラウザ認証を求められる。
 
 ## 疎通確認
 

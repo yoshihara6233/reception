@@ -8,8 +8,12 @@ compatibility_date = "2024-11-01"
 # ルート: 画像専用サブドメイン。
 #  eo光は *.r2.cloudflarestorage.com を SNI 遮断するが genesis-edge.com は通る（2026-08-03 実測）。
 #  この Worker は R2 バインディング経由で読み書きするため、遮断ホスト名を一切踏まない。
+#
+#  custom_domain = true にすると wrangler が **DNS レコードまで自動作成**する。
+#  route 方式だとプレースホルダの A レコード(192.0.2.1・プロキシ有効)を手で作る必要があり、
+#  作り忘れると「デプロイは成功しているのに 404/接続不可」になるため、こちらを既定にする。
 routes = [
-  { pattern = "img.genesis-edge.com/v1/*", zone_name = "genesis-edge.com" },
+  { pattern = "img.genesis-edge.com", custom_domain = true },
 ]
 
 # R2 バケット（S3 API ではなくバインディングで直接アクセス）。
