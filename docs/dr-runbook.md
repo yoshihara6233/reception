@@ -93,7 +93,23 @@ supabase backups restore --project-ref <ref>   # 任意タイムスタンプへ�
    - **pg_cron ジョブ**（5本: jalert_poll / bcp_report_sweep / patrol 系 / cleanup 系）— `select jobname, schedule, active from cron.job;` で確認。
    - 点検 SQL・復旧手順の詳細はメモリ/過去実績（2026-08-01 BCP 沈黙障害）を参照。
 
-### 3.5 データ復旧訓練（非破壊・所要約30分・GA前に1回実施）
+### 3.5 データ復旧訓練 — 2026-08-03 実施結果と、そこで潰した障害
+
+> **実施済み。** 実測: **ダンプ取得 3秒（3.1MB）／リストア 1秒未満／突合 完全一致**。
+> DB 155MB・主要21テーブルで、**RTO(データ) は実質数分**（大半は人の操作時間）。
+> 訓練で **本番復旧を確実に止めていた障害が2件** 見つかり、いずれも修正済み。
+
+| # | 発見 | 影響 | 対処 |
+|---|---|---|---|
+| 1 | **関数の `search_path` 未固定** — `sync_store_nvr_lifecycle()` が `FROM nvr_models`（非修飾）。pg_restore は `search_path=''` で走るため解決できず、**`stores` の COPY が必ず失敗**→FK 連鎖で全滅 | **DR ブロッカー**。本番復旧でも必ず同じ場所で停止 | migration `20260803140000` で 9 関数に `search_path` を固定（SECURITY DEFINER 5 本の権限昇格リスクも同時解消） |
+| 2 | **`live_sessions` の月次パーティション自動生成が無い** — `monitor_results` には cron があるが live_sessions は関数だけで呼び出す人が不在 | **本番の時限爆弾**。9月分が無いと **9/1 に全店でライブ視聴が開始不能**（`no partition of relation found`） | migration `20260803150000` で当月〜翌々月を確保＋毎月25日の cron を登録（2ヶ月先まで作り、1回の失敗で止まらない設計） |
+| 3 | 復旧先スキーマが古いまま気づけない | `supabase start` は**既存ボリュームに新 migration を再適用しない**。古い schema へ復元すると「警告つき完了」に見えて実は失敗 | `~/dr-drill.sh` に repo と DB の migration 件数の突合ガードを追加。ズレたら中止 |
+| 4 | `--disable-triggers` が効かない | Supabase の `postgres` は真の superuser ではなく `permission denied: system trigger`。無効化失敗のまま復元すると FK 順序で落ちる | `--single-transaction` に変更。FK は COMMIT 時に一括評価＝順序問題を回避、失敗時は全ロールバック |
+
+**教訓**: 1 と 2 は **実データで復元してみるまで絶対に分からない**種類の障害だった。
+スキーマの再構築が速いこと（28秒）は、データが戻せることを何も保証しない。
+
+### 3.5b データ復旧訓練の手順（非破壊・所要約30分）
 
 > 本番には一切書き込まない。**「ダンプ取得 → 空プロジェクトへ復元 → 検証」**を通しで計測し、§0 の RTO(データ) を実測値に置き換えるのが目的。
 
