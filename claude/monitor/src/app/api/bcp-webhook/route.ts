@@ -26,6 +26,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { generateBcpReportPdf, type BcpReportProps } from '@/lib/pdf/bcp-report'
 import { sendEmail, bcpCompletedEmail } from '@/lib/email/send'
+import { absoluteUrl } from '@/lib/app-url'
 
 // ---------------------------------------------------------------------------
 // Types matching DB rows
@@ -308,9 +309,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           hour: '2-digit', minute: '2-digit',
         })
 
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
-        // イベント詳細ページは /bcp/[id]。旧 /bcp/events/[id] はページが存在せず 404 になる
-        const eventUrl = appUrl ? `${appUrl}/bcp/${eventId}` : `/bcp/${eventId}`
+        // イベント詳細ページは /bcp/[id]。旧 /bcp/events/[id] はページが存在せず 404 になる。
+        // absoluteUrl を通すこと（相対パスだとメーラーが解決できず押しても何も起きない）。
+        const eventUrl = absoluteUrl(`/bcp/${eventId}`)
 
         const { subject, html } = bcpCompletedEmail({
           storeName:  store.name,
