@@ -231,23 +231,29 @@
 <h2><span class="no">5</span>詳細実行計画（残タスクのみ・依存/受入つき）</h2>
 <p class="small">完了タスクは §2 に集約。ここでは「これからやること」だけを列挙する。</p>
 
+<div class="card new">
+<p style="margin-bottom:0"><strong>8/3 消し込み監査</strong>: 7/20版の残タスクのうち、<strong>tunnel migration 適用・VOD単画面統合（録画再生モーダル＋時間ピッカー）・JPEG1枚保存（単画/16分割）・TC3 見える化・ONVIF探索/接続テスト実機（PoC 常用で実証）は完了</strong>。
+さらに 7/31〜8/3 で BCP 実弾復旧一式・震度表示・NVR並列制限・運営アクセスログ・管理操作監査の拡大・NTP標準構成・NVR時計ズレ常時実測・スナップ時刻精度是正を追加出荷。
+残りは下表の <strong>未消化のみ強調</strong>（取り消し線=完了）。実質の残: <strong>①ALERT_EMAILS 通知E2E ②staging方針 ③PTZ（実機未入手がブロッカー） ④外部診断判断 ⑤DR訓練 ⑥bootstrapスコープ鍵 ⑦Phase D 実地一式</strong>。</p>
+</div>
+
 <h3>今すぐ（G1クローズ・運用）</h3>
 <table>
   <tr><th style="width:46px">P</th><th>タスク</th><th style="width:170px">依存/メモ</th><th style="width:120px">受入</th></tr>
-  <tr><td><span class="badge b-wait">運用</span></td><td>migration <code>20260720150000</code>（tunnel列）本番適用</td><td>いつもの <code>db push</code></td><td>up to date</td></tr>
+  <tr><td><span class="badge b-done">済</span></td><td class="strike">migration <code>20260720150000</code>（tunnel列）本番適用</td><td>8/3 の db push 時点で未適用ゼロを確認</td><td>✅ up to date</td></tr>
   <tr><td><span class="badge b-wait">運用</span></td><td>Vercel env <code>ALERT_EMAILS</code>（通知先）確認・必要なら <code>ALERT_WEBHOOK_URL</code> 追加</td><td>未設定だと検知しても通知ゼロ（レスポンス unnotified:true）</td><td>テスト通知受信</td></tr>
-  <tr><td><span class="badge b-wait">運用</span></td><td>staging常設（Supabase staging＋seed）の有無確認・無ければ整備判断</td><td>C1テストの前提は CI ephemeral で担保済</td><td>方針確定</td></tr>
+  <tr><td><span class="badge b-wait">運用</span></td><td>staging常設（Supabase staging＋seed）の有無確認・無ければ整備判断</td><td>C1テストの前提は CI ephemeral で担保済。<strong>推奨=常設は見送り</strong>（PoC店＋CI ephemeral で十分・有償顧客増加後に再訪）</td><td>方針確定</td></tr>
 </table>
 
 <h3>Phase B 残（8月）</h3>
 <table>
   <tr><th style="width:46px">P</th><th>タスク</th><th style="width:170px">依存/メモ</th><th style="width:120px">受入</th></tr>
-  <tr><td><span class="badge b-todo">P1</span></td><td>ONVIF探索/接続テストの実機検証（beelink＋実カメラ）</td><td>コードは実装済・実機操作のみ</td><td>探索→割当→到達OK</td></tr>
-  <tr><td><span class="badge b-todo">P1</span></td><td>実機 ONVIF PTZ スパイク（go/no-go）: GetNodes/GetPresets/GotoPreset/SetAuxiliaryCommand 疎通</td><td>全PTZ作業の前提</td><td>preset移動・AUX疎通</td></tr>
-  <tr><td><span class="badge b-todo">P1</span></td><td>録画再生(VOD)の単画面統合（ツールバー「録画再生」モード＋時間ピッカー）</td><td>既存 /api/vod・VodPlayer再利用＝低リスク・PTZ非依存で先行可</td><td>同画面で録画再生</td></tr>
-  <tr><td><span class="badge b-todo">P1</span></td><td>JPEG1枚保存（単画=既存snapshot流用・16分割=grid.jpgそのままDL）</td><td>最小コスト・go/no-go非依存</td><td>1クリックで保存</td></tr>
-  <tr><td><span class="badge b-todo">P2</span></td><td>ONVIF PTZ binding 実装＋capability永続化＋命令経路(/api/cameras/[id]/ptz・監査記録)＋操作UI（PTZパッド・プリセットチップ・AUXトグル）</td><td>スパイクgo後</td><td>非エンジニアが操作可</td></tr>
-  <tr><td><span class="badge b-todo">P1</span></td><td>実機UAT（PTZ/preset/aux/VOD/JPEG保存 通し確認）</td><td>—</td><td>全機能疎通</td></tr>
+  <tr><td><span class="badge b-done">済</span></td><td class="strike">ONVIF探索/接続テストの実機検証（beelink＋実カメラ）</td><td>PoC で探索→割当→grid/live/VOD 常用中＝実証済</td><td>✅ 到達OK</td></tr>
+  <tr><td><span class="badge b-todo">P1</span></td><td>実機 ONVIF PTZ スパイク（go/no-go）: GetNodes/GetPresets/GotoPreset/SetAuxiliaryCommand 疎通</td><td><strong>ブロッカー: PTZ実機なし</strong>（WV-U1132A/SW158 は固定）。i-PRO面談で評価機借用を打診 or PTZ を GA後スコープへ</td><td>preset移動・AUX疎通</td></tr>
+  <tr><td><span class="badge b-done">済</span></td><td class="strike">録画再生(VOD)の単画面統合（ツールバー「録画再生」モード＋時間ピッカー）</td><td>MonitorWorkspace 録画再生モーダル＋/vod（発報からのディープリンク含む）</td><td>✅ 同画面で録画再生</td></tr>
+  <tr><td><span class="badge b-done">済</span></td><td class="strike">JPEG1枚保存（単画=既存snapshot流用・16分割=grid.jpgそのままDL）</td><td>SaveJpegButton（単画・16分割）実装済</td><td>✅ 1クリックで保存</td></tr>
+  <tr><td><span class="badge b-todo">P2</span></td><td>ONVIF PTZ binding 実装＋capability永続化＋命令経路(/api/cameras/[id]/ptz・監査記録)＋操作UI（PTZパッド・プリセットチップ・AUXトグル）</td><td>スパイクgo後（PTZ実機入手が前提）</td><td>非エンジニアが操作可</td></tr>
+  <tr><td><span class="badge b-todo">P1</span></td><td>実機UAT（PTZ/preset/aux/VOD/JPEG保存 通し確認）</td><td>PTZ以外（VOD/JPEG保存）は現PoCで随時確認可</td><td>全機能疎通</td></tr>
 </table>
 <p class="small">工数目安（6/23版と同じ）: スパイク0.5〜1人日／VOD統合〜2人日／PTZ backend 3〜4人日／PTZ・AUX UI 2〜3人日／JPEG保存〜0.5人日／UAT 0.5人日。推奨順=JPEG保存＆スパイク＆VOD先行→PTZ backend→UI→UAT。</p>
 
@@ -257,7 +263,7 @@
   <tr><td><span class="badge b-todo">P1</span></td><td><strong>外部脆弱性診断の扱いを再決定</strong>（内製常設に切替済。GA前に外部1回を課すなら往復2〜3週の逆算で8月発注）</td><td>経営判断</td><td>方針確定・(実施なら)重大ゼロ</td></tr>
   <tr><td><span class="badge b-todo">P2</span></td><td>DR復旧訓練（データ復旧編）1回 / Runbook・構築手順・オペレータマニュアル</td><td>スキーマ編は28秒実績</td><td>訓練完了</td></tr>
   <tr><td><span class="badge b-todo">P2</span></td><td>SLA定義書・データガバナンス（保持31日・アクセス記録）の顧客合意</td><td>1号店契約と同時</td><td>顧客合意</td></tr>
-  <tr><td><span class="badge b-todo">P2</span></td><td>TC3 監視中断の見える化（heartbeat単一源・監視/録画区別の顧客向け表示）</td><td>DR4</td><td>顧客に中断を明示</td></tr>
+  <tr><td><span class="badge b-done">済</span></td><td class="strike">TC3 監視中断の見える化（heartbeat単一源・監視/録画区別の顧客向け表示）</td><td>deriveEdgeStatus 単一源＋/stores・/infra・地図で「監視中断/録画継続」表示済。8/3 に NVR時計ズレ警告も追加</td><td>✅ 顧客に中断を明示</td></tr>
   <tr><td><span class="badge b-todo">P2</span></td><td>bootstrap のエッジ専用スコープ鍵化（device_token 漏洩時の影響限定）</td><td>CSO残</td><td>master鍵を返さない</td></tr>
 </table>
 
@@ -329,7 +335,7 @@
 </div>
 
 <footer>
-  Intereco Recorder Monitor ／ v1 GA 進捗 &amp; 実行計画 ／ 2026-06-14 作成・<strong>2026-07-20 進捗更新</strong>（G1実質達成・OTA/DB東京移行/商品拡張3モジュールを反映）。
+  Intereco Recorder Monitor ／ v1 GA 進捗 &amp; 実行計画 ／ 2026-06-14 作成・2026-07-20 進捗更新・<strong>2026-08-03 消し込み監査</strong>（§5: tunnel migration／VOD統合／JPEG保存／TC3／ONVIF実機を完了化・PTZ実機ブロッカーを明記）。
   本書は <code>docs/release-plan-v1-ga.md</code>（eng-review＋CEOレビュー＋差分再審査反映）と 6/23版 PDF（<code>Intereco_v1-GA実行計画_20260623.pdf</code>）の後継サマリー。
   全体像・価格案・残課題の詳細は <code>docs/monitor-system-handbook.html</code>。本番: https://intereco-monitor.vercel.app（monitor-prod 自動デプロイ・PR #198 時点で最新）。
 </footer>
