@@ -86,7 +86,7 @@ GA前ロードマップの「脆弱性診断（外部）」を、当面 **内部
 |---|---|---|
 | B1 | `edge_jobs` だけを短命スコープトークンへ（先行1テーブル） | 完了（2026-06-29） |
 | B2 | 残り8テーブル＋Storage 4バケットに RLS。エッジ auth ユーザの自動 provisioning | 完了（2026-08-03・migration `20260803160000`） |
-| B3 | エッジを `EDGE_SCOPED_DB=true` に切替（全DB/StorageアクセスがRLS配下） | コード投入済・**本番の切替は未**（下記手順） |
+| B3 | エッジを `EDGE_SCOPED_DB=true` に切替（全DB/StorageアクセスがRLS配下） | **完了**（2026-08-03 14:56 JST 切替・soak中）。稼働エッジは PoC Beelink 1台のみ（デモ機は同日退役） |
 | B4 | bootstrap から `supabase_service_role_key` の返却を撤廃 | B3 の soak 後 |
 
 ### B2 で敷いたスコープ
@@ -120,14 +120,64 @@ GA前ロードマップの「脆弱性診断（外部）」を、当面 **内部
    接続テストが通る。`permission denied` や 401 がログに出たらそのテーブルの RLS 漏れ。
 5. 戻す場合は `EDGE_SCOPED_DB` を消して restart するだけ（DB側は無変更で戻る）。
 
+**⚠ 新ビルドの投入とフラグ投入を同時にやらない。** `EDGE_SCOPED_DB` は新しいエージェントに
+しか無いので、先にフラグを入れても旧ビルドは黙って無視する（zod が未知キーを捨てる＝エラーにも
+ならない）。かつ OTA の健全性プローブは heartbeat 到達で合否を出すため、両方同時だと
+スコープ側の問題が「新ビルドが壊れている」に化けて自動ロールバックされ、切り分けを失う。
+**①OTA で新版を healthy まで持っていく → ②フラグ投入して restart** の順で行う。
+
 **フェイルクローズ設計**: スコープトークンが取れない/期限切れのとき、エッジは service_role へ
 フォールバックしない。要求は 401 になり、heartbeat のエラー処理が bootstrap を叩いて自動復帰する。
 「静かに越権状態へ戻る」より「見えて止まる」を選んでいる。
 
+### B3 実測（2026-08-03・PoC Beelink `17f0cd0b-…`）
+
+```
+14:53:52  ota: starting agent self-update  412c9d67… → 1f25f7c9f…
+14:54:04  supabase: service_role mode   scopedDb:false, scopedJobs:true   ← 新ビルド起動
+14:55:34  ota: promoted to known-good                                    ← 健全性検証 合格
+14:56:57  supabase: scoped mode                       scopedDb:true      ← B3 切替
+14:57:57  nvr_clock_checked_at 更新（スコープ下での edge_devices 書込み）
+14:58:57  last_seen_at 更新継続 / ota_status=healthy
+```
+切替後10分間 `permission denied` / 401 / row-level security のログはゼロ。
+heartbeat（status/last_seen_at/agent_version/ota_status）と NVR時計（nvr_clock_*）の
+2系統が**列ホワイトリストのトリガを本番トラフィックで通過**した。
+
+グリッド/スナップショットは R2 直行のため Supabase Storage の RLS を踏まない（エグレス対策の
+副作用）。そこで **BCP テスト（`/bcp/test`）を1回打って残りを実証した**（15:0x JST・クリップ16件・
+PDF 2MB・完了メール着）。BCP は1回で `bcp_events` UPDATE（finalize）／`bcp_clips` INSERT・DELETE／
+`bcp-clips` バケットへの Storage 書込みを一度に通すため、スコープ切替の検証に最も費用対効果が高い。
+特に finalize が通らないと自動PDFの sweep が起動しないので、**完了メールの着信が経路全体の証明**になる。
+
 ### B4 の前提
 
-全稼働エッジが `EDGE_SCOPED_DB=true` で soak 済みであること。撤廃後は **provisioning 済みでない
-エッジは何もできなくなる**（bootstrap の自動 provisioning がその保険）。
+1. **全稼働エッジが bootstrap 経由であること。** 確認は `select count(*) from edge_devices
+   where auth_user_id is null;` が 0 であること。B2 以降 bootstrap は未 provisioning の
+   エッジをその場で用意するので、**auth_user_id が NULL のまま残る = そのエッジは
+   bootstrap を一度も叩いていない**（＝`MONITOR_URL` 未設定の旧レイアウト機）と読める。
+2. 全稼働エッジが `EDGE_SCOPED_DB=true` で soak 済みであること。
+
+⚠ **heartbeat が生きていることは bootstrap 到達の証拠にならない。** heartbeat は
+`edge_devices` への DB 直書きなので、`MONITOR_URL` 未設定のエッジも管理画面では健全に見える。
+その手のエッジは鍵ローテにも追従せず（ローテのたびに現地で `.env` 手編集が要る）、
+B4 実施後は scoped トークンを受け取れないまま service_role も来なくなって停止する。
+
+実例（2026-08-03 に発見・**同日解消**）: PoC 実機の 2 台目 `intereco-edge-demo`（デモ店
+Frigate/Hview・`28fee1ec-aa52-…`）が旧パス `/home/intereco/intereco/claude/edge-agent/.env.demo`
+運用で `MONITOR_URL` / `EDGE_ROOT` ともに未設定だった。B2 の provisioning がこの1台だけ
+埋まらないことで表面化。**退役**（`systemctl stop/disable` → 管理画面でエッジ行を削除）。
+現在 `auth_user_id is null` は 0 件＝前提1クリア。
+
+⚠ 退役の順序は **①エッジ行の削除 → ②サービス停止**。逆にすると死活 cron（2分毎・
+閾値3分）が「エッジ無応答」を1通飛ばす。行が消えていれば cron の対象にならない。
+
+**副産物**: 退役時の `ls` で、旧ディレクトリに service_role 鍵のコピーが5本残っているのを
+発見した（`.env` は**現行鍵**、`.envy` と `.env.bak` は失効鍵だが **644＝誰でも読める**）。
+全て削除。現行鍵のコピーは 600・同一ホスト・同一ユーザで、正規の置き場所
+（`edge/shared/agent.env`）を読める者しか読めない＝新たに鍵へ到達できる主体は増えないため
+**鍵ローテはしていない**。削除の理由は露出そのものより「次のローテで出所不明の古い鍵が
+残り続ける」こと。**エッジを退役させたら env ファイルの掃除まで含めて1手順にする。**
 
 ## 5. findings 管理
 
@@ -146,3 +196,4 @@ GA前ロードマップの「脆弱性診断（外部）」を、当面 **内部
 | 2026-06-23 | 本プログラム（CI自動化）導入 | Semgrep（SAST+secrets+OWASP）/ bun audit / Dependabot を CI に追加 |
 | 2026-06-29 | エッジ専用スコープ鍵化 方式比較（§4.1）＋JWT署名前提検証 | 本番JWKSが **ES256非対称署名**を実証 → 自己署名JWT不可。A方式は「GoTrue発行のper-edgeトークン」に確定。次：A′ vs B 最終確定 → spec → `edge_jobs`先行実装 |
 | 2026-08-03 | エッジ専用スコープ鍵化 **B2**（RLS本体・§4.2） | エッジが触る8テーブル＋Storage4バケットに「1エッジ・1店舗」スコープを整備。`edge_devices` は自己申告列だけ更新可（`store_id` 付け替え禁止）。auth ユーザは bootstrap が自動 provisioning。authz 契約テスト 43件 green。B3（`EDGE_SCOPED_DB=true`）は本番切替待ち |
+| 2026-08-03 | エッジ専用スコープ鍵化 **B3**（PoC実機で切替・§4.2） | OTA で新版を healthy まで上げてから `EDGE_SCOPED_DB=true`。heartbeat / NVR時計 / BCP一式（clips16件・PDF・完了メール）がスコープ下で完走。`permission denied` ゼロ。**副産物**: 2台目 `intereco-edge-demo` が `MONITOR_URL` 未設定で bootstrap 未到達と判明（B4 のブロッカー） |
