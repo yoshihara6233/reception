@@ -35,7 +35,9 @@ export function checkCriticalEnv(): EnvCheckItem[] {
     // R2（エグレス無料）。未設定でも静かに Supabase へフォールバックするため、
     // 「気づかないまま課金エグレスが積む」事故になりやすい（2026-08-03: Free 5GB に対し
     // 11.4GB 超過。原因はライブ画像を毎フレーム Supabase から配信していたこと）。
-    { key: 'R2_ACCOUNT_ID',                 required: false, set: has('R2_ACCOUNT_ID'),                 purpose: '未設定だとクリップ・ライブ画像が Supabase 配信のまま＝課金エグレスが視聴時間に比例して増える' },
+    { key: 'EDGE_IMAGES_BASE_URL',          required: false, set: has('EDGE_IMAGES_BASE_URL'),          purpose: 'ライブ画像を自社ドメインのWorker経由でR2へ（例 https://img.genesis-edge.com）。未設定だと Supabase 配信のまま＝課金エグレスが視聴時間に比例して増える' },
+    { key: 'EDGE_IMAGES_SIGNING_SECRET',    required: false, set: has('EDGE_IMAGES_SIGNING_SECRET'),    purpose: 'ライブ画像 Worker と共有する署名鍵（Worker 側 secret と同値でないと全フレーム403）' },
+    { key: 'R2_ACCOUNT_ID',                 required: false, set: has('R2_ACCOUNT_ID'),                 purpose: '未設定だとクリップが Supabase 保存のまま。※eo光等は *.r2.cloudflarestorage.com を遮断するため、その回線ではS3 API経路は使えない' },
     { key: 'R2_ACCESS_KEY_ID',              required: false, set: has('R2_ACCESS_KEY_ID'),              purpose: 'R2 アクセスキー（3点揃って初めて R2 が有効）' },
     { key: 'R2_SECRET_ACCESS_KEY',          required: false, set: has('R2_SECRET_ACCESS_KEY'),          purpose: 'R2 シークレット（3点揃って初めて R2 が有効）' },
     { key: 'R2_EDGE_BUCKET',                required: false, set: has('R2_EDGE_BUCKET'),                purpose: 'ライブ画像(grid/snapshot)の R2 バケット（既定 edge-images）' },

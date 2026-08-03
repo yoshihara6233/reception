@@ -8,6 +8,9 @@ import { createSupabaseServer } from '@/lib/supabase/server'
 import {
   edgeImagesR2Configured, edgeImageExists, presignEdgeImageGet, gridKey,
 } from '@/lib/storage/edge-images-r2'
+import {
+  edgeImagesWorkerConfigured, workerImageExists, signEdgeImageUrl,
+} from '@/lib/storage/edge-images-sign'
 
 export async function GET(
   _req: NextRequest,
@@ -22,8 +25,22 @@ export async function GET(
 
   // R2 優先（エグレス無料）。オブジェクトが無いエッジ＝未移行なので Supabase へ落ちる。
   // 毎フレーム Supabase から取り直すと課金エグレスが視聴1時間あたり約0.5GB出る。
-  if (edgeImagesR2Configured() && (await edgeImageExists(gridKey(edgeId)))) {
-    const url = await presignEdgeImageGet(gridKey(edgeId))
+  //
+  // 経路1: 自社ドメインの Worker。eo光のように `*.r2.cloudflarestorage.com` を
+  // SNI 遮断する回線でも視聴できるため、S3 presigned より優先する。
+  const key = gridKey(edgeId)
+  if (edgeImagesWorkerConfigured() && (await workerImageExists(key))) {
+    const url = signEdgeImageUrl('GET', key)
+    if (url) {
+      return NextResponse.redirect(url, {
+        status: 302,
+        headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },
+      })
+    }
+  }
+  // 経路2: R2 の S3 API 直（Worker 未設定時）。
+  if (edgeImagesR2Configured() && (await edgeImageExists(key))) {
+    const url = await presignEdgeImageGet(key)
     return NextResponse.redirect(url, {
       status: 302,
       headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },

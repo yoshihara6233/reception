@@ -11,6 +11,9 @@ import { createSupabaseServer } from '@/lib/supabase/server'
 import {
   edgeImagesR2Configured, edgeImageExists, presignEdgeImageGet, snapshotKey,
 } from '@/lib/storage/edge-images-r2'
+import {
+  edgeImagesWorkerConfigured, workerImageExists, signEdgeImageUrl,
+} from '@/lib/storage/edge-images-sign'
 
 export async function GET(
   _req: NextRequest,
@@ -24,7 +27,17 @@ export async function GET(
   if (!user) return new NextResponse('Unauthorized', { status: 401 })
 
   // R2 優先（エグレス無料）。未移行エッジは Supabase へフォールバック。
+  // 経路1: 自社ドメインの Worker（SNI 遮断回線でも通る）。経路2: R2 の S3 API 直。
   const key = snapshotKey(edgeId, cameraId)
+  if (edgeImagesWorkerConfigured() && (await workerImageExists(key))) {
+    const url = signEdgeImageUrl('GET', key)
+    if (url) {
+      return NextResponse.redirect(url, {
+        status: 302,
+        headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },
+      })
+    }
+  }
   if (edgeImagesR2Configured() && (await edgeImageExists(key))) {
     const url = await presignEdgeImageGet(key)
     return NextResponse.redirect(url, {
