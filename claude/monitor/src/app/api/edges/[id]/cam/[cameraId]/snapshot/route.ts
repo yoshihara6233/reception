@@ -14,9 +14,12 @@ import {
 import {
   edgeImagesWorkerConfigured, workerImageExists, signEdgeImageUrl,
 } from '@/lib/storage/edge-images-sign'
+import {
+  wantsImageBytes, imageRedirectOrBytes, staleFallbackForbidden, imageUnavailable,
+} from '@/lib/storage/edge-image-response'
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   ctx: { params: Promise<{ id: string; cameraId: string }> },
 ) {
   const { id: edgeId, cameraId } = await ctx.params
@@ -31,20 +34,16 @@ export async function GET(
   const key = snapshotKey(edgeId, cameraId)
   if (edgeImagesWorkerConfigured() && (await workerImageExists(key))) {
     const url = signEdgeImageUrl('GET', key)
-    if (url) {
-      return NextResponse.redirect(url, {
-        status: 302,
-        headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },
-      })
-    }
+    if (url) return imageRedirectOrBytes(url, wantsImageBytes(req))
   }
   if (edgeImagesR2Configured() && (await edgeImageExists(key))) {
     const url = await presignEdgeImageGet(key)
-    return NextResponse.redirect(url, {
-      status: 302,
-      headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },
-    })
+    return imageRedirectOrBytes(url, wantsImageBytes(req))
   }
+
+  // R2/Worker 構成済みなら Supabase は必ず古い（エッジが書かなくなったため）。
+  // 古いフレームを黙って出さず、取得失敗として返す。
+  if (staleFallbackForbidden()) return imageUnavailable()
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
   const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY!

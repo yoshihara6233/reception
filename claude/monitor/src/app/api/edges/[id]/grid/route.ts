@@ -11,9 +11,12 @@ import {
 import {
   edgeImagesWorkerConfigured, workerImageExists, signEdgeImageUrl,
 } from '@/lib/storage/edge-images-sign'
+import {
+  wantsImageBytes, imageRedirectOrBytes, staleFallbackForbidden, imageUnavailable,
+} from '@/lib/storage/edge-image-response'
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   ctx: { params: Promise<{ id: string }> },
 ) {
   const { id: edgeId } = await ctx.params
@@ -31,25 +34,21 @@ export async function GET(
   const key = gridKey(edgeId)
   if (edgeImagesWorkerConfigured() && (await workerImageExists(key))) {
     const url = signEdgeImageUrl('GET', key)
-    if (url) {
-      return NextResponse.redirect(url, {
-        status: 302,
-        headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },
-      })
-    }
+    if (url) return imageRedirectOrBytes(url, wantsImageBytes(req))
   }
   // 経路2: R2 の S3 API 直（Worker 未設定時）。
   if (edgeImagesR2Configured() && (await edgeImageExists(key))) {
     const url = await presignEdgeImageGet(key)
-    return NextResponse.redirect(url, {
-      status: 302,
-      headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },
-    })
+    return imageRedirectOrBytes(url, wantsImageBytes(req))
   }
 
   // Fetch directly from the Storage REST API with service_role key.
   // Using native fetch with cache: 'no-store' bypasses Next.js fetch cache
   // and any internal SDK caching, guaranteeing a fresh response every call.
+  // R2/Worker 構成済みなら Supabase は必ず古い（エッジが書かなくなったため）。
+  // 古いフレームを黙って出さず、取得失敗として返す。
+  if (staleFallbackForbidden()) return imageUnavailable()
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
   const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY!
   const objectPath  = `edges/${edgeId}/grid.jpg`
