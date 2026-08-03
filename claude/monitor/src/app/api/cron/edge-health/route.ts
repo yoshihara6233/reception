@@ -25,6 +25,7 @@ import { sendOpsWebhook, opsWebhookConfigured } from '@/lib/ops/webhook'
 import { nextTunnelState, probeStatusOk, TUNNEL_ALERT_AFTER_SEC } from '@/lib/ops/tunnel-health'
 import { recordMetric } from '@/lib/metrics'
 import { MONITOR_STALE_SECONDS } from '@intereco/shared'
+import { appBaseUrl } from '@/lib/app-url'
 
 interface EdgeRow {
   id: string
@@ -85,7 +86,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const staleMin   = Math.round(staleSec / 60)
   const thresholdMs = Date.now() - staleSec * 1000
   const recipients = (process.env.ALERT_EMAILS ?? '').split(',').map((s) => s.trim()).filter(Boolean)
-  const monitorUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://intereco-monitor.vercel.app'
+  const monitorUrl = appBaseUrl()
 
   const supa = createSupabaseService()
   const { data, error } = await supa

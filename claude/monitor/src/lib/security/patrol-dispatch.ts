@@ -6,13 +6,14 @@
  * 2経路でロジックが乖離しないようにする。実際の pending_command 書込は各呼び出し側で行う
  * （busy/offline の扱いが異なるため）。
  */
+import { appBaseUrl } from '@/lib/app-url'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { randomUUID } from 'node:crypto'
 import type { EdgeCommand } from '@/lib/edge/commands'
 
 /** ingest の絶対URL（エッジはコマンド内のこのURLへ multipart POST する）。 */
 export function patrolIngestUrl(): string {
-  const base = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://intereco-monitor.vercel.app'
+  const base = appBaseUrl()
   return `${base}/api/security/patrol/ingest`
 }
 
