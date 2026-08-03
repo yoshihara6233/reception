@@ -86,7 +86,7 @@ GA前ロードマップの「脆弱性診断（外部）」を、当面 **内部
 |---|---|---|
 | B1 | `edge_jobs` だけを短命スコープトークンへ（先行1テーブル） | 完了（2026-06-29） |
 | B2 | 残り8テーブル＋Storage 4バケットに RLS。エッジ auth ユーザの自動 provisioning | 完了（2026-08-03・migration `20260803160000`） |
-| B3 | エッジを `EDGE_SCOPED_DB=true` に切替（全DB/StorageアクセスがRLS配下） | **PoC Beelink 1台で切替済**（2026-08-03 14:56 JST・soak中）。デモ機は下記の理由で対象外 |
+| B3 | エッジを `EDGE_SCOPED_DB=true` に切替（全DB/StorageアクセスがRLS配下） | **完了**（2026-08-03 14:56 JST 切替・soak中）。稼働エッジは PoC Beelink 1台のみ（デモ機は同日退役） |
 | B4 | bootstrap から `supabase_service_role_key` の返却を撤廃 | B3 の soak 後 |
 
 ### B2 で敷いたスコープ
@@ -163,10 +163,21 @@ PDF 2MB・完了メール着）。BCP は1回で `bcp_events` UPDATE（finalize�
 その手のエッジは鍵ローテにも追従せず（ローテのたびに現地で `.env` 手編集が要る）、
 B4 実施後は scoped トークンを受け取れないまま service_role も来なくなって停止する。
 
-実例（2026-08-03 に発見）: PoC 実機の 2 台目 `intereco-edge-demo`（デモ店 Frigate/Hview・
-`28fee1ec-aa52-…`）が旧パス `/home/intereco/intereco/claude/edge-agent/.env.demo` 運用で
-`MONITOR_URL` / `EDGE_ROOT` ともに未設定だった。B2 の provisioning がこの1台だけ埋まらない
-ことで表面化した。**B4 の前に OTA レイアウト（`edge/shared/agent.env`）へ寄せるか、退役させる。**
+実例（2026-08-03 に発見・**同日解消**）: PoC 実機の 2 台目 `intereco-edge-demo`（デモ店
+Frigate/Hview・`28fee1ec-aa52-…`）が旧パス `/home/intereco/intereco/claude/edge-agent/.env.demo`
+運用で `MONITOR_URL` / `EDGE_ROOT` ともに未設定だった。B2 の provisioning がこの1台だけ
+埋まらないことで表面化。**退役**（`systemctl stop/disable` → 管理画面でエッジ行を削除）。
+現在 `auth_user_id is null` は 0 件＝前提1クリア。
+
+⚠ 退役の順序は **①エッジ行の削除 → ②サービス停止**。逆にすると死活 cron（2分毎・
+閾値3分）が「エッジ無応答」を1通飛ばす。行が消えていれば cron の対象にならない。
+
+**副産物**: 退役時の `ls` で、旧ディレクトリに service_role 鍵のコピーが5本残っているのを
+発見した（`.env` は**現行鍵**、`.envy` と `.env.bak` は失効鍵だが **644＝誰でも読める**）。
+全て削除。現行鍵のコピーは 600・同一ホスト・同一ユーザで、正規の置き場所
+（`edge/shared/agent.env`）を読める者しか読めない＝新たに鍵へ到達できる主体は増えないため
+**鍵ローテはしていない**。削除の理由は露出そのものより「次のローテで出所不明の古い鍵が
+残り続ける」こと。**エッジを退役させたら env ファイルの掃除まで含めて1手順にする。**
 
 ## 5. findings 管理
 
