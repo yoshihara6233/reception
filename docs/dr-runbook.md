@@ -88,6 +88,39 @@ supabase backups restore --project-ref <ref>   # 任意タイムスタンプへ�
 1. **Vercel env** の `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` を復旧先の値に更新 → **Redeploy**（env変更は再デプロイで反映）。
 2. **エッジ**は `MONITOR_URL` 経由の bootstrap で**新URL/鍵を自動取得**（約5分）。急ぐ場合は `/home/intereco/edge/shared/agent.env` の該当値を更新して `sudo systemctl restart intereco-edge`。
 3. 検証: `/admin/edges` でエッジがオンライン復帰・監視画面が正常。
+4. **⚠ バックアップに乗らないもの（2026-08-01 東京移行の実弾教訓）**を手で再構築する:
+   - **Vault secrets**: `project_url` / `service_role_key` / `app_url` / `bcp_webhook_secret`（無いと J-Alert ポーリングと BCP PDF 自動生成が**黙って**止まる）。
+   - **pg_cron ジョブ**（5本: jalert_poll / bcp_report_sweep / patrol 系 / cleanup 系）— `select jobname, schedule, active from cron.job;` で確認。
+   - 点検 SQL・復旧手順の詳細はメモリ/過去実績（2026-08-01 BCP 沈黙障害）を参照。
+
+### 3.5 データ復旧訓練（非破壊・所要約30分・GA前に1回実施）
+
+> 本番には一切書き込まない。**「ダンプ取得 → 空プロジェクトへ復元 → 検証」**を通しで計測し、§0 の RTO(データ) を実測値に置き換えるのが目的。
+
+1. **計測開始**（開始時刻を記録）。
+2. **本番からデータダンプ取得**（読み取りのみ・ユーザー実行）:
+   ```bash
+   pg_dump "$PROD_DB_URL" --data-only --no-owner --no-privileges -Fc -f ~/dr-drill-$(date +%Y%m%d).dump
+   ```
+3. **復旧先を用意**: Supabase で訓練用プロジェクトを新規作成（東京）→ スキーマは migrations から適用:
+   ```bash
+   supabase db push --db-url "$DRILL_DB_URL"    # スキーマ編は 28 秒実績
+   ```
+4. **データ復元**:
+   ```bash
+   pg_restore --data-only --disable-triggers --no-owner -d "$DRILL_DB_URL" ~/dr-drill-*.dump
+   ```
+5. **検証 SQL**（本番と件数比較・主要テーブル）:
+   ```sql
+   select 'stores' t, count(*) from stores union all
+   select 'edge_devices', count(*) from edge_devices union all
+   select 'admin_users', count(*) from admin_users union all
+   select 'bcp_events', count(*) from bcp_events union all
+   select 'inspection_sessions', count(*) from inspection_sessions union all
+   select 'recorder_cameras', count(*) from recorder_cameras;
+   ```
+6. **§3.4-4 の「乗らないもの」チェック**: 訓練プロジェクトに Vault secrets と cron.job が**無い**ことを確認し、再構築手順を読み合わせる（実際の再構築は本番切替時のみ）。
+7. **記録**: 所要時間を §0 の RTO(データ) 実測として追記。ダンプは削除 or 暗号化保管、訓練プロジェクトは削除。
 
 ---
 

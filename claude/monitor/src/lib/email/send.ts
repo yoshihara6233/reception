@@ -357,7 +357,7 @@ export function edgeOfflineAlertEmail(p: EdgeHealthParams): { subject: string; h
 <html lang="ja"><head><meta charset="UTF-8"></head>
 <body style="font-family:sans-serif;color:#333;max-width:600px;margin:0 auto;padding:20px">
   <h2 style="color:#c0392b">🔴 エッジ無応答</h2>
-  <p>エッジからの heartbeat が <b>${p.staleMin}分以上</b>途絶えています。監視/録画が停止している可能性があります。</p>
+  <p>エッジからの heartbeat が <b>${p.staleMin}分以上</b>途絶えています。<b>遠隔監視が停止</b>している可能性があります（録画はレコーダ本体で継続します）。</p>
   <table style="width:100%;border-collapse:collapse;margin:16px 0">
     <tr><td style="padding:8px;background:#f5f5f5;font-weight:bold;width:140px;border:1px solid #ddd">店舗</td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(p.storeName)}</td></tr>
     <tr><td style="padding:8px;background:#f5f5f5;font-weight:bold;border:1px solid #ddd">エッジ</td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(p.edgeName)}</td></tr>
