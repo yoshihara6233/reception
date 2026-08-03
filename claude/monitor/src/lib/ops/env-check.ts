@@ -32,6 +32,14 @@ export function checkCriticalEnv(): EnvCheckItem[] {
     { key: 'LIVEKIT_URL',                   required: false, set: has('LIVEKIT_URL'),                   purpose: 'SFUベータ: LiveKit プロジェクトURL（wss://…）。LIVEKIT_ENABLED=true 時に必須' },
     { key: 'LIVEKIT_API_KEY',               required: false, set: has('LIVEKIT_API_KEY'),               purpose: 'SFUベータ: LiveKit APIキー。token/ingress 発行に必須' },
     { key: 'LIVEKIT_API_SECRET',            required: false, set: has('LIVEKIT_API_SECRET'),            purpose: 'SFUベータ: LiveKit APIシークレット。token/ingress 発行に必須' },
+    // R2（エグレス無料）。未設定でも静かに Supabase へフォールバックするため、
+    // 「気づかないまま課金エグレスが積む」事故になりやすい（2026-08-03: Free 5GB に対し
+    // 11.4GB 超過。原因はライブ画像を毎フレーム Supabase から配信していたこと）。
+    { key: 'R2_ACCOUNT_ID',                 required: false, set: has('R2_ACCOUNT_ID'),                 purpose: '未設定だとクリップ・ライブ画像が Supabase 配信のまま＝課金エグレスが視聴時間に比例して増える' },
+    { key: 'R2_ACCESS_KEY_ID',              required: false, set: has('R2_ACCESS_KEY_ID'),              purpose: 'R2 アクセスキー（3点揃って初めて R2 が有効）' },
+    { key: 'R2_SECRET_ACCESS_KEY',          required: false, set: has('R2_SECRET_ACCESS_KEY'),          purpose: 'R2 シークレット（3点揃って初めて R2 が有効）' },
+    { key: 'R2_EDGE_BUCKET',                required: false, set: has('R2_EDGE_BUCKET'),                purpose: 'ライブ画像(grid/snapshot)の R2 バケット（既定 edge-images）' },
+    { key: 'R2_BAGGAGE_BUCKET',             required: false, set: has('R2_BAGGAGE_BUCKET'),             purpose: '手荷物検査クリップの R2 バケット（既定 baggage-clips）' },
   ]
 }
 
