@@ -1,0 +1,21 @@
+# intereco-edge-images — ライブ画像(grid/snapshot)を自社ドメイン経由で R2 に読み書きする Worker。
+# デプロイ手順は README.md を参照。
+
+name = "intereco-edge-images"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+
+# ルート: 画像専用サブドメイン。
+#  eo光は *.r2.cloudflarestorage.com を SNI 遮断するが genesis-edge.com は通る（2026-08-03 実測）。
+#  この Worker は R2 バインディング経由で読み書きするため、遮断ホスト名を一切踏まない。
+routes = [
+  { pattern = "img.genesis-edge.com/v1/*", zone_name = "genesis-edge.com" },
+]
+
+# R2 バケット（S3 API ではなくバインディングで直接アクセス）。
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "edge-images"
+
+# Secrets は wrangler secret put で設定（このファイルには書かない）:
+#   wrangler secret put EDGE_IMAGES_SIGNING_SECRET   # = Vercel の同名 env と一致させる

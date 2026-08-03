@@ -16,6 +16,9 @@ import { createSupabaseService } from '@/lib/supabase/server'
 import {
   edgeImagesR2Configured, presignEdgeImagePut, gridKey, snapshotKey,
 } from '@/lib/storage/edge-images-r2'
+import {
+  edgeImagesWorkerConfigured, signEdgeImageUrl, EDGE_IMAGES_PUT_TTL_SEC,
+} from '@/lib/storage/edge-images-sign'
 
 const Body = z.object({
   // 省略時は grid のみ。カメラ ID を渡すとその分の snapshot URL も返す。
@@ -47,6 +50,28 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
   const cameraIds = parsed.data.cameraIds ?? []
 
+  // 経路1（推奨）: 自社ドメインの Worker 経由。
+  // eo光のように `*.r2.cloudflarestorage.com` を SNI 遮断する回線でも通るため、
+  // S3 presigned より先に試す。エッジ側は URL を PUT するだけで実装差はない。
+  if (edgeImagesWorkerConfigured()) {
+    const grid = signEdgeImageUrl('PUT', gridKey(edgeId))
+    if (grid) {
+      const snapshots: Record<string, string> = {}
+      for (const camId of cameraIds) {
+        const u = signEdgeImageUrl('PUT', snapshotKey(edgeId, camId))
+        if (u) snapshots[camId] = u
+      }
+      return NextResponse.json({
+        mode: 'r2',
+        via: 'worker',
+        expiresAt: Date.now() + EDGE_IMAGES_PUT_TTL_SEC * 1000,
+        grid,
+        snapshots,
+      })
+    }
+  }
+
+  // 経路2: R2 の S3 API 直（Worker 未設定時）。遮断回線では失敗し Supabase へ落ちる。
   if (!edgeImagesR2Configured()) return NextResponse.json({ mode: 'supabase' })
 
   try {

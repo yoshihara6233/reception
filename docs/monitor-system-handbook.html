@@ -617,6 +617,8 @@
 <p><strong>事象</strong>: 本番 Supabase（Free）の Egress が <strong>11.4GB / 5GB = 228% 超過</strong>。DB は 155MB、MAU 10 と健全で、<strong>原因はライブ視聴の画像配信のみ</strong>だった。</p>
 <p><strong>原因</strong>: 16分割 <code>grid.jpg</code> とカメラ別 <code>snapshot.jpg</code> は、ライブの鮮度を優先して <strong>CDN を意図的に迂回</strong>していた（<code>?t=</code> キャッシュバスター＋<code>no-store</code>）。そのため1枚もCDNに乗らず、<strong>毎フレームが課金エグレス</strong>になる。概算 <strong>視聴1時間あたり約0.5GB</strong>（グリッド約300KB×0.5fps／単画約100KB×1.5fps）。視聴上限120分/日を使い切ると1人で月約30GB。</p>
 <p><strong>対策（PR #250）</strong>: 手荷物検査クリップと同じ <strong>R2 方式（エグレス無料）</strong>へ移行。エッジは presigned PUT（キー固定・TTL1時間を使い回すので毎フレームの往復なし）で R2 へ直接上げ、配信は presigned GET へ302。<strong>R2にオブジェクトが無いエッジは自動的に従来のSupabase経路へフォールバック</strong>するため、デプロイとOTAの順序に依存しない。</p>
+<p>🔴 <strong>ただし S3 API 経路だけでは PoC 店で機能しない（PR #252 で恒久対策）</strong>: eo光が <code>*.r2.cloudflarestorage.com</code> を <strong>SNI 遮断</strong>している（2026-08-03 実測: <code>r2.dev</code>・<code>genesis-edge.com</code>・<code>api.cloudflare.com</code> はいずれも到達可＝<strong>遮断はこのホスト名だけ</strong>）。放置すると当該店では毎回 Supabase へ静かにフォールバックし、削減効果がゼロになる。<br>
+→ <strong>自社ドメインの Cloudflare Worker（<code>img.genesis-edge.com</code>・R2バインディング）</strong>を経由させ、遮断ホスト名を一切踏まない構成にした。認証は既存 live-gate と同じ短TTL HMAC（正規化文字列 <code>method\nkey\nexp</code>・method を含むので PUT 署名で GET 不可）。同種フィルタを持つ顧客店舗でも同じ事故が起きうるため、<strong>全店でこの経路を既定</strong>とする。</p>
 <p><strong>なぜ重要か</strong>: この費用は<strong>店舗数×視聴時間に比例</strong>する。多店舗を本部が見る使い方ほど増えるため、放置すると店舗単価 ¥3,200/月 の粗利を直接削る。5,000店構想では致命的だった。</p>
 <p class="small">運用: Cloudflare に <code>edge-images</code> バケットを作成し、Vercel env <code>R2_EDGE_BUCKET</code>（既定 <code>edge-images</code>）を設定。<code>R2_ACCOUNT_ID</code>／<code>R2_ACCESS_KEY_ID</code>／<code>R2_SECRET_ACCESS_KEY</code> はクリップ用と共用。移行後は Supabase 側の旧 <code>edge-grids</code> バケットの掃除も可。</p>
 </div>
