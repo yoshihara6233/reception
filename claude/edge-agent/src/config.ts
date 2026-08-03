@@ -4,7 +4,11 @@ import { z } from 'zod'
 const Env = z.object({
   SUPABASE_URL:              z.string().url(),
   SUPABASE_ANON_KEY:         z.string().min(20),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(20),
+  // Phase B4: スコープ運用（EDGE_SCOPED_DB=true）に載ったエッジでは **不要**。
+  // .env から消せるようにするため optional にした（消せなければ「bootstrap が
+  // 鍵を返さない」ようにしても、エッジのディスクにはマスター鍵が残り続ける）。
+  // 非スコープ運用では従来どおり必須（下の superRefine で強制）。
+  SUPABASE_SERVICE_ROLE_KEY: z.string().min(20).optional(),
   EDGE_ID:                   z.string().uuid(),
   EDGE_DEVICE_TOKEN:         z.string().min(8),
 
@@ -97,6 +101,16 @@ const Env = z.object({
   // 必要だったため踏襲。小さくすると未フラッシュで latest フォールバックしやすくなる。
   // 発生時以降はライブ即時取得のためこの猶予は掛からない。
   ALARM_FRAME_SETTLE_MS: z.coerce.number().default(60_000),
+}).superRefine((v, ctx) => {
+  // スコープ運用でない限り service_role は必須。ここを緩めたままにすると
+  // 「鍵が無いのに非スコープ経路が走って実行時に落ちる」状態を許してしまう。
+  if (!v.EDGE_SCOPED_DB && !v.SUPABASE_SERVICE_ROLE_KEY) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['SUPABASE_SERVICE_ROLE_KEY'],
+      message: 'EDGE_SCOPED_DB=true のとき以外は必須です（省略できるのはスコープ運用のみ）',
+    })
+  }
 })
 
 export const config = Env.parse(process.env)

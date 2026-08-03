@@ -30,7 +30,8 @@ const otaDeps: RunnerDeps = {
   heartbeatGraceMs: config.OTA_HEARTBEAT_GRACE_MS,
 }
 
-let currentKey = config.SUPABASE_SERVICE_ROLE_KEY
+// Phase B4 以降は未設定でもよい（スコープ運用では使わない）。
+let currentKey: string | undefined = config.SUPABASE_SERVICE_ROLE_KEY
 let client: SupabaseClient | null = null
 
 // --- scoped(短命トークン)状態 ---
@@ -70,6 +71,11 @@ function scopedTokenFresh(): boolean {
 export function getSupabase(): SupabaseClient {
   if (config.EDGE_SCOPED_DB) return scopedClientOrStale()
   if (!client) {
+    // config の superRefine で担保しているのでここには来ないはずだが、
+    // 万一来たら黙って壊れるより明示的に落とす（無鍵クライアントを作らない）。
+    if (!currentKey) {
+      throw new Error('SUPABASE_SERVICE_ROLE_KEY が未設定です（EDGE_SCOPED_DB=true にするか鍵を設定してください）')
+    }
     client = createClient(config.SUPABASE_URL, currentKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     })
@@ -116,6 +122,12 @@ export async function refreshSupabaseKey(): Promise<void> {
       currentKey = key
       client = null   // 次回 getSupabase() で新キーで作り直す
       logger.info('bootstrap: supabase service key refreshed from monitor')
+    } else if (!key && currentKey && config.EDGE_SCOPED_DB) {
+      // Phase B4: サーバが service_role を返さなくなった（scoped_only）。
+      // スコープ運用中は使わないので、メモリ上からも落としておく。
+      currentKey = undefined
+      client = null
+      logger.info('bootstrap: service_role no longer issued (scoped_only) — dropped from memory')
     }
 
     // scoped トークン（あれば反映）。値が変わった時だけクライアントを作り直す。

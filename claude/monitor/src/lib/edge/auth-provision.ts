@@ -109,3 +109,21 @@ export async function ensureEdgeAuthPassword(
 
   return password
 }
+
+/**
+ * Phase B4: この応答で `supabase_service_role_key` を省いてよいか。
+ *
+ * 省いてよいのは「このエッジが確実にスコープトークンを持っている」と言える時だけ。
+ * 代替手段が無い応答で鍵まで止めると、そのエッジは何もできなくなる（＝丸腰）。
+ * bootstrap は5分ごとに来るので、1回見送っても次で締まる。**安全側に倒す。**
+ */
+export function mayWithholdServiceRole(opts: {
+  /** edge_devices.scoped_only — 本部が「このエッジには配らない」と宣言している */
+  scopedOnly: boolean
+  /** この応答でスコープトークンを新規発行できた */
+  mintedToken: boolean
+  /** エッジが x-scoped-until で「手持ちがまだ有効」と申告している */
+  clientTokenStillFresh: boolean
+}): boolean {
+  return opts.scopedOnly && (opts.mintedToken || opts.clientTokenStillFresh)
+}

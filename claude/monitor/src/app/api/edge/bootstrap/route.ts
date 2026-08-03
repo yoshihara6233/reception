@@ -23,7 +23,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createSupabaseService } from '@/lib/supabase/server'
-import { edgeAuthEmail, ensureEdgeAuthPassword } from '@/lib/edge/auth-provision'
+import { edgeAuthEmail, ensureEdgeAuthPassword, mayWithholdServiceRole } from '@/lib/edge/auth-provision'
 
 /**
  * 手持ちトークンの残り寿命がこれ以上あれば再発行しない（秒）。
@@ -44,7 +44,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const supa = createSupabaseService()
   const { data, error } = await supa
     .from('edge_devices')
-    .select('id, store_id, auth_user_id, auth_password_enc, desired_agent_version, desired_cloudflared_version')
+    .select('id, store_id, scoped_only, auth_user_id, auth_password_enc, desired_agent_version, desired_cloudflared_version')
     .eq('device_token', token)
     .single()
   if (error || !data) return NextResponse.json({ error: 'invalid device token' }, { status: 401 })
@@ -52,7 +52,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const body: {
     edge_id: string
     supabase_url: string
-    supabase_service_role_key: string
+    // Phase B4: scoped_only なエッジには返さない（下の安全装置つき）。
+    supabase_service_role_key?: string
     scoped_access_token?: string
     scoped_expires_at?: number
     // 自律OTA: 本部が宣言する目標版（NULL=更新指示なし）。エッジは pull で受けて
@@ -62,7 +63,6 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   } = {
     edge_id: data.id,
     supabase_url: url,
-    supabase_service_role_key: key,
     desired_agent_version: (data.desired_agent_version as string | null) ?? null,
     desired_cloudflared_version: (data.desired_cloudflared_version as string | null) ?? null,
   }
@@ -100,6 +100,20 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       // provisioning/復号/サインイン失敗は無視（scoped を返さないだけ）。
     }
   }
+
+  // Phase B4: scoped_only なエッジには service_role を返さない。
+  //
+  // ただし省くのは「このエッジが確実にスコープトークンを持っている」と言える時だけ:
+  //   - この応答で新しく発行できた（scoped_access_token あり）
+  //   - もしくはエッジが x-scoped-until でまだ有効だと申告している（stillFresh）
+  // どちらでもない＝代替手段が無い応答で鍵まで止めるとエッジが丸腰になるため、
+  // その場合は従来どおり返して次の pull で復帰させる（フェイルセーフ）。
+  const withhold = mayWithholdServiceRole({
+    scopedOnly: data.scoped_only === true,
+    mintedToken: !!body.scoped_access_token,
+    clientTokenStillFresh: stillFresh,
+  })
+  if (!withhold) body.supabase_service_role_key = key
 
   return NextResponse.json(body, { headers: { 'Cache-Control': 'no-store' } })
 }

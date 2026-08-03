@@ -17,6 +17,9 @@ const PatchBody = z.object({
   // エッジは /api/edge/bootstrap の pull で受信して self-update する。
   desired_agent_version:       trimmedNullable,
   desired_cloudflared_version: trimmedNullable,
+  // Phase B4: true にすると bootstrap が service_role を返さなくなる（per-device カナリア）。
+  // 実際に省かれるのは scoped トークンを渡せた応答のみ（route 側の安全装置）。
+  scoped_only:   z.boolean().optional(),
 })
 
 export async function PUT(

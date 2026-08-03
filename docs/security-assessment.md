@@ -87,7 +87,7 @@ GA前ロードマップの「脆弱性診断（外部）」を、当面 **内部
 | B1 | `edge_jobs` だけを短命スコープトークンへ（先行1テーブル） | 完了（2026-06-29） |
 | B2 | 残り8テーブル＋Storage 4バケットに RLS。エッジ auth ユーザの自動 provisioning | 完了（2026-08-03・migration `20260803160000`） |
 | B3 | エッジを `EDGE_SCOPED_DB=true` に切替（全DB/StorageアクセスがRLS配下） | コード投入済・**本番の切替は未**（下記手順） |
-| B4 | bootstrap から `supabase_service_role_key` の返却を撤廃 | B3 の soak 後 |
+| B4 | bootstrap から `supabase_service_role_key` の返却を撤廃 | **機構は実装済**（`edge_devices.scoped_only`・既定 false）。有効化は soak 後に1台ずつ |
 
 ### B2 で敷いたスコープ
 
@@ -123,6 +123,52 @@ GA前ロードマップの「脆弱性診断（外部）」を、当面 **内部
 **フェイルクローズ設計**: スコープトークンが取れない/期限切れのとき、エッジは service_role へ
 フォールバックしない。要求は 401 になり、heartbeat のエラー処理が bootstrap を叩いて自動復帰する。
 「静かに越権状態へ戻る」より「見えて止まる」を選んでいる。
+
+### B4 の中身（3点セット。1つ欠けると鍵は消えない）
+
+**「bootstrap が鍵を返さない」だけでは、エッジから鍵は消えない。** エッジの
+`shared/agent.env` には `SUPABASE_SERVICE_ROLE_KEY` が残り、しかも旧実装では
+それが無いと agent が起動すらしなかった（zod で必須）。B4 は次の3つで完成する。
+
+| # | 何を | どこで |
+|---|---|---|
+| 1 | bootstrap が鍵を返さなくなる | `edge_devices.scoped_only = true`（per-device） |
+| 2 | 鍵が無くても agent が動く | `SUPABASE_SERVICE_ROLE_KEY` を optional 化（`EDGE_SCOPED_DB=true` のときのみ省略可） |
+| 3 | **鍵をディスクから消す** | `shared/agent.env` から当該行を削除して restart |
+
+3 をやって初めて「device_token が漏れてもマスター鍵は取れない」が成立する。
+1 と 2 だけでは、鍵の**配布経路**が止まるだけで**保管**は残る。
+
+**安全装置**: bootstrap が鍵を省くのは「このエッジが確実にスコープトークンを持っている」
+と言える応答だけ（この応答で発行できた or エッジが `x-scoped-until` でまだ有効だと申告）。
+provisioning 失敗などでトークンを出せなかった応答では `scoped_only=true` でも従来どおり
+鍵を返す。代替手段が無い状態でエッジを丸腰にしないため。
+
+**per-device にした理由**: 全台一斉にコードで止めると、取り残された1台（bootstrap 未到達・
+旧ビルド）が無言で死ぬ。2026-08-03 に実際そういうエッジが1台見つかっている。OTA の
+desired 版と同じカナリア方式にして、SQL 1行で即戻せるようにした。
+
+**`scoped_only` はエッジ自身では変更できない**（`edge_devices` の自己申告列ホワイトリストに
+入っていない）。authz 契約テストで true→false を試みて拒否されることを固定している。
+
+### B4 有効化手順（1台ずつ）
+
+```sql
+-- ① 鍵の配布を止める
+update edge_devices set scoped_only = true where id = '<edge_id>';
+```
+
+② 5〜10分待ち、エッジのログに `service_role no longer issued (scoped_only)` が出て、
+`last_seen_at` が更新され続けることを確認する。
+
+```bash
+# ③ 鍵をディスクから消す（ここまでやって B4 完了）
+ssh -t intereco@<edge> 'F=/home/intereco/edge/shared/agent.env; sudo sed -i "/^SUPABASE_SERVICE_ROLE_KEY=/d" $F; sudo systemctl restart intereco-edge'
+```
+
+戻す場合は `scoped_only = false` に戻し、鍵を `agent.env` に書き戻して restart。
+③まで進むと鍵が手元に無いため、戻すには Supabase から現行鍵を取り直す必要がある
+（＝③は soak を終えてから）。
 
 ### B4 の前提
 
