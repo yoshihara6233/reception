@@ -3,15 +3,23 @@ import { logger } from '../logger.js'
 import { getSupabase, refreshSupabaseKey } from '../supabase.js'
 import { reportedOta } from '../ota/report.js'
 import { markHeartbeatOk } from '../ota/signal.js'
+import { putGridToR2, putSnapshotToR2 } from './edge-images-r2.js'
 
 const BUCKET = 'edge-grids'
 const KEY    = `edges/${config.EDGE_ID}/grid.jpg`
 
 /**
- * Overwrite the latest grid JPEG in Supabase Storage.
+ * Overwrite the latest grid JPEG.
+ *
+ * R2 を優先する（エグレス無料）。R2 未設定・presign 取得不可・PUT 失敗のときは
+ * 従来どおり Supabase Storage へ上げる＝どちらの経路でも配信側が拾える。
  * The bucket should be private; viewers fetch via signed URLs from /api.
  */
-export async function uploadGridJpeg(buf: Buffer): Promise<void> {
+export async function uploadGridJpeg(buf: Buffer, cameraIds: string[] = []): Promise<void> {
+  if (await putGridToR2(buf, cameraIds)) {
+    logger.debug({ bytes: buf.length }, 'storage: grid → r2 ok')
+    return
+  }
   const { error } = await getSupabase().storage.from(BUCKET).upload(KEY, buf, {
     contentType: 'image/jpeg',
     upsert: true,
@@ -30,6 +38,11 @@ export async function uploadGridJpeg(buf: Buffer): Promise<void> {
  * Path mirrors the grid object for symmetry.
  */
 export async function uploadCameraSnapshot(cameraId: string, buf: Buffer): Promise<void> {
+  // R2 優先（エグレス無料）。失敗時は Supabase へフォールバック。
+  if (await putSnapshotToR2(cameraId, buf)) {
+    logger.debug({ bytes: buf.length, cameraId }, 'storage: cam snapshot → r2 ok')
+    return
+  }
   const key = `edges/${config.EDGE_ID}/cam/${cameraId}/snapshot.jpg`
   const { error } = await getSupabase().storage.from(BUCKET).upload(key, buf, {
     contentType: 'image/jpeg',

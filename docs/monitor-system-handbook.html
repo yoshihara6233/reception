@@ -612,6 +612,15 @@
 </table>
 <p class="small">構成③（Frigate録画）は多TBストレージが必要で高額（例: 8ch×4Mbps×31日≒10TB）— 標準提案しない。Tier-3（中央集約・店舗ハード¥0）モードも実装済み。</p>
 
+<h3>15.2b ライブ視聴のエグレス（2026-08-03 実弾で判明・R2移行で解消）</h3>
+<div class="card">
+<p><strong>事象</strong>: 本番 Supabase（Free）の Egress が <strong>11.4GB / 5GB = 228% 超過</strong>。DB は 155MB、MAU 10 と健全で、<strong>原因はライブ視聴の画像配信のみ</strong>だった。</p>
+<p><strong>原因</strong>: 16分割 <code>grid.jpg</code> とカメラ別 <code>snapshot.jpg</code> は、ライブの鮮度を優先して <strong>CDN を意図的に迂回</strong>していた（<code>?t=</code> キャッシュバスター＋<code>no-store</code>）。そのため1枚もCDNに乗らず、<strong>毎フレームが課金エグレス</strong>になる。概算 <strong>視聴1時間あたり約0.5GB</strong>（グリッド約300KB×0.5fps／単画約100KB×1.5fps）。視聴上限120分/日を使い切ると1人で月約30GB。</p>
+<p><strong>対策（PR #250）</strong>: 手荷物検査クリップと同じ <strong>R2 方式（エグレス無料）</strong>へ移行。エッジは presigned PUT（キー固定・TTL1時間を使い回すので毎フレームの往復なし）で R2 へ直接上げ、配信は presigned GET へ302。<strong>R2にオブジェクトが無いエッジは自動的に従来のSupabase経路へフォールバック</strong>するため、デプロイとOTAの順序に依存しない。</p>
+<p><strong>なぜ重要か</strong>: この費用は<strong>店舗数×視聴時間に比例</strong>する。多店舗を本部が見る使い方ほど増えるため、放置すると店舗単価 ¥3,200/月 の粗利を直接削る。5,000店構想では致命的だった。</p>
+<p class="small">運用: Cloudflare に <code>edge-images</code> バケットを作成し、Vercel env <code>R2_EDGE_BUCKET</code>（既定 <code>edge-images</code>）を設定。<code>R2_ACCOUNT_ID</code>／<code>R2_ACCESS_KEY_ID</code>／<code>R2_SECRET_ACCESS_KEY</code> はクリップ用と共用。移行後は Supabase 側の旧 <code>edge-grids</code> バケットの掃除も可。</p>
+</div>
+
 <h3>15.3 手荷物検査オプションの変動費（前提: 退室200件/日・<strong>店長が全件確認再生</strong>）</h3>
 <p class="small">前提シナリオ: 退室200件/日（従業員150名×入退各1回＋来訪50名/日）。<strong>クリップは 720p・1024Kbps</strong>・検査窓約2分（±15秒バッファ込み）≒ <strong>約15MB/本</strong>（カメラ毎）。定常在庫 = 200件×2カメラ×15MB×保持60日 ≒ <strong>360GB/店</strong>。運用は<strong>店長による全件確認再生</strong>（各クリップ1回再生）＝ 再生転送量 200×2×15MB×30日 ≒ <strong>180GB/月/店</strong>。為替 1USD=155円。<span class="badge b-warn">訂正 7/21</span> 旧版はビットレートを約4Mbps（60MB/本）と過大に置いていた — 仕様の 1024Kbps 正で全体が1/4に。</p>
 <table>
