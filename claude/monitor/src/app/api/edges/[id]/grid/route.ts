@@ -5,6 +5,9 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseServer } from '@/lib/supabase/server'
+import {
+  edgeImagesR2Configured, edgeImageExists, presignEdgeImageGet, gridKey,
+} from '@/lib/storage/edge-images-r2'
 
 export async function GET(
   _req: NextRequest,
@@ -16,6 +19,16 @@ export async function GET(
   const supa = await createSupabaseServer()
   const { data: { user } } = await supa.auth.getUser()
   if (!user) return new NextResponse('Unauthorized', { status: 401 })
+
+  // R2 優先（エグレス無料）。オブジェクトが無いエッジ＝未移行なので Supabase へ落ちる。
+  // 毎フレーム Supabase から取り直すと課金エグレスが視聴1時間あたり約0.5GB出る。
+  if (edgeImagesR2Configured() && (await edgeImageExists(gridKey(edgeId)))) {
+    const url = await presignEdgeImageGet(gridKey(edgeId))
+    return NextResponse.redirect(url, {
+      status: 302,
+      headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },
+    })
+  }
 
   // Fetch directly from the Storage REST API with service_role key.
   // Using native fetch with cache: 'no-store' bypasses Next.js fetch cache

@@ -193,7 +193,8 @@ export async function startGrid(cameras: CameraDescriptor[]): Promise<GridHandle
       .jpeg({ quality: 100 - config.GRID_JPEG_QUALITY * 3 })  // map old 1..31 → ~97..7
       .toBuffer()
 
-    await uploadGridJpeg(composed)
+    // カメラIDも渡す: R2 の presign を grid と snapshot まとめて1回で取るため。
+    await uploadGridJpeg(composed, slots.map((s) => s.camId))
     logger.debug({ ok, total: slots.length }, 'grid: frame uploaded')
   }
 

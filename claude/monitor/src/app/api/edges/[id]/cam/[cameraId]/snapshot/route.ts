@@ -8,6 +8,9 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseServer } from '@/lib/supabase/server'
+import {
+  edgeImagesR2Configured, edgeImageExists, presignEdgeImageGet, snapshotKey,
+} from '@/lib/storage/edge-images-r2'
 
 export async function GET(
   _req: NextRequest,
@@ -19,6 +22,16 @@ export async function GET(
   const supa = await createSupabaseServer()
   const { data: { user } } = await supa.auth.getUser()
   if (!user) return new NextResponse('Unauthorized', { status: 401 })
+
+  // R2 優先（エグレス無料）。未移行エッジは Supabase へフォールバック。
+  const key = snapshotKey(edgeId, cameraId)
+  if (edgeImagesR2Configured() && (await edgeImageExists(key))) {
+    const url = await presignEdgeImageGet(key)
+    return NextResponse.redirect(url, {
+      status: 302,
+      headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },
+    })
+  }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
   const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY!
