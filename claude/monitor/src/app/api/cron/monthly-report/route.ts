@@ -11,6 +11,7 @@ import { sendEmail, SECURITY_FROM_ADDRESS } from '@/lib/email/send'
 import { jstDateStr } from '@/lib/baggage/unmatch'
 import { prevMonth } from '@/lib/reports/usage'
 import { finalizeMonthlyReport } from '@/lib/reports/finalize'
+import { appBaseUrl } from '@/lib/app-url'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
@@ -52,7 +53,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       const to = ((admins ?? []) as { email: string | null }[]).map((a) => a.email).filter(Boolean) as string[]
       let mailed = 0
       if (to.length) {
-        const appBase = process.env.NEXT_PUBLIC_APP_URL ?? 'https://intereco-monitor.vercel.app'
+        const appBase = appBaseUrl()
         const html = `<p>${t.name} 様</p><p>${ymLabel}の利用状況レポートを確定しました。</p>`
           + `<p><a href="${appBase}/admin/reports/usage?month=${ym}">管理画面で見る</a>`
           + (fin.pdfUrl ? ` / <a href="${fin.pdfUrl}">PDF</a>` : '') + '</p>'

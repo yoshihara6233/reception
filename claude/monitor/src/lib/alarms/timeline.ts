@@ -4,6 +4,7 @@
  * 1 発報につき「店舗の全カメラ × 下記オフセット」の JPEG を録画から抽出する。
  * 発生時=0 を基準に、前後を秒粒度で並べた 8 点のフォレンジックタイムライン。
  */
+import { appBaseUrl } from '@/lib/app-url'
 
 /** 取得オフセット（秒）。負=発報前 / 0=発生時 / 正=発報後。昇順。 */
 export const ALARM_TIMELINE_OFFSETS_SEC = [-5, 0, 5, 10, 20, 30, 60, 180] as const
@@ -27,6 +28,6 @@ export function offsetLabel(sec: number): string {
 
 /** frames ingest の絶対 URL（エッジはコマンド内のこの URL へ multipart POST）。 */
 export function alarmFramesIngestUrl(): string {
-  const base = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://intereco-monitor.vercel.app'
+  const base = appBaseUrl()
   return `${base}/api/alarms/frames/ingest`
 }
