@@ -8,23 +8,28 @@
  * signInWithPassword し、短命アクセストークン(≤1h)を `scoped_access_token` /
  * `scoped_expires_at` として追加で返す。エッジは edge_jobs だけをこのトークン
  * (authenticated/RLS スコープ)で叩く。トークンの app_metadata.edge_id を RLS が見て、
- * 自分宛の行だけに絞る。auth ユーザ未provisioning のエッジには scoped を返さない
- * （従来 service_role 経路のまま＝後方互換・無停止）。
+ * 自分宛の行だけに絞る。
+ *
+ * Phase B2: auth ユーザが未 provisioning なら **この場で作る**（旧実装は
+ * scripts/provision-edge-auth.ts の手動実行が前提だった）。エンロールしたエッジが
+ * 最初に bootstrap を叩いた時点でスコープ用の身元が揃うため、やり忘れが起きない。
+ * SECRETS_ENC_KEY 未設定の環境では provisioning しない（平文保存を避ける）。
  *
  * 認証: edge_devices.device_token と一致するトークンのみ。
  *
- * ⚠ 移行中は service_role も従来通り返す（未移行テーブル用）。全テーブル移行完了時に
+ * ⚠ 移行中は service_role も従来通り返す。Phase B4（全エッジがスコープ運用に載ったら）で
  *   service_role 返却を撤廃し、device_token 漏洩時の影響限定を完成させる。
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createSupabaseService } from '@/lib/supabase/server'
-import { decryptSecret } from '@intereco/shared'
+import { edgeAuthEmail, ensureEdgeAuthPassword } from '@/lib/edge/auth-provision'
 
-/** エッジ auth ユーザのメール（edge_id から決定的に導出。provisioning と一致させる）。 */
-function edgeAuthEmail(edgeId: string): string {
-  return `edge+${edgeId}@edge.intereco.local`
-}
+/**
+ * 手持ちトークンの残り寿命がこれ以上あれば再発行しない（秒）。
+ * bootstrap の pull 間隔（既定 5 分）より十分大きく取り、切れる前に必ず1回は回るようにする。
+ */
+const SCOPED_REISSUE_MARGIN_SEC = 15 * 60
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const token = req.headers.get('x-device-token')
@@ -39,7 +44,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const supa = createSupabaseService()
   const { data, error } = await supa
     .from('edge_devices')
-    .select('id, auth_user_id, auth_password_enc, desired_agent_version, desired_cloudflared_version')
+    .select('id, store_id, auth_user_id, auth_password_enc, desired_agent_version, desired_cloudflared_version')
     .eq('device_token', token)
     .single()
   if (error || !data) return NextResponse.json({ error: 'invalid device token' }, { status: 401 })
@@ -62,24 +67,37 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     desired_cloudflared_version: (data.desired_cloudflared_version as string | null) ?? null,
   }
 
-  // Phase B1: provisioning 済みなら短命スコープトークンを発行して同梱。
+  // 手持ちトークンがまだ十分に有効なら再サインインしない（5分毎の pull で毎回
+  // signInWithPassword すると GoTrue のレート上限に近づくため）。ヘッダを送らない
+  // 旧エージェントは従来どおり毎回発行される＝後方互換。
+  const until = Number(req.headers.get('x-scoped-until') ?? '')
+  const stillFresh = Number.isFinite(until) && until > Date.now() / 1000 + SCOPED_REISSUE_MARGIN_SEC
+
+  // 短命スコープトークンを発行して同梱。auth ユーザが未 provisioning ならここで用意する。
   // 失敗しても 200（service_role 経路は維持）— 無停止のための後方互換。
-  if (anon && data.auth_user_id && data.auth_password_enc) {
+  if (!stillFresh && anon) {
     try {
-      const password = decryptSecret(data.auth_password_enc as string)
-      const authClient = createClient(url, anon, {
-        auth: { persistSession: false, autoRefreshToken: false },
+      const password = await ensureEdgeAuthPassword(supa, {
+        id: data.id,
+        store_id: data.store_id as string,
+        auth_user_id: data.auth_user_id as string | null,
+        auth_password_enc: data.auth_password_enc as string | null,
       })
-      const { data: signIn, error: signErr } = await authClient.auth.signInWithPassword({
-        email: edgeAuthEmail(data.id),
-        password,
-      })
-      if (!signErr && signIn?.session?.access_token) {
-        body.scoped_access_token = signIn.session.access_token
-        body.scoped_expires_at = signIn.session.expires_at ?? undefined
+      if (password) {
+        const authClient = createClient(url, anon, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        })
+        const { data: signIn, error: signErr } = await authClient.auth.signInWithPassword({
+          email: edgeAuthEmail(data.id),
+          password,
+        })
+        if (!signErr && signIn?.session?.access_token) {
+          body.scoped_access_token = signIn.session.access_token
+          body.scoped_expires_at = signIn.session.expires_at ?? undefined
+        }
       }
     } catch {
-      // 復号/サインイン失敗は無視（scoped を返さないだけ）。
+      // provisioning/復号/サインイン失敗は無視（scoped を返さないだけ）。
     }
   }
 

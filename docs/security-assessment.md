@@ -43,7 +43,7 @@ GA前ロードマップの「脆弱性診断（外部）」を、当面 **内部
 
 | 項目 | 状態 | 対応 |
 |---|---|---|
-| `/api/edge/bootstrap` が device_token 保持者に service_role 鍵を返す | 計画中（§4.1） | エッジ専用スコープ鍵に置換（device_token 漏洩時の影響限定） |
+| `/api/edge/bootstrap` が device_token 保持者に service_role 鍵を返す | **B2 完了・B3/B4 は段階投入中**（§4.1 / §4.2） | RLS はエッジが触る全表＋Storage に整備済み。あとはエッジ側を `EDGE_SCOPED_DB=true` に切替（B3）→ service_role 返却の撤廃（B4） |
 | 過去チャットに漏れた service_role 鍵 / ログインPW `Intereco2026` | 要確認 | 鍵・PWのローテ完了を運用で確認（コード/gitには無し） |
 | 依存の moderate/low CVE | 監視 | Dependabot/`bun audit` で追跡 |
 
@@ -78,6 +78,57 @@ GA前ロードマップの「脆弱性診断（外部）」を、当面 **内部
 - エッジはそのトークンで Supabase 直アクセス。RLSは `((auth.jwt()->'app_metadata')->>'edge_id') = edge_id` 等で各テーブルをスコープ。
 - 追加コスト：per-edge authユーザ管理、RLSポリシー整備（~10テーブル＋Storage）。これが重すぎる場合は **B（APIプロキシ）** が代替本命。
 
+## 4.2 エッジ専用スコープ鍵化 ロールアウト（A方式・段階導入C）
+
+**到達点**: device_token / エッジ鍵が漏れても被害は「1エッジ・1店舗・最大1時間」に限定される。
+
+| 段階 | 内容 | 状態 |
+|---|---|---|
+| B1 | `edge_jobs` だけを短命スコープトークンへ（先行1テーブル） | 完了（2026-06-29） |
+| B2 | 残り8テーブル＋Storage 4バケットに RLS。エッジ auth ユーザの自動 provisioning | 完了（2026-08-03・migration `20260803160000`） |
+| B3 | エッジを `EDGE_SCOPED_DB=true` に切替（全DB/StorageアクセスがRLS配下） | コード投入済・**本番の切替は未**（下記手順） |
+| B4 | bootstrap から `supabase_service_role_key` の返却を撤廃 | B3 の soak 後 |
+
+### B2 で敷いたスコープ
+
+| 対象 | スコープ |
+|---|---|
+| `edge_devices` | 自分の行のみ。UPDATE はトリガで自己申告列（status/last_seen_at/agent_version/ota_status/pending_command/nvr_clock_*）だけに制限＝**`store_id` の付け替えによる他店舗への昇格を禁止** |
+| `recorders` / `recorder_cameras` | 自エッジ配下のみ（SELECT） |
+| `stores` | 自店舗のみ（SELECT・クリップ行の tenant_id 解決用） |
+| `inspection_clip_jobs` / `inspection_clips` | 自店舗のみ。clips の INSERT は tenant_id が DB 由来の値と一致必須 |
+| `vod_clips` | 自エッジ配下カメラの行のみ（UPDATE） |
+| `bcp_events` / `bcp_clips` | 自店舗のイベントとその配下のみ |
+| Storage（`edge-grids` / `baggage-clips` / `bcp-clips` / `vod-clips`） | バケット別のパス規約でスコープ（`edge_owns_storage_object`）。**DELETE は与えない**（証跡削除の禁止） |
+
+`store_id` / `tenant_id` は **JWT の app_metadata ではなく DB から引く**（`jwt_edge_store_id()`）。
+機器入替で `edge_devices.store_id` を付け替えると app_metadata は古いままになり、旧店舗の証跡を
+書ける状態が残るため。JWT から信じるのは `edge_id` だけ。
+
+契約テスト: `claude/monitor/tests/authz/rls.authz.test.ts`（`bun run test:authz`・CI 常設）。
+クロスエッジ／クロス店舗／クロステナントの読み書きが全て 0 行 or 拒否になることを実DBで実証している。
+
+### B3 切替手順（1台ずつ・無停止）
+
+1. 本番に migration を適用（`supabase db push`）。**先に link 先が東京DBか確認する**。
+2. 対象エッジが provisioning 済みか確認（`select id from edge_devices where auth_user_id is null`）。
+   未済でも次回 bootstrap で自動作成されるが、先に埋めるなら
+   `bun run scripts/provision-edge-auth.ts --all`。
+3. エッジの `shared/agent.env` に `EDGE_SCOPED_DB=true` を追記して `systemctl restart intereco-edge`。
+   起動ログに `supabase: scoped mode` が出れば切替完了。
+4. 30分ほど観察: エッジ詳細の `last_seen_at` が更新され続ける／グリッド画像が更新される／
+   接続テストが通る。`permission denied` や 401 がログに出たらそのテーブルの RLS 漏れ。
+5. 戻す場合は `EDGE_SCOPED_DB` を消して restart するだけ（DB側は無変更で戻る）。
+
+**フェイルクローズ設計**: スコープトークンが取れない/期限切れのとき、エッジは service_role へ
+フォールバックしない。要求は 401 になり、heartbeat のエラー処理が bootstrap を叩いて自動復帰する。
+「静かに越権状態へ戻る」より「見えて止まる」を選んでいる。
+
+### B4 の前提
+
+全稼働エッジが `EDGE_SCOPED_DB=true` で soak 済みであること。撤廃後は **provisioning 済みでない
+エッジは何もできなくなる**（bootstrap の自動 provisioning がその保険）。
+
 ## 5. findings 管理
 
 - CI の Semgrep/authz 失敗は PR で修正してからマージ。
@@ -94,3 +145,4 @@ GA前ロードマップの「脆弱性診断（外部）」を、当面 **内部
 | 2026-06-23 | Vault化（AES-256-GCM） | カメラ/VODパスワードの平文撤廃（CSOロードマップ#1） |
 | 2026-06-23 | 本プログラム（CI自動化）導入 | Semgrep（SAST+secrets+OWASP）/ bun audit / Dependabot を CI に追加 |
 | 2026-06-29 | エッジ専用スコープ鍵化 方式比較（§4.1）＋JWT署名前提検証 | 本番JWKSが **ES256非対称署名**を実証 → 自己署名JWT不可。A方式は「GoTrue発行のper-edgeトークン」に確定。次：A′ vs B 最終確定 → spec → `edge_jobs`先行実装 |
+| 2026-08-03 | エッジ専用スコープ鍵化 **B2**（RLS本体・§4.2） | エッジが触る8テーブル＋Storage4バケットに「1エッジ・1店舗」スコープを整備。`edge_devices` は自己申告列だけ更新可（`store_id` 付け替え禁止）。auth ユーザは bootstrap が自動 provisioning。authz 契約テスト 43件 green。B3（`EDGE_SCOPED_DB=true`）は本番切替待ち |

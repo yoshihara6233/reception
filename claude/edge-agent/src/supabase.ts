@@ -11,6 +11,10 @@
  * 短命アクセストークン(scoped_access_token/scoped_expires_at)も返す。getScopedSupabase()
  * はそのトークン(authenticated/RLS スコープ)で作ったクライアントを返す。edge_jobs ワーカ
  * だけがこれを使い、service_role の万能鍵を edge_jobs 操作から外す。
+ *
+ * Phase B3: `EDGE_SCOPED_DB=true` で getSupabase() 自体がスコープトークンのクライアントを
+ * 返すようになり、**全ての** DB/Storage アクセスが RLS 配下に入る（B2 の RLS が前提）。
+ * この状態では service_role へのフォールバックは行わない（fail-closed）。
  */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { config } from './config.js'
@@ -36,8 +40,35 @@ let scopedClient: SupabaseClient | null = null
 // 失効の何秒前から「期限切れ扱い」にして再取得を促すか（時計ずれ/取得遅延の余裕）。
 const SCOPED_SKEW_SEC = 60
 
-/** 現行の service key で作った（キャッシュ済み）クライアントを返す。 */
+/** 現行のスコープトークン（無ければ空文字）で作ったクライアント。fail-closed の受け皿。 */
+function scopedClientOrStale(): SupabaseClient {
+  if (!scopedClient) {
+    // apikey には anon キー、Authorization に短命トークンを載せる（RLS は user JWT を見る）。
+    scopedClient = createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { headers: { Authorization: `Bearer ${scopedToken ?? ''}` } },
+    })
+  }
+  return scopedClient
+}
+
+/** スコープトークンが「今まだ十分に有効」か。 */
+function scopedTokenFresh(): boolean {
+  const nowSec = Math.floor(Date.now() / 1000)
+  return !!scopedToken && nowSec < scopedExpEpoch - SCOPED_SKEW_SEC
+}
+
+/**
+ * 全モジュール共通の Supabase クライアント。
+ *
+ * EDGE_SCOPED_DB=false（既定）… 従来どおり service_role。
+ * EDGE_SCOPED_DB=true（Phase B3）… このエッジ専用の短命トークン。トークンが無い/
+ *   期限切れでも **service_role には落ちない**（fail-closed＝越権面を作らない）。
+ *   その状態の要求は 401 になるが、heartbeat のエラー処理が refreshSupabaseKey() を
+ *   叩くため、bootstrap が復旧すれば自動で戻る。
+ */
 export function getSupabase(): SupabaseClient {
+  if (config.EDGE_SCOPED_DB) return scopedClientOrStale()
   if (!client) {
     client = createClient(config.SUPABASE_URL, currentKey, {
       auth: { persistSession: false, autoRefreshToken: false },
@@ -49,18 +80,9 @@ export function getSupabase(): SupabaseClient {
 /**
  * このエッジ専用の短命トークンで作ったクライアントを返す（Phase B1）。
  * トークン未取得 or 失効間近なら null（呼び出し側はそのtickをスキップする）。
- * apikey には anon キー、Authorization に短命トークンを載せる（RLS は user JWT を見る）。
  */
 export function getScopedSupabase(): SupabaseClient | null {
-  const nowSec = Math.floor(Date.now() / 1000)
-  if (!scopedToken || nowSec >= scopedExpEpoch - SCOPED_SKEW_SEC) return null
-  if (!scopedClient) {
-    scopedClient = createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY, {
-      auth: { persistSession: false, autoRefreshToken: false },
-      global: { headers: { Authorization: `Bearer ${scopedToken}` } },
-    })
-  }
-  return scopedClient
+  return scopedTokenFresh() ? scopedClientOrStale() : null
 }
 
 /**
@@ -71,9 +93,13 @@ export async function refreshSupabaseKey(): Promise<void> {
   if (!config.MONITOR_URL) return
   try {
     const url = `${config.MONITOR_URL.replace(/\/$/, '')}/api/edge/bootstrap`
+    // 手持ちトークンの残り寿命を伝え、まだ十分なら monitor 側の再サインインを省く
+    // （5分毎の pull で毎回 signInWithPassword すると GoTrue のレート上限に近づくため）。
+    const headers: Record<string, string> = { 'x-device-token': config.EDGE_DEVICE_TOKEN }
+    if (scopedToken && scopedExpEpoch > 0) headers['x-scoped-until'] = String(scopedExpEpoch)
     const res = await fetch(url, {
       method: 'GET',
-      headers: { 'x-device-token': config.EDGE_DEVICE_TOKEN },
+      headers,
       signal: AbortSignal.timeout(10_000),
     })
     if (!res.ok) { logger.warn({ status: res.status }, 'bootstrap: non-OK response'); return }
@@ -118,6 +144,12 @@ export async function refreshSupabaseKey(): Promise<void> {
 
 /** 起動時 refresh + 定期 refresh を開始（鍵ローテ/トークン更新に自動追従）。 */
 export function startKeySync(): void {
+  logger.info(
+    { scopedDb: config.EDGE_SCOPED_DB, scopedJobs: config.EDGE_SCOPED_JOBS },
+    config.EDGE_SCOPED_DB
+      ? 'supabase: scoped mode (エッジ専用トークンのみ・service_role は使わない)'
+      : 'supabase: service_role mode',
+  )
   void refreshSupabaseKey()
   setInterval(() => { void refreshSupabaseKey() }, config.BOOTSTRAP_INTERVAL_MS)
 }

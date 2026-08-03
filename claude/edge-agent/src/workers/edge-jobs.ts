@@ -104,10 +104,12 @@ async function runConnectionTest(rec: RecorderRow, channel: number): Promise<unk
 
 /**
  * edge_jobs テーブル操作に使うクライアントを選ぶ（Phase B1）。
- * - EDGE_SCOPED_JOBS=false: 従来通り service_role。
+ * - EDGE_SCOPED_JOBS=false: getSupabase()（Phase B3 の EDGE_SCOPED_DB=true なら
+ *   それ自体がスコープトークンのクライアント）。
  * - true: このエッジ専用の短命スコープトークン。未取得/失効間近なら null
  *   → 呼び出し側はそのtickをスキップ（service_role には落ちない＝越権面を作らない）。
- * 注意: recorders 読み取り(resolveRecorder)は未移行のため常に service_role を使う。
+ * recorders 読み取り(resolveRecorder)は getSupabase() 経由。Phase B2 の RLS で
+ * 自エッジ配下だけに絞られるため、スコープモードでもそのまま動く。
  */
 function jobsClient(): SupabaseClient | null {
   if (!config.EDGE_SCOPED_JOBS) return getSupabase()

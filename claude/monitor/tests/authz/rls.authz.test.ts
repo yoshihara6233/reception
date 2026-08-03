@@ -23,8 +23,23 @@ const S_B1 = 'b1000000-0000-0000-0000-0000000000b1'
 const E_A1 = 'e1000000-0000-0000-0000-0000000000a1'
 const E_A2 = 'e2000000-0000-0000-0000-0000000000a2'
 const E_B1 = 'eb000000-0000-0000-0000-0000000000b1'
+const REC_A1 = 'ca000000-0000-0000-0000-0000000000a1'
+const CAM_A1 = 'fa000000-0000-0000-0000-0000000000a1'
 const REC_B1 = 'cb000000-0000-0000-0000-0000000000b1'
 const CAM_B1 = 'fb000000-0000-0000-0000-0000000000b1'
+// Phase B2: エッジが書く証跡系（A1店舗 と B1店舗 の対で越権を見る）
+const SES_A1 = '2a000000-0000-0000-0000-0000000000a1'
+const SES_B1 = '2b000000-0000-0000-0000-0000000000b1'
+const CJ_A1  = '3a000000-0000-0000-0000-0000000000a1'
+const CJ_B1  = '3b000000-0000-0000-0000-0000000000b1'
+const CL_A1  = '4a000000-0000-0000-0000-0000000000a1'
+const CL_B1  = '4b000000-0000-0000-0000-0000000000b1'
+const VC_A1  = '5a000000-0000-0000-0000-0000000000a1'
+const VC_B1  = '5b000000-0000-0000-0000-0000000000b1'
+const BE_A1  = '6a000000-0000-0000-0000-0000000000a1'
+const BE_B1  = '6b000000-0000-0000-0000-0000000000b1'
+const BC_A1  = '6a000000-0000-0000-0000-0000000000c1'
+const BC_B1  = '6b000000-0000-0000-0000-0000000000c1'
 // edge_jobs（Phase B1）: 各エッジ宛ジョブ
 const J_A1 = '1a000000-0000-0000-0000-0000000000a1'
 const J_A2 = '1a000000-0000-0000-0000-0000000000a2'
@@ -72,8 +87,12 @@ beforeAll(async () => {
       ('${U_SMGRA1}','store_manager','${T_A}','{${S_A1}}');
     insert into public.edge_devices (id, store_id, name) values
       ('${E_A1}','${S_A1}','edgeA1'),('${E_A2}','${S_A2}','edgeA2'),('${E_B1}','${S_B1}','edgeB1');
-    insert into public.recorders (id, edge_id, vendor, host) values ('${REC_B1}','${E_B1}','onvif-generic','10.0.0.1');
-    insert into public.recorder_cameras (id, recorder_id, channel, name) values ('${CAM_B1}','${REC_B1}',1,'camB1');
+    insert into public.recorders (id, edge_id, vendor, host) values
+      ('${REC_A1}','${E_A1}','onvif-generic','10.0.0.2'),
+      ('${REC_B1}','${E_B1}','onvif-generic','10.0.0.1');
+    insert into public.recorder_cameras (id, recorder_id, channel, name) values
+      ('${CAM_A1}','${REC_A1}',1,'camA1'),
+      ('${CAM_B1}','${REC_B1}',1,'camB1');
     insert into public.live_sessions (user_id, store_id, mode) values ('${U_SMGRA1}','${S_A1}','live');
     insert into public.session_limits (tenant_id) values ('${T_A}'),('${T_B}');
     insert into public.enrollment_tokens (token_hash, store_id, tenant_id, name, expires_at)
@@ -82,6 +101,19 @@ beforeAll(async () => {
       ('${J_A1}','${E_A1}'),('${J_A2}','${E_A2}'),('${J_B1}','${E_B1}');
     insert into public.jalert_receipts (id, alert_source, alert_type, title) values
       ('${JR_1}','jma-entry-1','earthquake','震源・震度に関する情報');
+    -- Phase B2: 店舗A1(テナントA) と 店舗B1(テナントB) に同じ形の証跡を置く
+    insert into public.inspection_sessions (id, tenant_id, store_id) values
+      ('${SES_A1}','${T_A}','${S_A1}'),('${SES_B1}','${T_B}','${S_B1}');
+    insert into public.inspection_clip_jobs (id, tenant_id, store_id, session_id, camera_id) values
+      ('${CJ_A1}','${T_A}','${S_A1}','${SES_A1}','${CAM_A1}'),
+      ('${CJ_B1}','${T_B}','${S_B1}','${SES_B1}','${CAM_B1}');
+    insert into public.inspection_clips (id, tenant_id, store_id, session_id, camera_id, storage_path) values
+      ('${CL_A1}','${T_A}','${S_A1}','${SES_A1}','${CAM_A1}','a1.mp4'),
+      ('${CL_B1}','${T_B}','${S_B1}','${SES_B1}','${CAM_B1}','b1.mp4');
+    insert into public.vod_clips (id, camera_id) values ('${VC_A1}','${CAM_A1}'),('${VC_B1}','${CAM_B1}');
+    insert into public.bcp_events (id, store_id) values ('${BE_A1}','${S_A1}'),('${BE_B1}','${S_B1}');
+    insert into public.bcp_clips (id, event_id, camera_id) values
+      ('${BC_A1}','${BE_A1}','${CAM_A1}'),('${BC_B1}','${BE_B1}','${CAM_B1}');
   `)
 })
 
@@ -139,13 +171,13 @@ describe('stores RLS（店舗×ロール可視性: super=全件 / tenant_admin=�
 })
 
 describe('recorders / recorder_cameras は edge 可視性に連鎖', () => {
-  it('tenant_admin A は B テナントのレコーダ/カメラを見られない', async () => {
-    expect(await asUser(U_TADMINA, 'select id from recorders')).toHaveLength(0)
-    expect(await asUser(U_TADMINA, 'select id from recorder_cameras')).toHaveLength(0)
+  it('tenant_admin A は自テナントのみ（B テナントのレコーダ/カメラは不可視）', async () => {
+    expect(ids(await asUser(U_TADMINA, 'select id from recorders'))).toEqual([REC_A1])
+    expect(ids(await asUser(U_TADMINA, 'select id from recorder_cameras'))).toEqual([CAM_A1])
   })
-  it('tenant_admin B / super_admin は B のレコーダ/カメラを見える', async () => {
+  it('tenant_admin B は B のみ / super_admin は全件', async () => {
     expect(ids(await asUser(U_TADMINB, 'select id from recorders'))).toEqual([REC_B1])
-    expect(ids(await asUser(U_SUPER, 'select id from recorder_cameras'))).toEqual([CAM_B1])
+    expect(ids(await asUser(U_SUPER, 'select id from recorder_cameras'))).toEqual([CAM_A1, CAM_B1].sort())
   })
 })
 
@@ -187,8 +219,107 @@ describe('edge_jobs RLS（エッジ専用スコープ鍵化 Phase B1）', () => 
     const rows = await asEdge(E_A1, `update edge_jobs set status='running' where id='${J_A1}' returning id`)
     expect(ids(rows)).toEqual([J_A1])
   })
-  it('エッジ scoped トークンでは未移行テーブル(recorders)は見えない（権限はedge_jobsに限定）', async () => {
-    expect(await asEdge(E_A1, 'select id from recorders')).toHaveLength(0)
+})
+
+describe('エッジ専用スコープ鍵化 Phase B2（残りのテーブルを 1エッジ・1店舗 に限定）', () => {
+  it('自分の edge_devices 行だけ見える（同テナントの別エッジも不可視）', async () => {
+    expect(ids(await asEdge(E_A1, 'select id from edge_devices'))).toEqual([E_A1])
+  })
+  it('自己申告列（status/last_seen_at 等）は更新できる', async () => {
+    const rows = await asEdge(
+      E_A1,
+      `update edge_devices set status='grid', last_seen_at=now(), agent_version='1.2.3'
+         where id='${E_A1}' returning id`,
+    )
+    expect(ids(rows)).toEqual([E_A1])
+  })
+  it('store_id の付け替えはトリガで拒否（他店舗への昇格を塞ぐ）', async () => {
+    await expect(
+      asEdge(E_A1, `update edge_devices set store_id='${S_B1}' where id='${E_A1}' returning id`),
+    ).rejects.toThrow(/edge token may only update/)
+  })
+  it('device_token / camera_tier の書換えもトリガで拒否', async () => {
+    await expect(
+      asEdge(E_A1, `update edge_devices set device_token='stolen' where id='${E_A1}' returning id`),
+    ).rejects.toThrow(/edge token may only update/)
+    await expect(
+      asEdge(E_A1, `update edge_devices set camera_tier=48 where id='${E_A1}' returning id`),
+    ).rejects.toThrow(/edge token may only update/)
+  })
+  it('他エッジの行は UPDATE 対象にすらならない（0行・トリガ以前にRLSで落ちる）', async () => {
+    expect(await asEdge(E_A1, `update edge_devices set status='grid' where id='${E_B1}' returning id`))
+      .toHaveLength(0)
+  })
+
+  it('recorders / recorder_cameras は自エッジ配下のみ', async () => {
+    expect(ids(await asEdge(E_A1, 'select id from recorders'))).toEqual([REC_A1])
+    expect(ids(await asEdge(E_A1, 'select id from recorder_cameras'))).toEqual([CAM_A1])
+    expect(ids(await asEdge(E_B1, 'select id from recorders'))).toEqual([REC_B1])
+  })
+  it('stores は自店舗のみ（tenant_id 解決に必要な最小範囲）', async () => {
+    expect(ids(await asEdge(E_A1, 'select id from stores'))).toEqual([S_A1])
+  })
+
+  it('inspection_clip_jobs / inspection_clips は自店舗のみ', async () => {
+    expect(ids(await asEdge(E_A1, 'select id from inspection_clip_jobs'))).toEqual([CJ_A1])
+    expect(ids(await asEdge(E_A1, 'select id from inspection_clips'))).toEqual([CL_A1])
+  })
+  it('他店舗のジョブは UPDATE できない（0行）', async () => {
+    expect(await asEdge(E_A1, `update inspection_clip_jobs set status='done' where id='${CJ_B1}' returning id`))
+      .toHaveLength(0)
+    expect(ids(await asEdge(E_A1, `update inspection_clip_jobs set status='done' where id='${CJ_A1}' returning id`)))
+      .toEqual([CJ_A1])
+  })
+  it('他テナントの tenant_id を載せた clips は INSERT できない', async () => {
+    await expect(
+      asEdge(E_A1, `insert into inspection_clips (tenant_id, store_id, session_id, camera_id, storage_path)
+                    values ('${T_B}','${S_A1}','${SES_A1}','${CAM_A1}','x.mp4') returning id`),
+    ).rejects.toThrow(/row-level security/)
+  })
+  it('他店舗の clips は INSERT できない', async () => {
+    await expect(
+      asEdge(E_A1, `insert into inspection_clips (tenant_id, store_id, session_id, camera_id, storage_path)
+                    values ('${T_B}','${S_B1}','${SES_B1}','${CAM_B1}','x.mp4') returning id`),
+    ).rejects.toThrow(/row-level security/)
+  })
+  it('自店舗・自テナントの clips は INSERT できる', async () => {
+    const rows = await asEdge(
+      E_A1,
+      `insert into inspection_clips (tenant_id, store_id, session_id, camera_id, storage_path)
+       values ('${T_A}','${S_A1}','${SES_A1}','${CAM_A1}','ok.mp4') returning id`,
+    )
+    expect(rows).toHaveLength(1)
+  })
+
+  it('vod_clips は自エッジ配下カメラの行のみ（他エッジの行は UPDATE 不可）', async () => {
+    expect(ids(await asEdge(E_A1, 'select id from vod_clips'))).toEqual([VC_A1])
+    expect(await asEdge(E_A1, `update vod_clips set status='ready' where id='${VC_B1}' returning id`))
+      .toHaveLength(0)
+  })
+
+  it('bcp_events / bcp_clips は自店舗のイベント配下のみ', async () => {
+    expect(ids(await asEdge(E_A1, 'select id from bcp_events'))).toEqual([BE_A1])
+    expect(ids(await asEdge(E_A1, 'select id from bcp_clips'))).toEqual([BC_A1])
+    expect(await asEdge(E_A1, `update bcp_events set status='failed' where id='${BE_B1}' returning id`))
+      .toHaveLength(0)
+    expect(await asEdge(E_A1, `delete from bcp_clips where id='${BC_B1}' returning id`)).toHaveLength(0)
+    expect(ids(await asEdge(E_A1, `delete from bcp_clips where id='${BC_A1}' returning id`))).toEqual([BC_A1])
+  })
+  it('他店舗イベント配下の bcp_clips は INSERT できない', async () => {
+    await expect(
+      asEdge(E_A1, `insert into bcp_clips (event_id, camera_id) values ('${BE_B1}','${CAM_B1}') returning id`),
+    ).rejects.toThrow(/row-level security/)
+  })
+
+  it('app_metadata.edge_id 無しのトークンはどの表も見えない', async () => {
+    for (const t of ['edge_devices', 'recorders', 'stores', 'inspection_clip_jobs',
+                     'inspection_clips', 'vod_clips', 'bcp_events', 'bcp_clips']) {
+      expect(await asEdge(null, `select id from ${t}`)).toHaveLength(0)
+    }
+  })
+  it('管理ユーザ(store_manager)にはエッジ用ポリシーが効かない（従来の可視範囲のまま）', async () => {
+    // jwt_edge_id() が NULL のため edge_* ポリシーは一切マッチしない＝既存モデルを壊さない。
+    expect(ids(await asUser(U_SMGRA1, 'select id from edge_devices'))).toEqual([E_A1])
   })
 })
 

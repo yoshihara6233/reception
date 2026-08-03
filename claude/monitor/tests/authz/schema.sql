@@ -67,7 +67,17 @@ create table public.edge_devices (
   store_id     uuid not null references public.stores(id) on delete cascade,
   name         text,
   status       text not null default 'offline',
-  last_seen_at timestamptz
+  last_seen_at timestamptz,
+  -- Phase B2: エッジが自己申告してよい列 / 触ってはいけない列の両方を持たせる
+  -- （edge_devices_guard_edge_update トリガの契約を検証するため）。
+  device_token text,
+  camera_tier  int not null default 16,
+  agent_version text,
+  ota_status   text,
+  pending_command jsonb,
+  nvr_clock_offset_sec int,
+  nvr_clock_checked_at timestamptz,
+  updated_at   timestamptz not null default now()
 );
 
 create table public.recorders (
@@ -120,6 +130,53 @@ create table public.edge_jobs (
   status     text not null default 'pending',
   result     jsonb,
   created_at timestamptz not null default now()
+);
+
+-- ── Phase B2 の検証対象（エッジが書く証跡系。RLSに必要な列のみ） ──
+create table public.inspection_sessions (
+  id        uuid primary key default gen_random_uuid(),
+  tenant_id uuid not null references public.tenants(id) on delete cascade,
+  store_id  uuid not null references public.stores(id) on delete cascade
+);
+
+create table public.inspection_clip_jobs (
+  id          uuid primary key default gen_random_uuid(),
+  tenant_id   uuid not null references public.tenants(id) on delete cascade,
+  store_id    uuid not null references public.stores(id) on delete cascade,
+  session_id  uuid references public.inspection_sessions(id) on delete cascade,
+  camera_id   uuid references public.recorder_cameras(id) on delete set null,
+  status      text not null default 'pending',
+  retry_count int not null default 0
+);
+
+create table public.inspection_clips (
+  id           uuid primary key default gen_random_uuid(),
+  tenant_id    uuid not null references public.tenants(id) on delete cascade,
+  store_id     uuid not null references public.stores(id) on delete cascade,
+  session_id   uuid references public.inspection_sessions(id) on delete cascade,
+  camera_id    uuid references public.recorder_cameras(id) on delete set null,
+  storage_path text not null,
+  upload_status text not null default 'done'
+);
+
+create table public.vod_clips (
+  id        uuid primary key default gen_random_uuid(),
+  camera_id uuid references public.recorder_cameras(id) on delete set null,
+  status    text not null default 'pending'
+);
+
+create table public.bcp_events (
+  id       uuid primary key default gen_random_uuid(),
+  store_id uuid not null references public.stores(id) on delete cascade,
+  status   text not null default 'pending'
+);
+
+create table public.bcp_clips (
+  id         uuid primary key default gen_random_uuid(),
+  event_id   uuid references public.bcp_events(id) on delete cascade,
+  camera_id  uuid references public.recorder_cameras(id) on delete set null,
+  offset_min int,
+  upload_status text not null default 'pending'
 );
 
 -- jalert_receipts（20260626_001 + 20260630_001 転記）: 全国 J-Alert 受信ログ＝店舗非依存。
@@ -287,3 +344,121 @@ create policy jalert_receipts_select on public.jalert_receipts
   for select using (
     exists (select 1 from public.admin_users u where u.auth_user_id = auth.uid())
   );
+
+-- ===========================================================================
+-- Phase B2（20260803160000_edge_scoped_rls.sql 転記）
+--   エッジ専用トークンのスコープを「1エッジ・1店舗」に限定する。
+--   Storage(storage.objects) はこの素の Postgres には無いためここでは検証しない
+--   （バケットのパス規約は edge_owns_storage_object に集約・実DBで確認する）。
+-- ===========================================================================
+create or replace function public.safe_uuid(p text) returns uuid
+  language plpgsql immutable set search_path = public, pg_temp
+  as $$ begin return p::uuid; exception when others then return null; end; $$;
+
+create or replace function public.jwt_edge_id() returns uuid
+  language sql stable set search_path = public, pg_temp
+  as $$ select public.safe_uuid(nullif(((auth.jwt() -> 'app_metadata') ->> 'edge_id'), '')) $$;
+
+-- store_id / tenant_id は JWT ではなく DB から引く（機器入替で app_metadata が陳腐化するため）。
+create or replace function public.jwt_edge_store_id() returns uuid
+  language sql stable security definer set search_path = public, pg_temp
+  as $$ select e.store_id from public.edge_devices e where e.id = public.jwt_edge_id() $$;
+
+create or replace function public.jwt_edge_tenant_id() returns uuid
+  language sql stable security definer set search_path = public, pg_temp
+  as $$ select s.tenant_id from public.edge_devices e
+        join public.stores s on s.id = e.store_id
+        where e.id = public.jwt_edge_id() $$;
+
+create or replace function public.edge_owns_camera(p_camera_id uuid) returns boolean
+  language sql stable security definer set search_path = public, pg_temp
+  as $$ select exists (select 1 from public.recorder_cameras rc
+          join public.recorders r on r.id = rc.recorder_id
+          where rc.id = p_camera_id and r.edge_id = public.jwt_edge_id()) $$;
+
+create or replace function public.edge_owns_bcp_event(p_event_id uuid) returns boolean
+  language sql stable security definer set search_path = public, pg_temp
+  as $$ select exists (select 1 from public.bcp_events e
+          where e.id = p_event_id and e.store_id = public.jwt_edge_store_id()) $$;
+
+create or replace function public.edge_owns_inspection_session(p_session_id uuid) returns boolean
+  language sql stable security definer set search_path = public, pg_temp
+  as $$ select exists (select 1 from public.inspection_sessions s
+          where s.id = p_session_id and s.store_id = public.jwt_edge_store_id()) $$;
+
+alter table public.inspection_sessions   enable row level security;
+alter table public.inspection_clip_jobs  enable row level security;
+alter table public.inspection_clips      enable row level security;
+alter table public.vod_clips             enable row level security;
+alter table public.bcp_events            enable row level security;
+alter table public.bcp_clips             enable row level security;
+
+-- edge_devices: 自分の行のみ。書換可能な列はトリガでホワイトリスト強制。
+create policy edge_devices_edge_select on public.edge_devices
+  for select to authenticated using (id = public.jwt_edge_id());
+create policy edge_devices_edge_update on public.edge_devices
+  for update to authenticated
+  using      (id = public.jwt_edge_id())
+  with check (id = public.jwt_edge_id());
+
+create or replace function public.edge_devices_guard_edge_update() returns trigger
+  language plpgsql set search_path = public, pg_temp
+  as $$
+declare
+  allowed text[] := array['status','last_seen_at','agent_version','ota_status',
+                          'pending_command','nvr_clock_offset_sec','nvr_clock_checked_at','updated_at'];
+begin
+  if public.jwt_edge_id() is null then return new; end if;
+  if (to_jsonb(old) - allowed) is distinct from (to_jsonb(new) - allowed) then
+    raise exception 'edge token may only update: %', array_to_string(allowed, ', ')
+      using errcode = 'insufficient_privilege';
+  end if;
+  return new;
+end; $$;
+create trigger trg_edges_edge_token_guard before update on public.edge_devices
+  for each row execute function public.edge_devices_guard_edge_update();
+
+create policy recorders_edge_select on public.recorders
+  for select to authenticated using (edge_id = public.jwt_edge_id());
+create policy cameras_edge_select on public.recorder_cameras
+  for select to authenticated using (public.edge_owns_camera(id));
+create policy stores_edge_select on public.stores
+  for select to authenticated using (id = public.jwt_edge_store_id());
+
+create policy inspection_clip_jobs_edge_select on public.inspection_clip_jobs
+  for select to authenticated using (store_id = public.jwt_edge_store_id());
+create policy inspection_clip_jobs_edge_update on public.inspection_clip_jobs
+  for update to authenticated
+  using      (store_id = public.jwt_edge_store_id())
+  with check (store_id = public.jwt_edge_store_id());
+
+create policy inspection_clips_edge_select on public.inspection_clips
+  for select to authenticated using (store_id = public.jwt_edge_store_id());
+create policy inspection_clips_edge_insert on public.inspection_clips
+  for insert to authenticated
+  with check (store_id = public.jwt_edge_store_id() and tenant_id = public.jwt_edge_tenant_id());
+create policy inspection_clips_edge_update on public.inspection_clips
+  for update to authenticated
+  using      (store_id = public.jwt_edge_store_id())
+  with check (store_id = public.jwt_edge_store_id() and tenant_id = public.jwt_edge_tenant_id());
+
+create policy vod_clips_edge_select on public.vod_clips
+  for select to authenticated using (public.edge_owns_camera(camera_id));
+create policy vod_clips_edge_update on public.vod_clips
+  for update to authenticated
+  using      (public.edge_owns_camera(camera_id))
+  with check (public.edge_owns_camera(camera_id));
+
+create policy bcp_events_edge_select on public.bcp_events
+  for select to authenticated using (store_id = public.jwt_edge_store_id());
+create policy bcp_events_edge_update on public.bcp_events
+  for update to authenticated
+  using      (store_id = public.jwt_edge_store_id())
+  with check (store_id = public.jwt_edge_store_id());
+
+create policy bcp_clips_edge_select on public.bcp_clips
+  for select to authenticated using (public.edge_owns_bcp_event(event_id));
+create policy bcp_clips_edge_insert on public.bcp_clips
+  for insert to authenticated with check (public.edge_owns_bcp_event(event_id));
+create policy bcp_clips_edge_delete on public.bcp_clips
+  for delete to authenticated using (public.edge_owns_bcp_event(event_id));

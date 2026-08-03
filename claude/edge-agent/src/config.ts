@@ -23,6 +23,14 @@ const Env = z.object({
   EDGE_SCOPED_JOBS:          z.string().optional()
                               .transform((v) => v === 'true' || v === '1'),
 
+  // エッジ専用スコープ鍵化 Phase B3: **全ての** DB/Storage アクセスを短命スコープ
+  // トークンで行う（service_role をエッジの実行経路から外す）。B2 の RLS が
+  // 本番に入っていることが前提。既定 false ＝ 従来どおり service_role。
+  // 有効時はトークンが無い/期限切れでも service_role には落ちない（fail-closed）。
+  // その状態の要求は 401 になり、heartbeat のエラー処理が bootstrap を叩いて復帰する。
+  EDGE_SCOPED_DB:            z.string().optional()
+                              .transform((v) => v === 'true' || v === '1'),
+
   // LiveKit endpoint URL — informational/diagnostic only since the F3 Ingress
   // migration. The edge no longer constructs WHIP URLs from this; the cloud
   // mints a per-session Ingress URL and passes it in livekit_whip_url. Kept
