@@ -225,6 +225,31 @@ Frigate/Hview・`28fee1ec-aa52-…`）が旧パス `/home/intereco/intereco/clau
 **鍵ローテはしていない**。削除の理由は露出そのものより「次のローテで出所不明の古い鍵が
 残り続ける」こと。**エッジを退役させたら env ファイルの掃除まで含めて1手順にする。**
 
+## 4.3 RLS を踏まない配信経路の可視性ガード（2026-08-06 是正）
+
+**症状**: `/api/edges/[id]/grid` と `/api/edges/[id]/cam/[cameraId]/snapshot` が
+`auth.getUser()` でログイン有無だけを見ており、**そのエッジが自分に見えるか**を確認していなかった。
+エッジUUID（管理画面のURL・スクショ・共有リンクから容易に漏れる）を知っていれば、
+どのテナントの利用者でも他社店舗のライブ映像・16分割グリッドを取得できた。
+
+**なぜ他のルートは無事だったか**: 大半の配信ルート（`live-sign` / `live-proxy` / `vod-hls` /
+`livekit/token` / 発報スナップショット / 巡回スナップショット）は、getUser の直後に
+セッションクライアントで `recorder_cameras` などを1行引いており、**その SELECT が RLS で
+落ちること自体が認可**になっていた。この2本だけ、画像バイトを R2 か service_role で
+取りに行く設計だったため引き当てが無く、ガードが素通りになっていた。
+
+**教訓**: **「RLS 配下のクエリを1本も通らないルート」は、その時点で認可がゼロ。**
+service_role / 署名URL / R2 直参照を使うルートを追加したら、入口で可視性を1行引く。
+新しい配信経路を足すときのチェック項目にする。
+
+**是正**: `src/lib/edge/view-access.ts` の `requireEdgeViewAccess(edgeId)`。
+`edge_devices` をセッションクライアントで引けるかを可視性判定に使い（`edges_select` を単一の
+正とする）、毎フレームのポーリングで DB を叩かないよう (userId, edgeId) を 30 秒メモ化する。
+権限剥奪の反映が最大30秒遅れるのはこの経路の受容リスク。
+
+**未了**: 同ルートの**フレームごと `auth.getUser()`**（＝Auth API への往復）は今回そのまま。
+API Gateway の 23万 req/24h の主因はこれで、可視性キャッシュでは減らない。別途対応。
+
 ## 5. findings 管理
 
 - CI の Semgrep/authz 失敗は PR で修正してからマージ。
@@ -243,3 +268,5 @@ Frigate/Hview・`28fee1ec-aa52-…`）が旧パス `/home/intereco/intereco/clau
 | 2026-06-29 | エッジ専用スコープ鍵化 方式比較（§4.1）＋JWT署名前提検証 | 本番JWKSが **ES256非対称署名**を実証 → 自己署名JWT不可。A方式は「GoTrue発行のper-edgeトークン」に確定。次：A′ vs B 最終確定 → spec → `edge_jobs`先行実装 |
 | 2026-08-03 | エッジ専用スコープ鍵化 **B2**（RLS本体・§4.2） | エッジが触る8テーブル＋Storage4バケットに「1エッジ・1店舗」スコープを整備。`edge_devices` は自己申告列だけ更新可（`store_id` 付け替え禁止）。auth ユーザは bootstrap が自動 provisioning。authz 契約テスト 43件 green。B3（`EDGE_SCOPED_DB=true`）は本番切替待ち |
 | 2026-08-03 | エッジ専用スコープ鍵化 **B3**（PoC実機で切替・§4.2） | OTA で新版を healthy まで上げてから `EDGE_SCOPED_DB=true`。heartbeat / NVR時計 / BCP一式（clips16件・PDF・完了メール）がスコープ下で完走。`permission denied` ゼロ。**副産物**: 2台目 `intereco-edge-demo` が `MONITOR_URL` 未設定で bootstrap 未到達と判明（B4 のブロッカー） |
+| 2026-08-06 | エッジ専用スコープ鍵化 **B4**（配布停止スイッチ・§4.2） | `edge_devices.scoped_only`（per-device・既定 false）で bootstrap の service_role 返却を止められるようにした。**有効化はまだ**（B3 soak 後に1台ずつ） |
+| 2026-08-06 | ライブ画像ルートの**テナントチェック欠如を修正**（下記） | `/api/edges/[id]/grid` と `.../cam/[cameraId]/snapshot` が `getUser()` だけで店舗可視性を見ておらず、**エッジUUIDを知る別テナントの利用者が映像を取得できた**。`edge_devices` の RLS 可視性を入口ガードに追加（`src/lib/edge/view-access.ts`） |

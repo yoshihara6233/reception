@@ -4,7 +4,7 @@
  * any SDK-level caching and ensure the freshest JPEG is always returned.
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { createSupabaseServer } from '@/lib/supabase/server'
+import { requireEdgeViewAccess } from '@/lib/edge/view-access'
 import {
   edgeImagesR2Configured, edgeImageExists, presignEdgeImageGet, gridKey,
 } from '@/lib/storage/edge-images-r2'
@@ -21,10 +21,12 @@ export async function GET(
 ) {
   const { id: edgeId } = await ctx.params
 
-  // Auth check
-  const supa = await createSupabaseServer()
-  const { data: { user } } = await supa.auth.getUser()
-  if (!user) return new NextResponse('Unauthorized', { status: 401 })
+  // 認証 + **このエッジが見える利用者か**。以降は R2/service_role で RLS を踏まないので、
+  // ここを通さないと edgeId を知るだけで他テナントの映像が取れる。
+  const access = await requireEdgeViewAccess(edgeId)
+  if (!access.ok) {
+    return new NextResponse(access.status === 401 ? 'Unauthorized' : 'Forbidden', { status: access.status })
+  }
 
   // R2 優先（エグレス無料）。オブジェクトが無いエッジ＝未移行なので Supabase へ落ちる。
   // 毎フレーム Supabase から取り直すと課金エグレスが視聴1時間あたり約0.5GB出る。
