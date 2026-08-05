@@ -13,12 +13,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 
 // ── @supabase/ssr モック（ロールとログイン状態をテスト側から注入） ──────────
-const state: { user: { id: string } | null; role: string | null } = { user: null, role: null }
+const state: { user: { id: string } | null; role: string | null; token: string | null } =
+  { user: null, role: null, token: null }
 const getUserMock = vi.fn(async () => ({ data: { user: state.user } }))
+// access_token は cookie から読むだけの想定なので、往復カウントの対象外。
+const getSessionMock = vi.fn(async () => ({
+  data: { session: state.token ? { access_token: state.token } : null },
+}))
 
 vi.mock('@supabase/ssr', () => ({
   createServerClient: () => ({
-    auth: { getUser: getUserMock },
+    auth: { getUser: getUserMock, getSession: getSessionMock },
     from: () => ({
       select: () => ({
         eq: () => ({
@@ -29,19 +34,24 @@ vi.mock('@supabase/ssr', () => ({
   }),
 }))
 
-import { middleware } from './middleware'
+import { middleware, resetMiddlewareRoleCache } from './middleware'
 
 const req = (path: string) => new NextRequest(`https://monitor.test${path}`)
 
+let tokenSeq = 0
 function asRole(role: string | null) {
   state.user = role === null ? null : { id: 'u-1' }
   state.role = role
+  // ロールを変えたら別トークン扱いにする（テスト間で判定を持ち越さないため）。
+  state.token = `tok-${++tokenSeq}`
 }
 
 beforeEach(() => {
   process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://example.supabase.co'
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'anon-test'
   getUserMock.mockClear()
+  getSessionMock.mockClear()
+  resetMiddlewareRoleCache()
 })
 
 describe('baggage_manager（手荷物検査店長）— /baggage 系のみ到達可', () => {
@@ -142,7 +152,49 @@ describe('admin_users 行が無い認証済みユーザー（プロビジョニ�
   it('/stores → 素通し（baggage_manager ではないため制限対象外）', async () => {
     state.user = { id: 'u-orphan' }
     state.role = null
+    state.token = 'tok-orphan'
     const res = await middleware(req('/stores'))
     expect(res.status).toBe(200)
+  })
+})
+
+/**
+ * ライブ画像は1〜2秒ごとにポーリングされ、その全てがこの境界を通る。
+ * ここで毎回 getUser() を叩くと Auth への往復だけで1視聴者あたり毎時数千回になる
+ * （2026-08 に API Gateway 23万 req/24h の主因と判明）。判定のメモ化を CI で固定する。
+ */
+describe('ロール判定のキャッシュ（Auth 往復の削減）', () => {
+  it('★同じトークンの連続アクセスでは getUser を1回しか呼ばない', async () => {
+    asRole('store_manager')
+    for (let i = 0; i < 5; i++) {
+      const res = await middleware(req('/api/edges/e1/grid'))
+      expect(res.status).toBe(200)
+    }
+    expect(getUserMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('★判定はキャッシュ後も変わらない（baggage_manager は2回目以降も遮断）', async () => {
+    asRole('baggage_manager')
+    const first = await middleware(req('/api/edges/e1/grid'))
+    const second = await middleware(req('/api/edges/e1/grid'))
+    expect(first.status).toBe(403)
+    expect(second.status).toBe(403)
+    expect(getUserMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('★トークンが変われば再検証する（再ログイン・トークン更新後）', async () => {
+    asRole('store_manager')
+    await middleware(req('/stores'))
+    state.token = 'tok-rotated'
+    await middleware(req('/stores'))
+    expect(getUserMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('未ログイン（トークン無し）はキャッシュせず、毎回 getUser に落ちる', async () => {
+    asRole(null)
+    state.token = null
+    await middleware(req('/stores'))
+    await middleware(req('/stores'))
+    expect(getUserMock).toHaveBeenCalledTimes(2)
   })
 })

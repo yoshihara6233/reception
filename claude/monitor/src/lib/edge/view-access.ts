@@ -13,59 +13,31 @@
  * 実DBで固定している＝**このルートの認可はそこで担保されている**。ポリシーを緩めると
  * 映像の可視範囲も一緒に緩むので、変更時は必ず両方を見ること。
  *
- * 毎フレーム DB を引かないよう (userId, edgeId) の判定を短時間メモ化する。grid は約2秒、
- * snapshot は約1秒ごとにポーリングされるため、TTL 30秒で追加クエリは 1/30〜1/15 に収まる。
- * 代償は「権限を外された利用者が最大 TTL の間だけ見え続ける」こと。ライブ映像の可視性
- * としては許容し、TTL を延ばさない。
+ * トークン単位のキャッシュで毎フレームの実検証を省く理由と代償は
+ * `src/lib/auth/token-cache.ts` の冒頭に集約してある。
  *
  * なお snapshot ルートの `cameraId` に個別チェックは要らない。ストレージキーが
  * `edges/<edgeId>/cam/<cameraId>/snapshot.jpg` とエッジ配下に閉じており、他エッジの
  * カメラIDを差し込んでも存在しないキーになるため（＝エッジの可視性が上位ゲート）。
  */
 import { createSupabaseServer } from '@/lib/supabase/server'
+import { createTokenCache, hashToken, jwtExpiresAtMs } from '@/lib/auth/token-cache'
 
-/** 認可判定を持ち回す時間。延ばすほど権限剥奪の反映が遅れる。 */
-export const VIEW_ACCESS_TTL_MS = 30_000
-/** ウォームインスタンスで無制限に伸びないための上限（超えたら丸ごと捨てる）。 */
-const MAX_ENTRIES = 5_000
-
-type Entry = { ok: boolean; at: number }
-const memo = new Map<string, Entry>()
-
-export function viewAccessKey(userId: string, edgeId: string): string {
-  // 改行はどちらのIDにも現れないので連結の曖昧さが出ない。
-  return `${userId}\n${edgeId}`
+/**
+ * ゲートの判定結果。
+ * - `userId` 非null = トークンは実検証済み。`ok` がそのエッジの可視性。
+ * - `userId` null   = トークンが無効だった（401）。連打を吸収するため覚える。
+ */
+export interface GateEntry {
+  userId: string | null
+  ok: boolean
 }
 
-/** キャッシュ命中なら判定、未命中/期限切れなら undefined。 */
-export function readViewAccess(
-  userId: string,
-  edgeId: string,
-  now: number = Date.now(),
-): boolean | undefined {
-  const key = viewAccessKey(userId, edgeId)
-  const hit = memo.get(key)
-  if (!hit) return undefined
-  if (now - hit.at >= VIEW_ACCESS_TTL_MS) {
-    memo.delete(key)
-    return undefined
-  }
-  return hit.ok
-}
-
-export function writeViewAccess(
-  userId: string,
-  edgeId: string,
-  ok: boolean,
-  now: number = Date.now(),
-): void {
-  if (memo.size >= MAX_ENTRIES) memo.clear()
-  memo.set(viewAccessKey(userId, edgeId), { ok, at: now })
-}
+const gateCache = createTokenCache<GateEntry>()
 
 /** テスト用／権限変更を即時反映させたいときに。 */
 export function resetViewAccessCache(): void {
-  memo.clear()
+  gateCache.reset()
 }
 
 /** RLS 配下で `edge_devices` を1行引くのに必要な最小の型（テストで差し替えるため）。 */
@@ -109,24 +81,46 @@ export type EdgeViewAccess =
   | { ok: true; userId: string }
   | { ok: false; status: 401 | 403 }
 
+export function toAccess(entry: GateEntry): EdgeViewAccess {
+  if (!entry.userId) return { ok: false, status: 401 }
+  return entry.ok ? { ok: true, userId: entry.userId } : { ok: false, status: 403 }
+}
+
 /**
  * ライブ画像ルートの入口ガード。未ログインは 401、可視外は 403。
  * 判定不能（DB障害等）もフェイルクローズで 403 にする — 監視映像は「見えて止まる」側に倒す。
  */
 export async function requireEdgeViewAccess(edgeId: string): Promise<EdgeViewAccess> {
   const supa = await createSupabaseServer()
-  const { data: { user } } = await supa.auth.getUser()
-  if (!user) return { ok: false, status: 401 }
 
-  const cached = readViewAccess(user.id, edgeId)
-  if (cached !== undefined) {
-    return cached ? { ok: true, userId: user.id } : { ok: false, status: 403 }
+  // ★ `session.user` には**触らない**（未検証の値なので信用できない）。ここで欲しいのは
+  //   キャッシュキーにする access_token だけで、これは cookie を読むだけ＝往復ゼロ。
+  //   期限切れが近ければ getSession 内で自動更新が走る。その場合は新しいトークンが返り、
+  //   キー変更＝未命中になるので、下で必ず実検証される。
+  const { data: { session } } = await supa.auth.getSession()
+  const token = session?.access_token ?? null
+  const tokenHash = token ? await hashToken(token) : null
+
+  if (tokenHash) {
+    const hit = gateCache.read(tokenHash, edgeId)
+    if (hit) return toAccess(hit.value)
+  }
+
+  // ここから先が実検証。キャッシュ未命中のときだけ Auth と DB を叩く。
+  const { data: { user } } = await supa.auth.getUser()
+  if (!user) {
+    // 失効・改竄トークンでのポーリングが毎秒 Auth を叩くのを止める。
+    // 再ログインすればトークンが変わる＝別キーなので、締め出しにはならない。
+    if (tokenHash && token) {
+      gateCache.write(tokenHash, edgeId, { userId: null, ok: false }, jwtExpiresAtMs(token))
+    }
+    return { ok: false, status: 401 }
   }
 
   const visibility = await resolveEdgeVisibility(supa as unknown as EdgeVisibilityClient, edgeId)
   if (visibility === 'error') return { ok: false, status: 403 }
 
-  const ok = visibility === 'visible'
-  writeViewAccess(user.id, edgeId, ok)
-  return ok ? { ok: true, userId: user.id } : { ok: false, status: 403 }
+  const entry: GateEntry = { userId: user.id, ok: visibility === 'visible' }
+  if (tokenHash && token) gateCache.write(tokenHash, edgeId, entry, jwtExpiresAtMs(token))
+  return toAccess(entry)
 }
