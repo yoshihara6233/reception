@@ -7,7 +7,7 @@
  * freshest available frame. Mirrors the existing per-edge grid route.
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { createSupabaseServer } from '@/lib/supabase/server'
+import { requireEdgeViewAccess } from '@/lib/edge/view-access'
 import {
   edgeImagesR2Configured, edgeImageExists, presignEdgeImageGet, snapshotKey,
 } from '@/lib/storage/edge-images-r2'
@@ -24,10 +24,12 @@ export async function GET(
 ) {
   const { id: edgeId, cameraId } = await ctx.params
 
-  // Auth gate — same pattern as /grid.
-  const supa = await createSupabaseServer()
-  const { data: { user } } = await supa.auth.getUser()
-  if (!user) return new NextResponse('Unauthorized', { status: 401 })
+  // 認証 + エッジ可視性 — /grid と同じガード。cameraId 側の検証が要らない理由は
+  // view-access.ts の冒頭コメント参照（キーが edges/<edgeId>/... 配下に閉じている）。
+  const access = await requireEdgeViewAccess(edgeId)
+  if (!access.ok) {
+    return new NextResponse(access.status === 401 ? 'Unauthorized' : 'Forbidden', { status: access.status })
+  }
 
   // R2 優先（エグレス無料）。未移行エッジは Supabase へフォールバック。
   // 経路1: 自社ドメインの Worker（SNI 遮断回線でも通る）。経路2: R2 の S3 API 直。
