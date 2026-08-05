@@ -85,8 +85,9 @@ beforeAll(async () => {
       ('${U_TADMINA}','tenant_admin','${T_A}','{}'),
       ('${U_TADMINB}','tenant_admin','${T_B}','{}'),
       ('${U_SMGRA1}','store_manager','${T_A}','{${S_A1}}');
-    insert into public.edge_devices (id, store_id, name) values
-      ('${E_A1}','${S_A1}','edgeA1'),('${E_A2}','${S_A2}','edgeA2'),('${E_B1}','${S_B1}','edgeB1');
+    insert into public.edge_devices (id, store_id, name, scoped_only) values
+      ('${E_A1}','${S_A1}','edgeA1', true),   -- B4 適用済みのエッジ（鍵を配らない宣言）
+      ('${E_A2}','${S_A2}','edgeA2', false),('${E_B1}','${S_B1}','edgeB1', false);
     insert into public.recorders (id, edge_id, vendor, host) values
       ('${REC_A1}','${E_A1}','onvif-generic','10.0.0.2'),
       ('${REC_B1}','${E_B1}','onvif-generic','10.0.0.1');
@@ -244,6 +245,13 @@ describe('エッジ専用スコープ鍵化 Phase B2（残りのテーブルを 
     ).rejects.toThrow(/edge token may only update/)
     await expect(
       asEdge(E_A1, `update edge_devices set camera_tier=48 where id='${E_A1}' returning id`),
+    ).rejects.toThrow(/edge token may only update/)
+  })
+  it('scoped_only を自分で false に戻せない（B4 を解除して service_role を取り返す経路を塞ぐ）', async () => {
+    // 新しい列は自己申告ホワイトリストに入らない＝既定で保護側に倒れる、の実証。
+    // 注: 同じ値への UPDATE は差分ゼロでトリガを素通りするため、true→false を試す。
+    await expect(
+      asEdge(E_A1, `update edge_devices set scoped_only=false where id='${E_A1}' returning id`),
     ).rejects.toThrow(/edge token may only update/)
   })
   it('他エッジの行は UPDATE 対象にすらならない（0行・トリガ以前にRLSで落ちる）', async () => {

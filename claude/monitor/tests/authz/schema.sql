@@ -77,7 +77,10 @@ create table public.edge_devices (
   pending_command jsonb,
   nvr_clock_offset_sec int,
   nvr_clock_checked_at timestamptz,
-  updated_at   timestamptz not null default now()
+  updated_at   timestamptz not null default now(),
+  -- Phase B4: bootstrap が service_role を返さないエッジの宣言。
+  -- 自己申告列のホワイトリストに入っていない＝エッジからは変更できない。
+  scoped_only  boolean not null default false
 );
 
 create table public.recorders (
