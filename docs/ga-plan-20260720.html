@@ -235,6 +235,11 @@
 <p style="margin-bottom:0"><strong>8/3 消し込み監査</strong>: 7/20版の残タスクのうち、<strong>tunnel migration 適用・VOD単画面統合（録画再生モーダル＋時間ピッカー）・JPEG1枚保存（単画/16分割）・TC3 見える化・ONVIF探索/接続テスト実機（PoC 常用で実証）は完了</strong>。
 さらに 7/31〜8/3 で BCP 実弾復旧一式・震度表示・NVR並列制限・運営アクセスログ・管理操作監査の拡大・NTP標準構成・NVR時計ズレ常時実測・スナップ時刻精度是正を追加出荷。
 残りは下表の <strong>未消化のみ強調</strong>（取り消し線=完了）。実質の残: <strong>①ALERT_EMAILS 通知E2E ②staging方針 ③PTZ（実機未入手がブロッカー） ④外部診断判断 ⑤DR訓練 ⑥bootstrapスコープ鍵 ⑦Phase D 実地一式</strong>。</p>
+<p style="margin-bottom:0"><strong>8/6 更新</strong>: ①②④⑤は判断・実施済み、⑥はスコープ鍵化 B2/B3 を本番投入し B4（配布停止スイッチ）まで実装済（有効化は soak 後）。
+<strong>③PTZ は GA スコープ外に決定</strong>（実機調達保留・i-PRO からの情報提供なし・顧客要望が出てから再開）。
+よって<strong>GA 必須の残りは ⑦Phase D 実地一式（9〜10月）のみ</strong>。あわせて 8/6 に
+<strong>ライブ画像ルートのテナント可視性チェック欠如を修正</strong>し（詳細は <code>security-assessment.md</code> §4.3）、
+同経路の毎フレーム認証をトークン単位キャッシュで削減した。</p>
 </div>
 
 <h3>今すぐ（G1クローズ・運用）</h3>
@@ -249,12 +254,16 @@
 <table>
   <tr><th style="width:46px">P</th><th>タスク</th><th style="width:170px">依存/メモ</th><th style="width:120px">受入</th></tr>
   <tr><td><span class="badge b-done">済</span></td><td class="strike">ONVIF探索/接続テストの実機検証（beelink＋実カメラ）</td><td>PoC で探索→割当→grid/live/VOD 常用中＝実証済</td><td>✅ 到達OK</td></tr>
-  <tr><td><span class="badge b-todo">P1</span></td><td>実機 ONVIF PTZ スパイク（go/no-go）: GetNodes/GetPresets/GotoPreset/SetAuxiliaryCommand 疎通</td><td><strong>ブロッカー: PTZ実機なし</strong>（WV-U1132A/SW158 は固定）。i-PRO面談で評価機借用を打診 or PTZ を GA後スコープへ</td><td>preset移動・AUX疎通</td></tr>
+  <tr><td><span class="badge b-wait">保留</span></td><td>実機 ONVIF PTZ スパイク（go/no-go）: GetNodes/GetPresets/GotoPreset/SetAuxiliaryCommand 疎通</td><td><strong>8/6 GAスコープ外に決定</strong>。i-PRO 面談で評価機借用は不調（先方は競合 i-PRO Remo を持つため技術情報の提供なし）。PTZ 実機の調達も保留。<strong>顧客要望が出てから着手</strong>する</td><td>（保留）</td></tr>
   <tr><td><span class="badge b-done">済</span></td><td class="strike">録画再生(VOD)の単画面統合（ツールバー「録画再生」モード＋時間ピッカー）</td><td>MonitorWorkspace 録画再生モーダル＋/vod（発報からのディープリンク含む）</td><td>✅ 同画面で録画再生</td></tr>
   <tr><td><span class="badge b-done">済</span></td><td class="strike">JPEG1枚保存（単画=既存snapshot流用・16分割=grid.jpgそのままDL）</td><td>SaveJpegButton（単画・16分割）実装済</td><td>✅ 1クリックで保存</td></tr>
-  <tr><td><span class="badge b-todo">P2</span></td><td>ONVIF PTZ binding 実装＋capability永続化＋命令経路(/api/cameras/[id]/ptz・監査記録)＋操作UI（PTZパッド・プリセットチップ・AUXトグル）</td><td>スパイクgo後（PTZ実機入手が前提）</td><td>非エンジニアが操作可</td></tr>
-  <tr><td><span class="badge b-todo">P1</span></td><td>実機UAT（PTZ/preset/aux/VOD/JPEG保存 通し確認）</td><td>PTZ以外（VOD/JPEG保存）は現PoCで随時確認可</td><td>全機能疎通</td></tr>
+  <tr><td><span class="badge b-wait">保留</span></td><td>ONVIF PTZ binding 実装＋capability永続化＋命令経路(/api/cameras/[id]/ptz・監査記録)＋操作UI（PTZパッド・プリセットチップ・AUXトグル）</td><td>スパイクgo後（PTZ実機入手が前提）。<strong>上記により GAスコープ外</strong></td><td>（保留）</td></tr>
+  <tr><td><span class="badge b-todo">P1</span></td><td>実機UAT（VOD/JPEG保存 通し確認）</td><td>現PoCで随時確認可。<strong>PTZ/preset/aux は保留のため対象外</strong></td><td>全機能疎通</td></tr>
 </table>
+<p class="small"><strong>PTZ 保留の判断（8/6）</strong>: 実機が無いと go/no-go すら出せず、i-PRO からの評価機借用も期待できない
+（先方は競合 <em>i-PRO Remo</em> を持つため技術情報の提供なし）。現行案件（NU101 リプレイス）にも PTZ 要件は出ていない。
+<strong>顧客要望が出た時点で再開</strong>する。再開時は<strong>ベンダ固有APIを使わず ONVIF 標準プロファイル（Profile S/PTZ）だけで実装する</strong>方針を推奨
+— ベンダの情報提供に依存せず、i-PRO / Uniview 双方に効き、3社対応の方向とも合うため。着手の前提は PTZ 実機1台の調達のみ。</p>
 <p class="small">工数目安（6/23版と同じ）: スパイク0.5〜1人日／VOD統合〜2人日／PTZ backend 3〜4人日／PTZ・AUX UI 2〜3人日／JPEG保存〜0.5人日／UAT 0.5人日。推奨順=JPEG保存＆スパイク＆VOD先行→PTZ backend→UI→UAT。</p>
 
 <h3>Phase C 残（8〜9月・並行）</h3>
