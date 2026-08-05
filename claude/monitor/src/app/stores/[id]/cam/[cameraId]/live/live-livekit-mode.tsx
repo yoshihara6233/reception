@@ -132,6 +132,14 @@ export default function LiveKitMode({ cameraId, edgeId, onFallback }: {
   return (
     <div className="relative h-full w-full bg-black">
       <video ref={videoRef} autoPlay muted playsInline className="h-full w-full bg-black object-contain" />
+      {/*
+        エッジが同時に持てる SFU publish は 1 本（state-machine.ts startSfu が
+        貼り替え式）。別カメラで SFU を開くと、こちらの配信は停止する。
+        書いていないと「途中で止まった」という不具合報告になるため明示する。
+      */}
+      <div className="pointer-events-none absolute left-2 top-2 rounded bg-black/60 px-2 py-1 text-[11px] text-slate-200">
+        高画質ライブは 1 台のみ。別カメラで開くとこちらは停止します。
+      </div>
       {status !== 'playing' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/70 px-6 text-center text-sm text-slate-200">
           {status === 'connecting' && <div>SFU に接続中…</div>}

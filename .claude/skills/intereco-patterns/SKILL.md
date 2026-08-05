@@ -28,6 +28,28 @@ description: >-
 - ~~`live_host` 等はadmin UIに編集欄が無い → Supabase SQL Editor で直接UPDATE~~ → **R2で解消済（2026-07-07）**：
   `live_host`/`vod_host`/`vod_username`/`vod_password`/`vod_channel` は `/admin/edges/[id]` の RecorderCard「詳細(ライブ/VOD/go2rtc)」パネルで編集可（API `/api/admin/recorders/[id]` PUT・PWはVault暗号化・監査ログ記録）。SQL直編集は不要。
 
+## 1.5 R2移行で壊れた2つの暗黙前提（2026-08-04・本番で踏んだ）
+
+grid/snapshot ルートは R2 にオブジェクトがあると `img.genesis-edge.com` へ **302** する。
+これが次の2つの「書かれていない前提」を壊した。**同種の移行では必ず両方を確認する。**
+
+1. **「同一オリジンだから fetch できる」** — `lib/saveJpeg.ts` は fetch→blob で保存する。
+   302 先の Worker に `Access-Control-Allow-Origin` が無いため **fetch だけ CORS で失敗**
+   （`<img>` は CORS 不要なので表示は成功）。症状は「見えているのに『保存失敗』」。
+   16分割は R2 にオブジェクトがあり失敗、シングルは R2 未作成で Supabase へ落ちて成功、
+   という**非対称が切り分けの決め手**になった。
+   対処: 保存時のみ `?download=1` でルートにバイトを中継させる（`lib/storage/edge-image-response.ts`）。
+   Worker に CORS を足す案は却下 — Vercel プレビューはオリジンが毎回変わり許可リストが破綻する。
+2. **「Supabase にも最新がある」** — 移行前はエッジが毎フレーム両方に書いていたので
+   フォールバックが成立していた。移行後は **R2 成功時に早期 return** するため Supabase 側は
+   移行時点で凍結＝**必ず古い**。`workerImageExists` の否定判定 60 秒メモ化と重なり、
+   ライブ開始直後の60秒間ずっと古いフレームを表示していた。
+   対処: 否定メモを 3 秒に短縮＋ R2/Worker 構成済みなら Supabase へ落とさず 503
+   （監視用途で古い映像を黙って出すのは「今を見ている」誤認を生むため）。
+
+**SFU が「途中で止まる」のは仕様**（`state-machine.ts startSfu` が `stopSfu()` してから貼り替え）。
+同時 publish は 1 本。UI に明示していないと必ず不具合報告になる（2026-08-04 に表示を追加）。
+
 ## 2. service_role 鍵ローテはエッジ.envも同期（でないと全停止）
 
 鍵をローテ（旧失効）したら **エッジの env も新キーに更新 → restart**。env の正しい場所（2026-07-19確定）:

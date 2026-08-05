@@ -63,12 +63,17 @@ export function signEdgeImageUrl(
  * （誤って古い判定を掴んでも、返るのは同じキーの最新フレームか Supabase の最新フレーム）。
  */
 const existsMemo = new Map<string, { exists: boolean; at: number }>()
+// 肯定は長め（毎フレーム HEAD を打たない）、**否定は短く**。
+// 否定を長く持つと、ライブ開始直後のまだ R2 に無いキーを掴んだインスタンスが
+// その間ずっと「取得失敗」を返し続ける（旧実装は Supabase の古い画像で
+// 誤魔化していたが、監視用途では古い映像を出す方が危険なので出さない）。
 const MEMO_TTL_MS = 60_000
+const MEMO_NEG_TTL_MS = 3_000
 
 export async function workerImageExists(key: string): Promise<boolean> {
   const hit = existsMemo.get(key)
   const now = Date.now()
-  if (hit && now - hit.at < MEMO_TTL_MS) return hit.exists
+  if (hit && now - hit.at < (hit.exists ? MEMO_TTL_MS : MEMO_NEG_TTL_MS)) return hit.exists
 
   let exists = false
   try {

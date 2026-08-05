@@ -81,12 +81,14 @@ export function presignEdgeImageGet(key: string, ttlSec = 120): Promise<string> 
  * 最新オブジェクト」のどちらかなので、映像が壊れることはない。
  */
 const existsMemo = new Map<string, { exists: boolean; at: number }>()
+// 肯定は長め、否定は短く（理由は edge-images-sign.ts の同名定数を参照）。
 const MEMO_TTL_MS = 60_000
+const MEMO_NEG_TTL_MS = 3_000
 
 export async function edgeImageExists(key: string): Promise<boolean> {
   const hit = existsMemo.get(key)
   const now = Date.now()
-  if (hit && now - hit.at < MEMO_TTL_MS) return hit.exists
+  if (hit && now - hit.at < (hit.exists ? MEMO_TTL_MS : MEMO_NEG_TTL_MS)) return hit.exists
 
   let exists = false
   try {
