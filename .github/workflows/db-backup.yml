@@ -1,0 +1,212 @@
+# 本番 DB の毎時バックアップ（RPO ≤ 1時間）
+#
+# ## ⚠ このファイルが「既定ブランチ」に置いてある理由（消さないこと）
+#
+# **GitHub は `schedule` トリガを既定ブランチ（`design/v2-redesign`）からしか起動しない。**
+# 本番ブランチ `monitor-prod` にだけ置いても cron は永久に発火せず、しかも
+# **エラーも出ない**（実行されないだけ）。バックアップとして最悪の壊れ方なので、
+# 実行されるブランチ＝既定ブランチに置く。
+#
+# このワークフローは `actions/checkout` を使わない（DB へ接続して R2 へ上げるだけで
+# リポジトリの中身を一切参照しない）。したがって既定ブランチから走らせて問題ない。
+#
+# 運用ドキュメントは `monitor-prod` の `docs/dr-runbook.md` §6 にある。
+#
+# ## なぜ GitHub Actions なのか
+#
+# Supabase の PITR（$100/mo）は Phase D 直前に入れる方針（docs/dr-runbook.md §6）。
+# それまでの間、RPO 24時間（日次論理バックアップ頼み）は長すぎるので、外部から
+# `pg_dump --data-only` を毎時取って埋める。
+#
+# 実行場所を GitHub Actions にしたのは次の理由:
+#   - `pg_dump` の実バイナリが要る。Vercel(サーバレス) / Supabase Edge Functions(Deno)
+#     には無く、DB 内の pg_cron からも当然実行できない。
+#   - **バックアップ先とバックアップ元を別ベンダにできる**。Supabase アカウントごと
+#     失う事故（誤削除・請求停止・アカウント凍結）で共倒れしないことが DR の要。
+#     取得＝GitHub / 保管＝Cloudflare R2 / 本番＝Supabase の三点分離になる。
+#
+# ## コスト
+#
+# private repo の Linux ランナーは $0.008/min。1回 1分弱 × 720回/月 ≒ **$5〜6/月**。
+# R2 は 14日保持で 1GB 未満＝ほぼ無料（エグレス課金なし）。PITR の $100/mo に対して
+# 1/20 以下で RPO を 24h → 1h にできる、というのがこの構成の主旨。
+#
+# ## 必要な Secrets（Settings → Secrets and variables → Actions）
+#
+# | 名前 | 中身 |
+# |---|---|
+# | `BACKUP_DATABASE_URL` | **Session pooler** の接続URI（下の注意を必読） |
+# | `BACKUP_ENC_PASSPHRASE` | ダンプ暗号化のパスフレーズ。**復元に必須なので別途保管する** |
+# | `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | R2 の認証情報 |
+# | `R2_BACKUP_BUCKET` | **バックアップ専用バケット**。画像用 `R2_EDGE_BUCKET` とは分ける |
+#
+# ⚠ **接続先は Session pooler (5432) を使う**。理由:
+#   - Direct connection は IPv6 のみ（IPv4 アドオン未購入）で、**GitHub ランナーは
+#     IPv6 を持たない**ため必ず接続できない。
+#   - Transaction pooler (6543) は prepared statement を使えず `pg_dump` が動かない。
+#   → Supabase ダッシュボード → Connect → **Session pooler** の URI を使うこと。
+#
+# ⚠ **`R2_BACKUP_BUCKET` は公開してはいけない**。画像用バケットは
+#   `img.genesis-edge.com` の Worker から公開配信している。同じバケットに置くと
+#   DB ダンプ（`auth.users` のパスワードハッシュを含む）が世界に晒される。必ず別バケット。
+
+name: DB backup
+
+on:
+  schedule:
+    - cron: '17 * * * *'   # 毎時17分。毎正時は GitHub 全体が混み、遅延・スキップが起きやすい
+  workflow_dispatch:        # 手動実行（訓練・移行前の臨時取得）
+
+concurrency:
+  group: db-backup
+  cancel-in-progress: false   # 前回が長引いても取りこぼさない（重複より欠測の方が痛い）
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # ダンプがこれ未満なら「成功したが中身が無い」とみなして落とす。
+      # 静かに空ファイルを保管し続けるのがバックアップの最悪の壊れ方なので、
+      # 少しでも疑わしければ失敗させて気づけるようにする。
+      MIN_DUMP_BYTES: '1000000'
+      RETENTION_DAYS: '14'
+    steps:
+      - name: PostgreSQL 17 クライアントを入れる
+        # pg_dump はサーバ以上のバージョンが要る（本番は PG17: supabase/config.toml）。
+        # ubuntu 標準リポジトリは古いので PGDG から入れる。
+        run: |
+          set -euo pipefail
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+            https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17
+          pg_dump --version
+
+      - name: ダンプを取る（データのみ）
+        env:
+          PGCONNECT_TIMEOUT: '30'
+          DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          test -n "$DATABASE_URL" || { echo "::error::BACKUP_DATABASE_URL が未設定です"; exit 1; }
+          # スキーマは git の migration から再構築できる（RPO 0）ので data-only で足りる。
+          # auth も含めるのは、失うと全利用者が再登録になるため。パスワードハッシュを
+          # 含むので、この後の暗号化は必須（平文のまま保管しない）。
+          pg_dump "$DATABASE_URL" \
+            --data-only --no-owner --no-privileges \
+            --schema=public --schema=auth \
+            --file=dump.sql
+          ls -l dump.sql
+
+      - name: 中身があるか確かめる
+        run: |
+          set -euo pipefail
+          size=$(stat -c%s dump.sql)
+          echo "dump size: ${size} bytes (floor ${MIN_DUMP_BYTES})"
+          if [ "$size" -lt "$MIN_DUMP_BYTES" ]; then
+            echo "::error::ダンプが小さすぎます (${size} < ${MIN_DUMP_BYTES})。接続先・権限を確認してください"
+            exit 1
+          fi
+          # 主要テーブルの COPY が入っていること（権限不足だと空で成功してしまう）
+          for t in stores recorders recorder_cameras edge_devices; do
+            grep -q "COPY public.${t} " dump.sql || {
+              echo "::error::public.${t} のデータがダンプに含まれていません"; exit 1; }
+          done
+
+      - name: 圧縮して暗号化する
+        env:
+          PASSPHRASE: ${{ secrets.BACKUP_ENC_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          test -n "$PASSPHRASE" || { echo "::error::BACKUP_ENC_PASSPHRASE が未設定です"; exit 1; }
+          gzip -9 dump.sql
+          gzip -t dump.sql.gz
+          gpg --batch --yes --symmetric --cipher-algo AES256 \
+              --passphrase "$PASSPHRASE" --output dump.sql.gz.gpg dump.sql.gz
+          # 往復確認: 復号して元と一致するか。パスフレーズや gpg の壊れに、
+          # 復元が必要になった当日ではなく今日気づくため。
+          gpg --batch --yes --decrypt --passphrase "$PASSPHRASE" \
+              --output roundtrip.gz dump.sql.gz.gpg
+          cmp dump.sql.gz roundtrip.gz
+          rm -f roundtrip.gz dump.sql.gz
+          ls -l dump.sql.gz.gpg
+
+      - name: R2 へ上げる
+        env:
+          AWS_ACCESS_KEY_ID:     ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION:    auto
+          ACCOUNT_ID:            ${{ secrets.R2_ACCOUNT_ID }}
+          BUCKET:                ${{ secrets.R2_BACKUP_BUCKET }}
+        run: |
+          set -euo pipefail
+          test -n "$BUCKET" || { echo "::error::R2_BACKUP_BUCKET が未設定です"; exit 1; }
+          endpoint="https://${ACCOUNT_ID}.r2.cloudflarestorage.com"
+          # UTC の時刻でキーを作る（復元時に JST/UTC を取り違えないよう Z を明示）。
+          key="db/$(date -u +%Y/%m/%d)/monitor-$(date -u +%Y%m%dT%H%M%SZ).sql.gz.gpg"
+          aws s3 cp dump.sql.gz.gpg "s3://${BUCKET}/${key}" \
+            --endpoint-url "$endpoint" --only-show-errors
+          # 置けたことを一覧で確認する（cp の成功だけを信じない）
+          aws s3 ls "s3://${BUCKET}/${key}" --endpoint-url "$endpoint"
+          echo "backed up: ${key}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 古い世代を消す
+        env:
+          AWS_ACCESS_KEY_ID:     ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION:    auto
+          ACCOUNT_ID:            ${{ secrets.R2_ACCOUNT_ID }}
+          BUCKET:                ${{ secrets.R2_BACKUP_BUCKET }}
+        run: |
+          set -euo pipefail
+          endpoint="https://${ACCOUNT_ID}.r2.cloudflarestorage.com"
+          cutoff=$(date -u -d "-${RETENTION_DAYS} days" +%s)
+          # 一覧はファイルに落としてから回す（パイプの subshell を挟まないため）。
+          # 空バケットのとき aws は "None" を返すので弾く。
+          aws s3api list-objects-v2 --bucket "$BUCKET" --prefix "db/" \
+            --endpoint-url "$endpoint" --query 'Contents[].[Key,LastModified]' --output text \
+            > listing.txt || true
+          deleted=0
+          while read -r key modified; do
+            case "$key" in ''|None) continue ;; esac
+            [ -n "$modified" ] || continue
+            if [ "$(date -u -d "$modified" +%s)" -lt "$cutoff" ]; then
+              aws s3 rm "s3://${BUCKET}/${key}" --endpoint-url "$endpoint" --only-show-errors
+              deleted=$((deleted + 1))
+            fi
+          done < listing.txt
+          kept=$(grep -cv '^\(None\)\?$' listing.txt || true)
+          echo "retention: ${RETENTION_DAYS} 日 / 削除 ${deleted} 件 / 保管 $((kept - deleted)) 件" \
+            >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 失敗をメールで知らせる
+        # バックアップの失敗は「静かに壊れ続ける」のが一番怖い。GitHub の通知だけに
+        # 頼らず、運用アドレスへ能動的に出す（死活アラートと同じ Resend 経路）。
+        if: failure()
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          ALERT_EMAILS:   ${{ secrets.ALERT_EMAILS }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RESEND_API_KEY:-}" ] || [ -z "${ALERT_EMAILS:-}" ]; then
+            echo "通知用の secret が無いので送信をスキップします（GitHub の通知のみ）"
+            exit 0
+          fi
+          to=$(echo "$ALERT_EMAILS" | tr ',' '\n' | sed 's/^ *//;s/ *$//' \
+               | grep -v '^$' | awk '{printf "%s\"%s\"", (NR>1?",":""), $0}')
+          curl -fsS -X POST https://api.resend.com/emails \
+            -H "Authorization: Bearer ${RESEND_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "{\"from\":\"Recording Monitor <admin@genesis-edge.com>\",
+                 \"to\":[${to}],
+                 \"subject\":\"[緊急] DB バックアップが失敗しました\",
+                 \"text\":\"毎時の DB バックアップが失敗しました。RPO が 24 時間（Supabase 日次）に戻っています。\\n\\n実行ログ: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\\n\\n復旧手順: docs/dr-runbook.md §6\"}" \
+            > /dev/null
