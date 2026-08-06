@@ -50,6 +50,41 @@ grid/snapshot ルートは R2 にオブジェクトがあると `img.genesis-edg
 **SFU が「途中で止まる」のは仕様**（`state-machine.ts startSfu` が `stopSfu()` してから貼り替え）。
 同時 publish は 1 本。UI に明示していないと必ず不具合報告になる（2026-08-04 に表示を追加）。
 
+## 1.6 migration を含む PR は「マージ＝デプロイ」に間に合わない（2026-08-06 全エッジ停止）
+
+Vercel はマージした瞬間に新コードを本番へ出すが、**Supabase の migration は誰かが
+`db push` するまで当たらない**。`scoped_only` 列を足す PR をマージし、migration を
+当て忘れたため、`/api/edge/bootstrap` の SELECT が列不在で失敗した。
+
+**手順（migration を含む PR は必ずこの順）**:
+1. `bunx supabase migration list` で**接続先が東京DB `vywvpcjbicrtcyvzmrwh` か**を確認（旧refに向いて誤爆した実績あり）
+2. `bunx supabase db push` で先に列を作る
+3. そのうえで PR をマージ（新列は「あっても古いコードは読まない」ので先行適用は安全）
+
+**列追加は必ず `add column if not exists` + `default`**。既存行を壊さず、
+push 前にデプロイが走っても Not Null 違反にならない。
+
+**症状の見分け方**: このときエッジ側のログは `bootstrap: non-OK response status:401` で、
+トークン不正と全く同じ見た目だった。→ bootstrap は**トークン不一致(401)とサーバ側失敗(500)を
+分けて返す**ようにした（`api/edge/bootstrap/route.ts`）。401 が出たら現地のトークンを、
+500 が出たら本部の migration を疑う、と切り分けられる。
+
+## 1.7 i-PRO NVR 経由（カメラ網が分離された現場）は JPEG では成立しない（2026-08-06 実機）
+
+NU101 は `push.cgi COMP=JPEG` に対し、**JPEG 配信を持たないカメラへ 39×37 のプレースホルダを
+HTTP 200 で返す**。バイト列は正しい JPEG なので SOI/EOI 判定では通ってしまい、グリッドに
+黒いセルが並ぶだけでエラーにならない。→ `COMP=H265|H264` を受けて**エッジでデコード**する
+方式に変更（`adapters/i-pro/nvr-rtp.ts`）。カメラの配信設定に一切依存しない。
+
+- **各 multipart パートがちょうど RTP パケット1個**。独自フレーミングは無い。PT 98=H.264 / 101=H.265。
+  RTP 拡張にカメラ番号(0x0004)と時刻(0x0007)が載るので読み飛ばす。
+- **ONVIF は無い**（`/onvif/device_service` は 404・RTSP 554 も閉）。チャンネル列挙は
+  `as_getinfo.cgi?FILE=2` の `CAM_CONNECT_xxCH`。接続テストも push.cgi で判定する。
+- **ユーザ名は NVR 本体の管理者（既定 `ADMIN`）**。カメラ側の `admin` を入れると
+  `dlogin.cgi` が 401 になりライブが一切出ない。UI 既定値も `ADMIN` に修正済み。
+- 機器が返す極小画像は `util/jpeg.ts` の `assertUsableJpeg` で弾き、**取得失敗として扱う**
+  （黙って表示すると現地で原因に辿り着けない）。
+
 ## 2. service_role 鍵ローテはエッジ.envも同期（でないと全停止）
 
 鍵をローテ（旧失効）したら **エッジの env も新キーに更新 → restart**。env の正しい場所（2026-07-19確定）:

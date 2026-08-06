@@ -31,6 +31,7 @@ interface Recorder {
   vod_username: string | null
   vod_channel: number | null
   vod_has_password: boolean
+  has_password: boolean       // 値は返さない。設定済みか否かのみ
   recorder_cameras: Camera[]
 }
 interface EdgePayload {
@@ -326,7 +327,15 @@ const VENDOR_DEFAULTS: Record<NewRecorder['vendor'], Partial<NewRecorder>> = {
   // カメラ直 ONVIF: ONVIF は通常 80、RTSP は 554。1行=1カメラ。
   'onvif-generic':  { rtsp_port: 554,  onvif_port: 80, username: 'admin', password: '' },
   // i-PRO NVR 経由: host=NVRのIP。ライブ=push.cgi / VOD=httpdl.cgi。
-  'i-pro-nvr':      { rtsp_port: 554,  onvif_port: 443, username: 'admin', password: '' },
+  // ユーザ名は **NVR 本体の管理者(既定 ADMIN)**。カメラ側の admin を入れると
+  // dlogin.cgi が 401 になり、ライブが一切出ない（2026-08-06 実機で踏んだ）。
+  // ポートは NVR の HTTPS ポート（既定 443）。
+  'i-pro-nvr':      { rtsp_port: 554,  onvif_port: 443, username: 'ADMIN', password: '' },
+}
+
+/** ONVIF ポート欄の意味はベンダで変わる（i-PRO NVR は CGI を叩く HTTPS ポート）。 */
+function portLabel(v: NewRecorder['vendor']): string {
+  return v === 'i-pro-nvr' ? 'NVR HTTPS ポート' : 'ONVIF ポート (任意)'
 }
 
 function vendorLabel(v: NewRecorder['vendor']) {
@@ -386,7 +395,7 @@ function NewRecorderForm({
                  className="w-full rounded border border-slate-300 px-2 py-1 font-mono" />
         </Field>
         {!isFrigate && (
-          <Field label="ONVIF ポート (任意)">
+          <Field label={portLabel(r.vendor)}>
             <input type="number" value={r.onvif_port ?? ''}
                    onChange={(e) => setR({ ...r, onvif_port: e.target.value === '' ? null : Number(e.target.value) })}
                    className="w-full rounded border border-slate-300 px-2 py-1 font-mono" />
@@ -419,6 +428,12 @@ function NewRecorderForm({
           </Field>
         )}
       </div>
+      {r.vendor === 'i-pro-nvr' && (
+        <p className="mt-2 rounded bg-amber-50 border border-amber-200 px-2 py-1.5 text-[10px] text-amber-800">
+          ユーザ名は <b>NVR 本体の管理者</b>（既定 <code>ADMIN</code>）です。カメラ側のユーザを入れるとログインに失敗し、
+          ライブが表示されません。ホストは NVR の IP、ポートは NVR の HTTPS ポート（既定 443）を指定します。
+        </p>
+      )}
       {isFrigate && (
         <p className="mt-2 rounded bg-amber-50 border border-amber-200 px-2 py-1.5 text-[10px] text-amber-800">
           Frigate は認証なしで接続します。カメラごとのストリーム名 (例: <code>camera_01</code>) は、
@@ -472,6 +487,12 @@ function RecorderCard({ recorder }: { recorder: Recorder }) {
   // 詳細設定（ライブ/VOD/go2rtc）— 従来 SQL 直編集だったフィールドの開閉式編集。
   const [showDetail, setShowDetail] = useState(false)
   const [rec, setRec] = useState({
+    // 接続設定（作成後に変更できないと現地でのパスワードローテができない）
+    host:         recorder.host,
+    rtsp_port:    recorder.rtsp_port.toString(),
+    onvif_port:   recorder.onvif_port?.toString() ?? '',
+    username:     recorder.username,
+    password:     '',                                   // 書込専用。空欄=現状維持
     live_host:    recorder.live_host ?? '',
     vod_host:     recorder.vod_host ?? '',
     vod_username: recorder.vod_username ?? '',
@@ -484,11 +505,16 @@ function RecorderCard({ recorder }: { recorder: Recorder }) {
   async function saveRecorder() {
     setRecBusy(true); setRecMsg(null)
     const body: Record<string, unknown> = {
+      host:         rec.host,
+      rtsp_port:    Number(rec.rtsp_port),
+      onvif_port:   rec.onvif_port === '' ? null : Number(rec.onvif_port),
+      username:     rec.username,
       live_host:    rec.live_host,
       vod_host:     rec.vod_host,
       vod_username: rec.vod_username,
       vod_channel:  rec.vod_channel === '' ? null : Number(rec.vod_channel),
     }
+    if (rec.password)     body.password     = rec.password       // 非空のみ更新
     if (rec.vod_password) body.vod_password = rec.vod_password   // 非空のみ更新
     const res = await fetch(`/api/admin/recorders/${recorder.id}`, {
       method: 'PUT',
@@ -497,7 +523,7 @@ function RecorderCard({ recorder }: { recorder: Recorder }) {
     })
     setRecBusy(false)
     if (!res.ok) { const j = await res.json().catch(() => ({})); setRecMsg(j.error ?? `保存失敗: ${res.status}`); return }
-    setRecMsg('保存しました'); setRec((p) => ({ ...p, vod_password: '' })); router.refresh()
+    setRecMsg('保存しました'); setRec((p) => ({ ...p, password: '', vod_password: '' })); router.refresh()
   }
 
   // Stage 2b: ONVIF探索 / 接続テスト（エッジ経由・ジョブをポーリング）。
@@ -606,6 +632,31 @@ function RecorderCard({ recorder }: { recorder: Recorder }) {
       {/* 詳細設定パネル（ライブ/VOD）— 従来 SQL 直編集だったレコーダ単位フィールド */}
       {showDetail && (
         <div className="border-b border-slate-200 bg-slate-50/50 px-3 py-3">
+          {/* 接続設定 — 登録後も変更できないと現地のパスワードローテに追従できない */}
+          <div className="mb-3 grid grid-cols-2 gap-x-4 gap-y-2 md:grid-cols-3">
+            <Field label="ホスト (IP)">
+              <input value={rec.host} onChange={(e) => setRec({ ...rec, host: e.target.value })}
+                     className="w-full rounded border border-slate-300 px-2 py-1 font-mono" placeholder="192.168.0.10" />
+            </Field>
+            <Field label="RTSP ポート">
+              <input type="number" value={rec.rtsp_port} onChange={(e) => setRec({ ...rec, rtsp_port: e.target.value })}
+                     className="w-full rounded border border-slate-300 px-2 py-1 font-mono" />
+            </Field>
+            <Field label={portLabel(recorder.vendor)}>
+              <input type="number" value={rec.onvif_port} onChange={(e) => setRec({ ...rec, onvif_port: e.target.value })}
+                     className="w-full rounded border border-slate-300 px-2 py-1 font-mono"
+                     placeholder={recorder.vendor === 'i-pro-nvr' ? '443' : '80'} />
+            </Field>
+            <Field label={recorder.vendor === 'i-pro-nvr' ? 'ユーザ名 (NVR本体・既定 ADMIN)' : 'ユーザ名'}>
+              <input value={rec.username} onChange={(e) => setRec({ ...rec, username: e.target.value })}
+                     className="w-full rounded border border-slate-300 px-2 py-1" placeholder="admin" />
+            </Field>
+            <Field label={`パスワード${recorder.has_password ? '（設定済・変更時のみ入力）' : '（未設定）'}`}>
+              <input type="password" value={rec.password} onChange={(e) => setRec({ ...rec, password: e.target.value })}
+                     className="w-full rounded border border-slate-300 px-2 py-1"
+                     placeholder={recorder.has_password ? '••••••（変更しない場合は空欄）' : ''} />
+            </Field>
+          </div>
           <div className="grid grid-cols-2 gap-x-4 gap-y-2 md:grid-cols-3">
             <Field label="ライブ host:port (Frigate iframe)">
               <input value={rec.live_host} onChange={(e) => setRec({ ...rec, live_host: e.target.value })}
@@ -636,7 +687,7 @@ function RecorderCard({ recorder }: { recorder: Recorder }) {
             {recMsg && <span className="text-xs text-emerald-700">{recMsg}</span>}
             <button onClick={saveRecorder} disabled={recBusy}
                     className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white disabled:opacity-50">
-              {recBusy ? '保存中…' : 'ライブ/VOD設定を保存'}
+              {recBusy ? '保存中…' : 'レコーダ設定を保存'}
             </button>
           </div>
           <p className="mt-1 text-[10px] text-slate-400">

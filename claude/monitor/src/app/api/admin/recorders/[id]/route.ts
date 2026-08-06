@@ -6,11 +6,12 @@ import { encryptSecret } from '@intereco/shared'
 
 const PatchBody = z.object({
   model:      z.string().nullable().optional(),
-  host:       z.string().optional(),
+  // host / username は空にできない（空で上書きすると現地から到達不能になる）。
+  host:       z.string().min(1).optional(),
   rtsp_port:  z.coerce.number().int().min(1).max(65535).optional(),
   onvif_port: z.coerce.number().int().min(1).max(65535).nullable().optional(),
-  username:   z.string().optional(),
-  password:   z.string().optional(),
+  username:   z.string().min(1).optional(),
+  password:   z.string().optional(),              // 空欄=現状維持。非空のみ更新
   notes:      z.string().nullable().optional(),
   // ライブ/VOD/go2rtc 系（従来は SQL Editor 直編集だったフィールドを UI 化）。
   live_host:    z.string().nullable().optional(),   // Frigate iframe 用 LAN host:port

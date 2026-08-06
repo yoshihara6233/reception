@@ -108,7 +108,16 @@ export async function refreshSupabaseKey(): Promise<void> {
       headers,
       signal: AbortSignal.timeout(10_000),
     })
-    if (!res.ok) { logger.warn({ status: res.status }, 'bootstrap: non-OK response'); return }
+    if (!res.ok) {
+      // 401=このエッジのトークンが本部と食い違っている（設定/失効）。
+      // 5xx=本部側の障害（migration 未適用など）。現地でやることが全く違うので区別して出す。
+      const detail = await res.text().catch(() => '')
+      logger.warn(
+        { status: res.status, cause: res.status === 401 ? 'device token mismatch' : 'monitor-side failure', detail: detail.slice(0, 200) },
+        'bootstrap: non-OK response',
+      )
+      return
+    }
     const j = (await res.json()) as {
       supabase_service_role_key?: string
       scoped_access_token?: string

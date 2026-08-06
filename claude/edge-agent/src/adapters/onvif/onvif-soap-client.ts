@@ -280,12 +280,16 @@ export class OnvifSoapClient {
     const ctl = new AbortController()
     const timer = setTimeout(() => ctl.abort(), this.timeoutMs)
     try {
+      // 監視機器は自己署名証明書が普通（i-PRO NVR / 一部カメラは HTTPS のみ）。
+      // 検証を有効にすると LAN 内の正規機器にすら繋がらないため無効化する。経路は
+      // 現地 LAN に閉じており、資格情報は Digest/WS-Security で別途保護される。
       const res = await fetch(url, {
         method:  'POST',
         headers: { 'content-type': 'application/soap+xml; charset=utf-8' },
         body:    envelope,
         signal:  ctl.signal,
-      })
+        tls:     { rejectUnauthorized: false },
+      } as unknown as RequestInit)
       const text = await res.text()
       if (!res.ok) {
         throw new Error(`ONVIF HTTP ${res.status}: ${text.slice(0, 200)}`)

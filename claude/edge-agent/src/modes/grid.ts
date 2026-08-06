@@ -23,7 +23,8 @@ import { snapshotUrl } from '../rtsp/url.js'
 import { captureRtspKeyframe, injectRtspCreds } from '../rtsp/keyframe.js'
 import { resolveOnvifRtspUrl } from '../adapters/onvif/onvif-rtsp.js'
 import { getOnvifSnapshotUrl, fetchOnvifJpeg } from '../adapters/onvif/onvif-snapshot.js'
-import { captureIproNvrJpeg } from '../adapters/i-pro/nvr-live.js'
+import { captureIproNvrJpeg, buildIproNvrEndpoint } from '../adapters/i-pro/nvr-live.js'
+import { assertUsableJpeg } from '../util/jpeg.js'
 import { uploadGridJpeg } from '../upload/storage.js'
 import type { CameraDescriptor } from '../types.js'
 
@@ -92,10 +93,10 @@ export async function startGrid(cameras: CameraDescriptor[]): Promise<GridHandle
       continue
     }
 
-    // i-PRO NVR 経由: push.cgi の MJPEG から1フレーム (config②)
+    // i-PRO NVR 経由: push.cgi の H.265/H.264 をエッジでデコードして1フレーム (config②)
     if (cam.recorder.vendor === 'i-pro-nvr') {
       const r = cam.recorder
-      const endpoint = r.host.startsWith('http') ? r.host : `https://${r.host}`
+      const endpoint = buildIproNvrEndpoint(r.host, r.onvif_port)
       slots.push({
         pos: cam.grid_pos, camId: cam.id,
         capture: () => captureIproNvrJpeg(
@@ -155,12 +156,20 @@ export async function startGrid(cameras: CameraDescriptor[]): Promise<GridHandle
     let ok = 0
     fetches.forEach((f, i) => {
       const s = slots[i]
-      if (f.status === 'fulfilled') {
-        LAST_FRAME.set(s.camId, f.value)  // 再起動を跨いで保持 (camId 別)
-        ok++
-      } else {
+      if (f.status !== 'fulfilled') {
         logger.debug({ pos: s.pos, camera_id: s.camId, reason: String(f.reason) }, 'grid: cell capture failed')
+        return
       }
+      // 機器はプレースホルダ画像(i-PRO NVR の 39×37 等)を HTTP 200 で返すことがある。
+      // 黙って通すと黒いセルが並ぶだけで原因に辿り着けないため、取得失敗として扱う。
+      try {
+        assertUsableJpeg(f.value, `grid(pos=${s.pos})`)
+      } catch (e) {
+        logger.warn({ pos: s.pos, camera_id: s.camId, reason: String(e) }, 'grid: cell frame rejected')
+        return
+      }
+      LAST_FRAME.set(s.camId, f.value)  // 再起動を跨いで保持 (camId 別)
+      ok++
     })
 
     const layers: sharp.OverlayOptions[] = []
