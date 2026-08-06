@@ -19,7 +19,8 @@ import { snapshotUrl } from '../rtsp/url.js'
 import { captureRtspKeyframe, injectRtspCreds } from '../rtsp/keyframe.js'
 import { resolveOnvifRtspUrl } from '../adapters/onvif/onvif-rtsp.js'
 import { getOnvifSnapshotUrl, fetchOnvifJpeg } from '../adapters/onvif/onvif-snapshot.js'
-import { captureIproNvrJpeg } from '../adapters/i-pro/nvr-live.js'
+import { captureIproNvrJpeg, buildIproNvrEndpoint } from '../adapters/i-pro/nvr-live.js'
+import { assertUsableJpeg } from '../util/jpeg.js'
 import { uploadCameraSnapshot } from '../upload/storage.js'
 import type { CameraDescriptor } from '../types.js'
 
@@ -39,7 +40,7 @@ const LIVE_INTERVAL_MS = 1_000
 function buildCapture(cam: CameraDescriptor): () => Promise<Buffer> {
   const r = cam.recorder
   if (r.vendor === 'i-pro-nvr') {
-    const endpoint = r.host.startsWith('http') ? r.host : `https://${r.host}`
+    const endpoint = buildIproNvrEndpoint(r.host, r.onvif_port)
     return () => captureIproNvrJpeg(
       { endpoint, username: r.username, password: r.password, timeoutMs: 10_000 },
       cam.channel,
@@ -87,6 +88,8 @@ export async function startLive(i: StartLiveInput): Promise<LiveHandle> {
 
   async function iterate(): Promise<void> {
     const buf = await capture()
+    // 機器のプレースホルダ画像を「更新できた」ことにしない（grid と同じ判定）。
+    assertUsableJpeg(buf, `live(camera=${i.camera.id})`)
     await uploadCameraSnapshot(i.camera.id, buf)
   }
 

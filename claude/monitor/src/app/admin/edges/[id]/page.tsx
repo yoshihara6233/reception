@@ -37,7 +37,9 @@ interface EdgePayload {
     vod_host: string | null
     vod_username: string | null
     vod_channel: number | null
-    vod_has_password: boolean   // 値は返さない。設定済みか否かのみ
+    // 秘密そのものは返さない。設定済みか否かだけ渡す。
+    has_password: boolean
+    vod_has_password: boolean
     recorder_cameras: { id: string; channel: number; name: string; grid_pos: number; enabled: boolean; frigate_camera: string | null; hls_url: string | null; live_rtsp: string | null }[]
   }[]
 }
@@ -48,7 +50,7 @@ interface RawRecorder {
   model: string | null; host: string; rtsp_port: number; onvif_port: number | null
   username: string; notes: string | null
   live_host: string | null; vod_host: string | null; vod_username: string | null
-  vod_channel: number | null; vod_password_enc: string | null
+  vod_channel: number | null; password_enc: string | null; vod_password_enc: string | null
   recorder_cameras: EdgePayload['recorders'][number]['recorder_cameras']
 }
 
@@ -69,7 +71,7 @@ export default async function EdgeEditPage(
       stores ( name, area_code ),
       recorders (
         id, vendor, model, host, rtsp_port, onvif_port, username, notes,
-        live_host, vod_host, vod_username, vod_channel, vod_password_enc,
+        live_host, vod_host, vod_username, vod_channel, password_enc, vod_password_enc,
         recorder_cameras ( id, channel, name, grid_pos, enabled, frigate_camera, hls_url, live_rtsp )
       )
     `)
@@ -77,7 +79,7 @@ export default async function EdgeEditPage(
     .single()
   if (!data) notFound()
 
-  // vod_password_enc（秘密）はクライアントへ送らず、設定済みフラグだけにする。
+  // password_enc / vod_password_enc（秘密）はクライアントへ送らず、設定済みフラグだけにする。
   const raw = data as never as Omit<EdgePayload, 'recorders'> & { recorders: RawRecorder[] }
   const edge: EdgePayload = {
     ...raw,
@@ -86,6 +88,7 @@ export default async function EdgeEditPage(
       onvif_port: r.onvif_port, username: r.username, notes: r.notes,
       live_host: r.live_host, vod_host: r.vod_host, vod_username: r.vod_username,
       vod_channel: r.vod_channel, recorder_cameras: r.recorder_cameras,
+      has_password: !!r.password_enc,
       vod_has_password: !!r.vod_password_enc,
     })),
   }

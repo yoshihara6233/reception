@@ -46,8 +46,21 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     .from('edge_devices')
     .select('id, store_id, scoped_only, auth_user_id, auth_password_enc, desired_agent_version, desired_cloudflared_version')
     .eq('device_token', token)
-    .single()
-  if (error || !data) return NextResponse.json({ error: 'invalid device token' }, { status: 401 })
+    .maybeSingle()
+
+  // ⚠ ここを 401 で一括りにしてはいけない。2026-08-06、migration 未適用で
+  //   `scoped_only` 列が無い状態のデプロイが走り、PostgREST のスキーマエラーが
+  //   「invalid device token」として返った。全エッジの bootstrap が同時に落ちたのに、
+  //   ログ上はトークン不正と見分けがつかず切り分けに時間を要した。
+  //   トークン不一致(401)とサーバ側の失敗(500)は必ず分けて返す。
+  if (error) {
+    console.error('[bootstrap] edge_devices query failed', error.message)
+    return NextResponse.json(
+      { error: 'bootstrap lookup failed', detail: error.message },
+      { status: 500 },
+    )
+  }
+  if (!data) return NextResponse.json({ error: 'invalid device token' }, { status: 401 })
 
   const body: {
     edge_id: string

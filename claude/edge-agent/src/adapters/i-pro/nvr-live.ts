@@ -1,27 +1,51 @@
 /**
- * i-PRO NVR ライブ JPEG（push.cgi の multipart MJPEG）。**永続ストリーム方式**。
+ * i-PRO NVR 経由のライブ1コマ取得（`push.cgi COMP=H265|H264`）。**永続ストリーム方式**。
  *
- * 2026-06-19 実機(NU100)知見:
- *   - push.cgi は「開きっぱなしのストリーム」。毎フレーム START/STOP すると
- *     セッションが飽和し START が 204(空) になる(churn)。
- *   → カメラ(endpoint+channel)ごとに push.cgi を **1本だけ開いて常時受信**し、
- *     最新フレームをメモリにキャッシュ。grid/live はそのキャッシュを即返す。
- *   - UID は接続ごとに取得し status.cgi でキープアライブ。一定時間 grid から
- *     要求が無ければ自動停止して NVR セッションを解放。
- *   - ライブJPEGは低解像・低fps(監視用)。高画質は将来 H.264/H.265+HLS で別実装。
+ * ## なぜ JPEG をやめたか（2026-08-06 実機 NU101）
+ *
+ * 当初は `COMP=JPEG` で MJPEG を受けていたが、**JPEG 配信を持たないカメラに対して
+ * NVR が 39×37 のプレースホルダ画像を HTTP 200 で返す**ことが判明した。16分割グリッドに
+ * 黒コマが並ぶだけで、エラーにもならない。カメラ側で JPEG 配信を有効化して回る運用は
+ * 100 店舗規模で成立しないため、**H.265/H.264 を受けてエッジでデコードする**方式に変更。
+ * カメラの配信設定に一切依存しない。実機で 1920×1080 のデコードを確認済み。
+ *
+ * ## 構成
+ *
+ * - push.cgi は「開きっぱなしのストリーム」。毎フレーム START/STOP するとセッションが
+ *   飽和し START が 204(空) になる(churn)。→ カメラ(endpoint+channel)ごとに1本だけ開いて
+ *   常時受信し、直近のキーフレームをメモリに保持。grid/live の要求で JPEG 化して返す。
+ * - UID は NVR 単位で共有（同時16セッション制限）。status.cgi でキープアライブ。
+ *   一定時間要求が無ければ自動停止して NVR セッションを解放。
+ * - コーデックは受信 RTP のペイロードタイプ(98=H.264/101=H.265)で判定する。要求 COMP は
+ *   H265 から試し、フレームが来なければ H264 に切り替えてチャンネル単位で記憶する。
  */
 import { logger } from '../../logger.js'
+import { config } from '../../config.js'
 import { parseDigestChallenge, buildHttpDigest } from '../onvif/onvif-soap-client'
 import { iproNvrLogin, type IproNvrVodOptions } from './nvr-vod'
+import {
+  KeyframeAssembler,
+  NalReassembler,
+  codecForPayloadType,
+  extractMultipartParts,
+  parseRtpPacket,
+  type Codec,
+} from './nvr-rtp.js'
+import { decodeAnnexBToJpeg } from '../../util/decode-frame.js'
+import { assertUsableJpeg } from '../../util/jpeg.js'
 
 export type IproNvrLiveOptions = IproNvrVodOptions
 
 const IDLE_MS      = 30_000   // この時間 grid 要求が無ければストリーム停止
 const KEEPALIVE_MS = 60_000   // status.cgi keepalive 間隔(<90秒)
-const FIRST_FRAME_WAIT_MS = 9_000
+const FIRST_FRAME_WAIT_MS = 12_000
+/** この時間キーフレームが来なければ COMP を切り替えて再接続する。 */
+const CODEC_PROBE_MS = 8_000
+/** 受信バッファがこれを超えたら同期が壊れたとみなして捨てる。 */
+const MAX_ACC_BYTES = 8_000_000
 
-const SOI = Buffer.from([0xff, 0xd8])
-const EOI = Buffer.from([0xff, 0xd9])
+type Comp = 'H265' | 'H264'
+const COMP_FOR: Record<Codec, Comp> = { h265: 'H265', h264: 'H264' }
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms))
@@ -46,28 +70,21 @@ async function digestGetStream(url: string, user: string, pass: string, signal: 
   return insecureFetch(url, { method: 'GET', headers: { Authorization: buildHttpDigest('GET', url, user, pass, ch) } }, signal)
 }
 
-/**
- * バッファから完全な JPEG(ffd8…ffd9)を全て取り出し、残り(末尾の未完部)を返す。純粋関数。
- */
-export function extractJpegFrames(buf: Buffer): { frames: Buffer[]; rest: Buffer } {
-  const frames: Buffer[] = []
-  let cursor = 0
-  for (;;) {
-    const soi = buf.indexOf(SOI, cursor)
-    if (soi < 0) { cursor = buf.length; break }
-    const eoi = buf.indexOf(EOI, soi + 2)
-    if (eoi < 0) { cursor = soi; break }      // SOI はあるが EOI 未着 → ここから残す
-    frames.push(buf.subarray(soi, eoi + 2))
-    cursor = eoi + 2
-  }
-  return { frames, rest: buf.subarray(cursor) }
+/** NVR のホスト(IP or URL)から HTTPS エンドポイントを組む。NVR は自己署名 HTTPS。 */
+export function buildIproNvrEndpoint(host: string, port: number | null): string {
+  if (/^https?:\/\//i.test(host)) return host.replace(/\/+$/, '')
+  return `https://${host}:${port ?? 443}`
 }
 
 interface Streamer {
-  latest:      Buffer | null
-  lastFrameAt: number
-  lastReqAt:   number
-  stopped:     boolean
+  assembler:  KeyframeAssembler | null
+  /** 直近デコード済み JPEG と、その元になったキーフレームの受信時刻。 */
+  jpeg:       Buffer | null
+  jpegKeyAt:  number
+  decoding:   Promise<void> | null
+  comp:       Comp
+  lastReqAt:  number
+  stopped:    boolean
 }
 const STREAMERS = new Map<string, Streamer>()
 
@@ -131,61 +148,114 @@ function releaseNvr(opts: IproNvrLiveOptions): void {
   }
 }
 
-/** push.cgi を常時受信し、最新フレームを s.latest に反映し続ける（共有UID・自己再接続）。 */
+/** push.cgi を常時受信し、直近キーフレームを s.assembler に反映し続ける（共有UID・自己再接続）。 */
 async function runStreamLoop(opts: IproNvrLiveOptions, channel: number, s: Streamer, key: string): Promise<void> {
   let backoff = 2_000
+  let failedProbes = 0
   retainNvr(opts)   // 共有UIDの参照を1つ確保 (このストリーマの生存中)
   while (!s.stopped && STREAMERS.get(key) === s) {
     if (Date.now() - s.lastReqAt > IDLE_MS) break   // アイドル停止
     const ctrl = new AbortController()
+    const comp = s.comp
+    let sawKeyframe = false
+    let codecDetected = false
+    // 要求した COMP で映像が来ない時に切り替えるための番犬。read() が永久にブロック
+    // する（NVR が接続だけ受けて何も流さない）ケースがあるので、ループ内の時刻比較では
+    // 不十分で、外から abort する必要がある。
+    // ただし **既知の PT が1つでも来ていれば要求コーデックは正しい**。その場合は
+    // キーフレーム待ち（GOP 次第で数秒かかる）なので切り替えない。
+    let switchCodec = false
+    const watchdog = setTimeout(() => {
+      if (sawKeyframe || codecDetected) return
+      switchCodec = true
+      ctrl.abort()
+    }, CODEC_PROBE_MS)
     try {
-      const uid = await getNvrUid(opts)   // NVR共有UID (両カメラで1つ)
+      const uid = await getNvrUid(opts)   // NVR共有UID (全カメラで1つ)
       await digestGet(`${opts.endpoint}/cgi-bin/hdrctl.cgi?UID=${uid}&SCREEN=1X&PC=AS60`, opts.username, opts.password, 8_000).catch(() => undefined)
 
-      const url = `${opts.endpoint}/cgi-bin/push.cgi?UID=${uid}&CAM=${channel}&CMD=START&COMP=JPEG&INTERNETMODE=ON`
+      const url = `${opts.endpoint}/cgi-bin/push.cgi?UID=${uid}&CAM=${channel}&CMD=START&COMP=${comp}&INTERNETMODE=ON`
       const res = await digestGetStream(url, opts.username, opts.password, ctrl.signal)
       if (res.status === 401) { invalidateUid(opts.endpoint); throw new Error('push.cgi 401 (UID失効)') }
       if (!res.ok || !res.body) throw new Error(`push.cgi HTTP ${res.status}`)
-      logger.info({ key, status: res.status, ct: res.headers.get('content-type') }, 'i-pro-nvr: push connected')
+      logger.info({ key, comp, status: res.status, ct: res.headers.get('content-type') }, 'i-pro-nvr: push connected')
 
       const reader = res.body.getReader()
       let acc: Buffer = Buffer.alloc(0)
-      let bytes = 0          // この接続で受信した総バイト
-      let frameCount = 0     // この接続で取り出した総フレーム
+      let bytes = 0
+      let packets = 0
+      let lastSeq: number | null = null
+      let reassembler: NalReassembler | null = null
+      const startedAt = Date.now()
+
       for (;;) {
         if (s.stopped || STREAMERS.get(key) !== s || Date.now() - s.lastReqAt > IDLE_MS) { ctrl.abort(); break }
         const { done, value } = await reader.read()
         if (done) break
         if (value) {
-          if (bytes === 0) logger.info({ key, chunk: value.byteLength }, 'i-pro-nvr: first bytes received')
           bytes += value.byteLength
           acc = Buffer.concat([acc, Buffer.from(new Uint8Array(value))])
         }
-        const { frames, rest } = extractJpegFrames(acc)
-        if (frames.length) {
-          const f = frames[frames.length - 1]
-          const out = Buffer.alloc(f.length)   // Buffer<ArrayBuffer> を確保
-          f.copy(out)
-          if (frameCount === 0) logger.info({ key, jpegBytes: out.length }, 'i-pro-nvr: first frame decoded')
-          frameCount += frames.length
-          s.latest = out
-          s.lastFrameAt = Date.now()
+        const { parts, rest } = extractMultipartParts(acc)
+        acc = rest.length > MAX_ACC_BYTES ? Buffer.alloc(0) : rest
+
+        for (const part of parts) {
+          const rtp = parseRtpPacket(part.body)
+          if (!rtp) continue
+          const codec = codecForPayloadType(rtp.payloadType)
+          if (!codec) continue
+          packets++
+          codecDetected = true
+          if (!s.assembler || s.assembler.codecName !== codec) {
+            s.assembler = new KeyframeAssembler(codec)
+            reassembler = new NalReassembler(codec)
+            s.comp = COMP_FOR[codec]   // 実際に来ているコーデックを次回以降も要求する
+            logger.info({ key, codec, pt: rtp.payloadType }, 'i-pro-nvr: codec detected')
+          }
+          if (!reassembler) reassembler = new NalReassembler(codec)
+          // シーケンス不連続＝欠落。組み立て中の FU を捨てて壊れた NAL を出さない。
+          if (lastSeq !== null && ((lastSeq + 1) & 0xffff) !== rtp.sequence) reassembler.reset()
+          lastSeq = rtp.sequence
+          for (const nal of reassembler.push(rtp.payload)) s.assembler.push(nal)
         }
-        acc = rest.length > 4_000_000 ? Buffer.alloc(0) : rest   // 壊れ対策
+
+        if (!sawKeyframe && s.assembler?.ready) {
+          sawKeyframe = true
+          clearTimeout(watchdog)
+          logger.info(
+            { key, codec: s.assembler.codecName, bytes, elapsedMs: Date.now() - startedAt },
+            'i-pro-nvr: first keyframe assembled',
+          )
+        }
       }
-      logger.info({ key, bytes, frameCount }, 'i-pro-nvr: push loop ended')
-      // 正常に抜けた場合は push STOP だけ送る (UIDは共有なのでログアウトしない)
+      logger.info(
+        { key, comp, bytes, packets, keyframeIntervalMs: s.assembler?.keyframeIntervalMs ?? 0 },
+        'i-pro-nvr: push loop ended',
+      )
       const cur = UID_STATE.get(opts.endpoint)?.uid
-      if (cur) digestGet(`${opts.endpoint}/cgi-bin/push.cgi?UID=${cur}&CAM=${channel}&CMD=STOP&COMP=JPEG`, opts.username, opts.password, 5_000).catch(() => undefined)
+      if (cur) digestGet(`${opts.endpoint}/cgi-bin/push.cgi?UID=${cur}&CAM=${channel}&CMD=STOP&COMP=${comp}`, opts.username, opts.password, 5_000).catch(() => undefined)
       backoff = 2_000
     } catch (e) {
-      const msg = String(e)
-      if (/HTTP 503/.test(msg)) invalidateUid(opts.endpoint)   // UID上限等 → 取り直し
-      logger.warn({ key, err: msg }, 'i-pro-nvr: stream error; will reconnect')
-      await sleep(backoff)
-      backoff = Math.min(backoff * 2, 20_000)
+      // 番犬による abort は「異常」ではなく想定内の切り替え。待たずに繋ぎ直す。
+      if (!switchCodec) {
+        const msg = String(e)
+        if (/HTTP 503/.test(msg)) invalidateUid(opts.endpoint)   // UID上限等 → 取り直し
+        logger.warn({ key, comp, err: msg }, 'i-pro-nvr: stream error; will reconnect')
+        await sleep(backoff)
+        backoff = Math.min(backoff * 2, 20_000)
+      }
     } finally {
+      clearTimeout(watchdog)
       ctrl.abort()
+      if (switchCodec) {
+        s.comp = comp === 'H265' ? 'H264' : 'H265'
+        failedProbes++
+        logger.warn({ key, from: comp, to: s.comp, failedProbes }, 'i-pro-nvr: no video; switching codec')
+        // 両方試して駄目なら、そのカメラは配信していない。NVR を叩き続けない。
+        if (failedProbes >= 2) { await sleep(backoff); backoff = Math.min(backoff * 2, 20_000) }
+      } else if (sawKeyframe) {
+        failedProbes = 0
+      }
     }
   }
   STREAMERS.delete(key)
@@ -197,7 +267,7 @@ function ensureStreamer(opts: IproNvrLiveOptions, channel: number): Streamer {
   const key = keyOf(opts.endpoint, channel)
   let s = STREAMERS.get(key)
   if (s) { s.lastReqAt = Date.now(); return s }
-  s = { latest: null, lastFrameAt: 0, lastReqAt: Date.now(), stopped: false }
+  s = { assembler: null, jpeg: null, jpegKeyAt: 0, decoding: null, comp: 'H265', lastReqAt: Date.now(), stopped: false }
   STREAMERS.set(key, s)
   void runStreamLoop(opts, channel, s, key)
   logger.info({ key }, 'i-pro-nvr: stream started')
@@ -205,17 +275,54 @@ function ensureStreamer(opts: IproNvrLiveOptions, channel: number): Streamer {
 }
 
 /**
- * NVR から指定チャンネルのライブ JPEG を1枚返す（永続ストリームの最新フレーム）。
- * 初回はフレーム到着まで最大 FIRST_FRAME_WAIT_MS 待つ。
+ * 直近キーフレームを JPEG 化して返す。同じキーフレームなら再デコードせずキャッシュを返す
+ * （16ch × 数秒間隔でも iGPU を焼かないための要）。並行要求は1回のデコードに相乗りする。
+ */
+async function currentJpeg(s: Streamer, key: string): Promise<Buffer> {
+  const asm = s.assembler
+  if (!asm?.ready) throw new Error('i-pro-nvr: keyframe not ready')
+  if (s.jpeg && s.jpegKeyAt === asm.keyframeAt) return s.jpeg
+
+  let inflight = s.decoding
+  if (!inflight) {
+    const es = asm.snapshot()!
+    const at = asm.keyframeAt
+    const codec = asm.codecName
+    inflight = (async () => {
+      const jpeg = await decodeAnnexBToJpeg(es, codec, config.FFMPEG_BIN)
+      assertUsableJpeg(jpeg, `i-pro-nvr(${key})`)
+      s.jpeg = jpeg
+      s.jpegKeyAt = at
+    })()
+    s.decoding = inflight
+    // 失敗しても次の要求で再挑戦できるよう、必ず解放する。
+    inflight.catch(() => undefined).finally(() => { if (s.decoding === inflight) s.decoding = null })
+  }
+  await inflight
+  if (!s.jpeg) throw new Error('i-pro-nvr: decode produced no frame')
+  return s.jpeg
+}
+
+/**
+ * NVR から指定チャンネルのライブ画像を JPEG で1枚返す。
+ * 初回はキーフレーム到着まで最大 FIRST_FRAME_WAIT_MS 待つ。
  */
 export async function captureIproNvrJpeg(opts: IproNvrLiveOptions, channel: number): Promise<Buffer> {
+  const key = keyOf(opts.endpoint, channel)
   const s = ensureStreamer(opts, channel)
-  if (s.latest) return s.latest
+  if (s.assembler?.ready) return currentJpeg(s, key)
+
   const deadline = Date.now() + FIRST_FRAME_WAIT_MS
   while (Date.now() < deadline) {
     await sleep(200)
-    if (s.latest) return s.latest
+    s.lastReqAt = Date.now()          // 待っている間にアイドル停止させない
+    if (s.assembler?.ready) return currentJpeg(s, key)
   }
-  logger.warn({ ch: channel, key: keyOf(opts.endpoint, channel), waitedMs: FIRST_FRAME_WAIT_MS }, 'i-pro-nvr: no frame yet')
-  throw new Error(`i-pro-nvr: no frame yet (ch=${channel})`)
+  logger.warn({ ch: channel, key, comp: s.comp, waitedMs: FIRST_FRAME_WAIT_MS }, 'i-pro-nvr: no keyframe yet')
+  throw new Error(`i-pro-nvr: no keyframe yet (ch=${channel})`)
+}
+
+/** テスト・接続テスト用に、開いているストリームを全て止める。 */
+export function stopAllIproNvrStreams(): void {
+  for (const s of STREAMERS.values()) s.stopped = true
 }

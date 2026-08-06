@@ -19,6 +19,8 @@ import { resolveOnvifRtspUrl } from '../adapters/onvif/onvif-rtsp.js'
 import { injectRtspCreds, captureRtspKeyframe } from '../rtsp/keyframe.js'
 import { getOnvifSnapshotUrl, fetchOnvifJpeg } from '../adapters/onvif/onvif-snapshot.js'
 import { buildOnvifEndpoint } from './onvif-endpoint.js'
+import { fetchIproNvrChannels } from '../adapters/i-pro/nvr-info.js'
+import { buildIproNvrEndpoint, captureIproNvrJpeg } from '../adapters/i-pro/nvr-live.js'
 import { decryptSecret } from '@intereco/shared'
 
 const POLL_MS = 3000
@@ -44,6 +46,47 @@ async function resolveRecorder(recorderId: string): Promise<RecorderRow | null> 
     .eq('edge_id', config.EDGE_ID)   // 他エッジのレコーダは触らない
     .single()
   return (data as RecorderRow | null) ?? null
+}
+
+/**
+ * i-PRO NVR 経由構成の探索。ONVIF は NU101 に無い（`/onvif/device_service` が 404）ので、
+ * NVR のカメラ接続情報 CGI で「実際に繋がっているチャンネル」を列挙する。
+ * 返す形は ONVIF 探索と同じ（管理UIの「＋カメラ追加」がそのまま使える）。
+ */
+async function runIproNvrDiscovery(rec: RecorderRow): Promise<unknown> {
+  const channels = await fetchIproNvrChannels({
+    endpoint: buildIproNvrEndpoint(rec.host, rec.onvif_port),
+    username: rec.username,
+    password: decodePassword(rec.password_enc),
+    timeoutMs: 12_000,
+  })
+  const connected = channels.filter((c) => c.connected)
+  return {
+    device: { manufacturer: 'i-PRO', model: 'NVR (recorder-via)' },
+    profiles: connected.map((c) => ({
+      token: `ch${c.channel}`,
+      name: `CAM${String(c.channel).padStart(2, '0')}`,
+      encoding: null,
+    })),
+    count: connected.length,
+    scanned: channels.length,
+  }
+}
+
+/** i-PRO NVR は実際のライブ経路（push.cgi）で1コマ取れるかを見るのが唯一正しい到達確認。 */
+async function runIproNvrConnectionTest(rec: RecorderRow, channel: number): Promise<unknown> {
+  const opts = {
+    endpoint: buildIproNvrEndpoint(rec.host, rec.onvif_port),
+    username: rec.username,
+    password: decodePassword(rec.password_enc),
+    timeoutMs: 15_000,
+  }
+  try {
+    const jpeg = await captureIproNvrJpeg(opts, channel)
+    return { ok: true, method: 'ipro_nvr_push', bytes: jpeg.length }
+  } catch (e) {
+    return { ok: false, method: 'ipro_nvr_push', error: String((e as Error)?.message ?? e) }
+  }
 }
 
 async function runOnvifDiscovery(rec: RecorderRow): Promise<unknown> {
@@ -123,9 +166,11 @@ async function processJob(job: EdgeJob, jobsSupa: SupabaseClient): Promise<void>
     const rec = await resolveRecorder(recorderId)
     if (!rec) throw new Error('recorder not found for this edge')
 
+    const channel = job.params?.channel ?? 1
+    const isNvr = rec.vendor === 'i-pro-nvr'
     const result = job.kind === 'onvif_discovery'
-      ? await runOnvifDiscovery(rec)
-      : await runConnectionTest(rec, job.params?.channel ?? 1)
+      ? (isNvr ? await runIproNvrDiscovery(rec) : await runOnvifDiscovery(rec))
+      : (isNvr ? await runIproNvrConnectionTest(rec, channel) : await runConnectionTest(rec, channel))
 
     await jobsSupa.from('edge_jobs')
       .update({ status: 'done', result, updated_at: new Date().toISOString() })

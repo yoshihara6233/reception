@@ -29,7 +29,36 @@ GET /cgi-bin/push.cgi?UID=<uid>&CAM=<n>&CMD=START&COMP=JPEG&INTERNETMODE=ON
      (NVR/カメラ情報が 0xFFFE COM セグメントとして埋め込み＝標準デコーダで読める)
 GET /cgi-bin/push.cgi?UID=<uid>&CAM=<n>&CMD=STOP&COMP=JPEG
 ```
-COMP は H264/H265/JPEG/AUDIO。grid 静止画用途なら開いて1フレーム取って閉じる運用。
+COMP は H264/H265/JPEG/AUDIO。
+
+> 🔴 **2026-08-06 実機検証: `COMP=JPEG` は使えない。**
+> NU101 は **JPEG 配信を持たないカメラに対して 39×37 のプレースホルダ画像**（701 バイト）を
+> HTTP 200 で返す。バイト列としては妥当な JPEG なので SOI/EOI 判定では素通りし、
+> 16分割に黒いセルが並ぶだけでエラーにもならない。`SCREEN=1X` / `16X` いずれでも同じ
+> （両方 778 バイトの同一応答）。カメラ側で JPEG 配信を有効化して回る運用は 100 店舗規模で
+> 成立しないため、**`COMP=H265` / `COMP=H264` を受けてエッジでデコードする**方式を採用した。
+
+### ①' ライブ H.265/H.264（§2.3.3 / 2.3.4）= 本採用の経路
+```
+GET /cgi-bin/push.cgi?UID=<uid>&CAM=<n>&CMD=START&COMP=H265&INTERNETMODE=ON
+```
+応答は `multipart`。各パートは
+```
+--myboundary\r\nContent-type: application/octet-stream\r\nContent-Length: <n>\r\n\r\n<n バイト>\r\n
+```
+で、**本体はちょうど RTP パケット1個**。独自フレーミングは無い（実機ダンプで確認）。
+
+- ペイロードタイプ: **98 = H.264 / 101 = H.265**
+- RTP 拡張(X=1)にカメラ番号 `0x0004` と時刻 `0x0007` が載る。映像復元には不要なので読み飛ばす。
+- 実測の先頭3パート（H.265）: `0x90 0x65` → X=1/PT=101、拡張 7 ワード=28 バイト → ヘッダ計 44 バイト。
+  NAL は順に `46 01`=AUD(35) → `44 01`=PPS(34) → `4e 01`=SEI(39)。
+- FU（type 49）の結合時は元の NAL ヘッダを復元する: `[(pay[0] & 0x81) | (fuType << 1), pay[1]]`。
+- ビットレート実測 約 1.3 Mbps / 解像度 **1920×1080**（JPEG 経路より高品質）。
+- ⚠ ストリームの途中から拾うと VPS/SPS が無く `SPS 0 does not exist` になる。
+  **パラメータセットが揃い、IRAP ピクチャが完結してから**デコードに回すこと。
+
+実装: `claude/edge-agent/src/adapters/i-pro/nvr-rtp.ts`（純ロジック・テスト付き） +
+`nvr-live.ts`（ストリーム管理） + `util/decode-frame.ts`（ffmpeg で1枚 JPEG 化）。
 
 ### ② VOD = MP4 ダウンロード（§6.3）= 録画再生（ONVIF Profile-G 不要）
 ```
@@ -95,8 +124,14 @@ vcodec: jpeg/jpeg_2/3, h264/_2/_3/_4, h265/_2/_3/_4。ch=1..4（マルチセン�
 | 取得物 | 経路 | 状態 |
 |---|---|---|
 | カメラ直 ライブJPEG | カメラ HTTPスナップCGI（現行 ONVIF 経由） | ✅ 稼働中 |
-| NVR ライブJPEG（config②） | NVR `push.cgi COMP=JPEG` | 未実装 |
-| **NVR VOD(MP4)** | NVR `httpdl.cgi KIND=MP4`（≤1h） | **次タスク（A）** |
+| ~~NVR ライブJPEG（config②）~~ | ~~NVR `push.cgi COMP=JPEG`~~ | ❌ **不採用**（39×37 プレースホルダ） |
+| NVR ライブ（config②） | NVR `push.cgi COMP=H265/H264` → エッジで RTP 復元 → ffmpeg | ✅ 2026-08-06 実装 |
+| NVR チャンネル列挙 | NVR `as_getinfo.cgi?FILE=2`（ONVIF は NU101 に無い） | ✅ 2026-08-06 実装 |
+| **NVR VOD(MP4)** | NVR `httpdl.cgi KIND=MP4`（≤1h） | ✅ 実装済 |
+
+**資格情報の注意**: NVR CGI（`dlogin.cgi` 以下すべて）は **NVR 本体の管理者**（既定 `ADMIN`）で
+認証する。カメラ側の `admin` を登録すると 401 になり、ライブが一切出ない。管理画面の
+レコーダ詳細でユーザ名／パスワードを後から変更できる（2026-08-06 に編集UIを追加）。
 
 共通の注意: HTTPS自己署名（TLS無検証 dispatcher 要）・Digest認証・UID/keepalive 管理・
 コマンド間隔≥3秒・同一カメラ同時2本不可。
