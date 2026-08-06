@@ -21,33 +21,53 @@ concurrency:
 
 jobs:
   # ── 変更検知 (どの app を走らせるか決める) ──────────────────────────────
+  #
+  # ⚠ **push では変更検知を使わず、必ず全 job を走らせる**（2026-08-06 是正）。
+  #
+  # 以前は push でも paths-filter を使っていたが、`actions/checkout` は既定で
+  # 浅いクローン(fetch-depth:1)のため、push イベントの比較対象 `github.event.before`
+  # がローカルに存在せず **毎回 git exit 128 で落ちていた**。detect-changes が落ちると
+  # 後続 job は全て skip され、しかも当時の ci-passed は skip を成功として扱っていたので、
+  # **monitor-prod への push 後の CI は何も検証しないまま緑を返していた**
+  # （実例: run 31071066635 / 31056989148）。
+  #
+  # fetch-depth:0 で直すこともできるが、そもそも **マージ後の CI は安全網**であって、
+  # そこで job を間引くのは目的に反する。push は全部走らせるのが正しい。
+  # 差分による間引きは、速いフィードバックが要る pull_request だけで行う。
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
-      shared:     ${{ steps.changes.outputs.shared }}
-      monitor:    ${{ steps.changes.outputs.monitor }}
-      edge-agent: ${{ steps.changes.outputs.edge-agent }}
-      docs:       ${{ steps.changes.outputs.docs }}
+      # push のときは無条件に true（＝全 job 実行）。PR のときだけ paths-filter の結果を使う。
+      shared:     ${{ github.event_name == 'push' || steps.changes.outputs.shared     == 'true' }}
+      monitor:    ${{ github.event_name == 'push' || steps.changes.outputs.monitor    == 'true' }}
+      edge-agent: ${{ github.event_name == 'push' || steps.changes.outputs.edge-agent == 'true' }}
+      docs:       ${{ github.event_name == 'push' || steps.changes.outputs.docs       == 'true' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590  # v3.0.2 (SHA-pinned: supply-chain)
         id: changes
+        if: github.event_name == 'pull_request'   # push では走らせない（上のコメント参照）
         with:
+          # CI 自身を変えた PR では全 job を走らせる（CI の変更は CI で確かめる）。
+          # これが無いと、ワークフローを壊す PR が「変更なし＝全 skip」で緑になる。
           filters: |
             shared:
               - 'packages/shared/**'
               - 'package.json'
               - 'bun.lock'
+              - '.github/workflows/ci.yml'
             monitor:
               - 'claude/monitor/**'
               - 'packages/shared/**'
               - 'package.json'
               - 'bun.lock'
+              - '.github/workflows/ci.yml'
             edge-agent:
               - 'claude/edge-agent/**'
               - 'packages/shared/**'
               - 'package.json'
               - 'bun.lock'
+              - '.github/workflows/ci.yml'
             docs:
               - 'docs/**'
               - '**/*.md'
@@ -156,14 +176,27 @@ jobs:
 
   # ── 全 job 完了確認 (PR マージ要件用) ──────────────────────────────────
   ci-passed:
-    needs: [shared, monitor, edge-agent, authz]
+    needs: [detect-changes, shared, monitor, edge-agent, authz]
     if: always()
     runs-on: ubuntu-latest
     steps:
+      # ★ detect-changes 自体の失敗を必ず落とす（2026-08-06 是正）。
+      # これが落ちると後続は全て skip される。skip を「変更が無かった」と解釈すると、
+      # **検知が壊れているだけなのに CI 全体が緑になる**。実際にそうなっていた。
+      # 「走らなかった」と「走って通った」を混同しないための最重要ガード。
+      - name: Check change detection
+        run: |
+          if [[ "${{ needs.detect-changes.result }}" != "success" ]]; then
+            echo "::error::detect-changes が ${{ needs.detect-changes.result }} で終了しました。"
+            echo "::error::後続 job は skip されており、何も検証されていません。"
+            exit 1
+          fi
       - name: Check all jobs
         run: |
           # paths-filter で skip された job は 'skipped' 扱いになるので
           # 'failure' / 'cancelled' のみを失敗とみなす
+          # （skip が正当なのは PR のときだけ。push では上の detect-changes が
+          #   全 true を返すため、そもそも skip は発生しない）
           if [[ "${{ needs.shared.result }}" == "failure" ]] || \
              [[ "${{ needs.monitor.result }}" == "failure" ]] || \
              [[ "${{ needs.edge-agent.result }}" == "failure" ]] || \
@@ -178,4 +211,16 @@ jobs:
             echo "::warning::One or more CI jobs were cancelled"
             exit 1
           fi
-          echo "✓ All required jobs passed (or skipped due to no changes)"
+          # push（マージ後の安全網）では skip があってはならない。
+          # ここが緑のまま skip されるのが今回の不具合そのものだったので、明示的に落とす。
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            for r in "${{ needs.shared.result }}" "${{ needs.monitor.result }}" \
+                     "${{ needs.edge-agent.result }}" "${{ needs.authz.result }}"; do
+              if [[ "$r" == "skipped" ]]; then
+                echo "::error::push では全 job が走るはずですが skip されたものがあります"
+                echo "::error::shared=${{ needs.shared.result }} monitor=${{ needs.monitor.result }} edge-agent=${{ needs.edge-agent.result }} authz=${{ needs.authz.result }}"
+                exit 1
+              fi
+            done
+          fi
+          echo "✓ All required jobs passed (or skipped due to no changes on a PR)"
