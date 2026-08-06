@@ -3,7 +3,9 @@
 対象: Intereco Recorder Monitor（本部 Next.js on Vercel ＋ 現地エッジ ＋ Supabase）。
 目的: 各構成要素の喪失シナリオに対する **復旧手順（RTO/RPO 目標付き）** と **訓練記録** を1本化し、**99% SLA** を運用で支える。
 
-- 本番 Supabase: `jmlviywilxzavjbmlpnf`（region `ap-south-1`）
+- 本番 Supabase: **`vywvpcjbicrtcyvzmrwh`（region `ap-northeast-1` 東京）**
+  - ⚠ 旧 `jmlviywilxzavjbmlpnf`（`ap-south-1` ムンバイ）は **2026-08-01 に移行完了・使用しない**。
+    障害対応中に旧 ref を叩くと「バックアップは正常」と誤認する。**必ず ref を確認してから実行する**。
 - 本番 URL: https://intereco-monitor.vercel.app（Vercel project `intereco-monitor` / prod branch `monitor-prod`）
 - スキーマ正本: `claude/monitor/supabase/migrations/20260707090000_remote_baseline.sql`（git・CLI `db push` 運用 → `docs/db-environments.md`）
 - エッジ運用手順: `claude/edge-agent/deploy/ota/RUNBOOK.md`（OTA + known-good ロールバック）
@@ -21,7 +23,7 @@
 |------|------|------|------|
 | アプリ（Vercel） | **< 15 分** | 0（git がソース） | 再デプロイのみ |
 | DB スキーマ | **< 30 分** | 0（git baseline） | `db push`/`db reset` で再構築 |
-| DB データ | **1〜4 時間** | **≤ 24 時間**（現状） | Supabase 日次バックアップ（後述の課題） |
+| DB データ | **1〜4 時間** | **≤ 1 時間**（2026-08-06〜） | 毎時 `pg_dump --data-only` → R2（§6.1）。PITR 有効化後は秒単位 |
 | エッジ1台 | **2〜4 時間** | 該当店のライブ/巡回/発報のみ | 予備機 or 再プロビジョニング |
 | 鍵漏洩 | **< 1 時間** | 0 | 無停止ローテ手順あり |
 
@@ -32,7 +34,8 @@
 
 ## 1. 現状のバックアップ実態（2026-07-07 調査）
 
-`supabase backups list --project-ref jmlviywilxzavjbmlpnf` の結果:
+`supabase backups list` の結果（調査時点は移行前の `jmlviywilxzavjbmlpnf`。
+東京移行後の `vywvpcjbicrtcyvzmrwh` も **PITR 無効のまま**であることを 2026-08-06 に確認済み）:
 ```
 walg_enabled: true      # 物理バックアップ基盤(WAL-G)は有効
 pitr_enabled: false     # ★ PITR(任意時点復旧)は未購入=無効
@@ -42,7 +45,8 @@ backups: []             # セルフ物理バックアップ点は未提供
 **意味するところ**:
 - **スキーマ**は git baseline から**即時再構築可能**（RPO 0・RTO 数十秒〜数分）。
 - **データ**の自動復旧点は Supabase の**日次論理バックアップ**（ダッシュボード restore）に依存 ＝ **RPO 最大約24時間**、任意秒への PITR は**不可**。
-- → §6 の推奨（PITR 有効化 or 定期 `pg_dump --data-only`）で RPO を縮める。
+- → **2026-08-06 に §6.1 の毎時外部バックアップを実装し、RPO を ≤1 時間に短縮した**。
+  秒単位（PITR）は **2026-09-30 を期限**として有効化する（§6.0）。
 
 ---
 
@@ -74,7 +78,9 @@ backups: []             # セルフ物理バックアップ点は未提供
    （新規プロジェクトなら履歴は空なのでそのまま適用される。既存なら `migration list` で差分確認）
 4. 検証: 主要テーブル（tenants/stores/admin_users/edge_devices/alarm_events…）の存在と RLS 有効を確認。
 
-### 3.2 データ復旧（RPO ≤ 24h・PITR 無効の現状）
+### 3.2 データ復旧（RPO ≤ 1h・PITR 無効の現状）
+0. **まず §6.2 の毎時バックアップ（R2）から戻す**のが既定。直近1時間以内の世代が使える。
+   以下は R2 側も失った場合のフォールバック。
 1. **Supabase ダッシュボード → Database → Backups** から**最新の日次バックアップを restore**（PITR 有効化済みなら §3.3）。
 2. restore 対象を確認（別プロジェクトへ復元 → 切替 or 同プロジェクトへ上書き）。
 3. restore 後、§3.4 の切替を実施。
@@ -176,17 +182,107 @@ supabase backups restore --project-ref <ref>   # 任意タイムスタンプへ�
 
 ---
 
-## 6. RPO 改善の推奨（99% SLA 強化）
+## 6. RPO 改善（2026-08-06 決定・実装済み）
 
-現状 RPO ≤24h（PITR 無効）を縮めるための選択肢:
-1. **Supabase PITR を有効化**（有料アドオン）→ RPO 分単位・任意時点復旧。最も確実。
-2. **定期 `pg_dump --data-only` を外部保管**（cron で日次〜時間次・Storage/S3へ）→ 低コストで RPO を時間単位に。
-   ```bash
-   supabase db dump --linked --data-only -f backup_$(date +%Y%m%d).sql   # ※タイムスタンプは実行時に付与
-   ```
-3. **スキーマは git baseline で担保済**（追加コスト0）。データ層のみが課題。
+### 6.0 決定事項
 
-> 判断: 実データ量・許容損失・コストで①/②を選ぶ。防犯用途で発報/録画メタの喪失が痛い場合は①推奨。
+| 時期 | 施策 | RPO | 費用 |
+|---|---|---|---|
+| **2026-08-06〜（実装済み）** | 毎時 `pg_dump --data-only` を R2 へ外部保管 | **≤ 1 時間** | 約 $6/月（Actions 実行時間） |
+| **⏰ Phase D 実店舗展開まで（遅くとも 2026-09-30）** | **Supabase PITR を有効化** | 秒単位 | $100/月 |
+| （済） | スキーマは git baseline で担保 | 0 | 0 |
+
+> ### ⏰ PITR 有効化の期限: **2026-09-30**（Phase D 開始前）
+>
+> **理由**: Phase D で実店舗の**手荷物検査の証跡**が入り始める。証跡は顧客にとって
+> 法的な意味を持ちうるデータで、1 時間分の欠損でも説明が立たない場面がある。
+>
+> **なぜ前倒しできないか＝なぜ後回しにしてはいけないか**: PITR は**遡って効かない**。
+> 事故が起きてから有効化しても、その事故のデータは戻らない。「実データが入る前に
+> 入れておく」以外に正しいタイミングが無い。
+>
+> **費用の考え方**: $100/月 ≒ ¥180,000/年。100 店舗案件なら **1 店舗あたり ¥150/年**で、
+> 契約に織り込めば誤差。今 PoC 段階で払わないのは「守る対象がまだ無い」からであって、
+> 高いからではない。
+>
+> **有効化時の注意**: Supabase は PITR に compute アドオンの下限を要求する場合がある。
+> 有効化画面で $100 以外の増額が乗らないか、押す前に内訳を確認する。
+>
+> **有効化したら**: 本節の表と `docs/data-governance-sla.md` §7 / G5 を「秒単位」に更新し、
+> 毎時ダンプは**残す**（ベンダを跨いだ二重化としての価値は PITR 有効後も消えない）。
+
+### 6.1 毎時バックアップの構成（実装済み）
+
+`.github/workflows/db-backup.yml`（毎時17分 + 手動実行）。
+
+```
+Supabase(本番) ──pg_dump──> GitHub Actions ──gzip+GPG(AES256)──> Cloudflare R2
+   取得元                      実行                                 保管先
+```
+
+**三点を別ベンダに分けてある**のが要点。Supabase アカウントごと失う事故
+（誤削除・請求停止・凍結）で共倒れしない。
+
+- 対象: `public` + `auth` スキーマの**データのみ**（スキーマは git から再構築＝RPO 0）
+- `auth` を含むのは、失うと全利用者が再登録になるため。**パスワードハッシュを含むので
+  暗号化は必須**。GPG 対称鍵（AES256）で暗号化し、毎回**復号の往復確認**まで行う
+- 保持 14 日（`RETENTION_DAYS`）。R2 は 1GB 未満＝ほぼ無料
+- **静かに壊れない工夫**: ダンプが 1MB 未満なら失敗させる／主要テーブルの `COPY` 行が
+  無ければ失敗させる／失敗時は `ALERT_EMAILS` へ Resend で能動通知
+
+**必要な Secrets**（GitHub → Settings → Secrets and variables → Actions）:
+
+| 名前 | 中身 |
+|---|---|
+| `BACKUP_DATABASE_URL` | **Session pooler (5432)** の URI ※下記 |
+| `BACKUP_ENC_PASSPHRASE` | 復号パスフレーズ。**リポジトリ外にも別途保管する**（これを失うと全世代が読めない） |
+| `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | R2 認証情報 |
+| `R2_BACKUP_BUCKET` | **バックアップ専用バケット** |
+
+> ⚠ **接続先は Session pooler (5432)**。Direct connection は IPv6 のみで
+> **GitHub ランナーは IPv6 を持たない**ため必ず失敗する。Transaction pooler (6543) は
+> prepared statement が使えず `pg_dump` が動かない。
+>
+> ⚠ **`R2_BACKUP_BUCKET` は画像用 `R2_EDGE_BUCKET` と必ず分ける**。画像バケットは
+> `img.genesis-edge.com` から公開配信している。同じバケットに置くと DB ダンプが
+> 世界に晒される。
+
+### 6.2 毎時バックアップからの復元手順
+
+```bash
+# 1. 世代を選ぶ（キーは UTC）
+export AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... AWS_DEFAULT_REGION=auto
+EP="https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com"
+aws s3 ls "s3://<R2_BACKUP_BUCKET>/db/2026/09/12/" --endpoint-url "$EP"
+
+# 2. 取得して復号・展開
+aws s3 cp "s3://<R2_BACKUP_BUCKET>/db/2026/09/12/monitor-20260912T031700Z.sql.gz.gpg" . --endpoint-url "$EP"
+gpg --batch --decrypt --passphrase "<BACKUP_ENC_PASSPHRASE>" \
+    --output restore.sql.gz monitor-20260912T031700Z.sql.gz.gpg
+gunzip restore.sql.gz
+
+# 3. スキーマを先に作る（データのみのダンプなので器が要る）
+bunx supabase db push   # ★ link 先が東京 vywvpcjbicrtcyvzmrwh か必ず確認
+
+# 4. データを流し込む
+#    FK と トリガを止めないと投入順で落ちる。単一トランザクションで全か無かにする。
+psql "<SESSION_POOLER_URI>" \
+  --single-transaction -v ON_ERROR_STOP=1 \
+  -c "SET session_replication_role = replica;" \
+  -f restore.sql
+```
+
+**復元後は §3.2 の「バックアップに乗らないもの」を必ず手で再構築する**
+（Vault の秘密情報・pg_cron ジョブ・Storage/R2 オブジェクト）。ここを飛ばすと
+「DB は戻ったのに BCP の自動 PDF が静かに止まる」という 2026-08-01 の再現になる。
+
+### 6.3 このバックアップ自体の点検（月次）
+
+バックアップは**使う日まで壊れていることに気づけない**。月次で以下を確認する。
+
+1. R2 に**直近 24 世代が揃っている**か（欠測は Actions の失敗 or スキップ）
+2. 最新世代を**復号して展開できる**か（パスフレーズの取り違えはここで判る）
+3. 半年に一度は §4 の訓練プロジェクトへ**実際に流し込む**（§4 の手順に相乗り）
 
 ---
 
@@ -236,7 +332,7 @@ supabase backups restore --project-ref <ref>   # 任意タイムスタンプへ�
 ## 付録: よく使うコマンド
 ```bash
 # バックアップ状況の確認
-supabase backups list --project-ref jmlviywilxzavjbmlpnf
+supabase backups list --project-ref vywvpcjbicrtcyvzmrwh   # ★東京。旧ムンバイ ref を叩かない
 
 # スキーマ復旧（新/復旧先プロジェクトへ）
 cd claude/monitor && supabase link --project-ref <ref> && supabase db push
