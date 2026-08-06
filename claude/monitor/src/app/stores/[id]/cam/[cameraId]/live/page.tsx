@@ -73,7 +73,15 @@ export default async function LivePage(
   // （手動命名不要）。monitor の認証付きプロキシ越しに HLS を再生し、プロキシが
   // Cloudflare Access の Service Token をサーバ側で付けるのでエンドユーザは
   // monitorログインのみ。&mp4 で fMP4(H.264)。これでカメラ追加はエッジ設定ゼロ。
-  const hasGo2rtc = !!c.recorders.stores?.go2rtc_host || !!c.hls_url
+  //
+  // ただし **i-PRO NVR 経由（カメラ網が分離された構成）は go2rtc に載せられない**。
+  // go2rtc は RTSP を口にするが、NU101 は RTSP 554 を閉じており、ライブの入口が
+  // push.cgi しか無い（docs/vendor/ipro-cgi-notes.md）。エッジ側 go2rtc/sync.ts も
+  // vendor='onvif-generic' か live_rtsp 明示のカメラしか登録しないため、
+  // `cam_<id>` ストリームは存在しない。SFU も go2rtc から引くので同じく成立しない。
+  // → 押せるのに必ず失敗するボタンは出さず、理由を1行で示す。
+  const liveViaNvr = vendor === 'i-pro-nvr'
+  const hasGo2rtc = (!!c.recorders.stores?.go2rtc_host || !!c.hls_url) && !liveViaNvr
   const hqUrl: string | null = hasGo2rtc
     ? `/api/live-proxy/${cameraId}/api/stream.m3u8?src=${encodeURIComponent(`cam_${cameraId}`)}&mp4`
     : null
@@ -104,7 +112,10 @@ export default async function LivePage(
             liveIsImageStream={isRemoteHost}
             liveSigned={liveSigned}
             hqUrl={hqUrl}
-            sfuEnabled={livekitEnabled()}
+            sfuEnabled={livekitEnabled() && !liveViaNvr}
+            unavailableNote={liveViaNvr
+              ? 'レコーダ経由の構成のため高画質ライブは非対応 — 軽量 (JPEG) でご覧ください'
+              : null}
           />
         </div>
       </main>
