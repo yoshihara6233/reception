@@ -84,7 +84,7 @@
     <div><div class="k">面談相手</div><div class="v">i-PRO 技術責任者</div></div>
     <div><div class="k">当社実績機</div><div class="v">WJ-NU101 / NU100（実機）</div></div>
     <div><div class="k">控える案件</div><div class="v">NU101 × 100 店舗</div></div>
-    <div><div class="k">作成日</div><div class="v mono">2026-07-31</div></div>
+    <div><div class="k">作成日 / 実装更新</div><div class="v mono">2026-07-31 / <strong>2026-08-06</strong></div></div>
   </div>
 </header>
 
@@ -121,14 +121,14 @@
   </tr></thead>
   <tbody>
     <tr>
-      <td><strong>ライブ監視（グリッド/単画面・低 fps JPEG）</strong></td>
-      <td>NVR: <code>push.cgi</code>（COMP=JPEG, multipart MJPEG）<br>カメラ直: ONVIF <code>GetSnapshotUri</code></td>
-      <td>push.cgi はカメラごとに 1 本だけ開いて常時受信し最新フレームをキャッシュ（毎回 START/STOP するとセッション枯渇で 204 になるため）。事前に <code>hdrctl.cgi?SCREEN=1X</code>。UID は NVR 1 台につき 1 つを全カメラで共有し、<code>status.cgi</code> を 60 秒間隔で keepalive。</td>
+      <td><strong>ライブ監視（グリッド/単画面・低 fps）</strong></td>
+      <td>NVR: <code>push.cgi</code>（<strong>COMP=H265 / H264</strong>, multipart RTP）<br>カメラ直: ONVIF <code>GetSnapshotUri</code></td>
+      <td>push.cgi はカメラごとに 1 本だけ開いて常時受信（毎回 START/STOP するとセッション枯渇で 204 になるため）。事前に <code>hdrctl.cgi?SCREEN=1X</code>。UID は NVR 1 台につき 1 つを全カメラで共有し、<code>status.cgi</code> を 60 秒間隔で keepalive。<strong>2026-08-06 に COMP=JPEG から H.265/H.264 へ変更</strong>（§4 の 39×37 問題）。受信した RTP を再構成し、キーフレームをエッジで JPEG にデコードして配信する。</td>
     </tr>
     <tr>
       <td><strong>高画質ライブ（H.264 HLS）</strong></td>
       <td>カメラ直: ONVIF <code>GetProfiles</code>→<code>GetStreamUri</code>→RTSP</td>
-      <td>RTSP URL は静的に組まず ONVIF で取得（NU 配下カメラは <code>rtsp://&lt;ip&gt;/ONVIF/MediaInput?profile=…</code> の動的形式）。go2rtc 経由で HLS 配信。H.265 はエッジで H.264 に変換。<strong>NVR 経由の高画質ライブは未使用</strong>。</td>
+      <td>RTSP URL は静的に組まず ONVIF で取得（NU 配下カメラは <code>rtsp://&lt;ip&gt;/ONVIF/MediaInput?profile=…</code> の動的形式）。go2rtc 経由で HLS 配信。H.265 はエッジで H.264 に変換。<strong>NVR 経由では提供しない</strong> — NU101 は RTSP(554) が閉じており go2rtc に載せる手段が無いため（構成上の制約。当社 UI でも該当カメラには高画質ボタンを出さない）。</td>
     </tr>
     <tr>
       <td><strong>録画再生（VOD）・検査クリップ切り出し</strong></td>
@@ -164,7 +164,7 @@
     <li>NVR は <strong>HTTPS のみ（80 閉・自己署名証明書）</strong>、Digest realm は <code>Network disk recorder</code>。</li>
     <li>NVR の <strong>RTSP(554) は閉</strong>・<strong>ONVIF サーバ非提供</strong>（<code>/onvif/device_service</code> が 404）→ 録画取得は CGI 一択。</li>
     <li>配下カメラは標準 ONVIF/RTSP で成立（カメラごとに認証情報が異なるケースあり）。コーデックはカメラ混在（H.264 / H.265）。</li>
-    <li>そのため当社構成は「<strong>ライブ・静止画＝カメラ直 ONVIF、録画＝NVR の httpdl.cgi</strong>」のハイブリッド。</li>
+    <li>そのため当社構成は「<strong>ライブ・静止画＝カメラ直 ONVIF、録画＝NVR の httpdl.cgi</strong>」のハイブリッド。<br><strong>【2026-08-06 追記】カメラ網がレコーダ側と分離されている店舗では、ライブ・録画とも NVR 経由のみで成立するようになった</strong>（ライブ＝<code>push.cgi COMP=H265/H264</code>、チャンネル列挙＝<code>as_getinfo.cgi</code>、録画＝<code>httpdl.cgi</code>）。高画質ライブのみ提供できない。</li>
   </ul>
 </div>
 
@@ -194,6 +194,16 @@
       <td><code>push.cgi</code> を短時間に START/STOP 連打するとセッションが飽和し、以後 START が <strong>204（空応答）</strong></td>
       <td>カメラごとに 1 本を開きっぱなしにする永続ストリーム方式に変更して解決</td>
       <td><span class="tag chk">Q11</span> 204 の条件</td>
+    </tr>
+    <tr>
+      <td><strong>【2026-08-06 追記】</strong> <code>push.cgi COMP=JPEG</code> は、<strong>JPEG 配信を持たないカメラに対して 39×37 のプレースホルダ画像を HTTP 200 で返す</strong>（701 バイト・バイト列としては妥当な JPEG）。<code>SCREEN=1X</code> / <code>16X</code> いずれでも同一。エラーにならないため、グリッドに黒いコマが並ぶだけで原因に辿り着けない</td>
+      <td><strong><code>COMP=H265</code> / <code>COMP=H264</code> に変更し、エッジでデコードする方式へ全面移行</strong>。カメラ側の JPEG 配信設定に一切依存しなくなった（100 店舗規模で全カメラの設定を回るのは非現実的なため）。各 multipart パートはちょうど RTP パケット 1 個（PT 98=H.264 / 101=H.265・拡張にカメラ番号と時刻）で、独自フレーミングは無いことを実機ダンプで確認。パラメータセットと IRAP が揃ってからデコードに回す。<strong>実測 1920×1080・約 1.3 Mbps</strong>（JPEG 経路より高品質）</td>
+      <td><span class="tag chk">Q11</span> 仕様として正か・判別手段はあるか</td>
+    </tr>
+    <tr>
+      <td><strong>【2026-08-06 追記】</strong> NVR 配下カメラの列挙に ONVIF が使えない（<code>/onvif/device_service</code> が 404）</td>
+      <td><code>as_getinfo.cgi?FILE=2</code> の <code>CAM_CONNECT_xxCH</code> で接続 CH を列挙する実装に変更。管理画面の「探索」もこの経路に振り分けた</td>
+      <td><span class="tag chk">Q1</span> 機種別対応表</td>
     </tr>
     <tr>
       <td>UID 寿命 90 秒・同時最大 16・同一カメラ 2 本不可・ライブと再生は同一 UID 不可・コマンド間隔 3 秒目安（CGI 資料 V15R1 の記載）</td>
@@ -387,7 +397,7 @@
 
 <div class="qa">
   <div class="qhead"><span class="qno">Q11</span><div class="qt">push.cgi の挙動</div></div>
-  <div class="qbody"><p>COMP=JPEG の解像度・フレームレートは何で決まるか（制御手段はあるか）。INTERNETMODE=ON の意味。START が 204（空）を返す条件（当社はセッション枯渇と推定し永続ストリーム化で回避）。</p></div>
+  <div class="qbody"><p><strong>【2026-08-06 更新】COMP=JPEG は、JPEG 配信を持たないカメラに対して 39×37 のプレースホルダを HTTP 200 で返す</strong>（実機確認）。これは仕様か。<strong>「このカメラは JPEG を配信できない」を事前に判別する手段</strong>はあるか。当社は COMP=H265/H264 を受けてエッジでデコードする方式に全面移行し、この依存を解消済み。<br>COMP=H265/H264 の multipart は 1 パート＝RTP パケット 1 個（PT 98/101・拡張にカメラ番号と時刻）という理解で正しいか。INTERNETMODE=ON の意味。START が 204（空）を返す条件（当社はセッション枯渇と推定し永続ストリーム化で回避）。</p></div>
 </div>
 
 <div class="qa">

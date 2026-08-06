@@ -103,6 +103,9 @@ interface Props {
   hqUrl?: string | null
   // SFU(LiveKit)ベータが有効か（サーバ livekitEnabled()）。true のとき「🛰 SFU」モードを提供。
   sfuEnabled?: boolean
+  // 高画質系が構成上そもそも使えない時の理由（例: i-PRO NVR 経由）。
+  // ボタンを黙って消すだけだと「壊れている」と読まれるため、1行で理由を出す。
+  unavailableNote?: string | null
 }
 
 // 利用可能なモードから、保存済み設定を尊重しつつ有効なモードを選ぶ。
@@ -116,7 +119,7 @@ function resolveMode(prefer: Mode, hasSfu: boolean, hasHq: boolean, hasIframe: b
   return hasHq ? 'hq' : hasIframe ? 'iframe' : 'jpeg'
 }
 
-export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, liveIsImageStream, liveSigned, hqUrl, sfuEnabled }: Props) {
+export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, liveIsImageStream, liveSigned, hqUrl, sfuEnabled, unavailableNote }: Props) {
   // Default mode: go2rtc高画質 > Frigate iframe > jpeg. User pref overrides.
   // SFU は既定にしない（利用者が明示選択したときだけ・egress有界化）。
   const defaultMode: Mode = hqUrl ? 'hq' : liveIframeUrl ? 'iframe' : 'jpeg'
@@ -223,6 +226,7 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
         iframeSupported={!!liveIframeUrl}
         iframeFailed={iframeFailed}
         sfuFailed={sfuFailed}
+        unavailableNote={unavailableNote ?? null}
         onSwitch={switchMode}
         remainingSec={expired ? null : remainingSec}
       />
@@ -298,7 +302,7 @@ function LiveLimitOverlay() {
 // ─── Mode toolbar ───────────────────────────────────────────────────────────
 
 function ModeToolbar({
-  mode, sfuSupported, hqSupported, iframeSupported, iframeFailed, sfuFailed, onSwitch, remainingSec,
+  mode, sfuSupported, hqSupported, iframeSupported, iframeFailed, sfuFailed, unavailableNote, onSwitch, remainingSec,
 }: {
   mode:            Mode
   sfuSupported:    boolean
@@ -306,6 +310,7 @@ function ModeToolbar({
   iframeSupported: boolean
   iframeFailed:    boolean
   sfuFailed:       boolean
+  unavailableNote: string | null
   onSwitch:        (m: Mode) => void
   remainingSec:    number | null
 }) {
@@ -386,6 +391,7 @@ function ModeToolbar({
           {sfuFailed && (
             <span className="ml-2 text-amber-400">⚠ SFU 接続不可 — 通常経路へ自動切替</span>
           )}
+          {unavailableNote && <span className="ml-2 text-slate-500">{unavailableNote}</span>}
         </span>
       </div>
     </div>
