@@ -109,6 +109,18 @@ jobs:
             postgres://*|postgresql://*) ;;
             *)
               echo "::error::BACKUP_DATABASE_URL が接続 URI の形式ではありません（postgresql:// で始まっていません）。"
+              # よくある混入パターンを名指しする。ここで出るのは先頭 1 文字か既知の
+              # 固定文字列だけなので、パスワードは漏れない。
+              case "$(printf '%s' "$DATABASE_URL" | cut -c1)" in
+                ' '|'	') echo "::error::→ 先頭に空白またはタブが混入しています。貼り付け時に紛れ込んだ可能性があります。" ;;
+                '"'|"'")   echo "::error::→ 引用符ごと貼り付けられています。引用符を外して URI だけを登録してください。" ;;
+              esac
+              case "$DATABASE_URL" in
+                psql\ *) echo "::error::→ psql コマンドごと貼り付けられています。postgresql:// 以降だけを登録してください。" ;;
+                *://*)   echo "::error::→ スキーム名が違います。postgresql:// で始まる必要があります。" ;;
+                *@*)     echo "::error::→ スキームがありません。先頭に postgresql:// が必要です。" ;;
+                *)       echo "::error::→ 接続文字列ではなく、パスワードやホスト名だけが登録されている可能性があります。" ;;
+              esac
               echo "::error::期待する形: postgresql://postgres.<project-ref>:<password>@<host>.pooler.supabase.com:5432/postgres"
               echo "::error::取得元: Supabase ダッシュボード → Project Settings → Database"
               echo "::error::        → Connection string → Session pooler → URI タブ"
