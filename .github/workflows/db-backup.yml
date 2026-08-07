@@ -225,6 +225,38 @@ jobs:
           set -euo pipefail
           test -n "$BUCKET" || { echo "::error::R2_BACKUP_BUCKET が未設定です"; exit 1; }
 
+          # ── バケット名とキーの形を検証する（2026-08-07 追加）─────────────────
+          # バケット名に URL やスラッシュが混ざると
+          #   Invalid bucket name "***": Bucket name must match the regex ...
+          # となるが、値が伏字なので何が悪いか読み取れない。実際に踏んだ
+          # （run 31140351942）。**バケット名だけ**（パスもスキームも付けない）。
+          case "$BUCKET" in
+            http*|s3://*)
+              echo "::error::R2_BACKUP_BUCKET に URL が登録されています。バケット名だけを登録してください。"
+              echo "::error::例: monitor-db-backup"
+              exit 1 ;;
+            */*)
+              echo "::error::R2_BACKUP_BUCKET にスラッシュが含まれています。パスは付けずバケット名だけを登録してください。"
+              exit 1 ;;
+            *[!a-zA-Z0-9._-]*)
+              echo "::error::R2_BACKUP_BUCKET に使えない文字が含まれています（英数字と . _ - のみ）。"
+              exit 1 ;;
+          esac
+
+          # R2 のアクセスキーは 32 桁、シークレットは 64 桁の 16 進。取り違えると
+          # 認証エラーになるが、その原因が値の取り違えだとは分からない。
+          if [ ${#AWS_ACCESS_KEY_ID} -ne 32 ]; then
+            echo "::error::R2_ACCESS_KEY_ID の長さが ${#AWS_ACCESS_KEY_ID} 文字です（32 文字である必要があります）。"
+            echo "::error::R2 API トークン作成時に表示される Access Key ID を登録してください。"
+            exit 1
+          fi
+          if [ ${#AWS_SECRET_ACCESS_KEY} -ne 64 ]; then
+            echo "::error::R2_SECRET_ACCESS_KEY の長さが ${#AWS_SECRET_ACCESS_KEY} 文字です（64 文字である必要があります）。"
+            echo "::error::Access Key ID（32文字）と取り違えていないか確認してください。"
+            exit 1
+          fi
+          # ──────────────────────────────────────────────────────────────────
+
           # ── ACCOUNT_ID の形を先に検証する（2026-08-07 追加）─────────────────
           # 値をそのままホスト名に埋めるので、URL やスラッシュが混ざると
           #   aws: [ERROR]: Invalid endpoint: https://***.r2.cloudflarestorage.com
