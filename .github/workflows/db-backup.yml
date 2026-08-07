@@ -224,6 +224,32 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$BUCKET" || { echo "::error::R2_BACKUP_BUCKET が未設定です"; exit 1; }
+
+          # ── ACCOUNT_ID の形を先に検証する（2026-08-07 追加）─────────────────
+          # 値をそのままホスト名に埋めるので、URL やスラッシュが混ざると
+          #   aws: [ERROR]: Invalid endpoint: https://***.r2.cloudflarestorage.com
+          # という、値が伏字なせいで何が悪いのか分からないエラーになる。実際に
+          # 踏んだ（run 31138533383）。ここで落として直し方を示す。
+          # Cloudflare のアカウント ID は 32 桁の 16 進文字列。
+          test -n "$ACCOUNT_ID" || { echo "::error::R2_ACCOUNT_ID が未設定です"; exit 1; }
+          if [ ${#ACCOUNT_ID} -ne 32 ]; then
+            echo "::error::R2_ACCOUNT_ID の長さが ${#ACCOUNT_ID} 文字です（32 文字である必要があります）。"
+            case "$ACCOUNT_ID" in
+              http*) echo "::error::→ エンドポイントの URL ごと登録されています。ホスト名の先頭にある ID 部分だけを登録してください。" ;;
+              */*)   echo "::error::→ スラッシュが含まれています。URL やパスではなく ID だけを登録してください。" ;;
+            esac
+            echo "::error::取得元: Cloudflare ダッシュボード → R2 → Overview 右側の Account ID"
+            echo "::error::（S3 API の表示 https://<32桁>.r2.cloudflarestorage.com の <32桁> の部分）"
+            exit 1
+          fi
+          case "$ACCOUNT_ID" in
+            *[!0-9a-fA-F]*)
+              echo "::error::R2_ACCOUNT_ID に 16 進以外の文字が含まれています。"
+              echo "::error::取得元: Cloudflare ダッシュボード → R2 → Overview 右側の Account ID"
+              exit 1 ;;
+          esac
+          # ──────────────────────────────────────────────────────────────────
+
           endpoint="https://${ACCOUNT_ID}.r2.cloudflarestorage.com"
           # UTC の時刻でキーを作る（復元時に JST/UTC を取り違えないよう Z を明示）。
           key="db/$(date -u +%Y/%m/%d)/monitor-$(date -u +%Y%m%dT%H%M%SZ).sql.gz.gpg"
