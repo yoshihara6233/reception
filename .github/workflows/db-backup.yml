@@ -97,6 +97,51 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$DATABASE_URL" || { echo "::error::BACKUP_DATABASE_URL が未設定です"; exit 1; }
+
+          # ── 接続文字列の形を先に検証する（2026-08-07 追加）─────────────────
+          # pg_dump は引数が URI に見えないと「dbname」と解釈し、ローカルの Unix
+          # ソケットへ繋ぎにいって
+          #   connection to server on socket "/var/run/postgresql/.s.PGSQL.5432" failed
+          # という、原因がまるで分からないエラーで落ちる。実際に踏んだ（run 31136553196）。
+          # 値そのものは秘密なので出せないが、「形」だけは出せる。ここで落として
+          # 直し方まで示す。
+          case "$DATABASE_URL" in
+            postgres://*|postgresql://*) ;;
+            *)
+              echo "::error::BACKUP_DATABASE_URL が接続 URI の形式ではありません（postgresql:// で始まっていません）。"
+              echo "::error::期待する形: postgresql://postgres.<project-ref>:<password>@<host>.pooler.supabase.com:5432/postgres"
+              echo "::error::取得元: Supabase ダッシュボード → Project Settings → Database"
+              echo "::error::        → Connection string → Session pooler → URI タブ"
+              exit 1
+              ;;
+          esac
+
+          # パスワードを出さずに接続先だけ表示する。'##*@' は最後の '@' までを落とす
+          # ので、パスワードに '@' が含まれていても漏れない。'@' が無い異常な値の
+          # ときは何も出さない（全体が出てしまうため）。
+          case "$DATABASE_URL" in
+            *@*)
+              endpoint=${DATABASE_URL##*@}
+              endpoint=${endpoint%%\?*}
+              echo "接続先: ${endpoint}"
+              case "$endpoint" in
+                *pooler.supabase.com:5432/*)
+                  echo "→ Session pooler (5432)。pg_dump に対応した正しい接続方式です。" ;;
+                *pooler.supabase.com:6543/*)
+                  echo "::error::Transaction pooler (6543) が指定されています。この方式では pg_dump は動作しません。"
+                  echo "::error::Session pooler (5432) の URI に差し替えてください。"
+                  exit 1 ;;
+                *.supabase.co:5432/*)
+                  echo "::error::Direct connection が指定されています。Direct は IPv6 専用で、GitHub Actions の"
+                  echo "::error::ランナーは IPv6 を持たないため到達できません。Session pooler (5432) に差し替えてください。"
+                  exit 1 ;;
+                *)
+                  echo "::warning::想定外の接続先です。Supabase 以外を指している可能性があります。" ;;
+              esac
+              ;;
+          esac
+          # ──────────────────────────────────────────────────────────────────
+
           # スキーマは git の migration から再構築できる（RPO 0）ので data-only で足りる。
           # auth も含めるのは、失うと全利用者が再登録になるため。パスワードハッシュを
           # 含むので、この後の暗号化は必須（平文のまま保管しない）。
