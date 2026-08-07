@@ -88,7 +88,25 @@ jobs:
             | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
           sudo apt-get update -qq
           sudo apt-get install -y -qq postgresql-client-17
-          pg_dump --version
+
+          # ランナーには PostgreSQL 16 クライアントが同梱されており、その bin が
+          # PATH の前方にある。そのため postgresql-client-17 を入れても素の
+          # `pg_dump` は 16 のままで、PG17 サーバに拒否される：
+          #   pg_dump: error: aborting because of server version mismatch
+          #   detail: server version: 17.6; pg_dump version: 16.14
+          # 実際に踏んだ（run 31137713944）。絶対パスで 17 を指し、以降の
+          # ステップでもそれを使う。
+          PG_DUMP=/usr/lib/postgresql/17/bin/pg_dump
+          test -x "$PG_DUMP" || { echo "::error::$PG_DUMP が見つかりません"; exit 1; }
+
+          # ここは表示するだけでなく検証する。以前は `pg_dump --version` を
+          # 出力していただけで、16 と表示されていても素通りしていた。
+          ver=$("$PG_DUMP" --version | awk '{print $3}')
+          case "$ver" in
+            17.*) echo "pg_dump ${ver} を使用します" ;;
+            *) echo "::error::pg_dump が 17 系ではありません（${ver}）。PG17 のダンプは取得できません"; exit 1 ;;
+          esac
+          echo "PG_DUMP=$PG_DUMP" >> "$GITHUB_ENV"
 
       - name: ダンプを取る（データのみ）
         env:
@@ -97,10 +115,67 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$DATABASE_URL" || { echo "::error::BACKUP_DATABASE_URL が未設定です"; exit 1; }
+
+          # ── 接続文字列の形を先に検証する（2026-08-07 追加）─────────────────
+          # pg_dump は引数が URI に見えないと「dbname」と解釈し、ローカルの Unix
+          # ソケットへ繋ぎにいって
+          #   connection to server on socket "/var/run/postgresql/.s.PGSQL.5432" failed
+          # という、原因がまるで分からないエラーで落ちる。実際に踏んだ（run 31136553196）。
+          # 値そのものは秘密なので出せないが、「形」だけは出せる。ここで落として
+          # 直し方まで示す。
+          case "$DATABASE_URL" in
+            postgres://*|postgresql://*) ;;
+            *)
+              echo "::error::BACKUP_DATABASE_URL が接続 URI の形式ではありません（postgresql:// で始まっていません）。"
+              # よくある混入パターンを名指しする。ここで出るのは先頭 1 文字か既知の
+              # 固定文字列だけなので、パスワードは漏れない。
+              case "$(printf '%s' "$DATABASE_URL" | cut -c1)" in
+                ' '|'	') echo "::error::→ 先頭に空白またはタブが混入しています。貼り付け時に紛れ込んだ可能性があります。" ;;
+                '"'|"'")   echo "::error::→ 引用符ごと貼り付けられています。引用符を外して URI だけを登録してください。" ;;
+              esac
+              case "$DATABASE_URL" in
+                psql\ *) echo "::error::→ psql コマンドごと貼り付けられています。postgresql:// 以降だけを登録してください。" ;;
+                *://*)   echo "::error::→ スキーム名が違います。postgresql:// で始まる必要があります。" ;;
+                *@*)     echo "::error::→ スキームがありません。先頭に postgresql:// が必要です。" ;;
+                *)       echo "::error::→ 接続文字列ではなく、パスワードやホスト名だけが登録されている可能性があります。" ;;
+              esac
+              echo "::error::期待する形: postgresql://postgres.<project-ref>:<password>@<host>.pooler.supabase.com:5432/postgres"
+              echo "::error::取得元: Supabase ダッシュボード → Project Settings → Database"
+              echo "::error::        → Connection string → Session pooler → URI タブ"
+              exit 1
+              ;;
+          esac
+
+          # パスワードを出さずに接続先だけ表示する。'##*@' は最後の '@' までを落とす
+          # ので、パスワードに '@' が含まれていても漏れない。'@' が無い異常な値の
+          # ときは何も出さない（全体が出てしまうため）。
+          case "$DATABASE_URL" in
+            *@*)
+              endpoint=${DATABASE_URL##*@}
+              endpoint=${endpoint%%\?*}
+              echo "接続先: ${endpoint}"
+              case "$endpoint" in
+                *pooler.supabase.com:5432/*)
+                  echo "→ Session pooler (5432)。pg_dump に対応した正しい接続方式です。" ;;
+                *pooler.supabase.com:6543/*)
+                  echo "::error::Transaction pooler (6543) が指定されています。この方式では pg_dump は動作しません。"
+                  echo "::error::Session pooler (5432) の URI に差し替えてください。"
+                  exit 1 ;;
+                *.supabase.co:5432/*)
+                  echo "::error::Direct connection が指定されています。Direct は IPv6 専用で、GitHub Actions の"
+                  echo "::error::ランナーは IPv6 を持たないため到達できません。Session pooler (5432) に差し替えてください。"
+                  exit 1 ;;
+                *)
+                  echo "::warning::想定外の接続先です。Supabase 以外を指している可能性があります。" ;;
+              esac
+              ;;
+          esac
+          # ──────────────────────────────────────────────────────────────────
+
           # スキーマは git の migration から再構築できる（RPO 0）ので data-only で足りる。
           # auth も含めるのは、失うと全利用者が再登録になるため。パスワードハッシュを
           # 含むので、この後の暗号化は必須（平文のまま保管しない）。
-          pg_dump "$DATABASE_URL" \
+          "${PG_DUMP:?PG_DUMP が未設定です（クライアント導入ステップを確認）}" "$DATABASE_URL" \
             --data-only --no-owner --no-privileges \
             --schema=public --schema=auth \
             --file=dump.sql
