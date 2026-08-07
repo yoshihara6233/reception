@@ -88,7 +88,25 @@ jobs:
             | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
           sudo apt-get update -qq
           sudo apt-get install -y -qq postgresql-client-17
-          pg_dump --version
+
+          # ランナーには PostgreSQL 16 クライアントが同梱されており、その bin が
+          # PATH の前方にある。そのため postgresql-client-17 を入れても素の
+          # `pg_dump` は 16 のままで、PG17 サーバに拒否される：
+          #   pg_dump: error: aborting because of server version mismatch
+          #   detail: server version: 17.6; pg_dump version: 16.14
+          # 実際に踏んだ（run 31137713944）。絶対パスで 17 を指し、以降の
+          # ステップでもそれを使う。
+          PG_DUMP=/usr/lib/postgresql/17/bin/pg_dump
+          test -x "$PG_DUMP" || { echo "::error::$PG_DUMP が見つかりません"; exit 1; }
+
+          # ここは表示するだけでなく検証する。以前は `pg_dump --version` を
+          # 出力していただけで、16 と表示されていても素通りしていた。
+          ver=$("$PG_DUMP" --version | awk '{print $3}')
+          case "$ver" in
+            17.*) echo "pg_dump ${ver} を使用します" ;;
+            *) echo "::error::pg_dump が 17 系ではありません（${ver}）。PG17 のダンプは取得できません"; exit 1 ;;
+          esac
+          echo "PG_DUMP=$PG_DUMP" >> "$GITHUB_ENV"
 
       - name: ダンプを取る（データのみ）
         env:
@@ -157,7 +175,7 @@ jobs:
           # スキーマは git の migration から再構築できる（RPO 0）ので data-only で足りる。
           # auth も含めるのは、失うと全利用者が再登録になるため。パスワードハッシュを
           # 含むので、この後の暗号化は必須（平文のまま保管しない）。
-          pg_dump "$DATABASE_URL" \
+          "${PG_DUMP:?PG_DUMP が未設定です（クライアント導入ステップを確認）}" "$DATABASE_URL" \
             --data-only --no-owner --no-privileges \
             --schema=public --schema=auth \
             --file=dump.sql
