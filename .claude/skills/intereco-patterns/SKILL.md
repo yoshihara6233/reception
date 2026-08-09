@@ -236,6 +236,32 @@ HTTP 200 で返す**。バイト列は正しい JPEG なので SOI/EOI 判定で
   セットしないため多くのアカウントで NULL。**テナント分離をJWTに依存しない**こと。
 - 別件未調査: `new`/`edit` のテナント・店舗ピッカーも RLS セッション読み → 空表示の可能性あり。
 
+## 6.5 パーティション表を PostgREST の埋め込みに使うと「0件」で素通りする（2026-08-10・本番で1度も動いていなかった）
+
+PostgREST の埋め込み（`.select('id, stores!inner(tenant_id)')`）は**外部キーから相手を探す**。
+**月次パーティション化した表は外部キーを失っている**（`live_sessions` は `live_sessions_pkey` と
+`mode_check` しか持たず、remote_baseline にも無い）。相手が見つからないと PGRST200 → 400 だが、
+
+```ts
+const { count } = await svc.from('live_sessions')      // ← error を受け取っていない
+  .select('id, stores!inner(tenant_id)', { count: 'exact', head: true })
+const active = count ?? 0                              // ← null が 0 になる
+if (active >= max) { /* 発動しない */ }
+```
+
+と書いてあると **`count` は null → 0 として素通りする**。同時視聴上限(F-10)がこれで、
+**本番で一度も発動していなかった**。429 も metric(`session_rejected`) も出ないので、
+ダッシュボード上は「上限に達していない」ようにしか見えない＝壊れているのに正常と区別が付かない。
+
+- **上限・課金・認可の判定を埋め込みでやらない。** 素の SQL（DB 関数）で数える。
+- 判定と INSERT は **1 トランザクションに畳む**。分けると数えてから入れるまでに隙ができ、
+  同時に来た N 本が全員通る（advisory lock でテナント単位に直列化。`start_live_session()`）。
+- 判定が失敗したら**フェイルクローズ**。`const { count } = ...` のように error を捨てない。
+- 検査: `tests/schema-meta/embed-inventory.test.ts` が src の埋め込みを全部拾って
+  外部キーの実在を確かめ、パーティション表の埋め込みを禁じる。
+- 同時実行の契約: `tests/schema-meta/concurrency.test.ts`（DB）／`e2e/session-limit.spec.ts`（実サーバ）。
+  スループット計測は `scripts/load-measure.mjs`（ローカル専用・本番に向けない）。
+
 ## 7. パスワードリセット（メールベース・allowlist回避）
 
 ログイン画面 → `/forgot-password` → `POST /api/auth/reset-link` →
