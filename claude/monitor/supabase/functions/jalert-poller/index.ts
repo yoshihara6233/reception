@@ -25,10 +25,11 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import {
-  matchesStoreArea,
+  parseAffectedPrefs,
   parseAreaCodes,
   parseMaxIntensity,
   shouldTrigger,
+  storeAreaIntensity,
 } from './match.ts'
 
 // ---------------------------------------------------------------------------
@@ -276,21 +277,36 @@ async function processEntry(
   console.log(`[jalert-poller] New entry: ${entry.title} (${entry.id})`)
 
   // 5. Fetch detail XML and extract area codes + max intensity
-  const { areaCodes, maxIntensity } = await fetchDetail(entry.linkHref)
+  const { areaCodes, maxIntensity, affectedPrefs } = await fetchDetail(entry.linkHref)
   console.log(
     `[jalert-poller] Area codes: ${areaCodes.join(', ') || '(none)'}` +
-    (maxIntensity ? `, MaxInt: ${maxIntensity}` : ''),
+    (maxIntensity ? `, MaxInt: ${maxIntensity}` : '') +
+    `, 対象都道府県: ${
+      affectedPrefs.size
+        ? [...affectedPrefs].map(([p, i]) => `${p}:${i ?? '-'}`).join(' ')
+        : '(特定できず)'
+    }`,
   )
 
   // 6. Find matching stores with BCP enabled（エリア一致＋有効化のみ。発動条件は次段で判定）
   const alertType = classifyAlertType(entry.title)
   const alertIssuedAt = entry.updated || new Date().toISOString()
-  const areaStores = await findMatchingStores(supa, areaCodes)
+
+  // 津波・ミサイルの電文は津波予報区コード(3桁)しか持たず、JIS 都道府県を導出できない。
+  // 3桁から先頭2桁を取るのは誤り（無関係な県に一致する）なので、ここでは安全側に倒して
+  // 「全有効店舗を対象」とする。地震で都道府県が取れないのは異常なので対象なしとする。
+  const prefUnknown = affectedPrefs.size === 0
+  const areaWide = prefUnknown && (alertType === 'tsunami' || alertType === 'missile')
+  if (prefUnknown && alertType === 'earthquake') {
+    console.warn('[jalert-poller] 地震電文から都道府県を抽出できませんでした（対象なしとして扱います）')
+  }
+  const areaStores = await findMatchingStores(supa, affectedPrefs, areaWide)
 
   // 6.5. 店舗ごとの発動条件（震度しきい値 / 津波 ON-OFF / ミサイル ON-OFF）で絞り込む。
-  //      条件を満たした店舗だけ自動取得＋イベント化する。
-  const triggeredStores = areaStores.filter(({ settings }) =>
-    shouldTrigger(alertType, maxIntensity, settings),
+  //      震度は「その店舗の都道府県で観測された値」で判定する。全国最大値を全店に
+  //      当てると、震度1の県の店舗が震度4扱いで発動する（2026-08-09 の障害）。
+  const triggeredStores = areaStores.filter(({ intensity, settings }) =>
+    shouldTrigger(alertType, intensity, settings),
   )
 
   // 6.6. 受信ログを必ず記録（店舗マッチの有無に関わらず）。これが「J-Alert受信履歴」の
@@ -310,9 +326,9 @@ async function processEntry(
   console.log(`[jalert-poller] ${triggeredStores.length} store(s) meet trigger condition`)
 
   // 7. 各店舗で自動取得＋通知
-  for (const { store, settings } of triggeredStores) {
+  for (const { store, settings, intensity } of triggeredStores) {
     try {
-      await processStore(supa, entry, store, settings, alertType, alertIssuedAt, areaCodes, maxIntensity)
+      await processStore(supa, entry, store, settings, alertType, alertIssuedAt, areaCodes, intensity)
     } catch (err) {
       console.error(
         `[jalert-poller] Error processing store ${store.id} (${store.name}):`,
@@ -327,24 +343,34 @@ async function processEntry(
 // ---------------------------------------------------------------------------
 
 interface AlertDetail {
+  /** 受信ログ用の生コード一覧（監査目的。照合には使わない）。 */
   areaCodes: string[]
+  /** 電文全体の最大震度（表示・ログ用。発動判定には使わない）。 */
   maxIntensity: string | null
+  /** JIS 都道府県コード → その県の観測震度。照合と発動判定はこちらを使う。 */
+  affectedPrefs: Map<string, string | null>
 }
 
+const EMPTY_DETAIL: AlertDetail = { areaCodes: [], maxIntensity: null, affectedPrefs: new Map() }
+
 async function fetchDetail(linkHref: string): Promise<AlertDetail> {
-  if (!linkHref) return { areaCodes: [], maxIntensity: null }
+  if (!linkHref) return EMPTY_DETAIL
 
   try {
     const res = await fetch(linkHref)
     if (!res.ok) {
       console.error(`[jalert-poller] Detail fetch failed: HTTP ${res.status}`)
-      return { areaCodes: [], maxIntensity: null }
+      return EMPTY_DETAIL
     }
     const xml = await res.text()
-    return { areaCodes: parseAreaCodes(xml), maxIntensity: parseMaxIntensity(xml) }
+    return {
+      areaCodes:     parseAreaCodes(xml),
+      maxIntensity:  parseMaxIntensity(xml),
+      affectedPrefs: parseAffectedPrefs(xml),
+    }
   } catch (err) {
     console.error('[jalert-poller] Detail fetch error:', err)
-    return { areaCodes: [], maxIntensity: null }
+    return EMPTY_DETAIL
   }
 }
 
@@ -355,12 +381,15 @@ async function fetchDetail(linkHref: string): Promise<AlertDetail> {
 interface StoreWithSettings {
   store: Store
   settings: BcpSettings
+  /** その店舗の都道府県で観測された震度（地震以外・不明時は null）。 */
+  intensity: string | null
 }
 
 async function findMatchingStores(
   // deno-lint-ignore no-explicit-any
   supa: any,
-  areaCodes: string[],
+  affectedPrefs: ReadonlyMap<string, string | null>,
+  areaWide: boolean,
 ): Promise<StoreWithSettings[]> {
   // Fetch all active BCP settings with their store's area_code
   const { data, error } = await supa
@@ -379,10 +408,16 @@ async function findMatchingStores(
     const store = row.stores as Store | null
     if (!store) continue
 
-    // 照合ルールは match.ts に集約（JIS 都道府県 2 桁プレフィックス一致 or 完全一致）。
-    if (matchesStoreArea(store.area_code, areaCodes)) {
+    // 照合ルールは match.ts に集約（JIS 都道府県 2 桁の一致）。
+    // areaWide は津波・ミサイルで都道府県を特定できない場合の安全側フォールバック。
+    const hit = areaWide
+      ? { matched: true, intensity: null }
+      : storeAreaIntensity(store.area_code, affectedPrefs)
+
+    if (hit.matched) {
       results.push({
         store,
+        intensity: hit.intensity,
         settings: {
           id: row.id,
           store_id: row.store_id,
@@ -415,7 +450,8 @@ async function processStore(
   alertType: string,
   alertIssuedAt: string,
   areaCodes: string[],
-  maxIntensity: string | null,
+  /** この店舗の都道府県で観測された震度。電文全体の最大値ではない。 */
+  storeIntensity: string | null,
 ): Promise<void> {
   // 自動取得モデル: 発令を検知したら、現地レコーダから 8 枚スナップ(T-5〜T+30分)を
   // 自動取得 → アップロード → 自動PDF(bcp_report_sweep) → 完了メール、まで全自動。
@@ -457,7 +493,8 @@ async function processStore(
       alert_type: alertType,
       alert_issued_at: alertIssuedAt,
       area_code: areaCodes[0] ?? null,
-      max_intensity: maxIntensity,
+      // 店舗ごとの観測震度。レポート/一覧はこの値を「その店舗が受けた揺れ」として表示する。
+      max_intensity: storeIntensity,
       status: 'pending',
       is_test: false,
     })

@@ -13,7 +13,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useLang } from '@/lib/i18n/context'
 import type { Msg } from '@/lib/i18n/messages'
-import { jmaIntensityLabel } from '@/lib/bcp/intensity'
+import { intensityRank, jmaIntensityLabel } from '@/lib/bcp/intensity'
 import { FileText } from 'lucide-react'
 
 export interface BcpEventChild {
@@ -108,8 +108,11 @@ function groupByAlert(rows: BcpEventChild[]): AlertGroup[] {
       }
       map.set(key, g)
     }
-    // 同一発令でも古い行に震度が無いことがある（バックフィル前）— ある値を優先
-    if (!g.max_intensity && r.max_intensity) g.max_intensity = r.max_intensity
+    // max_intensity は店舗ごとの観測震度（同一発令でも県によって異なる）。
+    // 親行にはその発令で最も強かった震度を出す。古い行は震度が無いことがある（バックフィル前）。
+    if (intensityRank(r.max_intensity) > intensityRank(g.max_intensity)) {
+      g.max_intensity = r.max_intensity
+    }
     g.stores.push(r)
   }
   // Compute aggregated status: failed > in_progress > partial > completed

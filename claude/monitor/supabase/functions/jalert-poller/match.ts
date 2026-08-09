@@ -9,7 +9,11 @@
  *   Pref/Area/Code            = 地震情報／細分区域（3桁: 741 = 熊本県熊本）
  *   Pref/Area/City/Code       = 気象・地震・火山情報／市町村等（7桁: 4310400 = 熊本南区）
  * 店舗側 stores.area_code は JIS 市区町村コード（例: 43100 = 熊本市）を入れる。
- * 照合は「都道府県 2 桁プレフィックス一致」で行う（Pref/City どちらのコードでも成立）。
+ *
+ * 照合は「JIS 都道府県 2 桁の一致」で行うが、**その 2 桁を作ってよいのは
+ * Pref(2桁) と City(7桁の先頭2桁) だけ**。細分区域(3桁)からは作ってはならない。
+ * 細分区域コードは JIS とは別体系で、先頭2桁が無関係な県の JIS コードと衝突する。
+ * 詳細は parseAffectedPrefs の注記を参照。
  */
 
 /** JMA 詳細XMLの最大震度 <MaxInt> を抽出（'6+','5-','4' 等の生値。無ければ null） */
@@ -53,18 +57,80 @@ export function parseAreaCodes(xml: string): string[] {
   return [...codes]
 }
 
+/** JIS 都道府県コードとして妥当な 2 桁（01〜47）か。 */
+function isJisPref(code: string): boolean {
+  if (!/^\d{2}$/.test(code)) return false
+  const n = Number(code)
+  return n >= 1 && n <= 47
+}
+
+/** 震度の強い方を残す（未取得 null は最弱扱い）。 */
+function strongerIntensity(a: string | null, b: string | null): string | null {
+  return intensityRank(b) > intensityRank(a) ? b : a
+}
+
 /**
- * 店舗の area_code が発令エリアに一致するか。
- * 完全一致、または「発令コードの先頭2桁（JIS 都道府県）で始まる」場合に一致。
- * 例: 店舗 '43100'(熊本市) × 発令 ['43','741','4310400'] → '43' で一致。
+ * 発表エリアを「JIS 都道府県コード(2桁) → その県で観測された最大震度」に畳む。
+ *
+ * 都道府県を導出してよいのは次の 2 種類のコードだけ:
+ *   Pref/Code            2桁  JIS 都道府県                （43 = 熊本県）
+ *   Pref/Area/City/Code  7桁  市町村等・先頭2桁が JIS 都道府県（4310400 → 43）
+ *
+ * **細分区域(3桁)と津波予報区(3桁)は使わない。** これらは JIS とは別体系で、
+ * 先頭2桁を都道府県として扱うと無関係な県に一致する。実例:
+ *   210「岩手県沿岸北部」→ "21" = 岐阜県 / 251「福島県浜通り」→ "25" = 滋賀県
+ *   220「宮城県北部」    → "22" = 静岡県 / 146「胆振地方中東部」→ "14" = 神奈川県
+ * 2026-08-09 03:02 の岩手県沖・震度4 では、実際に揺れた 7 県に対して 19 県が
+ * 一致と判定され 38 店舗が発動した。その根本原因がこの取り違えである。
+ *
+ * 震度も県単位で返す。全国最大値を全店舗に当てると、震度1の県の店舗が
+ * 「震度4」として発動条件を通ってしまうため（同障害のもう一方の原因）。
+ *
+ * 津波・ミサイルの電文には Pref/City が無く、戻り値は空になる。呼び出し側で
+ * 「都道府県を特定できない」ケースとして明示的に扱うこと（index.ts 参照）。
  */
-export function matchesStoreArea(storeAreaCode: string | null, alertCodes: string[]): boolean {
-  if (!storeAreaCode || alertCodes.length === 0) return false
-  return alertCodes.some(
-    (alertCode) =>
-      storeAreaCode === alertCode ||
-      (alertCode.length >= 2 && storeAreaCode.startsWith(alertCode.slice(0, 2))),
-  )
+export function parseAffectedPrefs(xml: string): Map<string, string | null> {
+  const out = new Map<string, string | null>()
+
+  const put = (pref: string, intensity: string | null) => {
+    if (!isJisPref(pref)) return
+    out.set(pref, out.has(pref) ? strongerIntensity(out.get(pref) ?? null, intensity) : intensity)
+  }
+
+  // ブロック内の先頭 <Code> / <MaxInt> は、そのブロック自身の値（下位要素より前に来る）。
+  const scan = (tag: string, toPref: (code: string) => string | null) => {
+    const blockRegex = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'g')
+    let m: RegExpExecArray | null
+    while ((m = blockRegex.exec(xml)) !== null) {
+      const body = m[1]
+      const code = body.match(/<Code[^>]*>(\d+)<\/Code>/)
+      if (!code) continue
+      const pref = toPref(code[1])
+      if (!pref) continue
+      const int = body.match(/<MaxInt[^>]*>([^<]+)<\/MaxInt>/)
+      put(pref, int ? int[1].trim() : null)
+    }
+  }
+
+  scan('Pref', (c) => (c.length === 2 ? c : null))
+  scan('City', (c) => (c.length >= 5 ? c.slice(0, 2) : null))
+
+  return out
+}
+
+/**
+ * 店舗が発表エリアに含まれるか、含まれるならその店舗の県で観測された震度。
+ * stores.area_code は JIS 市区町村コード（例: 43100 = 熊本市）。先頭2桁で照合する。
+ */
+export function storeAreaIntensity(
+  storeAreaCode: string | null,
+  affectedPrefs: ReadonlyMap<string, string | null>,
+): { matched: boolean; intensity: string | null } {
+  const miss = { matched: false, intensity: null }
+  if (!storeAreaCode || affectedPrefs.size === 0) return miss
+  const pref = storeAreaCode.slice(0, 2)
+  if (!isJisPref(pref) || !affectedPrefs.has(pref)) return miss
+  return { matched: true, intensity: affectedPrefs.get(pref) ?? null }
 }
 
 /** JMA 震度表記を順序ランクへ。未知/未取得は 0（＝条件未満扱い）。 */
