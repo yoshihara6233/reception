@@ -51,6 +51,17 @@ const U_SUPER  = '00000000-0000-0000-0000-000000000099'
 const U_TADMINA = '00000000-0000-0000-0000-0000000000a0'
 const U_TADMINB = '00000000-0000-0000-0000-0000000000b0'
 const U_SMGRA1  = '00000000-0000-0000-0000-0000000000c1'
+// 店舗限定ロールの残り2つ。テナントAの別々の店舗に割り当て、同テナント内でも
+// 担当外店舗が見えないことを見る（viewer=A1 / baggage_manager=A2）。
+const U_VIEWA1  = '00000000-0000-0000-0000-0000000000d1'
+const U_BMGRA2  = '00000000-0000-0000-0000-0000000000e2'
+
+/** 店舗限定ロール（acting.ts の STORE_SCOPED_ROLES と同じ集合）。 */
+const STORE_SCOPED = [
+  { name: 'store_manager',   user: U_SMGRA1, store: S_A1, edge: E_A1 },
+  { name: 'viewer',          user: U_VIEWA1, store: S_A1, edge: E_A1 },
+  { name: 'baggage_manager', user: U_BMGRA2, store: S_A2, edge: E_A2 },
+] as const
 
 /** authenticated ロール + 指定ユーザの JWT で SELECT を実行（RLS適用・read-only）。 */
 async function asUser(sub: string | null, sql: string): Promise<Record<string, unknown>[]> {
@@ -76,7 +87,8 @@ beforeAll(async () => {
 
   // シード（postgres=superuser で RLS バイパス）
   await pool.query(`
-    insert into auth.users (id) values ('${U_SUPER}'),('${U_TADMINA}'),('${U_TADMINB}'),('${U_SMGRA1}');
+    insert into auth.users (id) values
+      ('${U_SUPER}'),('${U_TADMINA}'),('${U_TADMINB}'),('${U_SMGRA1}'),('${U_VIEWA1}'),('${U_BMGRA2}');
     insert into public.tenants (id, name) values ('${T_A}','A'),('${T_B}','B');
     insert into public.stores (id, tenant_id, name) values
       ('${S_A1}','${T_A}','A1'),('${S_A2}','${T_A}','A2'),('${S_B1}','${T_B}','B1');
@@ -84,7 +96,9 @@ beforeAll(async () => {
       ('${U_SUPER}','super_admin', null, '{}'),
       ('${U_TADMINA}','tenant_admin','${T_A}','{}'),
       ('${U_TADMINB}','tenant_admin','${T_B}','{}'),
-      ('${U_SMGRA1}','store_manager','${T_A}','{${S_A1}}');
+      ('${U_SMGRA1}','store_manager','${T_A}','{${S_A1}}'),
+      ('${U_VIEWA1}','viewer','${T_A}','{${S_A1}}'),
+      ('${U_BMGRA2}','baggage_manager','${T_A}','{${S_A2}}');
     insert into public.edge_devices (id, store_id, name, scoped_only) values
       ('${E_A1}','${S_A1}','edgeA1', true),   -- B4 適用済みのエッジ（鍵を配らない宣言）
       ('${E_A2}','${S_A2}','edgeA2', false),('${E_B1}','${S_B1}','edgeB1', false);
@@ -168,6 +182,71 @@ describe('stores RLS（店舗×ロール可視性: super=全件 / tenant_admin=�
   })
   it('未認証(anon)は何も見えない', async () => {
     expect(await asUser(null, 'select id from stores')).toHaveLength(0)
+  })
+})
+
+describe('店舗限定ロール3種（store_manager / viewer / baggage_manager）の等価性', () => {
+  // stores_select の store_ids 節は 20260723150000 以降**ロール非依存**。
+  // ここを `role = 'store_manager'` に限定すると viewer / baggage_manager が
+  // 自店舗すら見えなくなる（本番とのドリフト）。3ロール横並びで固定する。
+  it.each(STORE_SCOPED)('$name は担当店舗のみ見える（同テナントの担当外店舗は不可視）', async ({ user, store }) => {
+    expect(ids(await asUser(user, 'select id from stores'))).toEqual([store])
+  })
+
+  it.each(STORE_SCOPED)('$name は担当店舗のエッジのみ見える', async ({ user, edge }) => {
+    expect(ids(await asUser(user, 'select id from edge_devices'))).toEqual([edge])
+  })
+
+  it.each(STORE_SCOPED)('$name は他テナント(B)の店舗・エッジを一切見られない', async ({ user }) => {
+    expect(await asUser(user, `select id from stores where id='${S_B1}'`)).toHaveLength(0)
+    expect(await asUser(user, `select id from edge_devices where id='${E_B1}'`)).toHaveLength(0)
+  })
+
+  it.each(STORE_SCOPED)('$name は enrollment_tokens を読めない（トークン漏洩面を作らない）', async ({ user }) => {
+    expect(await asUser(user, 'select id from enrollment_tokens')).toHaveLength(0)
+  })
+
+  it.each(STORE_SCOPED)('$name は J-Alert 受信ログを閲覧できる（全国共通・店舗非依存）', async ({ user }) => {
+    expect(ids(await asUser(user, 'select id from jalert_receipts'))).toEqual([JR_1])
+  })
+
+  it('recorders / recorder_cameras は担当店舗のエッジ配下だけに連鎖する', async () => {
+    // viewer A1 の担当 A1 には REC_A1 がぶら下がる。baggage_manager A2 の担当 A2 には
+    // レコーダが無いので空。エッジ可視性がそのまま連鎖することの確認。
+    expect(ids(await asUser(U_VIEWA1, 'select id from recorders'))).toEqual([REC_A1])
+    expect(ids(await asUser(U_VIEWA1, 'select id from recorder_cameras'))).toEqual([CAM_A1])
+    expect(await asUser(U_BMGRA2, 'select id from recorders')).toHaveLength(0)
+  })
+
+  it('session_limits は自テナント分が見える（tenant_id 一致・ロール非依存）', async () => {
+    expect(ids(await asUser(U_VIEWA1, 'select tenant_id as id from session_limits'))).toEqual([T_A])
+    expect(ids(await asUser(U_BMGRA2, 'select tenant_id as id from session_limits'))).toEqual([T_A])
+  })
+
+  it('【既知の非対称】live_sessions は store_manager だけが見える', async () => {
+    // sessions_select の店舗節は `role = 'store_manager'` に限定されており、
+    // stores/edges の store_ids 節（ロール非依存）と揃っていない。本番の実挙動が
+    // これなので、まず事実として固定する。揃えるなら migration + 本テストを同時に直す。
+    expect(await asUser(U_SMGRA1, 'select id from live_sessions')).toHaveLength(1)
+    expect(await asUser(U_VIEWA1, 'select id from live_sessions')).toHaveLength(0)
+    expect(await asUser(U_BMGRA2, 'select id from live_sessions')).toHaveLength(0)
+  })
+
+  it('admin_users.role の CHECK 制約が5ロールすべてを受け付ける', async () => {
+    // アプリ（zod enum・UserForm・STORE_SCOPED_ROLES）は5ロール前提なのに、
+    // DB の CHECK が4値のままで baggage_manager が作成不能だった回帰を防ぐ。
+    const probe = '00000000-0000-0000-0000-0000000000f0'
+    await pool.query(`insert into auth.users (id) values ('${probe}') on conflict do nothing`)
+    for (const role of ['super_admin', 'tenant_admin', 'store_manager', 'baggage_manager', 'viewer']) {
+      await pool.query(`
+        insert into public.admin_users (auth_user_id, role, tenant_id, store_ids)
+        values ('${probe}', '${role}', '${T_A}', '{}')
+      `)
+      await pool.query(`delete from public.admin_users where auth_user_id = '${probe}'`)
+    }
+    await expect(
+      pool.query(`insert into public.admin_users (auth_user_id, role) values ('${probe}', 'not_a_role')`),
+    ).rejects.toThrow(/admin_users_role_check/)
   })
 })
 
