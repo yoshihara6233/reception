@@ -23,6 +23,7 @@ interface BcpEventRow {
   alert_issued_at: string
   area_code: string | null
   max_intensity: string | null
+  jma_event_id: string | null
   status: string
   is_test: boolean
   created_at: string
@@ -60,7 +61,7 @@ export default async function BcpPage() {
   const [eventsRes, reportsRes, totalRes] = await Promise.all([
     supa
       .from('bcp_events')
-      .select('id, alert_type, alert_issued_at, area_code, max_intensity, status, is_test, created_at, stores ( id, name )')
+      .select('id, alert_type, alert_issued_at, area_code, max_intensity, jma_event_id, status, is_test, created_at, stores ( id, name )')
       .or(bcpFilter)
       .order('created_at', { ascending: false })
       .limit(500),
@@ -137,6 +138,7 @@ export default async function BcpPage() {
             alert_type:       r.alert_type,
             area_code:        r.area_code,
             max_intensity:    r.max_intensity,
+            jma_event_id:     r.jma_event_id,
             store_id:         r.stores?.id ?? null,
             store_name:       r.stores?.name ?? null,
           }))}

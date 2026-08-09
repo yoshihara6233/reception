@@ -16,6 +16,20 @@
  * 詳細は parseAffectedPrefs の注記を参照。
  */
 
+/**
+ * JMA 地震火山 XML の `<Head><EventID>` を抽出（無ければ null）。
+ *
+ * 1 つの地震に対し気象庁は複数の電文を出す（震度速報 → 震源に関する情報 →
+ * 震源・震度に関する情報 → 続報）。Atom の id と updated は電文ごとに違うが、
+ * **EventID は同一地震のすべての電文で共通**（実測: 2026-08-09 岩手県沖の
+ * 4 電文すべて 20260809025805）。これを地震の同一性の鍵として使う。
+ */
+export function parseEventId(xml: string): string | null {
+  const m = xml.match(/<(?:\w+:)?EventID>([^<]+)<\/(?:\w+:)?EventID>/)
+  const v = m ? m[1].trim() : ''
+  return v || null
+}
+
 /** JMA 詳細XMLの最大震度 <MaxInt> を抽出（'6+','5-','4' 等の生値。無ければ null） */
 export function parseMaxIntensity(xml: string): string | null {
   const m = xml.match(/<(?:\w+:)?MaxInt[^>]*>([^<]+)<\/(?:\w+:)?MaxInt>/)

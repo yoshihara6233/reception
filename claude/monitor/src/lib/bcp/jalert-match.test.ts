@@ -3,6 +3,7 @@ import {
   intensityRank,
   parseAffectedPrefs,
   parseAreaCodes,
+  parseEventId,
   parseMaxIntensity,
   shouldTrigger,
   storeAreaIntensity,
@@ -212,5 +213,27 @@ describe('intensityRank / shouldTrigger', () => {
     expect(shouldTrigger('tsunami', null, { ...settings, tsunami_enabled: false })).toBe(false)
     expect(shouldTrigger('missile', null, { ...settings, missile_enabled: false })).toBe(false)
     expect(shouldTrigger('weather', '3', settings)).toBe(false)
+  })
+})
+
+describe('parseEventId（同一地震の名寄せ）', () => {
+  it('Head の EventID を取り出す', () => {
+    const xml = `<Report><Head><Title>震度速報</Title><EventID>20260809025805</EventID></Head></Report>`
+    expect(parseEventId(xml)).toBe('20260809025805')
+  })
+
+  it('名前空間つきタグでも取れる', () => {
+    expect(parseEventId('<jmx:EventID>20260801024900</jmx:EventID>')).toBe('20260801024900')
+  })
+
+  it('EventID が無い電文は null（呼び出し側は時間窓へフォールバックする）', () => {
+    expect(parseEventId('<Report><Head><Title>津波注意報</Title></Head></Report>')).toBeNull()
+    expect(parseEventId('<Report><Head><EventID></EventID></Head></Report>')).toBeNull()
+  })
+
+  it('同一地震の 4 電文は同じ EventID を返す（2026-08-09 岩手県沖の実配信）', () => {
+    const ids = ['震度速報', '震度速報(続報)', '震源に関する情報', '震源・震度に関する情報']
+      .map((t) => parseEventId(`<Report><Head><Title>${t}</Title><EventID>20260809025805</EventID></Head></Report>`))
+    expect(new Set(ids).size).toBe(1)
   })
 })
