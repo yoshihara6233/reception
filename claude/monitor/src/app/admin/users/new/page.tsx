@@ -68,7 +68,9 @@ export default async function NewUserPage() {
           }}
           tenants={tenants}
           stores={(stores ?? []) as StoreOpt[]}
-          canCreateSuperAdmin={me.role === 'super_admin' && !acting}
+          // ①設定プレーンでは super_admin を作らせない。運営者の作成は
+          // ②運営管理 → /admin/ops-users/new で行う。
+          canCreateSuperAdmin={false}
         />
       </div>
     </AdminShell>

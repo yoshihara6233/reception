@@ -82,6 +82,12 @@ export default async function UsersAdmin({
     .order('display_name')
     .limit(500)
 
+  // ここは①設定プレーン＝「テナントに所属するユーザー」の面。
+  // super_admin はテナントを持たない運営側の存在なので、この一覧には**常に出さない**
+  // （操作中テナント未選択のときに tenant=— の行が混じって見えるのが不自然だった）。
+  // 運営者の管理は ②運営管理 → /admin/ops-users に分けた。
+  query = query.neq('role', 'super_admin')
+
   if (!isSuper) {
     query = query.eq('tenant_id', guard.profile.tenant_id)
   } else {
@@ -93,7 +99,7 @@ export default async function UsersAdmin({
   if (q) {
     query = query.or(`display_name.ilike.%${q}%,email.ilike.%${q}%`)
   }
-  if (role && ['super_admin', 'tenant_admin', 'store_manager', 'viewer'].includes(role)) {
+  if (role && ['tenant_admin', 'store_manager', 'baggage_manager', 'viewer'].includes(role)) {
     query = query.eq('role', role)
   }
 
@@ -131,7 +137,7 @@ export default async function UsersAdmin({
           className="rounded border border-slate-200 px-2 py-1"
         >
           <option value="">{tu.allRoles}</option>
-          <option value="super_admin">{tu.roleSuperAdmin}</option>
+          {/* super_admin はこの面に存在しないので選択肢からも外す（→ /admin/ops-users） */}
           <option value="tenant_admin">{tu.roleTenantAdmin}</option>
           <option value="store_manager">{tu.roleStoreManager}</option>
           <option value="viewer">{tu.roleViewer}</option>

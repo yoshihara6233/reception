@@ -32,6 +32,10 @@ export default async function EditUserPage(
     .single()
   if (!target) notFound()
 
+  // ①設定プレーンはテナント配下のユーザーだけを扱う。super_admin は
+  // ②運営管理 → /admin/ops-users/[id] へ分けた（面を混ぜない）。
+  if ((target as { role: string }).role === 'super_admin') notFound()
+
   // tenant_admin: only same-tenant
   if (me.role === 'tenant_admin' && target.tenant_id !== me.tenant_id) {
     notFound()
