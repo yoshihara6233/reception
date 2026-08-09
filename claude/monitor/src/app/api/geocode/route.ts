@@ -9,6 +9,7 @@
  *   { lat: number, lng: number, address: string }
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { createSupabaseServer } from '@/lib/supabase/server'
 
 interface ZipcloudResult {
   zipcode: string
@@ -36,6 +37,17 @@ interface NominatimResult {
 }
 
 export async function GET(req: NextRequest) {
+  // 呼び出し元は /bcp/test のフォームだけで、そこは認証必須のページ。
+  // つまりこの受け口を無認証で開けておく理由が無い。
+  //
+  // 開けておくと、外部（zipcloud / Nominatim）への無料の踏み台になる。
+  // 特に Nominatim は 1 req/sec の利用規約で、超過すると **こちらの UA と IP が
+  // 遮断される**。そうなると店舗登録の座標取得が正規の利用者にも効かなくなる。
+  // レート制限で緩和するより、ログイン必須にして経路ごと閉じるほうが確実。
+  const supa = await createSupabaseServer()
+  const { data: { user } } = await supa.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+
   const sp = req.nextUrl.searchParams
   const zipcode = sp.get('zipcode')?.replace(/-/g, '') ?? ''
 

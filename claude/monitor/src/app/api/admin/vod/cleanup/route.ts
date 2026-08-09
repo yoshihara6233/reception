@@ -229,6 +229,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const footageCutoff = new Date(Date.now() - FOOTAGE_LOG_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString()
     const { error: falErr } = await admin.from('footage_access_log').delete().lt('accessed_at', footageCutoff)
     if (falErr) console.error('[vod/cleanup] footage_access_log prune failed:', falErr.message)
+
+    // レート制限カウンタ（無認証ルート用）。窓は 1 時間なので 1 日残れば十分。
+    // これを回さないと、見たメールアドレス・IP の分だけ行が増え続ける。
+    const rlCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    const { error: rlErr } = await admin.from('rate_limits').delete().lt('window_start', rlCutoff)
+    if (rlErr) console.error('[vod/cleanup] rate_limits prune failed:', rlErr.message)
   }
 
   if (dryRun || rows.length === 0) {

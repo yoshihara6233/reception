@@ -51,13 +51,16 @@ const RULES: [Guard, RegExp][] = [
 
 /**
  * 無認証で公開してよいルート。増やすときは理由をここに書くこと。
- *   /api/server-time  : 時刻のみ。キオスクの時刻ずれ検出に使う。秘密なし。
- *   /api/geocode      : 住所→座標。外部(Nominatim)への proxy。※レート制限は未実装（別タスク）
- *   /api/auth/reset-link : パスワード再設定。ワンタイムリンクはメールでのみ配送。
+ *   /api/server-time     : 時刻のみ。キオスクの時刻ずれ検出に使う。秘密なし。
+ *   /api/auth/reset-link : パスワード再設定＝認証の入口そのもので閉じられない。
+ *                          回数で縛る（メール 3回/時・IP 10回/時・rate_limit_hit）。
+ *
+ * /api/geocode は 2026-08-09 にログイン必須へ変更して外した。呼び出し元は
+ * 認証必須ページのフォームだけで、開けておくと外部(Nominatim)への無料の
+ * 踏み台になり、規約超過でこちらの UA/IP が遮断されるリスクがあった。
  */
 const PUBLIC_ALLOWLIST = new Set([
   '/api/server-time',
-  '/api/geocode',
   '/api/auth/reset-link',
 ])
 
@@ -158,7 +161,7 @@ const EXPECTED: Record<string, Guard> = {
   '/api/edges/[id]/commands': 'session-only',
   '/api/edges/[id]/grid': 'edge-view',
   '/api/edges/[id]/image-upload-url': 'device-token',
-  '/api/geocode': 'PUBLIC',
+  '/api/geocode': 'session-only',
   '/api/live-proxy/[cameraId]/[...path]': 'session-only',
   '/api/live-sign/[cameraId]': 'session-only',
   '/api/livekit/publish': 'session-only',
@@ -194,7 +197,7 @@ describe('API ルートの認可ガード棚卸し', () => {
     expect(changed, `ガードが変化しました。強化なら EXPECTED を更新、弱化なら実装を戻してください:\n${changed.join('\n')}`).toEqual([])
   })
 
-  it('無認証のルートは許可リストの 3 本だけ', () => {
+  it('無認証のルートは許可リストの 2 本だけ', () => {
     const publics = Object.entries(actual).filter(([, g]) => g === 'PUBLIC').map(([r]) => r)
     const unlisted = publics.filter((r) => !PUBLIC_ALLOWLIST.has(r))
     expect(unlisted, `ガードが検出できませんでした。実装したか、PUBLIC_ALLOWLIST に理由付きで追加してください:\n${unlisted.join('\n')}`).toEqual([])
@@ -226,7 +229,9 @@ describe('API ルートの認可ガード棚卸し', () => {
     // 最も弱い層。RLS に全面依存するので、service client を使うルートが
     // ここに入ると越権になる（/api/bcp/test が実際にそうだった）。
     // 減らす分には自由。増やすときはこの数字ごと見直すこと。
+    // 25 は /api/geocode を PUBLIC からここへ移した分（無認証をやめた＝強化）。
+    // 弱化で増やしたのではない点に注意。減らす分には自由。
     const n = Object.values(actual).filter((g) => g === 'session-only').length
-    expect(n).toBeLessThanOrEqual(24)
+    expect(n).toBeLessThanOrEqual(25)
   })
 })
