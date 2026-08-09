@@ -33,6 +33,12 @@ import {
   type PartitionHealthFacts,
   type PartitionVerdict,
 } from '@/lib/ops/partition-health'
+import {
+  embedPairsForSql,
+  evaluateSchemaInvariants,
+  type SchemaInvariantFacts,
+} from '@/lib/ops/schema-invariants'
+import { missingCriticalEnv } from '@/lib/ops/env-check'
 import { appBaseUrl } from '@/lib/app-url'
 
 export const dynamic = 'force-dynamic'
@@ -40,11 +46,22 @@ export const dynamic = 'force-dynamic'
 function alertHtml(v: PartitionVerdict): string {
   const rows = v.problems.map((p) => `<li>${p}</li>`).join('')
   return `
-    <p>月次パーティションの点検で問題を検出しました。</p>
+    <p>本番の日次点検で問題を検出しました。</p>
     <ul>${rows}</ul>
     <p>
       パーティションが尽きると、その表への書き込みは必ず失敗します。
       <b>live_sessions が尽きるとライブ視聴が開始できなくなります。</b>
+    </p>
+    <p>
+      <b>スキーマ</b>の指摘（RLS・ポリシー・SECURITY DEFINER・埋め込みの外部キー）は、
+      CI がローカルで見ているのと同じ条件を本番に問うたものです。
+      <b>外部キーの欠落は「問い合わせが 400 になるのに 0 件として素通りする」</b>
+      形で効きます（2026-08-10 の同時視聴上限の不発動がこれ）。
+      直したら <code>supabase db push</code> で本番へ。
+    </p>
+    <p>
+      <b>環境変数</b>の指摘は Vercel → Settings → Environment Variables で設定し、
+      再デプロイしてください。値そのものはこの通知には含めていません。
     </p>
     <p>まず現状を確認（SQL エディタ）:</p>
     <pre>select jobname, schedule, active from cron.job order by jobname;   -- 6 本あるはず
@@ -79,7 +96,46 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
   }
 
-  const verdict = evaluatePartitionHealth((data ?? {}) as PartitionHealthFacts)
+  const partition = evaluatePartitionHealth((data ?? {}) as PartitionHealthFacts)
+
+  // ── 本番スキーマの不変条件 ───────────────────────────────────────────
+  // CI は**ローカルの DB** しか見ていない。本番はダッシュボードの手作業や
+  // DR でずれるし、2026-08-10 のようにローカルと本番が同じように壊れて
+  // いることもある（live_sessions → stores の外部キーが両方に無く、
+  // 同時視聴上限が本番で一度も発動していなかった）。本番自身に毎日聞く。
+  const { data: schemaFacts, error: schemaErr } = await svc
+    .rpc('schema_invariants', { p_embeds: embedPairsForSql() })
+  if (schemaErr) {
+    console.error('[partition-health] schema_invariants failed:', schemaErr.message)
+    return NextResponse.json({ ok: false, error: schemaErr.message }, { status: 500 })
+  }
+  const schema = evaluateSchemaInvariants((schemaFacts ?? {}) as SchemaInvariantFacts)
+
+  // ── env の必須欠落 ───────────────────────────────────────────────────
+  // 台帳（env-check.ts）は /admin のレポートに出しているが、**誰かが見に
+  // 行かない限り気づけない**。必須が欠けていれば鳴らす側に回す。
+  // 2026-08-09 に本番で無認証だった ONVIF webhook は、コードが正しくても
+  // env が欠けていれば起きる類の障害だった。
+  const envMissing = missingCriticalEnv().filter((i) => i.required)
+
+  const problems = [
+    ...partition.problems,
+    ...schema.problems,
+    ...envMissing.map((i) => `環境変数 ${i.key} が未設定です（${i.purpose}）`),
+  ]
+  const severity =
+    partition.severity === 'critical' || schema.severity === 'critical' || envMissing.length > 0
+      ? 'critical'
+      : partition.severity === 'warn' || schema.severity === 'warn'
+        ? 'warn'
+        : 'ok'
+  const summary = severity === 'ok'
+    ? partition.summary
+    : (partition.severity !== 'ok' ? partition.summary
+      : schema.severity !== 'ok' ? schema.summary
+      : `環境変数の設定漏れ: ${envMissing.map((i) => i.key).join(', ')}`)
+
+  const verdict: PartitionVerdict = { severity, summary, problems, runway: partition.runway }
 
   if (verdict.severity !== 'ok') {
     console.error('[partition-health]', verdict.summary, verdict.problems)

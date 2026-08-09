@@ -258,7 +258,13 @@ if (active >= max) { /* 発動しない */ }
   同時に来た N 本が全員通る（advisory lock でテナント単位に直列化。`start_live_session()`）。
 - 判定が失敗したら**フェイルクローズ**。`const { count } = ...` のように error を捨てない。
 - 検査: `tests/schema-meta/embed-inventory.test.ts` が src の埋め込みを全部拾って
-  外部キーの実在を確かめ、パーティション表の埋め込みを禁じる。
+  外部キーの実在を確かめ、パーティション表の埋め込みを禁じる。台帳の正本は
+  `src/lib/ops/schema-invariants.ts` の `EMBED_PAIRS`。
+- **本番にも毎日同じことを聞く**（`/api/cron/partition-health`・13:00 JST）。
+  CI が見ているのは**ローカルの DB**で、「ローカルと同じ」を保証するだけ。
+  今回は**両方に同じ穴があった**ので CI では永久に見つからなかった。
+  RLS・ポリシー・SECURITY DEFINER の search_path・埋め込みの外部キーを
+  本番の `schema_invariants()` に問い、欠けていればメールと Webhook で鳴らす。
 - 同時実行の契約: `tests/schema-meta/concurrency.test.ts`（DB）／`e2e/session-limit.spec.ts`（実サーバ）。
   スループット計測は `scripts/load-measure.mjs`（ローカル専用・本番に向けない）。
 
