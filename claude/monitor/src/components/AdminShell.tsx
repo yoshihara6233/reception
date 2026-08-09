@@ -43,6 +43,9 @@ export function getAdminNav(t: Msg, opts?: { isSuper?: boolean; baggage?: boolea
     items.push(
       { href: '#ops', label: '運営管理', icon: '', heading: true },
       { href: '/admin/tenants',    label: 'テナント',   icon: '🏢' },
+      // super_admin はテナントに属さないため、①設定「ユーザ」からは除外して
+      // ここで管理する（テナント文脈の一覧に tenant=— が混じるのを避ける）。
+      { href: '/admin/ops-users',  label: 'システム管理者', icon: '⚿' },
       { href: '/admin/edges',      label: t.adminNav.edges, icon: '⌬' },
       // レコーダはエッジ配下（/admin/edges/[id]）で管理。専用ページは未実装のため
       // デッドリンク（/admin/recorders）はナビから除外。

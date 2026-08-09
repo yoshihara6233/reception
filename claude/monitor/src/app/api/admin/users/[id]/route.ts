@@ -11,6 +11,7 @@ import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { storeIdsBelongToTenant } from '@/lib/admin/user-scope'
+import { checkSuperAdminFloor } from '@/lib/admin/super-admin-floor'
 import { recordAudit } from '@/lib/admin/audit'
 
 const UpdateBody = z.object({
@@ -67,6 +68,13 @@ export async function PUT(
 
   // 最終ロール／テナントを確定し、store_ids がそのテナントの店舗のみか検証する。
   const finalRole = body.role ?? target.role
+
+  // 降格で super_admin が 0 人になるのを防ぐ（削除だけ塞いでも自己降格で抜けられる）。
+  const floor = await checkSuperAdminFloor(svc, target.role, finalRole)
+  if (!floor.ok) {
+    return NextResponse.json({ error: floor.error, message: floor.message }, { status: 409 })
+  }
+
   const finalTenantId = finalRole === 'super_admin'
     ? null
     : (body.tenant_id !== undefined ? body.tenant_id : target.tenant_id)
@@ -157,6 +165,13 @@ export async function DELETE(
     if (target.role === 'super_admin') {
       return NextResponse.json({ error: 'cannot_delete_super_admin' }, { status: 403 })
     }
+  }
+
+  // 最後の super_admin は消させない。自己削除禁止だけでは、auth_user_id が NULL の
+  // 行や「A が B を消して A も別経路で消える」経路を塞げない。
+  const floor = await checkSuperAdminFloor(svc, target.role, null)
+  if (!floor.ok) {
+    return NextResponse.json({ error: floor.error, message: floor.message }, { status: 409 })
   }
 
   // Delete profile row first, then auth user

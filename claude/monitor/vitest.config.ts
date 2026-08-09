@@ -9,6 +9,11 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
+      // `import 'server-only'` は Next のビルド時ガード用のマーカーで、実体は
+      // node_modules に無い（Next が解決する）。vitest からはそのままだと
+      // 「Cannot find package 'server-only'」で suite ごと落ちるため、空実装へ逃がす。
+      // これが無いと server-only を付けたモジュールは一切テストできない。
+      'server-only': fileURLToPath(new URL('./src/test/server-only-stub.ts', import.meta.url)),
     },
   },
   test: {
