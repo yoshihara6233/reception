@@ -59,14 +59,20 @@ export async function POST(
 ) {
   const { storeId } = await params
 
-  // ── 1. 認証 ──
-  const auth = req.headers.get('authorization') ?? ''
+  // ── 1. 認証（未設定なら受け付けない＝フェイルクローズ）──
+  // 旧実装は `if (expectedSecret) { ...401... }` で、**env 未設定だと認証ごと
+  // スキップ**していた。本番は実際に未設定で、GET が
+  // `auth: 'open (no secret set)'` と自ら公開していた（2026-08-09 に実測）。
+  // 店舗UUIDさえ分かれば誰でも monitor_incidents に open な障害を投入できる状態。
+  // 同じ役割の /api/bcp-webhook は未設定を 500 で弾いており、そちらが正しい。
   const expectedSecret = process.env.ONVIF_WEBHOOK_SECRET
-  if (expectedSecret) {
-    const provided = auth.replace(/^Bearer\s+/i, '')
-    if (provided !== expectedSecret) {
-      return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 })
-    }
+  if (!expectedSecret) {
+    console.error('[onvif-webhook] ONVIF_WEBHOOK_SECRET is not configured')
+    return NextResponse.json({ ok: false, message: 'server_misconfiguration' }, { status: 500 })
+  }
+  const provided = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '')
+  if (provided !== expectedSecret) {
+    return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 })
   }
 
   // ── 2. ペイロードパース ──
@@ -151,6 +157,8 @@ export async function GET(
       value:       'object (vendor-specific)',
       occurred_at: 'ISO 8601 (optional)',
     },
-    auth:     process.env.ONVIF_WEBHOOK_SECRET ? 'Bearer token required' : 'open (no secret set)',
+    // 認証の設定状態は返さない。旧実装は未設定のとき 'open (no secret set)' と
+    // 自ら公開しており、開いている受け口の場所を教えるだけだった。
+    auth:     'Bearer token required',
   })
 }

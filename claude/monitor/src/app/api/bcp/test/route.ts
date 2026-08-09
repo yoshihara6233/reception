@@ -16,8 +16,15 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
+import { resolveMonitorScope } from '@/lib/tenant/monitor-scope'
 
 const VALID_ALERT_TYPES = ['tsunami', 'earthquake', 'missile'] as const
+
+/** テスト発令を実行してよいロール（viewer / baggage_manager は不可）。 */
+const TRIGGER_ROLES = ['super_admin', 'tenant_admin', 'store_manager']
+
+/** 対象半径の上限。無制限だと 1 リクエストで全店舗を対象にできてしまう。 */
+const MAX_RADIUS_KM = 500
 type AlertType = typeof VALID_ALERT_TYPES[number]
 
 interface StoreRow {
@@ -138,12 +145,28 @@ async function activateStore(
 }
 
 export async function POST(req: NextRequest) {
-  // Auth check only — use session-scoped client (RLS)
   const authSupa = await createSupabaseServer()
   const { data: { user } } = await authSupa.auth.getUser()
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
-  // All DB operations use service role to bypass RLS
+  // 旧実装はログイン確認だけで、その先を service role（RLS 迂回）で回していた。
+  // 対象店舗の抽出も全テナント横断（stores を無条件 select）だったため、
+  // **viewer でも他テナントの店舗にテスト発令を作れた**（半径にも上限が無く、
+  // radiusKm を大きくすれば 1 リクエストで全店舗が対象になった）。
+  // ロールと可視店舗の両方で絞る。
+  const scope = await resolveMonitorScope(authSupa)
+  if (!scope.ctx.role || !TRIGGER_ROLES.includes(scope.ctx.role)) {
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+  }
+  if (scope.needsTenant) {
+    // super_admin は操作中テナントを選んでから。誤って全社に撃たせない。
+    return NextResponse.json({ error: 'tenant_required' }, { status: 400 })
+  }
+  if (scope.storeIds.length === 0) {
+    return NextResponse.json({ error: 'no stores in scope' }, { status: 403 })
+  }
+
+  // 対象店舗を確定したうえで service role を使う（クリップ生成に必要なため）。
   const supa = createSupabaseService()
 
   let body: {
@@ -154,7 +177,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'invalid JSON' }, { status: 400 })
   }
 
-  const { lat, lng, radiusKm = 10, alertType, alertIssuedAt: rawAt } = body
+  const { lat, lng, radiusKm: rawRadius = 10, alertType, alertIssuedAt: rawAt } = body
+  const radiusKm = Math.min(Math.max(rawRadius, 0), MAX_RADIUS_KM)
 
   if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) {
     return NextResponse.json({ error: 'lat and lng are required' }, { status: 400 })
@@ -170,6 +194,7 @@ export async function POST(req: NextRequest) {
   const { data: allStores } = await supa
     .from('stores')
     .select('id, name, area_code, latitude, longitude')
+    .in('id', scope.storeIds)   // 可視店舗の外へは絶対に出さない
     .not('latitude', 'is', null)
     .not('longitude', 'is', null)
     .limit(10_000)
