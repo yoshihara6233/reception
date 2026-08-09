@@ -24,4 +24,10 @@ blob-report/
 
 # Stryker (変異テスト)
 .stryker-tmp/
-reports/
+# ⚠ **先頭の / を外さないこと。** `reports/` と書くと深さを問わず一致し、
+#   src/lib/reports/ や src/app/**/reports/ まで巻き込む（2026-08-09 の
+#   PR #286 で実際に巻き込み、src の 14 ファイルが .gitignore を尊重する
+#   ツール——ripgrep・エディタの検索・git add——から見えなくなっていた）。
+#   追跡済みのファイルは影響を受けないので気づけない。**新規ファイルだけが
+#   静かに追跡されない**という形で後から効いてくる。
+/reports/
