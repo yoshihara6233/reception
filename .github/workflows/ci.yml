@@ -175,13 +175,14 @@ jobs:
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
 
-  # ── ローカル Supabase を要する検査 (RLS メタ + ブラウザ E2E) ──────────────
+  # ── ローカル Supabase を要する検査 (スキーマのメタ検査 + ブラウザ E2E) ────
   #
   # 本番と同じ migration を当てた DB が要る 2 つをまとめて 1 job にする
   # （supabase start の起動コストを二重に払わないため）。
   #
-  # ① RLS メタ検査 … カタログを直接見る。RLS の有効化漏れ・無条件ポリシー・
-  #                   ビューの security_invoker・SECURITY DEFINER の search_path。
+  # ① スキーマのメタ検査 … カタログを直接見る。RLS の有効化漏れ・無条件ポリシー・
+  #                   ビューの security_invoker・SECURITY DEFINER の search_path、
+  #                   月次パーティションの残余と生成 cron の登録。
   #                   authz job は**手書きの近似スキーマ**に対して走るので、
   #                   本物のスキーマのこの手の抜けは見えない。
   # ② ブラウザ E2E … 画面を見る。メニューの出し分け・直 URL への到達・
@@ -216,12 +217,11 @@ jobs:
         working-directory: claude/monitor
         run: supabase db reset --no-seed   # seed は globalSetup が seed.example.sql を当てる
       # migration を当てた直後のカタログを見る。authz job（手書き近似スキーマ）
-      # では見られない「本物のスキーマ」の検査＝RLS の有効化漏れ・無条件ポリシー・
-      # ビューの security_invoker・SECURITY DEFINER の search_path。
+      # では見られない「本物のスキーマ」の検査。
       # ブラウザより先に走らせて、落ちたときの原因を切り分けやすくする。
-      - name: RLS メタ検査
+      - name: スキーマのメタ検査（RLS・パーティション）
         working-directory: claude/monitor
-        run: ./node_modules/.bin/vitest run --config vitest.rls-meta.config.ts
+        run: ./node_modules/.bin/vitest run --config vitest.schema-meta.config.ts
       - name: E2E (Playwright, 6 ロール)
         working-directory: claude/monitor
         run: ./node_modules/.bin/playwright test
