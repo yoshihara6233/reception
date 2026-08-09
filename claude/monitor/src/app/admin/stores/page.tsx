@@ -1,8 +1,11 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { AdminShell } from '@/components/AdminShell'
+import { AdminDenied } from '@/components/admin/AdminDenied'
 import { PageHeader, LinkBtn } from '@/components/admin/PageHeader'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { resolveAdminContext } from '@/lib/tenant/acting'
+import { requireAdmin } from '@/lib/admin/guard'
 import { getT } from '@/lib/i18n/server'
 
 interface Row {
@@ -22,6 +25,15 @@ export default async function StoresAdmin({
   searchParams: Promise<{ q?: string; area?: string }>
 }) {
   const { q, area } = await searchParams
+  // 店舗マスタは ADMIN_ROLES の持ち物。RLS が読み取り範囲を絞るので情報は
+  // 漏れないが、閲覧者(viewer)が「新規作成」「編集」の並ぶ保守画面に入れて
+  // いた（押しても API が 403 で断る＝押させてから断っていた）。
+  // 兄弟の /admin/users は最初からこの形。ここだけ抜けていた。
+  const guard = await requireAdmin()
+  if (!guard.ok) {
+    if (guard.status === 401) redirect('/login')
+    return <AdminDenied pathname="/admin/stores" />
+  }
   const supa = await createSupabaseServer()
   const t = await getT()
   const ts = t.adminStores

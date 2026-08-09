@@ -1,9 +1,21 @@
+import { redirect } from 'next/navigation'
 import { AdminShell } from '@/components/AdminShell'
+import { AdminDenied } from '@/components/admin/AdminDenied'
 import { PageHeader } from '@/components/admin/PageHeader'
+import { requireAdmin } from '@/lib/admin/guard'
 import { ImportForm } from './import-form'
 import { getT } from '@/lib/i18n/server'
 
 export default async function ImportPage() {
+  // 一括投入は店舗・カメラを作り替える操作。API 側（/api/admin/import/*）は
+  // requireAdmin で塞いであったが、**画面には何のロール判定も無かった**ため、
+  // 閲覧者(viewer)が投入フォームまで到達できていた（送信すれば 403）。
+  // 押した結果で断るのではなく、入口で断る。/admin/users・/admin/limits と同じ形。
+  const guard = await requireAdmin()
+  if (!guard.ok) {
+    if (guard.status === 401) redirect('/login')
+    return <AdminDenied pathname="/admin/import" />
+  }
   const t = await getT()
   return (
     <AdminShell pathname="/admin/import" section="admin">

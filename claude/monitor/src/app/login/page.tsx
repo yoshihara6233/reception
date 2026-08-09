@@ -16,6 +16,12 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError]       = useState<string | null>(null)
   const [busy, setBusy]         = useState(false)
+  // ハイドレーション完了フラグ。これが立つまで送信させない。
+  // 立てないと、素早く入力して Enter を押した利用者のリクエストが
+  // **React の onSubmit ではなく素の form の GET 送信**になり、入力欄が
+  // 空になった /login? に戻される（input に name が無いので値も消える）。
+  // 2026-08-09 の E2E 導入時に実際に踏んだ。
+  const [ready, setReady]       = useState(false)
 
   // QR target URL — populated after mount because we need window.location.
   // For localhost access we hint the user to use the LAN IP from a phone.
@@ -28,6 +34,7 @@ export default function LoginPage() {
     const cleanUrl = `${u.protocol}//${u.host}/login`
     setQrUrl(cleanUrl)
     setIsLocal(['localhost', '127.0.0.1', '0.0.0.0'].includes(u.hostname))
+    setReady(true)
   }, [])
 
   async function onSubmit(e: React.FormEvent) {
@@ -69,7 +76,7 @@ export default function LoginPage() {
 
           {error && <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
 
-          <button type="submit" disabled={busy}
+          <button type="submit" disabled={busy || !ready}
                   className="w-full rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50">
             {busy ? '認証中…' : 'ログイン'}
           </button>

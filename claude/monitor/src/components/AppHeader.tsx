@@ -141,7 +141,7 @@ export function AppHeader({
       </div>
 
       {/* Center: tab nav — desktop only */}
-      <nav className="hidden gap-1 text-xs md:flex">
+      <nav aria-label="モジュール" className="hidden gap-1 text-xs md:flex">
         {TABS.map((tab) => {
           const base   = tab.base ?? tab.href
           const active = pathname === base || pathname.startsWith(base + '/')

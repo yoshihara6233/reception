@@ -11,6 +11,8 @@ import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/serv
 import { resolveAdminContext } from '@/lib/tenant/acting'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
+import { AdminDenied } from '@/components/admin/AdminDenied'
+import { requireAdmin } from '@/lib/admin/guard'
 
 interface ChangeRow {
   id: number
@@ -62,9 +64,15 @@ export default async function AuditChangesPage({
   const page = Math.max(1, parseInt(pageStr ?? '1', 10))
   const offset = (page - 1) * PAGE_SIZE
 
+  // 設定の変更履歴も運用の記録＝ADMIN_ROLES の持ち物（/admin/audit と同じ）。
+  // 下の `ctx.role !== 'super_admin'` は**表示の絞り込み**であってガードではない。
+  // 見た目が似ているので取り違えやすい。判定はここで一度だけ行う。
+  const guard = await requireAdmin()
+  if (!guard.ok) {
+    if (guard.status === 401) redirect('/login')
+    return <AdminDenied pathname="/admin/audit" />
+  }
   const supa = await createSupabaseServer()
-  const { data: { user } } = await supa.auth.getUser()
-  if (!user) redirect('/login')
 
   // SaaS運営者（super_admin）の設定変更はテナント側に見せない。
   // クエリ段階で actor を除外し、ページング件数も正しく保つ。

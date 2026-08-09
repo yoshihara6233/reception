@@ -56,7 +56,10 @@ export function AdminShellClient({
               «
             </button>
           </div>
-          <nav className="p-2 text-xs">
+          {/* 1画面に nav が2つ（上部のモジュールタブとこの左メニュー）あるので
+              区別できる名前を付ける。読み上げでの迷子を防ぐのと、E2E から
+              「左メニューに何が出ているか」を名指しで見るのに要る。 */}
+          <nav aria-label="セクションメニュー" className="p-2 text-xs">
             {nav.map((e) => {
               // 区切り見出し（②運営管理 等）: リンクではなくラベルのみ描画。
               if (e.heading) {

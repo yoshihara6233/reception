@@ -13,3 +13,11 @@ next-env.d.ts
 supabase/.temp/
 supabase/.branches/
 supabase/seed.sql
+
+# Playwright (E2E)
+# .auth はログイン済みセッション＝実質的な資格情報。ローカル使い捨てでも commit しない。
+e2e/.auth/
+test-results/
+playwright-report/
+blob-report/
+.playwright/

@@ -1,6 +1,8 @@
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
+import { AdminDenied } from '@/components/admin/AdminDenied'
+import { requireAdmin } from '@/lib/admin/guard'
 import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { resolveAdminContext } from '@/lib/tenant/acting'
 import { getStoreOptionAvailability, type StoreOptionAvailability } from '@/lib/admin/tenant-quota'
@@ -10,6 +12,13 @@ export default async function StoreEdit(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params
+  // 店舗の編集画面。一覧(/admin/stores)と同じく ADMIN_ROLES の持ち物だが、
+  // ここは notFound()（＝店舗が無い）しか見ておらず、ロール判定が無かった。
+  const guard = await requireAdmin()
+  if (!guard.ok) {
+    if (guard.status === 401) redirect('/login')
+    return <AdminDenied pathname="/admin/stores" />
+  }
   const supa = await createSupabaseServer()
   const { data: store } = await supa
     .from('stores')

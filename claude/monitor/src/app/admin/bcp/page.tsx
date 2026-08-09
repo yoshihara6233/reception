@@ -8,10 +8,13 @@
  *   - 録画前後分・通知先
  * 条件未満の発令も /bcp/jalerts の受信履歴には残る（録画を起動しないだけ）。
  */
+import { redirect } from 'next/navigation'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { resolveAdminContext } from '@/lib/tenant/acting'
 import { AdminShell } from '@/components/AdminShell'
+import { AdminDenied } from '@/components/admin/AdminDenied'
 import { PageHeader } from '@/components/admin/PageHeader'
+import { requireAdmin } from '@/lib/admin/guard'
 import { type BcpStoreSetting } from './BcpSettingsForm'
 import { BcpSettingsTable } from './BcpSettingsTable'
 
@@ -27,6 +30,13 @@ interface SettingRow {
 }
 
 export default async function AdminBcpPage() {
+  // 発動条件は設定＝ADMIN_ROLES の持ち物。書き込みは bcp_settings_modify の
+  // RLS が拒むが、閲覧者(viewer)が設定画面自体に入れてしまっていた。
+  const guard = await requireAdmin()
+  if (!guard.ok) {
+    if (guard.status === 401) redirect('/login')
+    return <AdminDenied pathname="/admin/bcp" />
+  }
   const supa = await createSupabaseServer()
 
   // BCP発動条件は店舗別＝①設定プレーン。操作中テナント（tenant_admin=自テナント /
