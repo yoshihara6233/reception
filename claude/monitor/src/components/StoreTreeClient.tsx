@@ -1,6 +1,6 @@
 'use client'
 
-import Link from 'next/link'
+import Link, { useLinkStatus } from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Siren } from 'lucide-react'
 import { deriveEdgeStatus } from '@/lib/edge-status'
@@ -31,6 +31,36 @@ interface StoreRow {
 }
 
 /** TC3: last_seen 鮮度を真実源にツリードットの色を決める（監視中断=赤）。 */
+/**
+ * 店舗ツリーの 1 行。**必ず `<Link>` の内側で使う**（useLinkStatus は Link 配下でのみ働く）。
+ *
+ * 2026-08-09: 遷移が遅かった頃はページ全体のスケルトン(loading.tsx)で待ちを見せていたが、
+ * 往復削減と東京リージョン化で 0.4〜0.6 秒になり、骨組みの点滅の方が目障りになった。
+ * スケルトンは廃し、代わりに**押した行を即座に選択表示へ切り替える**だけにする。
+ * 画面は前のまま保たれるので、レイアウトが跳ねない。
+ */
+function StoreRow({
+  name, dotColor, active, alert,
+}: { name: string; dotColor: string; active: boolean; alert: boolean }) {
+  const { pending } = useLinkStatus()
+  const on = active || pending
+  return (
+    <span
+      className={
+        'flex items-center gap-2 px-3 py-1 pl-7 ' +
+        (on ? 'bg-blue-100 font-semibold text-blue-800' : 'hover:bg-slate-100')
+      }
+      aria-busy={pending || undefined}
+    >
+      <span className="block h-2 w-2 flex-shrink-0 rounded-full" style={{ background: dotColor }} />
+      <span className="flex-1 truncate">{name}</span>
+      {alert && (
+        <Siren size={11} strokeWidth={1.5} className="flex-shrink-0 text-red-500" aria-label="直近24h以内にBCPアラート発令" />
+      )}
+    </span>
+  )
+}
+
 function treeDotColor(dev: { status: string; last_seen_at: string | null } | undefined): string {
   const d = deriveEdgeStatus(dev?.status, dev?.last_seen_at)
   if (d.plane === 'interrupted') return '#A3332B'
@@ -173,24 +203,13 @@ export function TreeClient({
                   const dotColor = treeDotColor(s.edge_devices?.[0])   // TC3: 派生色
                   const active = s.id === selectedId
                   return (
-                    <Link
-                      key={s.id}
-                      href={`/stores/${s.id}`}
-                      className={
-                        'flex items-center gap-2 px-3 py-1 pl-7 ' +
-                        (active
-                          ? 'bg-blue-100 font-semibold text-blue-800'
-                          : 'hover:bg-slate-100')
-                      }
-                    >
-                      <span
-                        className="block h-2 w-2 flex-shrink-0 rounded-full"
-                        style={{ background: dotColor }}
+                    <Link key={s.id} href={`/stores/${s.id}`} className="block">
+                      <StoreRow
+                        name={s.name}
+                        dotColor={dotColor}
+                        active={active}
+                        alert={alertSet.has(s.id)}
                       />
-                      <span className="flex-1 truncate">{s.name}</span>
-                      {alertSet.has(s.id) && (
-                        <Siren size={11} strokeWidth={1.5} className="flex-shrink-0 text-red-500" aria-label="直近24h以内にBCPアラート発令" />
-                      )}
                     </Link>
                   )
                 })}
