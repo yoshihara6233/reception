@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { sendEmail, passwordResetEmail, SECURITY_FROM_ADDRESS } from '@/lib/email/send'
+import { rateLimitAllows, clientIp } from '@/lib/rate-limit'
+
+/**
+ * 回数制限。認証の入口なので閉じられない＝回数で縛るしかない。
+ *   メール単位: 特定の受信箱への爆撃を止める。正規の人が押し直す分（3 回/時）は通す。
+ *   IP 単位   : 宛先を変えながら大量に投げて Resend の枠を焼く経路を止める。
+ */
+const PER_EMAIL_LIMIT = 3
+const PER_IP_LIMIT    = 10
+const WINDOW_SECONDS  = 3600
 
 export const dynamic = 'force-dynamic'
 
@@ -49,6 +59,20 @@ export async function POST(req: NextRequest) {
 
   try {
     const supabase = createSupabaseService()
+
+    // 上限超過でも本文は generic（存在有無も、弾いたことも教えない）。
+    // 429 を返すと「この宛先は実在する」の手掛かりになりうるため 200 のまま黙って落とす。
+    const ip = clientIp(req)
+    const okEmail = await rateLimitAllows(
+      supabase, `reset-link:email:${email.toLowerCase()}`, PER_EMAIL_LIMIT, WINDOW_SECONDS)
+    const okIp = ip
+      ? await rateLimitAllows(supabase, `reset-link:ip:${ip}`, PER_IP_LIMIT, WINDOW_SECONDS)
+      : true
+    if (!okEmail || !okIp) {
+      console.warn('[reset-link] rate limited:', okEmail ? 'ip' : 'email')
+      return generic
+    }
+
     const { data, error } = await supabase.auth.admin.generateLink({
       type: 'recovery',
       email,
