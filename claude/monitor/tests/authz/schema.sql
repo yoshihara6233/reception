@@ -56,7 +56,10 @@ create table public.stores (
 create table public.admin_users (
   id           uuid primary key default gen_random_uuid(),
   auth_user_id uuid references auth.users(id) on delete cascade,
-  role         text not null check (role in ('super_admin','tenant_admin','store_manager')),
+  -- 本番 admin_users_role_check の転記（20260809160000 で baggage_manager を追加）。
+  -- store_manager / baggage_manager / viewer はいずれも「担当店舗(store_ids)のみ」の
+  -- 店舗限定ロール（src/lib/tenant/acting.ts の STORE_SCOPED_ROLES と同じ集合）。
+  role         text not null check (role in ('super_admin','tenant_admin','store_manager','baggage_manager','viewer')),
   tenant_id    uuid,
   store_ids    uuid[] not null default '{}'
 );
@@ -230,14 +233,17 @@ create policy tenants_select on public.tenants
       and (u.role = 'super_admin' or u.tenant_id = tenants.id))
   );
 
--- stores: super_admin=全件 / tenant_admin=自テナント / store_manager=store_ids(意図モデル)。
+-- stores: 20260723150000_stores_select_store_scope.sql の転記。
+-- super_admin=全件 / tenant_admin=自テナント / それ以外=担当店舗(store_ids)のみ。
+-- **store_ids 節はロール非依存**。store_manager だけに限定すると viewer /
+-- baggage_manager が自店舗すら見えないモデルになり、本番と食い違う。
 create policy stores_select on public.stores
   for select using (
     exists (select 1 from public.admin_users u where u.auth_user_id = auth.uid()
       and (
         u.role = 'super_admin'
         or (u.role = 'tenant_admin' and u.tenant_id = stores.tenant_id)
-        or (u.role = 'store_manager' and stores.id = any(u.store_ids))
+        or stores.id = any(u.store_ids)
       ))
   );
 
