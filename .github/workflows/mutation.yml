@@ -15,8 +15,9 @@ on:
   schedule:
     - cron: '0 19 * * 1'   # 毎週月曜 04:00 JST（Security の定期スキャンと1時間ずらす）
   workflow_dispatch:
+  # base で絞らない（ci.yml の同じ箇所を参照）。paths での絞り込みは
+  # 意図どおりなので残す——base による絞り込みだけが誤りだった。
   pull_request:
-    branches: [main, develop, monitor-prod]
     paths:
       # 設定そのものを変えた PR では走らせる（設定の変更は CI で確かめる）。
       - 'claude/monitor/stryker.config.mjs'
