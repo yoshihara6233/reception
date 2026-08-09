@@ -1,6 +1,17 @@
 import './globals.css'
 // Genesis Edge デザインシステムのフォント（self-host=@fontsource・ビルド堅牢）。
-// 本文 Noto Sans JP / 欧文見出し Inter Tight / 数字・コード IBM Plex Mono / 章扉 Noto Serif JP。
+// 本文 Noto Sans JP / 欧文見出し Inter Tight / 数字・コード IBM Plex Mono。
+//
+// 日本語フォントは 1 ウェイトあたり @font-face 124 件に分割されている（unicode-range
+// 単位）。**これは意図した形で、まとめてはいけない**。ブラウザは実際に使う字が入った
+// 塊だけを取りに行くため、実測で 61 ファイル ≒ 760 KB に収まる。fontsource の
+// 一体版（japanese-400.css）に替えると 1 ウェイト 994 KB × 3 ≒ 3 MB を必ず全部
+// 落とすことになり、4 倍悪化する。`font-display: swap` 済みで描画はブロックしない。
+//
+// 章扉用の Noto Serif JP は**どこからも参照されていなかった**ため 2026-08-09 に削除。
+// 生 107 KB（brotli 18 KB）・@font-face 124 件がまるごと無駄になっていた。依存も外して
+// あるので、再び使うときは `bun add @fontsource/noto-serif-jp` からやり直し、globals.css
+// の --font-ge-serif / --ge-font-serif（今は端末標準の明朝）とセットで戻すこと。
 import '@fontsource/noto-sans-jp/400.css'
 import '@fontsource/noto-sans-jp/500.css'
 import '@fontsource/noto-sans-jp/700.css'
@@ -8,7 +19,6 @@ import '@fontsource/inter-tight/500.css'
 import '@fontsource/inter-tight/600.css'
 import '@fontsource/ibm-plex-mono/400.css'
 import '@fontsource/ibm-plex-mono/500.css'
-import '@fontsource/noto-serif-jp/400.css'
 import type { Metadata, Viewport } from 'next'
 import Script from 'next/script'
 import { SwRegister } from '@/components/SwRegister'
