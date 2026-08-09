@@ -12,8 +12,17 @@ name: CI
 on:
   push:
     branches: [main, develop, monitor-prod]
+  # ⚠ **pull_request に base の絞り込みを付けない**（2026-08-10 是正）。
+  #
+  # 以前は `branches: [main, develop, monitor-prod]` を付けていたため、
+  # **機能ブランチ宛の PR では CI が 1 つも起動しなかった**。積んだ PR
+  # （PR B の base が PR A のブランチ、という形）がまさにこれで、実例として
+  # PR #286 はチェック 0 件のまま「緑」に見えていた。土台の PR を squash した
+  # 後にコンフリクトへ変わって初めて気づく、という壊れ方をする。
+  #
+  # push 側の絞り込みは正しい（機能ブランチへの push まで全部回すのは無駄で、
+  # そこは PR イベントが受け持つ）。**落としてよいのは push だけ。**
   pull_request:
-    branches: [main, develop, monitor-prod]
 
 # 同じ branch の古い run はキャンセル (PR への連打対応)
 concurrency:

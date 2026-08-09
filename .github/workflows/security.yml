@@ -7,8 +7,9 @@ name: Security
 on:
   push:
     branches: [monitor-prod]
+  # base で絞らない（ci.yml の同じ箇所を参照）。積んだ PR に
+  # 依存監査も SAST も掛からないまま通っていた。
   pull_request:
-    branches: [monitor-prod]
   schedule:
     - cron: '0 18 * * 1'   # 毎週月曜 03:00 JST 定期スキャン
 
