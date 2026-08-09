@@ -79,7 +79,25 @@ export async function POST(
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
-  // 2. Service role for DB ops (bypass RLS)
+  // 2. 可視性の判定は RLS に任せる（bcp_events_select: super_admin=全件 /
+  //    tenant_admin=自テナント / それ以外=担当店舗）。**service role を使う前に**
+  //    セッションクライアントで 1 回引き、見えない ID はここで落とす。
+  //
+  //    旧実装はログイン確認だけで直に service role へ移り、bcp_events を
+  //    ID 一本で引いていた。イベントIDさえ分かれば誰でも他テナントのレポート
+  //    （店舗名・住所・発令内容・クリップ）を生成・取得できた。
+  //
+  //    403 ではなく 404 を返すのは、見えない ID の「存在」を教えないため。
+  const { data: visible } = await authSupa
+    .from('bcp_events')
+    .select('id')
+    .eq('id', eventId)
+    .maybeSingle()
+  if (!visible) {
+    return NextResponse.json({ error: 'event_not_found' }, { status: 404 })
+  }
+
+  // 3. Service role for DB ops (bypass RLS)
   const supa = createSupabaseService()
 
   try {

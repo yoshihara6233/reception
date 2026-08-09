@@ -71,6 +71,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'missing_fields' }, { status: 400 })
     }
 
+    // 店舗の可視性を RLS に確認させる（stores_select）。
+    // 旧実装は storeId を無検証で受けており、他テナントの店舗IDを渡すと
+    // その行が作れた。映像自体は別経路で守られているので開示にはならないが、
+    // **他テナントの同時視聴枠を消費できた**（下の集計はテナント単位で数える）。
+    const { data: visibleStore } = await supa
+      .from('stores')
+      .select('id')
+      .eq('id', body.storeId)
+      .maybeSingle()
+    if (!visibleStore) {
+      return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+    }
+
     // ── 上限の解決＋同時視聴上限の強制（F-10 / R1・live/vod のみ）───────────
     // テナント横断の同時数を正確に数えるため service client(RLSバイパス)で集計。
     // セッションの開始本人は自分のしか見えない(RLS)ので、ここはサーバ権限で数える。
