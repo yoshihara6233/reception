@@ -40,16 +40,34 @@ export interface EmbedPair {
  * **count は null → 0 として素通りする**。2026-08-10 に判明した
  * 同時視聴上限の不発動がこれ（live_sessions は月次パーティション化した
  * 時点で stores への外部キーを失っていた）。
+ *
+ * ⚠ **手で維持しないこと。** この表は embed-scan.ts による機械抽出と
+ *   1 対 1 で対応し、CI（embed-inventory.test.ts）がずれを検出する。
+ *   最初は `!inner` だけを目で拾って 5 組としていたが、実際は
+ *   **素の埋め込みまで含めて 20 組**あり、4 分の 3 を見落としていた
+ *   （危険度は `!inner` の有無と関係が無い）。file は代表 1 件。
  */
 export const EMBED_PAIRS: EmbedPair[] = [
-  { file: 'app/stores/page.tsx',                   from: 'patrol_findings',     to: 'patrol_runs' },
-  { file: 'app/api/cron/baggage-daily/route.ts',   from: 'inspection_settings', to: 'stores' },
-  { file: 'app/api/cron/security-patrol/route.ts', from: 'security_settings',   to: 'stores' },
-  { file: 'app/api/cron/security-report/route.ts', from: 'security_settings',   to: 'stores' },
-  { file: 'app/api/baggage/settings/route.ts',     from: 'recorder_cameras',    to: 'recorders' },
-  { file: 'app/api/baggage/settings/route.ts',     from: 'recorders',           to: 'edge_devices' },
-  { file: 'app/admin/baggage/page.tsx',            from: 'recorder_cameras',    to: 'recorders' },
-  { file: 'app/admin/baggage/page.tsx',            from: 'recorders',           to: 'edge_devices' },
+  { file: 'app/admin/audit/changes/page.tsx', from: 'admin_audit_log', to: 'stores' },
+  { file: 'app/alarms/page.tsx', from: 'alarm_events', to: 'recorder_cameras' },
+  { file: 'app/alarms/[id]/page.tsx', from: 'alarm_events', to: 'stores' },
+  { file: 'app/api/bcp/[id]/snapshots.zip/route.ts', from: 'bcp_clips', to: 'recorder_cameras' },
+  { file: 'app/api/bcp/[id]/snapshots.zip/route.ts', from: 'bcp_events', to: 'stores' },
+  { file: '../supabase/functions/jalert-poller/index.ts', from: 'bcp_settings', to: 'stores' },
+  { file: 'app/alarms/[id]/page.tsx', from: 'edge_devices', to: 'recorders' },
+  { file: 'app/api/cron/edge-health/route.ts', from: 'edge_devices', to: 'stores' },
+  { file: 'app/api/baggage/sessions/[id]/detail/route.ts', from: 'inspection_clips', to: 'recorder_cameras' },
+  { file: 'app/api/cron/baggage-daily/route.ts', from: 'inspection_sessions', to: 'employees' },
+  { file: 'app/api/cron/baggage-daily/route.ts', from: 'inspection_settings', to: 'stores' },
+  { file: 'app/api/security/patrol/[runId]/[cameraId]/snapshot/route.ts', from: 'patrol_findings', to: 'patrol_runs' },
+  { file: 'app/security/actions.ts', from: 'patrol_findings', to: 'recorder_cameras' },
+  { file: 'lib/security/patrol-report.ts', from: 'patrol_runs', to: 'stores' },
+  { file: 'app/admin/baggage/page.tsx', from: 'recorder_cameras', to: 'recorders' },
+  { file: 'app/admin/baggage/page.tsx', from: 'recorders', to: 'edge_devices' },
+  { file: 'app/alarms/[id]/page.tsx', from: 'recorders', to: 'recorder_cameras' },
+  { file: 'app/api/cron/security-patrol/route.ts', from: 'security_settings', to: 'stores' },
+  { file: 'app/admin/edges/new/page.tsx', from: 'stores', to: 'edge_devices' },
+  { file: 'app/admin/tenants/[id]/page.tsx', from: 'tenants', to: 'stores' },
 ]
 
 /**

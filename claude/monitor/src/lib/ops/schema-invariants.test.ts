@@ -73,11 +73,11 @@ describe('evaluateSchemaInvariants', () => {
   })
 
   it('★外部キー欠落は critical で、どのファイルが困るかを添える', () => {
-    // 400 が握り潰されて「0 件」になる形。受け取った人がその場で動けるように。
+    // 400 が握り潰されて「0 件」になる形。受け取った人がその場で動けるように、
+    // 代表ファイルを 1 件添える（同じ組を使う箇所は複数あるが、1 件辿れば十分）。
     const v = evaluateSchemaInvariants({ ...OK, missing_fk: ['security_settings→stores'] })
     expect(v.severity).toBe('critical')
     expect(v.problems[0]).toContain('security-patrol')
-    expect(v.problems[0]).toContain('security-report')
   })
 
   it('パーティション表の埋め込みは critical', () => {
@@ -108,21 +108,34 @@ describe('evaluateSchemaInvariants', () => {
 })
 
 describe('EMBED_PAIRS（台帳）', () => {
-  it('DB へ渡す形では from→to の重複を畳む', () => {
-    // recorder_cameras→recorders は 2 ファイルから使われている。
-    // 同じ問い合わせを 2 回させない。
-    const pairs = embedPairsForSql()
-    const keys = pairs.map((p) => `${p.from}→${p.to}`)
-    expect(new Set(keys).size).toBe(keys.length)
-    expect(keys.length).toBeLessThan(EMBED_PAIRS.length)
+  it('★組が重複していない（1 組 1 行）', () => {
+    // 台帳は embed-scan.ts の機械抽出と 1 対 1。重複があれば
+    // 抽出か手編集のどちらかが壊れている。
+    const keys = EMBED_PAIRS.map((p) => `${p.from}→${p.to}`)
+    expect(new Set(keys).size, '同じ組が 2 行あります').toBe(keys.length)
+    expect(embedPairsForSql()).toHaveLength(EMBED_PAIRS.length)
+  })
+
+  it('十分な数の組を見ている（`!inner` だけ見て 5 組に戻っていない）', () => {
+    // 最初の実装は表記だけを目で拾って 5 組としており、実際の 4 分の 1 だった。
+    expect(EMBED_PAIRS.length, '台帳が縮んでいます').toBeGreaterThanOrEqual(20)
   })
 
   it('台帳の各行にファイルが書かれている（どこを直すか分かる）', () => {
     for (const p of EMBED_PAIRS) {
-      expect(p.file, JSON.stringify(p)).toMatch(/^(app|lib|components)\//)
+      // src 相対。`../supabase/functions/...` は Edge Function 側
+      // （src だけ見ていて丸ごと外れていた範囲）。
+      expect(p.file, JSON.stringify(p)).toMatch(/^(app|lib|components|\.\.\/supabase)\//)
       expect(p.from).toMatch(/^[a-z_]+$/)
       expect(p.to).toMatch(/^[a-z_]+$/)
     }
+  })
+
+  it('★Edge Function 側の埋め込みも入っている', () => {
+    // supabase/functions/ を走査対象から外していたため、J-Alert ポーラーの
+    // `bcp_settings → stores` が検査から丸ごと漏れていた。
+    expect(EMBED_PAIRS.some((p) => p.file.includes('supabase/functions')),
+      'Edge Function 側が台帳にありません').toBe(true)
   })
 
   it('台帳の理由（NO_POLICY_OK）が空文字でない', () => {
