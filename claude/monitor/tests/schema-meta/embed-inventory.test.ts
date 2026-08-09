@@ -27,6 +27,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
 import { Pool } from 'pg'
+import { EMBED_PAIRS, type EmbedPair } from '../../src/lib/ops/schema-invariants'
 
 const pool = new Pool({
   connectionString: process.env.SUPABASE_DB_URL
@@ -36,29 +37,12 @@ afterAll(async () => { await pool.end() })
 
 const SRC = join(process.cwd(), 'src')
 
-interface Embed {
-  /** src からの相対パス */
-  file: string
-  /** 埋め込む側のテーブル（`from(...)` か、入れ子なら 1 つ外側の埋め込み） */
-  from: string
-  /** 埋め込まれる側 */
-  to: string
-}
-
 /**
- * 棚卸し表。**src に出てくる埋め込みと 1 対 1 で対応する。**
- * 増やしたらここに足す。足し忘れると下の突き合わせで落ちる。
+ * 棚卸し表は **src/lib/ops/schema-invariants.ts の EMBED_PAIRS が正**。
+ * 日次の本番監視（/api/cron/partition-health）が同じ台帳を見るので、
+ * ここで別に持つと**CI と本番監視がずれる**——今日いちばん潰したかった形。
  */
-const EXPECTED: Embed[] = [
-  { file: 'app/stores/page.tsx',                from: 'patrol_findings',     to: 'patrol_runs' },
-  { file: 'app/api/cron/baggage-daily/route.ts', from: 'inspection_settings', to: 'stores' },
-  { file: 'app/api/cron/security-patrol/route.ts', from: 'security_settings', to: 'stores' },
-  { file: 'app/api/cron/security-report/route.ts', from: 'security_settings', to: 'stores' },
-  { file: 'app/api/baggage/settings/route.ts',  from: 'recorder_cameras',    to: 'recorders' },
-  { file: 'app/api/baggage/settings/route.ts',  from: 'recorders',           to: 'edge_devices' },
-  { file: 'app/admin/baggage/page.tsx',         from: 'recorder_cameras',    to: 'recorders' },
-  { file: 'app/admin/baggage/page.tsx',         from: 'recorders',           to: 'edge_devices' },
-]
+const EXPECTED: EmbedPair[] = EMBED_PAIRS
 
 function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {

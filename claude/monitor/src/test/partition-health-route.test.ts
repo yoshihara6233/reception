@@ -17,14 +17,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({
   rpcResult: null as unknown,
+  /** schema_invariants() の戻り。partition_health() とは別物なので分けて持つ。 */
+  schemaResult: null as unknown,
   rpcError: null as { message: string } | null,
+  schemaError: null as { message: string } | null,
   emails: [] as { to: string | string[]; subject: string; html: string }[],
   webhooks: [] as string[],
 }))
 
+// ルートは 2 つの RPC を呼ぶ。**名前で分けないと、片方の答えをもう片方に
+// 返してしまい、テストが実物と違う形を見ることになる**。
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseService: () => ({
-    rpc: async () => ({ data: h.rpcResult, error: h.rpcError }),
+    rpc: async (name: string) => (name === 'schema_invariants'
+      ? { data: h.schemaResult, error: h.schemaError }
+      : { data: h.rpcResult, error: h.rpcError }),
   }),
 }))
 vi.mock('@/lib/email/send', () => ({
@@ -56,16 +63,38 @@ const HEALTHY = {
   },
 }
 
+/** 指摘ゼロのスキーマ。checked_at が無いと「監視自体が壊れた」判定になる。 */
+const HEALTHY_SCHEMA = {
+  checked_at: '2026-08-10T04:00:00Z',
+  rls_disabled: [],
+  no_policy: ['rate_limits', 'live_sessions_202608'],   // 台帳と正規表現で落ちる
+  secdef_bad_search_path: [],
+  missing_fk: [],
+  partitioned_embed: [],
+  unknown_embed_tables: [],
+}
+
+/** 本番で必須の env。未設定だと critical になるので、正常系では埋めておく。 */
+const REQUIRED_ENV = [
+  'NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY',
+  'SUPABASE_SERVICE_ROLE_KEY', 'CRON_SECRET', 'RESEND_API_KEY',
+]
+
 let savedSecret: string | undefined
 let savedEmails: string | undefined
+let savedEnv: Record<string, string | undefined> = {}
 
 beforeEach(() => {
   savedSecret = process.env.CRON_SECRET
   savedEmails = process.env.ALERT_EMAILS
   process.env.CRON_SECRET = SECRET
   process.env.ALERT_EMAILS = 'ops@example.com, oncall@example.com'
+  savedEnv = Object.fromEntries(REQUIRED_ENV.map((k) => [k, process.env[k]]))
+  for (const k of REQUIRED_ENV) process.env[k] = process.env[k] || 'set-for-test'
   h.rpcResult = HEALTHY
+  h.schemaResult = HEALTHY_SCHEMA
   h.rpcError = null
+  h.schemaError = null
   h.emails = []
   h.webhooks = []
 })
@@ -74,6 +103,10 @@ afterEach(() => {
   else process.env.CRON_SECRET = savedSecret
   if (savedEmails === undefined) delete process.env.ALERT_EMAILS
   else process.env.ALERT_EMAILS = savedEmails
+  for (const [k, v] of Object.entries(savedEnv)) {
+    if (v === undefined) delete process.env[k]
+    else process.env[k] = v
+  }
 })
 
 async function call(headers: Record<string, string> = { 'x-cron-secret': SECRET }) {
@@ -136,5 +169,53 @@ describe('/api/cron/partition-health', () => {
     const res = await call()
     expect(res.status).toBe(500)
     err.mockRestore()
+  })
+
+  // ── ここから、本番スキーマと env の点検（2026-08-10 追加）─────────────
+
+  it('★埋め込みの外部キーが欠けていたら鳴らす', async () => {
+    // 同時視聴上限が本番で一度も発動しなかった原因そのもの。
+    // 400 が握り潰されて「0 件」になるため、**本番では何も起きないように見える**。
+    h.schemaResult = { ...HEALTHY_SCHEMA, missing_fk: ['live_sessions→stores'] }
+    const res = await call()
+    expect((await res.json()).severity).toBe('critical')
+    expect(h.emails[0].subject).toContain('外部キー')
+    expect(h.webhooks[0]).toContain('live_sessions→stores')
+  })
+
+  it('★RLS が無効な表があれば鳴らす', async () => {
+    h.schemaResult = { ...HEALTHY_SCHEMA, rls_disabled: ['secret_table'] }
+    expect((await (await call()).json()).severity).toBe('critical')
+    expect(h.emails[0].html).toContain('secret_table')
+  })
+
+  it('★必須の環境変数が欠けていたら鳴らす', async () => {
+    // env-check の台帳は /admin のレポートに出しているが、**見に行かないと
+    // 気づけない**。鳴らす側に回す。
+    delete process.env.RESEND_API_KEY
+    const res = await call()
+    expect((await res.json()).severity).toBe('critical')
+    expect(h.emails[0].subject).toContain('RESEND_API_KEY')
+    // 値そのものは通知に載せない。
+    expect(h.emails[0].html).not.toContain('set-for-test')
+  })
+
+  it('スキーマ点検の結果が空なら「監視が壊れた」として鳴らす', async () => {
+    // checked_at が無い＝関数の想定と実際がずれている。黙って ok にしない。
+    h.schemaResult = {}
+    expect((await (await call()).json()).severity).toBe('critical')
+  })
+
+  it('schema_invariants が失敗したら 500', async () => {
+    h.schemaError = { message: 'boom' }
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect((await call()).status).toBe(500)
+    err.mockRestore()
+  })
+
+  it('パーティションの子と台帳のテーブルは「ポリシー無し」で鳴らさない', async () => {
+    // 事実としては返るが、判断側が落とす。ここが効かないと毎日誤報が出る。
+    expect((await (await call()).json()).severity).toBe('ok')
+    expect(h.emails).toHaveLength(0)
   })
 })
