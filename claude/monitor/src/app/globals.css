@@ -32,7 +32,10 @@
   --font-ge-sans:    "Noto Sans JP", system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "Yu Gothic UI", sans-serif;
   --font-ge-display: "Inter Tight", "Noto Sans JP", system-ui, sans-serif;
   --font-ge-mono:    "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
-  --font-ge-serif:   "Noto Serif JP", serif;
+  /* 章扉用。Noto Serif JP は未使用だったため 2026-08-09 に読み込みを外した（layout.tsx
+     参照）。使う場面が出たら `@fontsource/noto-serif-jp/400.css` を戻すこと。それまでは
+     端末標準の明朝へ落とす。 */
+  --font-ge-serif:   "Hiragino Mincho ProN", "Yu Mincho", serif;
 
   /* 既存: ダーク管制パレット(案A) */
   --color-gedbg:     #0E1013;
@@ -55,7 +58,7 @@
   --ge-font-sans: "Noto Sans JP", system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "Yu Gothic UI", sans-serif;
   --ge-font-display: "Inter Tight", "Noto Sans JP", system-ui, sans-serif;
   --ge-font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
-  --ge-font-serif: "Noto Serif JP", serif;
+  --ge-font-serif: "Hiragino Mincho ProN", "Yu Mincho", serif;   /* 上の --font-ge-serif と同じ理由 */
   --ge-shadow-focus: 0 0 0 3px rgba(44, 74, 126, 0.25);
 
   /* ベースキャンバスを GE 紙×墨に（Phase 1: 既存slate utilityは温存し段階移行）。 */
