@@ -5,7 +5,7 @@
  * Mobile:         Full-width content + bottom nav + slide-in StoreDrawer
  */
 import { redirect } from 'next/navigation'
-import { createSupabaseServer } from '@/lib/supabase/server'
+import { getServerClient, getSessionUser } from '@/lib/tenant/session'
 import { jmaIntensityLabel } from '@/lib/bcp/intensity'
 import { resolveTenantFeatures } from '@/lib/tenant/features'
 import { resolveAdminContext } from '@/lib/tenant/acting'
@@ -26,22 +26,35 @@ export async function AppShell({
   showDetail?: boolean
   children: React.ReactNode
 }) {
-  const supa = await createSupabaseServer()
-  const { data: { user } } = await supa.auth.getUser()
+  // 認証・admin_users・tenants は lib/tenant/session の cache() 済みヘルパ経由。
+  // 以前はここと resolveTenantFeatures と resolveAdminContext が別々に取得していて、
+  // 1クリックあたり auth.getUser()×4 / admin_users×2 / tenants×3 が直列に飛んでいた。
+  const supa = await getServerClient()
+  const user = await getSessionUser()
   if (!user) redirect('/login')
 
   const userName = user.user_metadata?.name ?? user.email ?? '不明'
 
-  // テナントのオプション機能（巡回/発報/検査）を解決してヘッダーの出し分けに使う。
-  const features = await resolveTenantFeatures(supa)
+  // 発報アラートは可視店舗の絞り込み結果に依存しないので、先に投げて後で待つ。
+  // PostgrestFilterBuilder は thenable で、then() が呼ばれるまで実際のリクエストは
+  // 飛ばない（変数に入れただけでは走らない）。ここで明示的にプロミス化して先行させる。
+  const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  const alertPromise = supa
+    .from('bcp_events')
+    .select('store_id, alert_type, alert_issued_at, area_code, max_intensity, is_test')
+    .gte('created_at', since24h)
+    .not('store_id', 'is', null)
+    .then((r) => r)
+
+  // features（ヘッダーの出し分け）と ctx（可視店舗の絞り込み）は同じ素材を使うため、
+  // cache() により実クエリは共有される。並列にしておけば待ち時間も重ならない。
+  const [features, ctx] = await Promise.all([
+    resolveTenantFeatures(),
+    resolveAdminContext(),
+  ])
 
   // 可視店舗をロールで絞る: 店舗マネージャ等は担当店舗のみ／tenant_admin はテナント／
   // super_admin は全店舗（操作中テナント選択時はそのテナント）。
-  const ctx = await resolveAdminContext(supa)
-
-  // Fetch store groups + recent BCP alert store IDs in parallel
-  const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-
   let storesQuery = supa
     .from('stores')
     .select('id, name, area_code, edge_devices ( status, last_seen_at )')
@@ -51,14 +64,7 @@ export async function AppShell({
   if (ctx.storeIds) storesQuery = storesQuery.in('id', ctx.storeIds)
   else if (ctx.tenantId) storesQuery = storesQuery.eq('tenant_id', ctx.tenantId)
 
-  const [storeRes, alertRes] = await Promise.all([
-    storesQuery,
-    supa
-      .from('bcp_events')
-      .select('store_id, alert_type, alert_issued_at, area_code, max_intensity, is_test')
-      .gte('created_at', since24h)
-      .not('store_id', 'is', null),
-  ])
+  const [storeRes, alertRes] = await Promise.all([storesQuery, alertPromise])
 
   const byArea = new Map<string, { id: string; name: string; area_code: string | null; edge_devices: { status: string; last_seen_at: string | null }[] | null }[]>()
   for (const s of (storeRes.data ?? []) as { id: string; name: string; area_code: string | null; edge_devices: { status: string; last_seen_at: string | null }[] | null }[]) {

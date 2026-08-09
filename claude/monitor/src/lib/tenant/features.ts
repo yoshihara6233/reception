@@ -1,8 +1,8 @@
 import 'server-only'
 import { cookies } from 'next/headers'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { createSupabaseService } from '@/lib/supabase/server'
 import { ACTING_TENANT_COOKIE } from '@/lib/tenant/acting'
+import { getAdminUserRow, getTenantRow } from '@/lib/tenant/session'
 
 /**
  * テナントが有効化しているオプション機能。Monitor + BCP は基本パックのため
@@ -24,36 +24,26 @@ export const ALL_FEATURES_ON: TenantFeatures = { patrol: true, alarm: true, bagg
  * - テナント配下ユーザー → 所属テナントの opt_* フラグに従う。
  * フラグは service client で読む（tenants RLS ＋ 監視admin の JWT tenant=NULL を回避）。
  */
-export async function resolveTenantFeatures(supa: SupabaseClient): Promise<TenantFeatures> {
+/**
+ * @param _supa 使用しない。呼び出し側の互換のために残している引数。
+ *   認証・admin_users・tenants の取得は lib/tenant/session の cache() 済みヘルパへ
+ *   集約した（同一リクエスト内で resolveAdminContext と素材を共有し、往復を減らす）。
+ */
+export async function resolveTenantFeatures(_supa?: SupabaseClient): Promise<TenantFeatures> {
   try {
-    const { data: { user } } = await supa.auth.getUser()
-    if (!user) return ALL_FEATURES_ON
-
-    const { data: me } = await supa
-      .from('admin_users')
-      .select('role, tenant_id')
-      .eq('auth_user_id', user.id)
-      .single()
+    const me = await getAdminUserRow()
     if (!me) return ALL_FEATURES_ON
 
     // super_admin は「操作中テナント」を選択している間だけ、そのテナントの
     // フラグでメニューを出し分ける（＝テナント視点で設定変更できる）。未選択は全ON。
-    let tenantId: string | null = null
-    if (me.role === 'super_admin') {
-      tenantId = (await cookies()).get(ACTING_TENANT_COOKIE)?.value ?? null
-    } else {
-      tenantId = me.tenant_id ?? null
-    }
+    const tenantId = me.role === 'super_admin'
+      ? ((await cookies()).get(ACTING_TENANT_COOKIE)?.value ?? null)
+      : (me.tenant_id ?? null)
     if (!tenantId) return ALL_FEATURES_ON
 
-    const svc = createSupabaseService()
-    const { data: tn, error } = await svc
-      .from('tenants')
-      .select('opt_patrol, opt_alarm, opt_baggage')
-      .eq('id', tenantId)
-      .single()
     // 列がまだ本番へ適用されていない場合など＝隠さない。
-    if (error || !tn) return ALL_FEATURES_ON
+    const tn = await getTenantRow(tenantId)
+    if (!tn) return ALL_FEATURES_ON
 
     return {
       patrol:  !!tn.opt_patrol,
