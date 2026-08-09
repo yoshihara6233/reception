@@ -96,7 +96,12 @@ supabase backups restore --project-ref <ref>   # 任意タイムスタンプへ�
 3. 検証: `/admin/edges` でエッジがオンライン復帰・監視画面が正常。
 4. **⚠ バックアップに乗らないもの（2026-08-01 東京移行の実弾教訓）**を手で再構築する:
    - **Vault secrets**: `project_url` / `service_role_key` / `app_url` / `bcp_webhook_secret`（無いと J-Alert ポーリングと BCP PDF 自動生成が**黙って**止まる）。
-   - **pg_cron ジョブ**（5本: jalert_poll / bcp_report_sweep / patrol 系 / cleanup 系）— `select jobname, schedule, active from cron.job;` で確認。
+   - ~~**pg_cron ジョブ**~~ → **2026-08-09 に migration 化済み**（`20260810020000_core_cron_jobs.sql` ほか）。
+     `supabase db push` で 6 本すべて自動復活する（jalert_poll / bcp_report_sweep /
+     monitor_sweep_edges / monitor_sweep_unattended_streams / live_sessions_partition /
+     monitor_results_partition）。**手作業は不要になった。**
+     確認は `select jobname, schedule, active from cron.job;`。日次の
+     `/api/cron/partition-health` が欠落を検出してメール+webhook で鳴らす。
    - 点検 SQL・復旧手順の詳細はメモリ/過去実績（2026-08-01 BCP 沈黙障害）を参照。
 
 ### 3.5 データ復旧訓練 — 2026-08-03 実施結果と、そこで潰した障害

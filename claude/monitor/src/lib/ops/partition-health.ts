@@ -53,6 +53,21 @@ export const PARTITION_JOBS: Record<string, string> = {
   monitor_results: 'monitor_results_partition',
 }
 
+/**
+ * パーティション以外の中核 cron ジョブ。**止まると何が起きるか**を添える
+ * （アラートを受け取った人が、直すべきかを自分で判断できるように）。
+ *
+ * ここを見張る理由はパーティションと同じで、**pg_cron のジョブは DB を移行しても
+ * 引き継がれない**こと。2026-08-01 の東京移行では BCP の自動 PDF が実際に沈黙し、
+ * 数日誰も気づかなかった。1 つでも欠けたら鳴らす。
+ */
+export const CORE_JOBS: Record<string, string> = {
+  jalert_poll:                      'J-Alert 受信（BCP 発令の入口）',
+  bcp_report_sweep:                 'BCP レポートの自動生成',
+  monitor_sweep_edges:              'エッジ死活の掃き出し',
+  monitor_sweep_unattended_streams: '見放し配信の停止',
+}
+
 export function evaluatePartitionHealth(facts: PartitionHealthFacts): PartitionVerdict {
   const problems: string[] = []
   const runway: Record<string, number> = {}
@@ -94,7 +109,7 @@ export function evaluatePartitionHealth(facts: PartitionHealthFacts): PartitionV
   // pg_cron が無い環境（ローカル等）ではジョブの有無を問わない。
   // 本番で拡張ごと消えていたらそれ自体が critical。
   if (facts.pg_cron === false) {
-    problems.push('pg_cron 拡張がありません — パーティションは自動生成されません')
+    problems.push('pg_cron 拡張がありません — 定期処理がすべて動きません')
     raise('critical')
   } else {
     for (const table of WATCHED_TABLES) {
@@ -103,6 +118,14 @@ export function evaluatePartitionHealth(facts: PartitionHealthFacts): PartitionV
         // 残余があっても、作る人が居なければ数ヶ月後に必ず尽きる。
         // **DB を建て直すと pg_cron のジョブは消える**ので、これは実際に起きる。
         problems.push(`cron ジョブ ${job} が登録されていません（${table} の生成が止まります）`)
+        raise('critical')
+      }
+    }
+    // パーティション以外の中核ジョブ。こちらは「止まったら即座に機能が死ぬ」ので、
+    // 猶予という概念が無い。1 つでも欠けたら critical。
+    for (const [job, purpose] of Object.entries(CORE_JOBS)) {
+      if (facts.jobs?.[job] !== true) {
+        problems.push(`cron ジョブ ${job} が登録されていません（${purpose}が止まります）`)
         raise('critical')
       }
     }

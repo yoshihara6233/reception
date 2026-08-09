@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  CORE_JOBS,
   evaluatePartitionHealth,
   PARTITION_JOBS,
   WATCHED_TABLES,
@@ -24,10 +25,10 @@ function facts(over: Partial<PartitionHealthFacts> = {}): PartitionHealthFacts {
       live_sessions:   { last_partition: '202610', months_ahead: 2 },
       monitor_results: { last_partition: '202610', months_ahead: 2 },
     },
-    jobs: {
-      live_sessions_partition:   true,
-      monitor_results_partition: true,
-    },
+    // 期待するジョブが全部居る状態を既定にする（パーティション 2 + 中核 4）。
+    jobs: Object.fromEntries(
+      [...Object.values(PARTITION_JOBS), ...Object.keys(CORE_JOBS)].map((n) => [n, true]),
+    ),
     ...over,
   }
 }
@@ -107,12 +108,36 @@ describe('evaluatePartitionHealth', () => {
     expect(v.severity).toBe('critical')
   })
 
-  it('残余があってもジョブが消えていれば critical', () => {
+  it('中核ジョブ（J-Alert 受信など）が消えていれば critical', () => {
+    // 2026-08-01 の東京移行で BCP の自動 PDF が沈黙したのと同じ形。
+    // パーティションと違い猶予が無く、止まった瞬間に機能が死ぬ。
+    const v = evaluatePartitionHealth(facts({
+      jobs: { live_sessions_partition: true, monitor_results_partition: true,
+              bcp_report_sweep: true, monitor_sweep_edges: true,
+              monitor_sweep_unattended_streams: true },   // jalert_poll だけ欠落
+    }))
+    expect(v.severity).toBe('critical')
+    expect(v.problems.join()).toContain('jalert_poll')
+    expect(v.problems.join()).toContain('J-Alert 受信')
+  })
+
+  it('中核ジョブが全部消えていれば 4 件すべて指摘する', () => {
+    const v = evaluatePartitionHealth(facts({
+      jobs: { live_sessions_partition: true, monitor_results_partition: true },
+    }))
+    expect(v.severity).toBe('critical')
+    expect(v.problems).toHaveLength(Object.keys(CORE_JOBS).length)
+  })
+
+  it('残余があってもパーティション生成ジョブが消えていれば critical', () => {
     // **これが一番起きる形**。DB を建て直すと pg_cron のジョブは消えるので、
     // 「今は足りているから大丈夫」に見えたまま数ヶ月後に尽きる。
     // 2026-08-09 に monitor_results_partition が実際にこの状態だった。
     const v = evaluatePartitionHealth(facts({
-      jobs: { live_sessions_partition: true, monitor_results_partition: false },
+      jobs: Object.fromEntries([
+        ...Object.keys(CORE_JOBS).map((n) => [n, true]),
+        ['live_sessions_partition', true],
+      ]),
     }))
     expect(v.severity).toBe('critical')
     expect(v.problems.join()).toContain('monitor_results_partition')
@@ -121,7 +146,8 @@ describe('evaluatePartitionHealth', () => {
   it('jobs のキーが丸ごと欠けていても critical（未定義を正常と読まない）', () => {
     const v = evaluatePartitionHealth(facts({ jobs: {} }))
     expect(v.severity).toBe('critical')
-    expect(v.problems).toHaveLength(2)
+    // パーティション 2 + 中核 4
+    expect(v.problems).toHaveLength(2 + Object.keys(CORE_JOBS).length)
   })
 
   it('pg_cron 拡張ごと無ければ critical', () => {
@@ -133,11 +159,16 @@ describe('evaluatePartitionHealth', () => {
   })
 
   it('表が1つも見つからなければ critical（空を正常と読まない）', () => {
-    const v = evaluatePartitionHealth({ pg_cron: true, tables: {}, jobs: {
-      live_sessions_partition: true, monitor_results_partition: true,
-    } })
+    const v = evaluatePartitionHealth({
+      pg_cron: true,
+      tables: {},
+      jobs: Object.fromEntries(
+        [...Object.values(PARTITION_JOBS), ...Object.keys(CORE_JOBS)].map((n) => [n, true]),
+      ),
+    })
     expect(v.severity).toBe('critical')
-    expect(v.problems).toHaveLength(2)
+    // ジョブは全部居るので、指摘されるのは「表が無い」2 件だけ。
+    expect(v.problems).toHaveLength(WATCHED_TABLES.length)
   })
 
   it('空の事実を渡しても ok にならない', () => {
@@ -148,5 +179,12 @@ describe('evaluatePartitionHealth', () => {
   it('監視対象すべてに生成ジョブ名が定義されている', () => {
     // 表を足したのにジョブ名を書き忘れると、その表のジョブ欠落を検出できない。
     for (const t of WATCHED_TABLES) expect(PARTITION_JOBS[t]).toBeTruthy()
+  })
+
+  it('中核ジョブには「止まると何が起きるか」が添えてある', () => {
+    // アラートを受け取った人が、直すべきかを自分で判断できるように。
+    for (const [name, purpose] of Object.entries(CORE_JOBS)) {
+      expect(purpose, `${name} の説明が空です`).toBeTruthy()
+    }
   })
 })

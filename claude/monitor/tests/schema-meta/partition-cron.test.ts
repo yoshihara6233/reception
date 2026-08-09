@@ -18,7 +18,7 @@
 import { afterAll, describe, expect, it } from 'vitest'
 import { Pool } from 'pg'
 import {
-  evaluatePartitionHealth, PARTITION_JOBS, WATCHED_TABLES,
+  CORE_JOBS, evaluatePartitionHealth, PARTITION_JOBS, WATCHED_TABLES,
   type PartitionHealthFacts,
 } from '../../src/lib/ops/partition-health'
 
@@ -47,20 +47,24 @@ describe('パーティションと生成 cron', () => {
     }
   })
 
-  it('生成 cron が migration だけで登録される', async () => {
+  it('期待する cron ジョブがすべて migration だけで登録される', async () => {
     // ここが落ちたら「本番に手で作ったジョブ」に依存している。migration に書く。
+    //
+    // 2026-08-09 の時点では、本番で動いている 6 本のうち **4 本が
+    // migrations_archive/（db reset の対象外）にしか無かった**。本番は動いて
+    // いたので誰も困っていなかったが、DR で建て直すと J-Alert 受信すら
+    // 復旧しない状態だった。DR Runbook の「手で再構築する」項目そのもの。
     const h = await facts()
     if (h.pg_cron !== true) {
       // pg_cron 無しの環境ではジョブを問えない。**黙って通さず**理由を出す。
       throw new Error('pg_cron が入っていません。supabase db reset で作り直してください。')
     }
-    const missing = WATCHED_TABLES
-      .filter((t) => h.jobs?.[PARTITION_JOBS[t]] !== true)
-      .map((t) => `${PARTITION_JOBS[t]}（${t}）`)
+    const expected = [...Object.values(PARTITION_JOBS), ...Object.keys(CORE_JOBS)]
+    const missing = expected.filter((name) => h.jobs?.[name] !== true)
     expect(
       missing,
       'cron ジョブが migration から登録されていません。DB を建て直すと'
-      + 'このジョブは存在せず、数ヶ月後に書き込みが止まります:\n' + missing.join('\n'),
+      + 'このジョブは存在せず、対応する機能が黙って止まります:\n' + missing.join('\n'),
     ).toEqual([])
   })
 
