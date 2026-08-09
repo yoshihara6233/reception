@@ -151,6 +151,7 @@ const EXPECTED: Record<string, Guard> = {
   '/api/cron/baggage-daily': 'cron',
   '/api/cron/edge-health': 'cron',
   '/api/cron/monthly-report': 'cron',
+  '/api/cron/partition-health': 'cron',
   '/api/cron/security-patrol': 'cron',
   '/api/cron/security-report': 'cron',
   '/api/cron/sfu-reaper': 'cron',

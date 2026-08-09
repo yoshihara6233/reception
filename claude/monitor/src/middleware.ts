@@ -34,6 +34,12 @@ const ALLOW_PREFIXES = [
   '/baggage', '/kiosk',
   '/api/baggage', '/api/auth', '/api/server-time',
   '/login', '/logout', '/forgot-password', '/reset-password',
+  // Service Worker の本体。isStaticAsset は拡張子 .js を静的扱いしないので、
+  // これが無いと手荷物検査店長のときだけ /sw-v2.js が /baggage へリダイレクトされ、
+  // ブラウザが "script resource is behind a redirect" で登録を拒む。
+  // **iPad キオスクで使うのがまさにこのロール**で、PWA/オフラインが効かなくなる。
+  // 2026-08-09、E2E のログに出た registration failed から判明。
+  '/sw.js', '/sw-v2.js',
 ]
 
 function isAllowed(path: string): boolean {

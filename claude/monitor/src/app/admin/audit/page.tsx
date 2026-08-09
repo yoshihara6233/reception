@@ -11,6 +11,8 @@ import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/serv
 import { resolveAdminContext } from '@/lib/tenant/acting'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
+import { AdminDenied } from '@/components/admin/AdminDenied'
+import { requireAdmin } from '@/lib/admin/guard'
 import { AccessLogTable, type AccessRowVM } from './AccessLogTable'
 import { getT } from '@/lib/i18n/server'
 
@@ -39,8 +41,14 @@ export default async function AuditPage() {
   const t = await getT()
   const ta = t.adminAudit
 
-  const { data: { user } } = await supa.auth.getUser()
-  if (!user) redirect('/login')
+  // アクセスログは運用の記録＝ADMIN_ROLES の持ち物。閲覧者(viewer)は
+  // ログインさえしていれば読めていた（RLS でテナント内には絞られるが、
+  // 「誰がいつ何を見たか」は閲覧専用ロールに渡すものではない）。
+  const guard = await requireAdmin()
+  if (!guard.ok) {
+    if (guard.status === 401) redirect('/login')
+    return <AdminDenied pathname="/admin/audit" />
+  }
 
   // アクセスログは①設定プレーン＝操作中テナントに絞る（tenant_admin=自テナント /
   // super_admin=選択中テナント）。対象テナントの店舗IDでフィルタ。未選択の

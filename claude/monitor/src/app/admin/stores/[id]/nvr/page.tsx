@@ -10,10 +10,12 @@
  *
  * 旧パス /stores/[id]/nvr からの移設。AdminShell を使い admin 全体ナビと統合。
  */
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { Check, X } from 'lucide-react'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
+import { AdminDenied } from '@/components/admin/AdminDenied'
+import { requireAdmin } from '@/lib/admin/guard'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { CapabilityList } from '@/components/nvr/CapabilityList'
 import { LifecycleCard } from '@/components/nvr/LifecycleCard'
@@ -48,6 +50,12 @@ export default async function AdminStoreNvrPage(
 ) {
   const { id } = await params
   const { saved, error: errorMsg } = await searchParams
+  // レコーダ接続設定（資格情報を扱う）。ロール判定が無かった。
+  const guard = await requireAdmin()
+  if (!guard.ok) {
+    if (guard.status === 401) redirect('/login')
+    return <AdminDenied pathname="/admin/stores" />
+  }
   const supa = await createSupabaseServer()
 
   let store: StoreNvrRow | null = null
