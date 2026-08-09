@@ -27,6 +27,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import {
   parseAffectedPrefs,
   parseAreaCodes,
+  parseEventId,
   parseMaxIntensity,
   shouldTrigger,
   storeAreaIntensity,
@@ -277,7 +278,7 @@ async function processEntry(
   console.log(`[jalert-poller] New entry: ${entry.title} (${entry.id})`)
 
   // 5. Fetch detail XML and extract area codes + max intensity
-  const { areaCodes, maxIntensity, affectedPrefs } = await fetchDetail(entry.linkHref)
+  const { areaCodes, maxIntensity, affectedPrefs, eventId } = await fetchDetail(entry.linkHref)
   console.log(
     `[jalert-poller] Area codes: ${areaCodes.join(', ') || '(none)'}` +
     (maxIntensity ? `, MaxInt: ${maxIntensity}` : '') +
@@ -328,7 +329,7 @@ async function processEntry(
   // 7. 各店舗で自動取得＋通知
   for (const { store, settings, intensity } of triggeredStores) {
     try {
-      await processStore(supa, entry, store, settings, alertType, alertIssuedAt, areaCodes, intensity)
+      await processStore(supa, entry, store, settings, alertType, alertIssuedAt, areaCodes, intensity, eventId)
     } catch (err) {
       console.error(
         `[jalert-poller] Error processing store ${store.id} (${store.name}):`,
@@ -349,9 +350,13 @@ interface AlertDetail {
   maxIntensity: string | null
   /** JIS 都道府県コード → その県の観測震度。照合と発動判定はこちらを使う。 */
   affectedPrefs: Map<string, string | null>
+  /** JMA の地震識別子。同一地震の全電文で共通＝グルーピングと重複判定の鍵。 */
+  eventId: string | null
 }
 
-const EMPTY_DETAIL: AlertDetail = { areaCodes: [], maxIntensity: null, affectedPrefs: new Map() }
+const EMPTY_DETAIL: AlertDetail = {
+  areaCodes: [], maxIntensity: null, affectedPrefs: new Map(), eventId: null,
+}
 
 async function fetchDetail(linkHref: string): Promise<AlertDetail> {
   if (!linkHref) return EMPTY_DETAIL
@@ -367,6 +372,7 @@ async function fetchDetail(linkHref: string): Promise<AlertDetail> {
       areaCodes:     parseAreaCodes(xml),
       maxIntensity:  parseMaxIntensity(xml),
       affectedPrefs: parseAffectedPrefs(xml),
+      eventId:       parseEventId(xml),
     }
   } catch (err) {
     console.error('[jalert-poller] Detail fetch error:', err)
@@ -452,29 +458,42 @@ async function processStore(
   areaCodes: string[],
   /** この店舗の都道府県で観測された震度。電文全体の最大値ではない。 */
   storeIntensity: string | null,
+  /** JMA の地震識別子。同一地震の全電文で共通。JMA 以外の発令は null。 */
+  jmaEventId: string | null,
 ): Promise<void> {
   // 自動取得モデル: 発令を検知したら、現地レコーダから 8 枚スナップ(T-5〜T+30分)を
   // 自動取得 → アップロード → 自動PDF(bcp_report_sweep) → 完了メール、まで全自動。
   // 8 枚は軽量(JPEG)なので災害時でも実用的。連続動画(重い)は別途・手動取得とする。
 
-  // 同一地震の連続電文（震度速報 → 震源・震度情報 → 続報）で BCP が多重起動しないよう、
-  // 前後 15 分以内に同店舗・同種別の実イベントが既にあればスキップする。
-  // （entry.id が電文ごとに異なるため alert_source の dedup では防げない）
-  const DEDUP_WINDOW_MS = 15 * 60_000
-  const issuedMs = new Date(alertIssuedAt).getTime()
-  const { data: recentEvents } = await supa
+  // 同一地震の連続電文（震度速報 → 震源に関する情報 → 震源・震度情報 → 続報）で
+  // BCP が多重起動しないようにする。entry.id は電文ごとに異なるので alert_source の
+  // dedup では防げない。
+  //
+  // JMA の EventID があればそれで厳密に判定する。無い場合（JMA 以外の発令や
+  // EventID を持たない電文）だけ、従来どおり前後 15 分の時間窓へフォールバックする。
+  let dupQuery = supa
     .from('bcp_events')
     .select('id')
     .eq('store_id', store.id)
     .eq('alert_type', alertType)
     .eq('is_test', false)
-    .gte('alert_issued_at', new Date(issuedMs - DEDUP_WINDOW_MS).toISOString())
-    .lte('alert_issued_at', new Date(issuedMs + DEDUP_WINDOW_MS).toISOString())
-    .limit(1)
+
+  if (jmaEventId) {
+    dupQuery = dupQuery.eq('jma_event_id', jmaEventId)
+  } else {
+    const DEDUP_WINDOW_MS = 15 * 60_000
+    const issuedMs = new Date(alertIssuedAt).getTime()
+    dupQuery = dupQuery
+      .gte('alert_issued_at', new Date(issuedMs - DEDUP_WINDOW_MS).toISOString())
+      .lte('alert_issued_at', new Date(issuedMs + DEDUP_WINDOW_MS).toISOString())
+  }
+
+  const { data: recentEvents } = await dupQuery.limit(1)
 
   if (recentEvents && recentEvents.length > 0) {
     console.log(
-      `[jalert-poller] Store ${store.name}: 同一地震の続報とみなしスキップ（既存イベント ${recentEvents[0].id}）`,
+      `[jalert-poller] Store ${store.name}: 同一地震の続報とみなしスキップ`
+      + `（既存イベント ${recentEvents[0].id}${jmaEventId ? ` / EventID ${jmaEventId}` : ''}）`,
     )
     return
   }
@@ -495,6 +514,8 @@ async function processStore(
       area_code: areaCodes[0] ?? null,
       // 店舗ごとの観測震度。レポート/一覧はこの値を「その店舗が受けた揺れ」として表示する。
       max_intensity: storeIntensity,
+      // 同一地震の全電文で共通。一覧はこれでグルーピングし、2 行に割れるのを防ぐ。
+      jma_event_id: jmaEventId,
       status: 'pending',
       is_test: false,
     })

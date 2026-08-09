@@ -24,6 +24,8 @@ export interface BcpEventChild {
   alert_type:       string
   area_code:        string | null
   max_intensity:    string | null
+  /** JMA の地震識別子。同一地震の全電文で共通。2026-08-09 以前の行は null。 */
+  jma_event_id:     string | null
   store_id:         string | null
   store_name:       string | null
 }
@@ -90,10 +92,26 @@ interface AlertGroup {
   aggregated_status: string
 }
 
+/**
+ * グループキー。
+ *
+ * 1 つの地震に対し気象庁は複数の電文を出す（震度速報 → 震源に関する情報 →
+ * 震源・震度情報 → 続報）。電文ごとに alert_issued_at が違うため、従来の
+ * `alert_type|alert_issued_at|area_code` では**同じ地震が 2 行以上に割れて**いた
+ * （2026-08-01 02:49 に 18 店舗・02:52 に 24 店舗＝実際は 1 回の地震）。
+ * JMA の EventID は同一地震の全電文で共通なので、あればそれを鍵にする。
+ * 2026-08-09 以前の行と JMA 以外の発令は null なので従来キーへフォールバックする。
+ */
+function groupKeyOf(r: BcpEventChild): string {
+  return r.jma_event_id
+    ? `jma:${r.alert_type}|${r.jma_event_id}`
+    : `${r.alert_type}|${r.alert_issued_at}|${r.area_code ?? ''}`
+}
+
 function groupByAlert(rows: BcpEventChild[]): AlertGroup[] {
   const map = new Map<string, AlertGroup>()
   for (const r of rows) {
-    const key = `${r.alert_type}|${r.alert_issued_at}|${r.area_code ?? ''}`
+    const key = groupKeyOf(r)
     let g = map.get(key)
     if (!g) {
       g = {
@@ -113,6 +131,9 @@ function groupByAlert(rows: BcpEventChild[]): AlertGroup[] {
     if (intensityRank(r.max_intensity) > intensityRank(g.max_intensity)) {
       g.max_intensity = r.max_intensity
     }
+    // EventID でまとめると 1 グループに複数の電文（震度速報／震源震度情報）が入る。
+    // 親行の日時は「最初に検知した時刻」＝最も早い alert_issued_at を出す。
+    if (r.alert_issued_at < g.alert_issued_at) g.alert_issued_at = r.alert_issued_at
     g.stores.push(r)
   }
   // Compute aggregated status: failed > in_progress > partial > completed
