@@ -69,6 +69,7 @@ export default {
     'src/lib/ops/partition-health.ts',
     'src/lib/ops/tunnel-health.ts',
     'supabase/functions/jalert-poller/match.ts',
+    'supabase/functions/jalert-poller/flow.ts',
 
     // テスト自身は変異させない
     '!src/**/*.test.ts',

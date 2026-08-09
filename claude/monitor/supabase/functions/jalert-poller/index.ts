@@ -32,6 +32,15 @@ import {
   shouldTrigger,
   storeAreaIntensity,
 } from './match.ts'
+// 「流れ」の純ロジックは flow.ts へ切り出してある（vitest から読めるように）。
+// index.ts に残すのは fetch / DB / メールなど外に触る部分だけ。
+import {
+  classifyAlertType,
+  isRelevantEntry,
+  mergeFeedEntries,
+  resolveAreaScope,
+  type FeedEntry,
+} from './flow.ts'
 
 // ---------------------------------------------------------------------------
 // Config
@@ -59,13 +68,6 @@ const FROM_ADDRESS = 'bcp@genesis-edge.com'
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-interface FeedEntry {
-  id: string
-  title: string
-  updated: string
-  linkHref: string
-}
 
 interface BcpEvent {
   id: string
@@ -186,70 +188,7 @@ async function fetchFeed(url: string): Promise<string | null> {
 /** Fetch all configured feeds and merge their entries, deduped by entry id. */
 async function fetchAllEntries(): Promise<FeedEntry[]> {
   const xmls = await Promise.all(JMA_FEED_URLS.map((u) => fetchFeed(u)))
-  const byId = new Map<string, FeedEntry>()
-  for (const xml of xmls) {
-    if (!xml) continue
-    for (const entry of parseFeedEntries(xml)) {
-      if (!byId.has(entry.id)) byId.set(entry.id, entry)
-    }
-  }
-  return [...byId.values()]
-}
-
-function parseFeedEntries(xml: string): FeedEntry[] {
-  const entries: FeedEntry[] = []
-
-  // Simple regex-based parser for the Atom feed — Deno doesn't include a DOM parser.
-  // The JMA Atom feed uses consistent formatting, so this is reliable enough.
-  const entryRegex = /<entry[^>]*>([\s\S]*?)<\/entry>/g
-  let m: RegExpExecArray | null
-
-  while ((m = entryRegex.exec(xml)) !== null) {
-    const block = m[1]
-
-    const id = extractTag(block, 'id') ?? ''
-    const title = extractTag(block, 'title') ?? ''
-    const updated = extractTag(block, 'updated') ?? ''
-
-    // <link href="..."/> or <link rel="alternate" href="..."/>
-    const linkMatch = block.match(/<link[^>]+href="([^"]+)"/)
-    const linkHref = linkMatch?.[1] ?? ''
-
-    if (id) {
-      entries.push({ id, title, updated, linkHref })
-    }
-  }
-
-  return entries
-}
-
-/** Extract text content of the first matching tag */
-function extractTag(xml: string, tag: string): string | null {
-  const m = xml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`))
-  return m ? m[1].trim() : null
-}
-
-/**
- * J-Alert（地震・津波・ミサイル）の発令だけを通すタイトル許可リスト。
- *
- * 旧実装は RELEVANT_TYPES=['VPWW54','VXSE51'] で判定していたが、VPWW54 は「津波」では
- * なく「気象警報・注意報」だったため、平常時の気象警報が大量に混入していた（実データで確認）。
- * JMA の地震・津波・国民保護のタイトルは常に説明的なので、タイトルベースの方が確実。
- */
-function isRelevantEntry(entry: FeedEntry): boolean {
-  const t = entry.title
-
-  // 津波を最優先で判定（タイトルに「注意報」を含むため、気象の除外判定より先に通す）。
-  if (t.includes('津波')) return true
-
-  // 地震（震度速報・緊急地震速報・各種地震情報）。
-  if (t.includes('震度') || t.includes('緊急地震速報') || t.includes('地震')) return true
-
-  // 国民保護（弾道ミサイル等）。
-  if (t.includes('ミサイル') || t.includes('弾道') || t.includes('国民保護')) return true
-
-  // それ以外（気象警報・注意報、噴火など平常時の気象情報）は J-Alert 受信履歴に含めない。
-  return false
+  return mergeFeedEntries(xmls)
 }
 
 // ---------------------------------------------------------------------------
@@ -296,9 +235,8 @@ async function processEntry(
   // 津波・ミサイルの電文は津波予報区コード(3桁)しか持たず、JIS 都道府県を導出できない。
   // 3桁から先頭2桁を取るのは誤り（無関係な県に一致する）なので、ここでは安全側に倒して
   // 「全有効店舗を対象」とする。地震で都道府県が取れないのは異常なので対象なしとする。
-  const prefUnknown = affectedPrefs.size === 0
-  const areaWide = prefUnknown && (alertType === 'tsunami' || alertType === 'missile')
-  if (prefUnknown && alertType === 'earthquake') {
+  const { areaWide, quakeWithoutPref } = resolveAreaScope(alertType, affectedPrefs)
+  if (quakeWithoutPref) {
     console.warn('[jalert-poller] 地震電文から都道府県を抽出できませんでした（対象なしとして扱います）')
   }
   const areaStores = await findMatchingStores(supa, affectedPrefs, areaWide)
@@ -657,12 +595,6 @@ async function recordReceipt(
 }
 
 /** Determine alert type string from JMA title text */
-function classifyAlertType(title: string): string {
-  if (title.includes('津波')) return 'tsunami'
-  if (title.includes('震度') || title.includes('地震')) return 'earthquake'
-  if (title.includes('ミサイル') || title.includes('弾道')) return 'missile'
-  return title.slice(0, 50) // fallback: truncated raw title
-}
 
 // ---------------------------------------------------------------------------
 // Email sending
