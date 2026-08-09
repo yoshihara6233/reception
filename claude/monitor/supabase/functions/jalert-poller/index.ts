@@ -461,6 +461,17 @@ async function processStore(
     .single()
 
   if (eventError || !eventRows) {
+    // 23505 = unique_violation。上の重複判定をすり抜けた同時実行を、
+    // bcp_events_store_alert_event_uniq が最後に止めた形（20260810070000）。
+    // **これは異常ではなく、意図どおり二重起動を防いだ結果**なので、
+    // error として鳴らさない。障害ログに紛れると本物の失敗が埋もれる。
+    if ((eventError as { code?: string } | null)?.code === '23505') {
+      console.log(
+        `[jalert-poller] Store ${store.name}: 同時実行の重複を DB が抑止`
+        + `（EventID ${jmaEventId ?? '-'}）`,
+      )
+      return
+    }
     console.error(
       `[jalert-poller] Failed to insert bcp_events for store ${store.id}:`,
       eventError,
