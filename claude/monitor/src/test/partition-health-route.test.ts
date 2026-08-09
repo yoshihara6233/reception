@@ -45,7 +45,15 @@ const HEALTHY = {
     live_sessions:   { last_partition: '202610', months_ahead: 2 },
     monitor_results: { last_partition: '202610', months_ahead: 2 },
   },
-  jobs: { live_sessions_partition: true, monitor_results_partition: true },
+  jobs: {
+    live_sessions_partition: true, monitor_results_partition: true,
+    jalert_poll: true, bcp_report_sweep: true,
+    monitor_sweep_edges: true, monitor_sweep_unattended_streams: true,
+  },
+  vault: {
+    project_url: true, service_role_key: true,
+    app_url: true, bcp_webhook_secret: true,
+  },
 }
 
 let savedSecret: string | undefined
@@ -96,7 +104,7 @@ describe('/api/cron/partition-health', () => {
 
   it('異常ならメールと webhook の両方を出す', async () => {
     // **ここが本題**。以前はこの分岐を一度も通さずに「動いた」と判断していた。
-    h.rpcResult = { ...HEALTHY, jobs: { live_sessions_partition: true, monitor_results_partition: false } }
+    h.rpcResult = { ...HEALTHY, jobs: { ...HEALTHY.jobs, monitor_results_partition: false } }
     const res = await call()
     expect(res.status).toBe(200)
     expect((await res.json()).severity).toBe('critical')

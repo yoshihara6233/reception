@@ -18,8 +18,11 @@
 export interface PartitionHealthFacts {
   checked_at?: string
   pg_cron?: boolean
+  pg_net?: boolean
   tables?: Record<string, { last_partition?: string; months_ahead?: number }>
   jobs?: Record<string, boolean>
+  /** Vault に**存在する名前**だけ。値は決して入らない。 */
+  vault?: Record<string, boolean>
 }
 
 export type Severity = 'ok' | 'warn' | 'critical'
@@ -51,6 +54,39 @@ export const WATCHED_TABLES = ['live_sessions', 'monitor_results'] as const
 export const PARTITION_JOBS: Record<string, string> = {
   live_sessions:   'live_sessions_partition',
   monitor_results: 'monitor_results_partition',
+}
+
+/**
+ * パーティション以外の中核 cron ジョブ。**止まると何が起きるか**を添える
+ * （アラートを受け取った人が、直すべきかを自分で判断できるように）。
+ *
+ * ここを見張る理由はパーティションと同じで、**pg_cron のジョブは DB を移行しても
+ * 引き継がれない**こと。2026-08-01 の東京移行では BCP の自動 PDF が実際に沈黙し、
+ * 数日誰も気づかなかった。1 つでも欠けたら鳴らす。
+ */
+/**
+ * Vault に必ず在るべき秘密情報と、**無いと何が止まるか**。
+ *
+ * cron が登録されていても、これらが欠けると invoke_jalert_poller /
+ * bcp_sweep_pending_reports は `RAISE NOTICE` して `RETURN` する——
+ * **ログに一行出るだけで、外からは何も分からない**。
+ * 2026-08-01 の東京移行では実際に BCP の自動 PDF が沈黙し、数日気づかなかった。
+ *
+ * Vault はバックアップにも migration にも乗らない（値を書けない）ので、
+ * DR のたびに手で入れ直すしかない。**入れ忘れに気づける**ようにするのがここ。
+ */
+export const REQUIRED_VAULT_SECRETS: Record<string, string> = {
+  project_url:        'J-Alert 受信（Edge Function の呼び出し先）',
+  service_role_key:   'J-Alert 受信・検査クリップ生成（Edge Function の認証）',
+  app_url:            'BCP レポートの自動生成（webhook の宛先）',
+  bcp_webhook_secret: 'BCP レポートの自動生成（webhook の認証）',
+}
+
+export const CORE_JOBS: Record<string, string> = {
+  jalert_poll:                      'J-Alert 受信（BCP 発令の入口）',
+  bcp_report_sweep:                 'BCP レポートの自動生成',
+  monitor_sweep_edges:              'エッジ死活の掃き出し',
+  monitor_sweep_unattended_streams: '見放し配信の停止',
 }
 
 export function evaluatePartitionHealth(facts: PartitionHealthFacts): PartitionVerdict {
@@ -94,7 +130,7 @@ export function evaluatePartitionHealth(facts: PartitionHealthFacts): PartitionV
   // pg_cron が無い環境（ローカル等）ではジョブの有無を問わない。
   // 本番で拡張ごと消えていたらそれ自体が critical。
   if (facts.pg_cron === false) {
-    problems.push('pg_cron 拡張がありません — パーティションは自動生成されません')
+    problems.push('pg_cron 拡張がありません — 定期処理がすべて動きません')
     raise('critical')
   } else {
     for (const table of WATCHED_TABLES) {
@@ -105,6 +141,23 @@ export function evaluatePartitionHealth(facts: PartitionHealthFacts): PartitionV
         problems.push(`cron ジョブ ${job} が登録されていません（${table} の生成が止まります）`)
         raise('critical')
       }
+    }
+    // パーティション以外の中核ジョブ。こちらは「止まったら即座に機能が死ぬ」ので、
+    // 猶予という概念が無い。1 つでも欠けたら critical。
+    for (const [job, purpose] of Object.entries(CORE_JOBS)) {
+      if (facts.jobs?.[job] !== true) {
+        problems.push(`cron ジョブ ${job} が登録されていません（${purpose}が止まります）`)
+        raise('critical')
+      }
+    }
+  }
+
+  // Vault。cron が在っても、これが欠けると呼び出しは静かに空振りする。
+  // **cron の有無とは独立に**見る（pg_cron が無い環境でも Vault は問う）。
+  for (const [name, purpose] of Object.entries(REQUIRED_VAULT_SECRETS)) {
+    if (facts.vault?.[name] !== true) {
+      problems.push(`Vault の ${name} がありません（${purpose}が黙って止まります）`)
+      raise('critical')
     }
   }
 
