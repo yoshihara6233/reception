@@ -175,11 +175,17 @@ jobs:
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
 
-  # ── ブラウザ E2E (ロール別の画面境界) ────────────────────────────────────
+  # ── ローカル Supabase を要する検査 (RLS メタ + ブラウザ E2E) ──────────────
   #
-  # authz job が DB の行レベル権限を、api-guard-inventory がルートのガードを
-  # 見るのに対し、ここは**画面**を見る。メニューの出し分け・直 URL への到達・
-  # middleware のリダイレクトは、実際にブラウザで動かさないと分からない。
+  # 本番と同じ migration を当てた DB が要る 2 つをまとめて 1 job にする
+  # （supabase start の起動コストを二重に払わないため）。
+  #
+  # ① RLS メタ検査 … カタログを直接見る。RLS の有効化漏れ・無条件ポリシー・
+  #                   ビューの security_invoker・SECURITY DEFINER の search_path。
+  #                   authz job は**手書きの近似スキーマ**に対して走るので、
+  #                   本物のスキーマのこの手の抜けは見えない。
+  # ② ブラウザ E2E … 画面を見る。メニューの出し分け・直 URL への到達・
+  #                   middleware のリダイレクトは動かさないと分からない。
   #
   # ローカル Supabase を立てて migration を当て、supabase/seed.example.sql の
   # 6 ロールでログインする（seed.sql は各自の実験用で gitignore 済みなので使わない）。
@@ -209,6 +215,13 @@ jobs:
       - name: Apply migrations
         working-directory: claude/monitor
         run: supabase db reset --no-seed   # seed は globalSetup が seed.example.sql を当てる
+      # migration を当てた直後のカタログを見る。authz job（手書き近似スキーマ）
+      # では見られない「本物のスキーマ」の検査＝RLS の有効化漏れ・無条件ポリシー・
+      # ビューの security_invoker・SECURITY DEFINER の search_path。
+      # ブラウザより先に走らせて、落ちたときの原因を切り分けやすくする。
+      - name: RLS メタ検査
+        working-directory: claude/monitor
+        run: ./node_modules/.bin/vitest run --config vitest.rls-meta.config.ts
       - name: E2E (Playwright, 6 ロール)
         working-directory: claude/monitor
         run: ./node_modules/.bin/playwright test

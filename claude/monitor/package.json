@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:authz": "vitest run --config vitest.authz.config.ts",
+    "test:rls-meta": "vitest run --config vitest.rls-meta.config.ts",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "e2e:setup": "supabase start && supabase db reset",
