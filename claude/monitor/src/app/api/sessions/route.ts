@@ -17,17 +17,21 @@
  *     (UPDATE は INSERT した本人が auth.uid() でアクセスする限り通る)
  */
 import { NextResponse } from 'next/server'
-import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
+import { createSupabaseServer } from '@/lib/supabase/server'
 import { recordMetric } from '@/lib/metrics'
 
-// 同時視聴上限（F-10）。session_limits.max_concurrent 未設定時の既定。
-const DEFAULT_MAX_CONCURRENT = 5
-// R1: 1視聴セッションの最大継続分数。session_limits.max_session_min 未設定時の既定。
-const DEFAULT_MAX_SESSION_MIN = 120
-// これより古い未終了セッションは「閉じ忘れ(孤児)」とみなしカウント外（恒久ロックアウト防止）。
-const ACTIVE_WINDOW_MS = 6 * 60 * 60 * 1000
-// 上限の対象は帯域コストの高い live / vod のみ。grid(スナップ合成)は安価なので対象外。
-const LIMITED_MODES = ['live', 'vod']
+/**
+ * start_live_session() の戻り。**既定値・対象モード・孤児セッションの窓は
+ * すべて SQL 側に置いてある**（20260810050000_start_live_session.sql）。
+ * ここに定数を再掲すると、両側がずれても誰も気づけない。
+ */
+interface StartResult {
+  session_id:      string | null
+  active_count:    number
+  limit_max:       number
+  session_max_min: number | null
+  rejected:        boolean
+}
 
 interface StartBody {
   action:    'start'
@@ -84,66 +88,44 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'forbidden' }, { status: 403 })
     }
 
-    // ── 上限の解決＋同時視聴上限の強制（F-10 / R1・live/vod のみ）───────────
-    // テナント横断の同時数を正確に数えるため service client(RLSバイパス)で集計。
-    // セッションの開始本人は自分のしか見えない(RLS)ので、ここはサーバ権限で数える。
-    // あわせて max_session_min（1セッションの最大継続分数）を解決し、クライアントに返す。
-    let maxSessionMin: number | null = null
-    if (LIMITED_MODES.includes(body.mode)) {
-      maxSessionMin = DEFAULT_MAX_SESSION_MIN
-      const svc = createSupabaseService()
-      const { data: store } = await svc
-        .from('stores').select('tenant_id').eq('id', body.storeId).single()
-      const tenantId = (store as { tenant_id?: string } | null)?.tenant_id ?? null
-      if (tenantId) {
-        const { data: lim } = await svc
-          .from('session_limits')
-          .select('max_concurrent, max_session_min')
-          .eq('tenant_id', tenantId)
-          .maybeSingle()
-        const limit = lim as { max_concurrent?: number; max_session_min?: number } | null
-        const max = limit?.max_concurrent ?? DEFAULT_MAX_CONCURRENT
-        maxSessionMin = limit?.max_session_min ?? DEFAULT_MAX_SESSION_MIN
-        const sinceIso = new Date(Date.now() - ACTIVE_WINDOW_MS).toISOString()
-        const { count } = await svc
-          .from('live_sessions')
-          .select('id, stores!inner(tenant_id)', { count: 'exact', head: true })
-          .is('ended_at', null)
-          .gte('started_at', sinceIso)
-          .in('mode', LIMITED_MODES)
-          .eq('stores.tenant_id', tenantId)
-        const active = count ?? 0
-        if (active >= max) {
-          await recordMetric({
-            kind: 'session_rejected', storeId: body.storeId, userId: user.id,
-            value: active, meta: { limit: max, mode: body.mode },
-          })
-          return NextResponse.json(
-            { error: 'session_limit_reached', limit: max, active }, { status: 429 },
-          )
-        }
-      }
+    // ── 上限の判定と INSERT（F-10 / R1・live/vod のみ）──────────────────────
+    // **判定と作成は DB 関数に 1 トランザクションで任せる。**
+    // 旧実装はここで「数える → 入れる」を 2 往復に分けており、
+    //   ① 数える側の埋め込み(`stores!inner`)が外部キー不在で常に 400 を返す
+    //      → error を捨てていたため count は null → 0 → 上限が一度も発動しない
+    //   ② 直したとしても、数えてから入れるまでの隙で同時実行が全員通る
+    // の 2 つが同居していた。20260810050000_start_live_session.sql を参照。
+    const { data: started, error: startErr } = await supa
+      .rpc('start_live_session', {
+        p_store_id:  body.storeId,
+        p_mode:      body.mode,
+        p_camera_id: body.cameraId ?? null,
+        p_vod_from:  body.vodFrom ?? null,
+        p_vod_to:    body.vodTo ?? null,
+      })
+      .single<StartResult>()
+
+    // **フェイルクローズ。** 上限の判定ごと失敗しているので通してはいけない
+    // （旧実装がここを黙って通していたのが今回の穴そのもの）。
+    if (startErr || !started) {
+      console.error('[sessions/start] rpc failed:', startErr)
+      return NextResponse.json({ error: 'session_start_failed' }, { status: 500 })
     }
 
-    const { data, error } = await supa
-      .from('live_sessions')
-      .insert({
-        user_id:    user.id,
-        store_id:   body.storeId,
-        camera_id:  body.cameraId ?? null,
-        mode:       body.mode,
-        started_at: new Date().toISOString(),
-        vod_from:   body.vodFrom ?? null,
-        vod_to:     body.vodTo ?? null,
+    if (started.rejected) {
+      await recordMetric({
+        kind: 'session_rejected', storeId: body.storeId, userId: user.id,
+        value: started.active_count,
+        meta: { limit: started.limit_max, mode: body.mode },
       })
-      .select('id')
-      .single()
-    if (error) {
-      console.error('[sessions/start] insert failed:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json(
+        { error: 'session_limit_reached', limit: started.limit_max, active: started.active_count },
+        { status: 429 },
+      )
     }
-    // maxSessionMin は live/vod のみ非 null（grid は上限対象外）。
-    return NextResponse.json({ id: data.id, maxSessionMin })
+
+    // session_max_min は live/vod のみ非 null（grid は上限対象外）。
+    return NextResponse.json({ id: started.session_id, maxSessionMin: started.session_max_min })
   }
 
   if (body.action === 'end') {
