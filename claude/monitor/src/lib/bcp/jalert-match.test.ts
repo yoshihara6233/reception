@@ -237,3 +237,75 @@ describe('parseEventId（同一地震の名寄せ）', () => {
     expect(new Set(ids).size).toBe(1)
   })
 })
+
+/**
+ * 都道府県コードの境界と、震度の畳み込み。
+ *
+ * 2026-08-09 の変異テスト導入で見つかった穴。`isJisPref` の
+ * `n >= 1 && n <= 47` を `>` や `<` に変えても、`strongerIntensity` の
+ * `>` を `>=` に変えても、**どのテストも落ちなかった**。
+ *
+ * ここは 38 店舗への誤発報を生んだ領域そのもの。境界の 1 つ外側と内側を
+ * 必ず対にして固定する。
+ */
+describe('都道府県コードの境界（JIS 01〜47）', () => {
+  const prefXml = (code: string, maxInt?: string) =>
+    `<Pref><Code>${code}</Code>${maxInt ? `<MaxInt>${maxInt}</MaxInt>` : ''}</Pref>`
+
+  it('01（北海道）と 47（沖縄県）は都道府県として扱う', () => {
+    expect([...parseAffectedPrefs(prefXml('01', '4')).keys()]).toEqual(['01'])
+    expect([...parseAffectedPrefs(prefXml('47', '4')).keys()]).toEqual(['47'])
+  })
+
+  it('00 と 48 は都道府県ではない（範囲の 1 つ外側）', () => {
+    expect(parseAffectedPrefs(prefXml('00', '4')).size).toBe(0)
+    expect(parseAffectedPrefs(prefXml('48', '4')).size).toBe(0)
+  })
+
+  it('2 桁でないコードは都道府県として扱わない', () => {
+    // 細分区域コード（3桁）が紛れても県として採用しない。
+    expect(parseAffectedPrefs('<Pref><Code>462</Code><MaxInt>5+</MaxInt></Pref>').size).toBe(0)
+    expect(parseAffectedPrefs(prefXml('4', '4')).size).toBe(0)
+  })
+
+  it('市区町村コードは先頭 2 桁で県へ畳む', () => {
+    const xml = '<City><Code>43100</Code><MaxInt>5-</MaxInt></City>'
+    expect(parseAffectedPrefs(xml).get('43')).toBe('5-')
+  })
+})
+
+describe('同一県に複数の震度が来たとき', () => {
+  const two = (a: string, b: string) =>
+    parseAffectedPrefs(
+      `<Pref><Code>43</Code><MaxInt>${a}</MaxInt></Pref>` +
+      `<City><Code>43100</Code><MaxInt>${b}</MaxInt></City>`,
+    ).get('43')
+
+  it('強い方を残す', () => {
+    expect(two('3', '5+')).toBe('5+')
+    expect(two('5+', '3')).toBe('5+')
+  })
+
+  it('同じ強さなら先に採った方を保つ（無用な差し替えをしない）', () => {
+    expect(two('5+', '5+')).toBe('5+')
+  })
+
+  it('片方が未取得なら取得できている方を残す', () => {
+    expect(two('4', '')).toBe('4')
+  })
+})
+
+describe('storeAreaIntensity の境界', () => {
+  it('範囲外の県コードを持つ店舗は一致しない', () => {
+    const prefs = new Map([['00', '6+'], ['48', '6+']])
+    expect(storeAreaIntensity('00100', prefs).matched).toBe(false)
+    expect(storeAreaIntensity('48100', prefs).matched).toBe(false)
+  })
+
+  it('01 と 47 の店舗は一致する', () => {
+    expect(storeAreaIntensity('01100', new Map([['01', '4']])))
+      .toEqual({ matched: true, intensity: '4' })
+    expect(storeAreaIntensity('47201', new Map([['47', '4']])))
+      .toEqual({ matched: true, intensity: '4' })
+  })
+})

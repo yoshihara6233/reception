@@ -1,0 +1,49 @@
+# 変異テスト（mutation testing）。
+#
+# 実装をわざと壊し、テストが気づくかを機械的に測る。カバレッジが「実行されたか」
+# しか見ないのに対し、こちらは「壊したら落ちるか」を見る。
+#
+# **PR ごとには回さない。** 1 分弱かかるうえ、指摘は「テストを厚くする」という
+# 別作業になりがちで、PR を止める性質のものではない。週次で回して溜まった分を
+# まとめて見るほうが実態に合う。手動実行（workflow_dispatch）も可。
+#
+# 対象は認可・署名・可用性に関わるモジュールだけ（claude/monitor/stryker.config.mjs）。
+# 全部にかけると遅すぎて誰も回さなくなる。
+name: Mutation
+
+on:
+  schedule:
+    - cron: '0 19 * * 1'   # 毎週月曜 04:00 JST（Security の定期スキャンと1時間ずらす）
+  workflow_dispatch:
+  pull_request:
+    branches: [main, develop, monitor-prod]
+    paths:
+      # 設定そのものを変えた PR では走らせる（設定の変更は CI で確かめる）。
+      - 'claude/monitor/stryker.config.mjs'
+      - '.github/workflows/mutation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  mutation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.12
+      - name: Install dependencies (workspace)
+        run: bun install --frozen-lockfile
+      - name: Stryker
+        working-directory: claude/monitor
+        run: ./node_modules/.bin/stryker run
+      # 生き残った変異を 1 つずつ見るための HTML。落ちたときだけで十分。
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-report
+          path: claude/monitor/reports/mutation/
+          retention-days: 30

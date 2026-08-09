@@ -15,7 +15,13 @@ const config = [
   // Project ignores. (`.next/`, `out/`, `build/`, `next-env.d.ts` are already
   // ignored by eslint-config-next.)
   {
-    ignores: ['next.config.ts', 'postcss.config.mjs'],
+    ignores: [
+      'next.config.ts', 'postcss.config.mjs',
+      // Stryker（変異テスト）はソース一式を .stryker-tmp/sandbox-* に複製して
+      // そこを書き換える。lint がその複製まで拾うと、同じ警告が二重に出るうえ
+      // 「わざと壊したコード」に対する指摘まで混ざる。生成物は対象外。
+      '.stryker-tmp/**', 'reports/**',
+    ],
   },
 
   // ── 段階対応 (staged remediation) ──────────────────────────────────────

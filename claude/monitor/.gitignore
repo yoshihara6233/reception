@@ -21,3 +21,7 @@ test-results/
 playwright-report/
 blob-report/
 .playwright/
+
+# Stryker (変異テスト)
+.stryker-tmp/
+reports/
