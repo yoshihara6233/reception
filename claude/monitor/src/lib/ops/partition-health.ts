@@ -18,8 +18,11 @@
 export interface PartitionHealthFacts {
   checked_at?: string
   pg_cron?: boolean
+  pg_net?: boolean
   tables?: Record<string, { last_partition?: string; months_ahead?: number }>
   jobs?: Record<string, boolean>
+  /** Vault に**存在する名前**だけ。値は決して入らない。 */
+  vault?: Record<string, boolean>
 }
 
 export type Severity = 'ok' | 'warn' | 'critical'
@@ -61,6 +64,24 @@ export const PARTITION_JOBS: Record<string, string> = {
  * 引き継がれない**こと。2026-08-01 の東京移行では BCP の自動 PDF が実際に沈黙し、
  * 数日誰も気づかなかった。1 つでも欠けたら鳴らす。
  */
+/**
+ * Vault に必ず在るべき秘密情報と、**無いと何が止まるか**。
+ *
+ * cron が登録されていても、これらが欠けると invoke_jalert_poller /
+ * bcp_sweep_pending_reports は `RAISE NOTICE` して `RETURN` する——
+ * **ログに一行出るだけで、外からは何も分からない**。
+ * 2026-08-01 の東京移行では実際に BCP の自動 PDF が沈黙し、数日気づかなかった。
+ *
+ * Vault はバックアップにも migration にも乗らない（値を書けない）ので、
+ * DR のたびに手で入れ直すしかない。**入れ忘れに気づける**ようにするのがここ。
+ */
+export const REQUIRED_VAULT_SECRETS: Record<string, string> = {
+  project_url:        'J-Alert 受信（Edge Function の呼び出し先）',
+  service_role_key:   'J-Alert 受信・検査クリップ生成（Edge Function の認証）',
+  app_url:            'BCP レポートの自動生成（webhook の宛先）',
+  bcp_webhook_secret: 'BCP レポートの自動生成（webhook の認証）',
+}
+
 export const CORE_JOBS: Record<string, string> = {
   jalert_poll:                      'J-Alert 受信（BCP 発令の入口）',
   bcp_report_sweep:                 'BCP レポートの自動生成',
@@ -128,6 +149,15 @@ export function evaluatePartitionHealth(facts: PartitionHealthFacts): PartitionV
         problems.push(`cron ジョブ ${job} が登録されていません（${purpose}が止まります）`)
         raise('critical')
       }
+    }
+  }
+
+  // Vault。cron が在っても、これが欠けると呼び出しは静かに空振りする。
+  // **cron の有無とは独立に**見る（pg_cron が無い環境でも Vault は問う）。
+  for (const [name, purpose] of Object.entries(REQUIRED_VAULT_SECRETS)) {
+    if (facts.vault?.[name] !== true) {
+      problems.push(`Vault の ${name} がありません（${purpose}が黙って止まります）`)
+      raise('critical')
     }
   }
 

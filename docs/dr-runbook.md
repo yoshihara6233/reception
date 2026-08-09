@@ -95,7 +95,12 @@ supabase backups restore --project-ref <ref>   # 任意タイムスタンプへ�
 2. **エッジ**は `MONITOR_URL` 経由の bootstrap で**新URL/鍵を自動取得**（約5分）。急ぐ場合は `/home/intereco/edge/shared/agent.env` の該当値を更新して `sudo systemctl restart intereco-edge`。
 3. 検証: `/admin/edges` でエッジがオンライン復帰・監視画面が正常。
 4. **⚠ バックアップに乗らないもの（2026-08-01 東京移行の実弾教訓）**を手で再構築する:
-   - **Vault secrets**: `project_url` / `service_role_key` / `app_url` / `bcp_webhook_secret`（無いと J-Alert ポーリングと BCP PDF 自動生成が**黙って**止まる）。
+   - **Vault secrets**: `project_url` / `service_role_key` / `app_url` / `bcp_webhook_secret`
+     （無いと J-Alert ポーリングと BCP PDF 自動生成が**黙って**止まる）。
+     **これが唯一残る手作業**（値を migration に書けないため）。
+     2026-08-09 から日次 `/api/cron/partition-health` が**欠落を検出して鳴らす**ので、
+     入れ忘れても翌朝には分かる（名前の存在のみ確認・値は読まない）。
+     確認: `select name from vault.secrets order by name;`
    - ~~**pg_cron ジョブ**~~ → **2026-08-09 に migration 化済み**（`20260810020000_core_cron_jobs.sql` ほか）。
      `supabase db push` で 6 本すべて自動復活する（jalert_poll / bcp_report_sweep /
      monitor_sweep_edges / monitor_sweep_unattended_streams / live_sessions_partition /

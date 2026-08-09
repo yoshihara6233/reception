@@ -3,6 +3,7 @@ import {
   CORE_JOBS,
   evaluatePartitionHealth,
   PARTITION_JOBS,
+  REQUIRED_VAULT_SECRETS,
   WATCHED_TABLES,
   type PartitionHealthFacts,
 } from './partition-health'
@@ -29,6 +30,8 @@ function facts(over: Partial<PartitionHealthFacts> = {}): PartitionHealthFacts {
     jobs: Object.fromEntries(
       [...Object.values(PARTITION_JOBS), ...Object.keys(CORE_JOBS)].map((n) => [n, true]),
     ),
+    // Vault も既定は「全部揃っている」。
+    vault: Object.fromEntries(Object.keys(REQUIRED_VAULT_SECRETS).map((n) => [n, true])),
     ...over,
   }
 }
@@ -159,15 +162,9 @@ describe('evaluatePartitionHealth', () => {
   })
 
   it('表が1つも見つからなければ critical（空を正常と読まない）', () => {
-    const v = evaluatePartitionHealth({
-      pg_cron: true,
-      tables: {},
-      jobs: Object.fromEntries(
-        [...Object.values(PARTITION_JOBS), ...Object.keys(CORE_JOBS)].map((n) => [n, true]),
-      ),
-    })
+    const v = evaluatePartitionHealth(facts({ tables: {} }))
     expect(v.severity).toBe('critical')
-    // ジョブは全部居るので、指摘されるのは「表が無い」2 件だけ。
+    // ジョブも Vault も全部居るので、指摘されるのは「表が無い」2 件だけ。
     expect(v.problems).toHaveLength(WATCHED_TABLES.length)
   })
 
@@ -176,15 +173,67 @@ describe('evaluatePartitionHealth', () => {
     expect(evaluatePartitionHealth({}).severity).toBe('critical')
   })
 
+  it('Vault の秘密情報が 1 つ欠けても critical', () => {
+    // cron が全部揃っていても、Vault が欠ければ呼び出しは静かに空振りする。
+    // 2026-08-01 の BCP 沈黙はこの経路でも起こりえた。
+    const { project_url: _drop, ...rest } = Object.fromEntries(
+      Object.keys(REQUIRED_VAULT_SECRETS).map((n) => [n, true]),
+    )
+    const v = evaluatePartitionHealth(facts({ vault: rest }))
+    expect(v.severity).toBe('critical')
+    expect(v.problems).toHaveLength(1)
+    expect(v.problems[0]).toContain('project_url')
+    expect(v.problems[0]).toContain('J-Alert 受信')
+  })
+
+  it('Vault が丸ごと空なら 4 件すべて指摘する', () => {
+    const v = evaluatePartitionHealth(facts({ vault: {} }))
+    expect(v.severity).toBe('critical')
+    expect(v.problems).toHaveLength(Object.keys(REQUIRED_VAULT_SECRETS).length)
+  })
+
+  it('vault のキー自体が無くても critical（未定義を正常と読まない）', () => {
+    const v = evaluatePartitionHealth(facts({ vault: undefined }))
+    expect(v.severity).toBe('critical')
+    expect(v.problems).toHaveLength(Object.keys(REQUIRED_VAULT_SECRETS).length)
+  })
+
+  it('余分な秘密情報が入っていても騒がない', () => {
+    // 他用途の secret が同居していても、期待するものが揃っていれば ok。
+    const v = evaluatePartitionHealth(facts({
+      vault: {
+        ...Object.fromEntries(Object.keys(REQUIRED_VAULT_SECRETS).map((n) => [n, true])),
+        some_other_secret: true,
+      },
+    }))
+    expect(v.severity).toBe('ok')
+  })
+
+  it('pg_cron が無い環境でも Vault は問う（独立に見る）', () => {
+    const v = evaluatePartitionHealth(facts({ pg_cron: false, jobs: {}, vault: {} }))
+    // pg_cron 1 件 + Vault 4 件。cron ジョブは拡張が無いので重ねて責めない。
+    expect(v.problems).toHaveLength(1 + Object.keys(REQUIRED_VAULT_SECRETS).length)
+  })
+
   it('監視対象すべてに生成ジョブ名が定義されている', () => {
     // 表を足したのにジョブ名を書き忘れると、その表のジョブ欠落を検出できない。
     for (const t of WATCHED_TABLES) expect(PARTITION_JOBS[t]).toBeTruthy()
   })
 
-  it('中核ジョブには「止まると何が起きるか」が添えてある', () => {
+  it('中核ジョブと Vault には「止まると何が起きるか」が添えてある', () => {
     // アラートを受け取った人が、直すべきかを自分で判断できるように。
     for (const [name, purpose] of Object.entries(CORE_JOBS)) {
       expect(purpose, `${name} の説明が空です`).toBeTruthy()
+    }
+    for (const [name, purpose] of Object.entries(REQUIRED_VAULT_SECRETS)) {
+      expect(purpose, `${name} の説明が空です`).toBeTruthy()
+    }
+  })
+
+  it('Vault の期待リストに値が混ざっていない（名前だけを扱う）', () => {
+    // 万一ここに実際の秘密が書かれたら、アラート本文やログに漏れる。
+    for (const name of Object.keys(REQUIRED_VAULT_SECRETS)) {
+      expect(name, `${name} が秘密の値に見えます`).toMatch(/^[a-z0-9_]{1,40}$/)
     }
   })
 })

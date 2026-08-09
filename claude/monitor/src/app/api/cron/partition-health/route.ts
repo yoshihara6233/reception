@@ -46,10 +46,19 @@ function alertHtml(v: PartitionVerdict): string {
       パーティションが尽きると、その表への書き込みは必ず失敗します。
       <b>live_sessions が尽きるとライブ視聴が開始できなくなります。</b>
     </p>
-    <p>復旧手順（SQL エディタで実行）:</p>
+    <p>まず現状を確認（SQL エディタ）:</p>
+    <pre>select jobname, schedule, active from cron.job order by jobname;   -- 6 本あるはず
+select name from vault.secrets order by name;                     -- 4 本あるはず</pre>
+    <p>パーティションが足りないとき:</p>
     <pre>select public.create_live_sessions_partition(date_trunc('month', now() + interval '1 month')::date);
-select public.monitor_results_ensure_partition(date_trunc('month', now() + interval '1 month')::date);
-select * from cron.job where jobname like '%partition%';</pre>
+select public.monitor_results_ensure_partition(date_trunc('month', now() + interval '1 month')::date);</pre>
+    <p>cron が欠けているとき — <b>migration を当て直せば全部戻ります</b>:</p>
+    <pre>supabase db push</pre>
+    <p>
+      Vault が欠けているとき — <b>これだけは手で入れ直す必要があります</b>
+      （値を migration に書けないため）。手順は
+      <code>docs/dr-runbook.md</code> の「バックアップに乗らないもの」を参照。
+    </p>
     <p><a href="${appBaseUrl()}/infra">死活監視を開く</a></p>
   `
 }

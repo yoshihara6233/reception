@@ -50,6 +50,10 @@ const HEALTHY = {
     jalert_poll: true, bcp_report_sweep: true,
     monitor_sweep_edges: true, monitor_sweep_unattended_streams: true,
   },
+  vault: {
+    project_url: true, service_role_key: true,
+    app_url: true, bcp_webhook_secret: true,
+  },
 }
 
 let savedSecret: string | undefined
