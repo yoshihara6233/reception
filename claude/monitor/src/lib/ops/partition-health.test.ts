@@ -49,15 +49,20 @@ describe('evaluatePartitionHealth', () => {
     })).severity).toBe('ok')
   })
 
-  it('残り1ヶ月は critical（生成ジョブが1回失敗した状態）', () => {
+  it('残り1ヶ月は warn（生成ジョブが1回失敗した形）', () => {
+    // 旧実装ではこの分岐に到達できず、**warn を一度も出せなかった**
+    // （2026-08-09、変異テストが検出）。境界そのものを固定する。
     const v = evaluatePartitionHealth(facts({
       tables: {
         live_sessions:   { last_partition: '202609', months_ahead: 1 },
         monitor_results: { last_partition: '202610', months_ahead: 2 },
       },
     }))
-    expect(v.severity).toBe('critical')
-    expect(v.problems.join()).toContain('live_sessions')
+    expect(v.severity).toBe('warn')
+    expect(v.summary).toContain('警告')
+    expect(v.problems).toHaveLength(1)
+    expect(v.problems[0]).toContain('live_sessions: 残り 1 ヶ月（最終 202609）')
+    expect(v.problems[0]).toContain('生成ジョブが失敗している可能性')
   })
 
   it('残り0ヶ月は critical（来月頭に書き込みが落ちる）', () => {
@@ -70,6 +75,7 @@ describe('evaluatePartitionHealth', () => {
     expect(v.severity).toBe('critical')
     expect(v.problems).toHaveLength(2)
     expect(v.summary).toContain('異常')
+    expect(v.problems[0]).toContain('来月頭に書き込みが失敗します')
   })
 
   it('既に尽きている（負の残余）でも critical', () => {
@@ -79,6 +85,26 @@ describe('evaluatePartitionHealth', () => {
         monitor_results: { last_partition: '202610', months_ahead: 2 },
       },
     })).severity).toBe('critical')
+  })
+
+  it('warn と critical が混ざったら critical が勝つ（重い方を採る）', () => {
+    const v = evaluatePartitionHealth(facts({
+      tables: {
+        live_sessions:   { last_partition: '202609', months_ahead: 1 },   // warn
+        monitor_results: { last_partition: '202608', months_ahead: 0 },   // critical
+      },
+    }))
+    expect(v.severity).toBe('critical')
+  })
+
+  it('critical の後に warn が来ても格下げされない（順序に依存しない）', () => {
+    const v = evaluatePartitionHealth(facts({
+      tables: {
+        live_sessions:   { last_partition: '202608', months_ahead: 0 },   // critical が先
+        monitor_results: { last_partition: '202609', months_ahead: 1 },   // warn が後
+      },
+    }))
+    expect(v.severity).toBe('critical')
   })
 
   it('残余があってもジョブが消えていれば critical', () => {

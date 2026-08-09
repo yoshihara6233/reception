@@ -75,20 +75,18 @@ export function evaluatePartitionHealth(facts: PartitionHealthFacts): PartitionV
     const ahead = info.months_ahead
     runway[table] = ahead
 
-    if (ahead <= 0) {
-      problems.push(
-        `${table}: 残り ${ahead} ヶ月（最終 ${info.last_partition ?? '不明'}）`
-        + ' — 来月頭に書き込みが失敗します',
-      )
-      raise('critical')
-    } else if (ahead < CRITICAL_MONTHS_AHEAD + 1) {
-      problems.push(
-        `${table}: 残り ${ahead} ヶ月（最終 ${info.last_partition ?? '不明'}）`
-        + ' — 生成ジョブが失敗している可能性があります',
-      )
+    // 2026-08-09、変異テストがこの分岐の不備を出した。旧実装は
+    //   if (ahead <= 0) …critical / else if (ahead < 2) …critical / else if (ahead < 2) …warn
+    // となっており、**3 本目に到達する値が存在しなかった**（warn を一度も出せない）。
+    // 定数のコメントに書いた意図（1 ヶ月＝警告）と実装がずれていた。
+    const at = `${table}: 残り ${ahead} ヶ月（最終 ${info.last_partition ?? '不明'}）`
+    if (ahead <= CRITICAL_MONTHS_AHEAD - 1) {
+      // 今月ぶんしか無い。月が変わった瞬間に書き込みが落ちる。
+      problems.push(`${at} — 来月頭に書き込みが失敗します`)
       raise('critical')
     } else if (ahead < WARN_MONTHS_AHEAD) {
-      problems.push(`${table}: 残り ${ahead} ヶ月（最終 ${info.last_partition ?? '不明'}）`)
+      // 設計上は常に 2 ヶ月先まであるはず。1 ヶ月＝生成が 1 回失敗した形。
+      problems.push(`${at} — 生成ジョブが失敗している可能性があります`)
       raise('warn')
     }
   }
