@@ -39,6 +39,7 @@ import {
   type SchemaInvariantFacts,
 } from '@/lib/ops/schema-invariants'
 import { missingCriticalEnv } from '@/lib/ops/env-check'
+import { DAILY_CHECK, recordCheckRun } from '@/lib/ops/check-runs'
 import { appBaseUrl } from '@/lib/app-url'
 
 export const dynamic = 'force-dynamic'
@@ -87,14 +88,62 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     || req.headers.get('x-cron-secret') === secret
   if (!authed) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
+  const startedAt = Date.now()
   const svc = createSupabaseService()
-  const { data, error } = await svc.rpc('partition_health')
-  if (error) {
-    // 事実が取れないこと自体が異常。**黙って 200 を返さない**——
-    // 「監視が死んでいるのに緑」が一番まずい。
-    console.error('[partition-health] rpc failed:', error.message)
-    return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
+
+  /**
+   * 記録 → 通知 → 応答をまとめる。**すべての出口をここに通す。**
+   *
+   * 旧実装は RPC が落ちたとき 500 を返すだけで**通知していなかった**。
+   * 点検が壊れたことは誰にも届かず、沈黙は「正常」と見分けが付かない。
+   * 2026-08-12 に実際に確かめようとして、Vercel のログを人が掘るしか
+   * 手が無いと分かった（2 日かけて潰した形が監視自身にあった）。
+   */
+  async function finish(v: PartitionVerdict, status: number): Promise<NextResponse> {
+    const recorded = await recordCheckRun(
+      svc, DAILY_CHECK, v.severity, v.problems, Date.now() - startedAt)
+
+    // 記録できない＝鮮度の判定が効かなくなる。**それ自体を指摘に足す。**
+    const problems = recorded
+      ? v.problems
+      : [...v.problems, '実行記録を残せませんでした（鮮度の見張りが効きません）']
+    const severity: PartitionVerdict['severity'] = recorded ? v.severity : 'critical'
+
+    if (severity !== 'ok') {
+      console.error('[partition-health]', v.summary, problems)
+      const recipients = (process.env.ALERT_EMAILS ?? '')
+        .split(',').map((s) => s.trim()).filter(Boolean)
+      if (recipients.length) {
+        await sendEmail(
+          recipients,
+          `[Intereco] ${v.summary}`,
+          alertHtml({ ...v, problems }),
+          undefined,
+          SECURITY_FROM_ADDRESS,
+        )
+      }
+      await sendOpsWebhook(`[Intereco] ${v.summary}\n${problems.join('\n')}`)
+    }
+
+    return NextResponse.json({
+      ok: severity === 'ok',
+      severity,
+      summary: v.summary,
+      problems,
+      runway: v.runway,
+    }, { status })
   }
+
+  /** 事実が取れないこと自体が異常。**黙って 200 も、黙って 500 も返さない。** */
+  const rpcFailed = (fn: string, message: string): PartitionVerdict => ({
+    severity: 'critical',
+    summary: `日次点検が実行できません（${fn}）`,
+    problems: [`${fn}() の呼び出しに失敗しました: ${message}`],
+    runway: {},
+  })
+
+  const { data, error } = await svc.rpc('partition_health')
+  if (error) return finish(rpcFailed('partition_health', error.message), 500)
 
   const partition = evaluatePartitionHealth((data ?? {}) as PartitionHealthFacts)
 
@@ -105,10 +154,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   // 同時視聴上限が本番で一度も発動していなかった）。本番自身に毎日聞く。
   const { data: schemaFacts, error: schemaErr } = await svc
     .rpc('schema_invariants', { p_embeds: embedPairsForSql() })
-  if (schemaErr) {
-    console.error('[partition-health] schema_invariants failed:', schemaErr.message)
-    return NextResponse.json({ ok: false, error: schemaErr.message }, { status: 500 })
-  }
+  if (schemaErr) return finish(rpcFailed('schema_invariants', schemaErr.message), 500)
   const schema = evaluateSchemaInvariants((schemaFacts ?? {}) as SchemaInvariantFacts)
 
   // ── env の必須欠落 ───────────────────────────────────────────────────
@@ -135,30 +181,5 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       : schema.severity !== 'ok' ? schema.summary
       : `環境変数の設定漏れ: ${envMissing.map((i) => i.key).join(', ')}`)
 
-  const verdict: PartitionVerdict = { severity, summary, problems, runway: partition.runway }
-
-  if (verdict.severity !== 'ok') {
-    console.error('[partition-health]', verdict.summary, verdict.problems)
-
-    const recipients = (process.env.ALERT_EMAILS ?? '')
-      .split(',').map((s) => s.trim()).filter(Boolean)
-    if (recipients.length) {
-      await sendEmail(
-        recipients,
-        `[Intereco] ${verdict.summary}`,
-        alertHtml(verdict),
-        undefined,
-        SECURITY_FROM_ADDRESS,
-      )
-    }
-    await sendOpsWebhook(`[Intereco] ${verdict.summary}\n${verdict.problems.join('\n')}`)
-  }
-
-  return NextResponse.json({
-    ok: verdict.severity === 'ok',
-    severity: verdict.severity,
-    summary: verdict.summary,
-    problems: verdict.problems,
-    runway: verdict.runway,
-  })
+  return finish({ severity, summary, problems, runway: partition.runway }, 200)
 }
