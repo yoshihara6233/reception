@@ -21,6 +21,10 @@ const h = vi.hoisted(() => ({
   schemaResult: null as unknown,
   rpcError: null as { message: string } | null,
   schemaError: null as { message: string } | null,
+  /** record_check_run の失敗を作るため。鮮度の見張りが効かなくなる状態。 */
+  recordError: null as { message: string } | null,
+  /** 実行記録に渡された引数。正常時も残ることの確認用。 */
+  recorded: [] as { check: string; severity: string; problems: string[] }[],
   emails: [] as { to: string | string[]; subject: string; html: string }[],
   webhooks: [] as string[],
 }))
@@ -29,9 +33,20 @@ const h = vi.hoisted(() => ({
 // 返してしまい、テストが実物と違う形を見ることになる**。
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseService: () => ({
-    rpc: async (name: string) => (name === 'schema_invariants'
-      ? { data: h.schemaResult, error: h.schemaError }
-      : { data: h.rpcResult, error: h.rpcError }),
+    rpc: async (name: string, args?: Record<string, unknown>) => {
+      if (name === 'schema_invariants') return { data: h.schemaResult, error: h.schemaError }
+      if (name === 'record_check_run') {
+        if (!h.recordError) {
+          h.recorded.push({
+            check:    args?.p_check as string,
+            severity: args?.p_severity as string,
+            problems: (args?.p_problems ?? []) as string[],
+          })
+        }
+        return { data: 1, error: h.recordError }
+      }
+      return { data: h.rpcResult, error: h.rpcError }
+    },
   }),
 }))
 vi.mock('@/lib/email/send', () => ({
@@ -95,6 +110,8 @@ beforeEach(() => {
   h.schemaResult = HEALTHY_SCHEMA
   h.rpcError = null
   h.schemaError = null
+  h.recordError = null
+  h.recorded = []
   h.emails = []
   h.webhooks = []
 })
@@ -163,11 +180,66 @@ describe('/api/cron/partition-health', () => {
     expect(h.webhooks).toHaveLength(1)
   })
 
-  it('RPC が失敗したら 500（監視が死んでいるのに緑を返さない）', async () => {
+  it('★RPC が失敗したら 500 で、しかも通知する', async () => {
+    // 旧実装は 500 を返すだけで**黙っていた**。点検が壊れたことが誰にも
+    // 届かず、沈黙は「正常」と見分けが付かなかった（2026-08-12 是正）。
     h.rpcError = { message: 'boom' }
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     const res = await call()
     expect(res.status).toBe(500)
+    expect((await res.json()).severity).toBe('critical')
+    expect(h.emails, '点検が壊れたのに黙っています').toHaveLength(1)
+    expect(h.emails[0].subject).toContain('partition_health')
+    expect(h.webhooks).toHaveLength(1)
+    err.mockRestore()
+  })
+
+  it('★schema_invariants が失敗したときも通知する', async () => {
+    h.schemaError = { message: 'boom' }
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect((await call()).status).toBe(500)
+    expect(h.emails).toHaveLength(1)
+    expect(h.emails[0].subject).toContain('schema_invariants')
+    err.mockRestore()
+  })
+
+  // ── 実行記録（2026-08-12 追加）──────────────────────────────────────
+
+  it('★正常時も実行記録を残す（沈黙を「正常」と読める根拠）', async () => {
+    const res = await call()
+    expect((await res.json()).severity).toBe('ok')
+    expect(h.emails, '正常なのに通知しています').toHaveLength(0)
+    // **通知が無いこと**と**記録があること**の両方で初めて正常と言える。
+    expect(h.recorded).toEqual([
+      { check: 'partition-health', severity: 'ok', problems: [] },
+    ])
+  })
+
+  it('異常時の記録には指摘が入る', async () => {
+    h.schemaResult = { ...HEALTHY_SCHEMA, rls_disabled: ['secret_table'] }
+    await call()
+    expect(h.recorded[0].severity).toBe('critical')
+    expect(h.recorded[0].problems[0]).toContain('secret_table')
+  })
+
+  it('★実行記録に失敗したら critical に格上げして鳴らす', async () => {
+    // 記録が残らない＝鮮度の見張りが効かない。**点検が通っていても異常**。
+    h.recordError = { message: 'insert failed' }
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const res = await call()
+    const body = await res.json()
+    expect(body.severity).toBe('critical')
+    expect(body.problems.join()).toContain('鮮度の見張りが効きません')
+    expect(h.emails).toHaveLength(1)
+    err.mockRestore()
+  })
+
+  it('RPC が失敗しても実行記録は残す（履歴が途切れない）', async () => {
+    h.rpcError = { message: 'boom' }
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await call()
+    expect(h.recorded).toHaveLength(1)
+    expect(h.recorded[0].severity).toBe('critical')
     err.mockRestore()
   })
 

@@ -22,6 +22,7 @@ import {
   tunnelDownAlertEmail, tunnelRecoveredEmail, SECURITY_FROM_ADDRESS,
 } from '@/lib/email/send'
 import { sendOpsWebhook, opsWebhookConfigured } from '@/lib/ops/webhook'
+import { claimStaleCheckAlert, staleMessage, DAILY_CHECK } from '@/lib/ops/check-runs'
 import { nextTunnelState, probeStatusOk, TUNNEL_ALERT_AFTER_SEC } from '@/lib/ops/tunnel-health'
 import { recordMetric } from '@/lib/metrics'
 import { MONITOR_STALE_SECONDS } from '@intereco/shared'
@@ -192,6 +193,35 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
   }
 
+  // ── 日次点検の鮮度を見張る（2026-08-12 追加）─────────────────────────
+  //
+  // 日次点検（partition-health）は問題があったときだけ鳴る。つまり
+  // 「通知が来ない」が「正常」と「点検が動いていない」の**両方**を意味する。
+  // 実行記録を残すだけでは「記録が古いことに誰が気づくのか」が残るので、
+  // **別の cron から**見る。ここは 2 分間隔で確実に動いており、これ自体が
+  // 止まればエッジ死活が丸ごと止まる＝別の経路で気づける。
+  //
+  // 判定と通知記録の確保は DB の 1 文（claim_stale_check_alert）。2 分ごとに
+  // 走るので、分けて書くと同時実行で二重に鳴る。
+  const stale = await claimStaleCheckAlert(supa, DAILY_CHECK)
+  if (stale?.shouldAlert) {
+    const msg = staleMessage(DAILY_CHECK, stale.lastRanAt)
+    console.error('[edge-health]', msg)
+    if (recipients.length) {
+      await sendEmail(
+        recipients,
+        `[Intereco] ${msg}`,
+        `<p>${msg}</p>`
+        + '<p>日次点検が動いていないと、<b>本番スキーマ・環境変数・Vault・cron の異常が'
+        + '誰にも届きません</b>。Vercel の Cron Jobs で <code>/api/cron/partition-health</code> '
+        + 'の最終実行とステータスを確認してください。</p>',
+        undefined,
+        SECURITY_FROM_ADDRESS,
+      )
+    }
+    await sendOpsWebhook(`[Intereco] ${msg}`)
+  }
+
   // metric_events 保持90日プルーン（毎時1回だけ実行＝2分cronでも無駄打ち回避）。
   let pruned = false
   if (new Date().getUTCMinutes() < 2) {
@@ -215,5 +245,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     webhook: opsWebhookConfigured(),
     // 通知経路ゼロでダウンを検知した場合の警告（ログ/監視で拾えるように明示）。
     unnotified: (wentDown > 0 || tunnelDown > 0) && recipients.length === 0 && !opsWebhookConfigured(),
+    // 日次点検の鮮度。null は判定できなかった（RPC 失敗）ことを表す——
+    // **誤報を出し続けないため通知はしないので、ここに載せて見えるようにする。**
+    dailyCheck: stale === null
+      ? { checked: false }
+      : { checked: true, stale: stale.stale, lastRanAt: stale.lastRanAt, alerted: stale.shouldAlert },
   })
 }
