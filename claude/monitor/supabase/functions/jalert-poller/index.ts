@@ -35,6 +35,7 @@ import {
 // 「流れ」の純ロジックは flow.ts へ切り出してある（vitest から読めるように）。
 // index.ts に残すのは fetch / DB / メールなど外に触る部分だけ。
 import {
+  buildBcpCaptureCommand,
   classifyAlertType,
   isRelevantEntry,
   mergeFeedEntries,
@@ -542,7 +543,17 @@ async function processStore(
         edgeClips.push({ clipId: cameraToClip.get(camera.id) ?? '', cameraId: camera.id })
       }
     }
-    const command = { action: 'start_bcp_capture', request_id: crypto.randomUUID(), eventId, clips: edgeClips, clipFrom, clipTo, offsets: settings.snapshot_offsets ?? [-5, 5] }
+    // ⚠ clipFrom には **発令時刻そのもの**を渡す（clipFrom 変数＝発令−pre分 ではない）。
+    //   エッジはこれを T+0 として各オフセットを計算する。詳細は
+    //   buildBcpCaptureCommand の説明を参照（2026-08-13 是正）。
+    const command = buildBcpCaptureCommand({
+      requestId:     crypto.randomUUID(),
+      eventId,
+      clips:         edgeClips,
+      alertIssuedAt,
+      clipTo,
+      offsets:       settings.snapshot_offsets,
+    })
     const { error: cmdError } = await supa
       .from('edge_devices')
       .update({ pending_command: command, pending_command_at: new Date().toISOString() })
