@@ -45,6 +45,16 @@ export async function reportNvrClockOffsetOnce(): Promise<void> {
       })
       .eq('id', config.EDGE_ID)
     if (error) logger.debug({ err: error.message }, 'nvr-clock: report failed (column not migrated yet?)')
+
+    // 履歴も残す。edge_devices は最新値しか持たないので、**その映像を撮った
+    // 時点で何秒ずれていたか**を後から引けない。100 拠点の分布とドリフトを
+    // 見るためにも要る（2026-08-13 追加）。
+    const { error: sampleErr } = await getSupabase().rpc('record_nvr_clock_sample', {
+      p_edge_id:       config.EDGE_ID,
+      p_offset_sec:    offset,
+      p_recorder_host: rec.vod_host ?? rec.host,
+    })
+    if (sampleErr) logger.debug({ err: sampleErr.message }, 'nvr-clock: sample failed (not migrated yet?)')
   } catch (e) {
     logger.debug({ err: (e as Error).message }, 'nvr-clock: run failed')
   }

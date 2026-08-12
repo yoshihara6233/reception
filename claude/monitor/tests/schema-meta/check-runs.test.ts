@@ -165,3 +165,47 @@ describe('ops_check_runs の権限', () => {
     }
   })
 })
+
+/**
+ * NVR 時計の艦隊集計。**100 拠点を 1 つの判定に畳む**ための関数が、
+ * 正しい形を返すか。ここが空を返すようになると、時計ズレは永久に
+ * 検出されない（監視自身に同じ疑いをかける）。
+ */
+describe('nvr_clock_fleet', () => {
+  it('★エッジが無くても想定した形を返す（空を緑と読み違えない）', async () => {
+    const { rows } = await pool.query('select public.nvr_clock_fleet() as f')
+    const f = (rows[0] as { f: Record<string, unknown> }).f
+    for (const k of ['checked_at', 'edges', 'never_measured', 'stale',
+                     'over_threshold', 'max_abs_sec', 'worst']) {
+      expect(f, `${k} がありません`).toHaveProperty(k)
+    }
+    expect(Array.isArray(f.worst)).toBe(true)
+  })
+
+  it('しきい値と上限は引数で渡せる（判断は呼び出し側）', async () => {
+    const { rows } = await pool.query(
+      'select public.nvr_clock_fleet($1, $2, $3) as f', [30, 12, 5])
+    const f = (rows[0] as { f: { warn_sec: number; stale_hours: number } }).f
+    expect(f.warn_sec).toBe(30)
+    expect(f.stale_hours).toBe(12)
+  })
+
+  it('service_role 以外は実行できない', async () => {
+    const { rows } = await pool.query(
+      `select coalesce(has_function_privilege('anon', p.oid, 'execute'), false) as anon,
+              coalesce(has_function_privilege('authenticated', p.oid, 'execute'), false) as auth
+         from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public' and p.proname = 'nvr_clock_fleet'`)
+    expect(rows[0]).toEqual({ anon: false, auth: false })
+  })
+
+  it('★証跡テーブルに時刻差の列がある（後から監査・遡及補正できる）', async () => {
+    // 列が無ければ「その映像が何秒ずれていたか」を永久に再現できない。
+    const { rows } = await pool.query(
+      `select table_name from information_schema.columns
+        where table_schema = 'public' and column_name = 'clock_offset_sec'
+        order by table_name`)
+    expect(rows.map((r) => (r as { table_name: string }).table_name))
+      .toEqual(['alarm_frames', 'bcp_clips', 'inspection_clips'])
+  })
+})

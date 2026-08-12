@@ -37,6 +37,7 @@ import {
 } from '../security/recording-frame.js'
 import { captureIproNvrJpeg } from '../adapters/i-pro/nvr-live.js'
 import { captureAtMs, normalizeOffsets } from './bcp-timing.js'
+import { measureNvrClockOffsetSec } from '../util/nvr-clock.js'
 import {
   hasBcpSnapshotPath,
   bcpUnavailableReason,
@@ -289,6 +290,14 @@ async function captureCameraTimeline(
   alertIssuedMs:  number,
   sem:            Semaphore,
   offsets:        number[],
+  /**
+   * 取得時に実測した NVR 時計ズレ（秒・正 = NVR が進んでいる）。
+   * **証跡に刻む。** BCP のコマは NVR のタイムラインから切り出すので、
+   * NVR の時計がずれていれば画像の時刻もずれる（実例: NTP 未設定で +3 分）。
+   * 列が無ければ「その映像が何秒ずれていたか」を後から再現できない
+   * （2026-08-13 追加）。null = 測れなかった / Frigate（エッジ自身の時計）。
+   */
+  clockOffsetSec: number | null,
 ): Promise<number> {
   let successCount = 0
 
@@ -328,6 +337,8 @@ async function captureCameraTimeline(
       storage_path:  result.ok ? result.storage_path : null,
       clip_url:      result.ok ? result.public_url   : null,
       thumbnail_url: result.ok ? result.public_url   : null,
+      // 証跡の時刻精度の根拠。補正はしない（段階1）。まず記録する。
+      clock_offset_sec: clockOffsetSec,
     }
     const { error } = await getSupa()
       .from('bcp_clips')
@@ -367,6 +378,16 @@ export async function runBcpCapture(
     'bcp: starting snapshot timeline capture',
   )
 
+  // NVR 時計ズレを 1 回だけ実測し、この取得ぶんの全コマに刻む。
+  // **BCP のコマは NVR のタイムラインから切り出す**ので、NVR の時計が
+  // ずれていれば画像の時刻もずれる（実例: NTP 未設定で +3 分）。
+  // ここでは補正しない（段階1）。まず「何秒ずれていたか」を証跡に残す。
+  // 測れなくても取得は止めない（可用性優先・null で記録）。
+  const clockRef = cameras.find((c) => cameraIds.includes(c.id) && c.recorder.vendor !== 'frigate')
+  const clockOffsetSec = clockRef
+    ? await measureNvrClockOffsetSec(clockRef.recorder.vod_host ?? clockRef.recorder.host)
+    : null   // Frigate はエッジ自身の時計＝ズレの概念が無い
+
   const sem = new Semaphore(CONCURRENCY)
   const results = await Promise.allSettled(
     cameraIds.map((cameraId) => {
@@ -375,7 +396,7 @@ export async function runBcpCapture(
         logger.warn({ eventId, cameraId }, 'bcp: unknown camera, skipping')
         return Promise.resolve(0)
       }
-      return captureCameraTimeline(eventId, camera, alertIssuedMs, sem, offsets)
+      return captureCameraTimeline(eventId, camera, alertIssuedMs, sem, offsets, clockOffsetSec)
     }),
   )
 
