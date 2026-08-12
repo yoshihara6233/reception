@@ -138,3 +138,58 @@ export function resolveAreaScope(
     quakeWithoutPref: prefUnknown && alertType === 'earthquake',
   }
 }
+
+/** エッジへ送る自動取得コマンド（`start_bcp_capture`）。 */
+export interface BcpCaptureCommand {
+  action: 'start_bcp_capture'
+  request_id: string
+  eventId: string
+  clips: { clipId: string; cameraId: string }[]
+  /** **発令時刻そのもの（T+0）。** 下のコメントを必ず読むこと。 */
+  clipFrom: string
+  clipTo: string
+  offsets: number[]
+}
+
+/**
+ * 自動取得コマンドを組み立てる。
+ *
+ * ⚠ **`clipFrom` は「発令時刻そのもの」を渡すこと。**
+ *
+ * エッジはこの値を T+0 として各オフセットの取得時刻を計算する:
+ *
+ *     claude/edge-agent/src/modes/bcp.ts
+ *     const alertIssuedMs = new Date(clipFrom).getTime()
+ *     const targetMs      = alertIssuedMs + offsetMin * 60_000
+ *
+ * ここに旧 VOD 方式の「発令 − pre分」を渡すと、**全 8 コマが pre 分だけ
+ * 過去にずれる**。タイルのラベル（発令時刻から計算）と実画像が一致しなくなり、
+ * 「時刻がずれている」という形で表に出る。NTP とは無関係。
+ *
+ * 2026-07-13 にこの是正を入れたが、**当てたのは /api/bcp/test と
+ * /api/bcp/[id]/retrieve の 2 経路だけで、このポーラーが取り残されていた**。
+ * テスト発令では正しく見えるので、実発令だけが 3 分ずれ続けた
+ * （2026-08-13 の震度情報で再発見。pre_minutes 既定 3 分ぶんちょうど）。
+ *
+ * `bcp_clips.clip_from` 列は別物で、そちらは「発令 − pre分」が正しい
+ * （手動の動画取得に使う録画区間）。**混ぜないこと。**
+ */
+export function buildBcpCaptureCommand(params: {
+  requestId: string
+  eventId: string
+  clips: { clipId: string; cameraId: string }[]
+  /** 発令時刻（ISO）。録画区間の開始ではない。 */
+  alertIssuedAt: string
+  clipTo: string
+  offsets?: number[] | null
+}): BcpCaptureCommand {
+  return {
+    action:     'start_bcp_capture',
+    request_id: params.requestId,
+    eventId:    params.eventId,
+    clips:      params.clips,
+    clipFrom:   params.alertIssuedAt,
+    clipTo:     params.clipTo,
+    offsets:    params.offsets ?? [-5, 5],
+  }
+}
