@@ -132,9 +132,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     )
   }
 
-  // 4. Hand the work to the edge. The edge polls /api/edges/<id>/commands and
-  //    will pick this up on its next poll cycle (~500 ms).
-  await fetch(new URL(`/api/edges/${edgeId}/commands`, req.url).toString(), {
+  // 4. Hand the work to the edge. The edge polls edge_devices.pending_command
+  //    and will pick this up on its next poll cycle (~500 ms).
+  //
+  // ⚠ **応答を捨てない。**エッジが見にいく `pending_command` を書くのが、この
+  //   呼び出しそのもの。ここで書けなければエッジには何も届かない。
+  //   旧実装は `.catch(() => {/* 次の poll で拾う */})` と握りつぶしていたが、
+  //   その説明は誤りで、**clip は queued のまま永久に止まり、画面には
+  //   「準備中」が出続ける**（失敗した、とはどこにも出ない）。
+  //   命令の受け口は allowlist になったので拒否されうる経路が増えている。
+  //   失敗は failed に落として見えるようにする。
+  const dispatched = await fetch(new URL(`/api/edges/${edgeId}/commands`, req.url).toString(), {
     method:  'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -149,7 +157,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       to_iso,
       clip_id:   row.id,   // F77: edge uses this to update the vod_clips row
     }),
-  }).catch(() => { /* edge picks it up on next poll anyway */ })
+  }).then((r) => r.ok).catch(() => false)
+
+  if (!dispatched) {
+    console.error('[vod] command dispatch failed; marking clip failed', row.id)
+    await admin
+      .from('vod_clips')
+      .update({ status: 'failed', error: 'edge へ取得指示を送れませんでした' })
+      .eq('id', row.id)
+    return NextResponse.json(
+      { error: 'dispatch_failed', message: '録画の取得指示を送れませんでした。時間をおいて再試行してください。' },
+      { status: 502 },
+    )
+  }
 
   return NextResponse.json({ clip_id: row.id, status: 'queued', reused: false })
 }

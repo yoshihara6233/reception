@@ -17,15 +17,35 @@ import { randomBytes } from 'node:crypto'
 import { z } from 'zod'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { hashEnrollToken } from '@/lib/admin/enrollment'
+import { clientIp, rateLimitAllows } from '@/lib/rate-limit'
 
 const Body = z.object({ token: z.string().min(16).max(256) })
 
+/**
+ * IP あたりの試行上限。
+ *
+ * トークン自体は 32 バイト乱数のハッシュ照合なので総当たりは通らない。
+ * ここで防ぎたいのは**総当たりの成功**ではなく、公開受け口へ大量に投げて
+ * DB を引かせる形の負荷。現地でユニットを並べて登録する作業を邪魔しない
+ * 程度に緩く取る（1 拠点で数台〜十数台）。
+ */
+const ENROLL_MAX_PER_IP = 30
+const ENROLL_WINDOW_SEC = 60 * 60
+
 export async function POST(req: NextRequest) {
+  const svc = createSupabaseService()
+
+  // 本文を読む前に絞る（JSON 解析も DB 参照もさせない）。
+  const ip = clientIp(req)
+  if (ip) {
+    const ok = await rateLimitAllows(svc, `enroll:ip:${ip}`, ENROLL_MAX_PER_IP, ENROLL_WINDOW_SEC)
+    if (!ok) return NextResponse.json({ error: 'rate_limited' }, { status: 429 })
+  }
+
   const parsed = Body.safeParse(await req.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
 
   const token_hash = hashEnrollToken(parsed.data.token)
-  const svc = createSupabaseService()
   const nowIso = new Date().toISOString()
 
   // 1) 事前検証（未使用・未失効）。よくある不正トークンはエッジ行を作らず即 403。
