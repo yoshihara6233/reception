@@ -21,6 +21,8 @@ const h = vi.hoisted(() => ({
   schemaResult: null as unknown,
   rpcError: null as { message: string } | null,
   schemaError: null as { message: string } | null,
+  clockResult: null as unknown,
+  clockError: null as { message: string } | null,
   /** record_check_run の失敗を作るため。鮮度の見張りが効かなくなる状態。 */
   recordError: null as { message: string } | null,
   /** 実行記録に渡された引数。正常時も残ることの確認用。 */
@@ -35,6 +37,7 @@ vi.mock('@/lib/supabase/server', () => ({
   createSupabaseService: () => ({
     rpc: async (name: string, args?: Record<string, unknown>) => {
       if (name === 'schema_invariants') return { data: h.schemaResult, error: h.schemaError }
+      if (name === 'nvr_clock_fleet')   return { data: h.clockResult, error: h.clockError }
       if (name === 'record_check_run') {
         if (!h.recordError) {
           h.recorded.push({
@@ -89,6 +92,14 @@ const HEALTHY_SCHEMA = {
   unknown_embed_tables: [],
 }
 
+/** 時計ズレ無し。checked_at が無いと「監視自体が壊れた」判定になる。 */
+const HEALTHY_CLOCK = {
+  checked_at: '2026-08-13T04:00:00Z',
+  warn_sec: 10, stale_hours: 6,
+  edges: 100, never_measured: 0, stale: 0,
+  over_threshold: 0, max_abs_sec: 2, worst: [],
+}
+
 /** 本番で必須の env。未設定だと critical になるので、正常系では埋めておく。 */
 const REQUIRED_ENV = [
   'NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY',
@@ -108,8 +119,10 @@ beforeEach(() => {
   for (const k of REQUIRED_ENV) process.env[k] = process.env[k] || 'set-for-test'
   h.rpcResult = HEALTHY
   h.schemaResult = HEALTHY_SCHEMA
+  h.clockResult = HEALTHY_CLOCK
   h.rpcError = null
   h.schemaError = null
+  h.clockError = null
   h.recordError = null
   h.recorded = []
   h.emails = []
@@ -282,6 +295,43 @@ describe('/api/cron/partition-health', () => {
     h.schemaError = { message: 'boom' }
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     expect((await call()).status).toBe(500)
+    err.mockRestore()
+  })
+
+  // ── NVR 時計ズレ（2026-08-13 追加）────────────────────────────────
+
+  it('★NVR の時計が分単位でずれていたら鳴らす', async () => {
+    // BCP・発報・検査の映像は NVR のタイムラインから切り出すので、
+    // 時計ズレはそのまま証跡の時刻ズレになる（実例: NTP 未設定で +3 分）。
+    h.clockResult = {
+      ...HEALTHY_CLOCK, over_threshold: 37, max_abs_sec: 185,
+      worst: [{ store: 'A店', edge: 'edge-a', offset_sec: 185, abs_sec: 185,
+                checked_at: '2026-08-13T04:00:00Z' }],
+    }
+    const res = await call()
+    expect((await res.json()).severity).toBe('critical')
+    expect(h.emails).toHaveLength(1)
+    expect(h.emails[0].html).toContain('A店')
+    expect(h.webhooks[0]).toContain('37 / 100 台')
+  })
+
+  it('秒単位のズレは warn（証跡は使えるが要是正）', async () => {
+    h.clockResult = { ...HEALTHY_CLOCK, over_threshold: 2, max_abs_sec: 25 }
+    expect((await (await call()).json()).severity).toBe('warn')
+  })
+
+  it('一度も測れていない拠点があれば鳴らす', async () => {
+    h.clockResult = { ...HEALTHY_CLOCK, never_measured: 12 }
+    const res = await call()
+    expect((await res.json()).severity).toBe('warn')
+    expect(h.webhooks[0]).toContain('12 / 100 台')
+  })
+
+  it('nvr_clock_fleet が失敗したら 500 で通知する', async () => {
+    h.clockError = { message: 'boom' }
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect((await call()).status).toBe(500)
+    expect(h.emails[0].subject).toContain('nvr_clock_fleet')
     err.mockRestore()
   })
 

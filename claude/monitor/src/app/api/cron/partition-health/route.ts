@@ -40,6 +40,13 @@ import {
 } from '@/lib/ops/schema-invariants'
 import { missingCriticalEnv } from '@/lib/ops/env-check'
 import { DAILY_CHECK, recordCheckRun } from '@/lib/ops/check-runs'
+import {
+  evaluateNvrClock,
+  CRITICAL_OFFSET_SEC,
+  STALE_HOURS,
+  WARN_OFFSET_SEC,
+  type NvrClockFacts,
+} from '@/lib/ops/nvr-clock'
 import { appBaseUrl } from '@/lib/app-url'
 
 export const dynamic = 'force-dynamic'
@@ -63,6 +70,12 @@ function alertHtml(v: PartitionVerdict): string {
     <p>
       <b>環境変数</b>の指摘は Vercel → Settings → Environment Variables で設定し、
       再デプロイしてください。値そのものはこの通知には含めていません。
+    </p>
+    <p>
+      <b>NVR 時計</b>の指摘は、<b>その拠点の BCP・発報・検査の映像が、記録された
+      時刻とずれている</b>ことを意味します（NVR のタイムラインから切り出すため）。
+      現場の NVR に NTP を設定してください。${CRITICAL_OFFSET_SEC} 秒以上のズレは
+      証跡として使えない水準です。
     </p>
     <p>まず現状を確認（SQL エディタ）:</p>
     <pre>select jobname, schedule, active from cron.job order by jobname;   -- 6 本あるはず
@@ -164,22 +177,39 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   // env が欠けていれば起きる類の障害だった。
   const envMissing = missingCriticalEnv().filter((i) => i.required)
 
+  // ── NVR の時計ズレ（2026-08-13 追加）──────────────────────────────────
+  // BCP・発報・検査の映像は NVR のタイムラインから切り出すので、NVR の時計
+  // ズレはそのまま証跡の時刻ズレになる（実例: NTP 未設定で +3 分）。実測は
+  // 30 分毎に動いていたが、**エッジ詳細ページを 1 台ずつ開かないと見えなかった**。
+  // 100 拠点では誰も見に行かないので、艦隊全体を日次で鳴らす側に回す。
+  const { data: clockFacts, error: clockErr } = await svc
+    .rpc('nvr_clock_fleet', {
+      p_warn_sec:    WARN_OFFSET_SEC,
+      p_stale_hours: STALE_HOURS,
+    })
+  if (clockErr) return finish(rpcFailed('nvr_clock_fleet', clockErr.message), 500)
+  const clock = evaluateNvrClock((clockFacts ?? {}) as NvrClockFacts)
+
   const problems = [
     ...partition.problems,
     ...schema.problems,
+    ...clock.problems,
     ...envMissing.map((i) => `環境変数 ${i.key} が未設定です（${i.purpose}）`),
   ]
   const severity =
-    partition.severity === 'critical' || schema.severity === 'critical' || envMissing.length > 0
+    partition.severity === 'critical' || schema.severity === 'critical'
+      || clock.severity === 'critical' || envMissing.length > 0
       ? 'critical'
-      : partition.severity === 'warn' || schema.severity === 'warn'
+      : partition.severity === 'warn' || schema.severity === 'warn' || clock.severity === 'warn'
         ? 'warn'
         : 'ok'
   const summary = severity === 'ok'
     ? partition.summary
     : (partition.severity !== 'ok' ? partition.summary
       : schema.severity !== 'ok' ? schema.summary
-      : `環境変数の設定漏れ: ${envMissing.map((i) => i.key).join(', ')}`)
+      : envMissing.length > 0
+        ? `環境変数の設定漏れ: ${envMissing.map((i) => i.key).join(', ')}`
+        : clock.summary)
 
   return finish({ severity, summary, problems, runway: partition.runway }, 200)
 }
