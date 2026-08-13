@@ -23,6 +23,8 @@ const h = vi.hoisted(() => ({
   schemaError: null as { message: string } | null,
   clockResult: null as unknown,
   clockError: null as { message: string } | null,
+  evidenceResult: null as unknown,
+  evidenceError: null as { message: string } | null,
   /** record_check_run の失敗を作るため。鮮度の見張りが効かなくなる状態。 */
   recordError: null as { message: string } | null,
   /** 実行記録に渡された引数。正常時も残ることの確認用。 */
@@ -38,6 +40,7 @@ vi.mock('@/lib/supabase/server', () => ({
     rpc: async (name: string, args?: Record<string, unknown>) => {
       if (name === 'schema_invariants') return { data: h.schemaResult, error: h.schemaError }
       if (name === 'nvr_clock_fleet')   return { data: h.clockResult, error: h.clockError }
+      if (name === 'evidence_gaps')     return { data: h.evidenceResult, error: h.evidenceError }
       if (name === 'record_check_run') {
         if (!h.recordError) {
           h.recorded.push({
@@ -123,6 +126,12 @@ beforeEach(() => {
   h.rpcError = null
   h.schemaError = null
   h.clockError = null
+  h.evidenceError = null
+  h.evidenceResult = {
+    checked_at: '2026-08-13T04:00:00Z', days: 7, grace_minutes: 30,
+    alarms: { recent: 0, older: 0, worst: [] },
+    bcp:    { recent: 0, older: 0, not_due: 0, worst: [] },
+  }
   h.recordError = null
   h.recorded = []
   h.emails = []
@@ -325,6 +334,41 @@ describe('/api/cron/partition-health', () => {
     const res = await call()
     expect((await res.json()).severity).toBe('warn')
     expect(h.webhooks[0]).toContain('12 / 100 台')
+  })
+
+  it('★証跡の欠落は通知に出る', async () => {
+    h.evidenceResult = {
+      checked_at: '2026-08-13T04:00:00Z', days: 7, grace_minutes: 30,
+      alarms: { recent: 2, older: 0, worst: [{ store: 'A店', occurred_at: '2026-08-13T03:00:00Z' }] },
+      bcp:    { recent: 0, older: 0, not_due: 0, worst: [] },
+    }
+    const res = await call()
+    expect((await res.json()).severity).toBe('warn')
+    expect(h.webhooks[0]).toContain('発報の前後スナップ')
+    expect(h.emails[0].html).toContain('A店')
+  })
+
+  it('★足した検査が summary にも出る（problems だけに出る形にしない）', async () => {
+    // 以前は severity と summary が別々の三項演算子で、検査を足すたびに両方を
+    // 直す必要があった。片方を忘れると **通知の見出しだけが正常に見える**。
+    // ここは他の検査が全部正常なときに、要約が証跡の話になることを固定する。
+    h.evidenceResult = {
+      checked_at: '2026-08-13T04:00:00Z', days: 7, grace_minutes: 30,
+      alarms: { recent: 5, older: 0, worst: [] },
+      bcp:    { recent: 0, older: 0, not_due: 0, worst: [] },
+    }
+    const res = await call()
+    const body = await res.json() as { severity: string; summary: string }
+    expect(body.severity).toBe('critical')
+    expect(body.summary).toContain('証跡')
+  })
+
+  it('evidence_gaps が失敗したら 500 で通知する', async () => {
+    h.evidenceError = { message: 'boom' }
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect((await call()).status).toBe(500)
+    expect(h.emails[0].subject).toContain('evidence_gaps')
+    err.mockRestore()
   })
 
   it('nvr_clock_fleet が失敗したら 500 で通知する', async () => {

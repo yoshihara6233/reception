@@ -47,6 +47,10 @@ import {
   WARN_OFFSET_SEC,
   type NvrClockFacts,
 } from '@/lib/ops/nvr-clock'
+import {
+  evaluateEvidenceGaps,
+  type EvidenceFacts,
+} from '@/lib/ops/evidence-gaps'
 import { appBaseUrl } from '@/lib/app-url'
 
 export const dynamic = 'force-dynamic'
@@ -190,26 +194,37 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   if (clockErr) return finish(rpcFailed('nvr_clock_fleet', clockErr.message), 500)
   const clock = evaluateNvrClock((clockFacts ?? {}) as NvrClockFacts)
 
-  const problems = [
-    ...partition.problems,
-    ...schema.problems,
-    ...clock.problems,
-    ...envMissing.map((i) => `環境変数 ${i.key} が未設定です（${i.purpose}）`),
-  ]
-  const severity =
-    partition.severity === 'critical' || schema.severity === 'critical'
-      || clock.severity === 'critical' || envMissing.length > 0
-      ? 'critical'
-      : partition.severity === 'warn' || schema.severity === 'warn' || clock.severity === 'warn'
-        ? 'warn'
-        : 'ok'
-  const summary = severity === 'ok'
-    ? partition.summary
-    : (partition.severity !== 'ok' ? partition.summary
-      : schema.severity !== 'ok' ? schema.summary
-      : envMissing.length > 0
-        ? `環境変数の設定漏れ: ${envMissing.map((i) => i.key).join(', ')}`
-        : clock.summary)
+  // ── 証跡の取りこぼし（2026-08-13 追加）────────────────────────────────
+  // 「取得を指示したのに、使える証跡が届いていない」ものを数える。
+  // エッジは命令を**実行より先にクリア**して detached で走らせるため（BCP は
+  // 最大 30 分かかり、待つとライブ視聴が止まる）、拾った直後に落ちると命令は
+  // どこにも残らない。しかも発報は命令を書いた時点で timeline_dispatched_at を
+  // 埋めるので、**リトライ cron が二度と再送しない**。
+  // 結果を見ているので、命令消失だけでなくエッジ停止・NVR 不通・切り出し失敗も
+  // 同じ網にかかる。
+  const { data: evidenceFacts, error: evidenceErr } = await svc.rpc('evidence_gaps')
+  if (evidenceErr) return finish(rpcFailed('evidence_gaps', evidenceErr.message), 500)
+  const evidence = evaluateEvidenceGaps((evidenceFacts ?? {}) as EvidenceFacts)
+
+  // env の欠落も同じ形の判定にそろえて、下の合成に載せる。
+  const envVerdict = {
+    severity: (envMissing.length > 0 ? 'critical' : 'ok') as 'critical' | 'ok',
+    summary: `環境変数の設定漏れ: ${envMissing.map((i) => i.key).join(', ')}`,
+    problems: envMissing.map((i) => `環境変数 ${i.key} が未設定です（${i.purpose}）`),
+  }
+
+  // ⚠ 検査を足すときは**この配列に足すだけ**にする。
+  //   以前は severity と summary が別々の三項演算子で、検査を足すたびに
+  //   両方を直す必要があった。片方を忘れると「problems には出るが summary は
+  //   正常のまま」——通知の見出しだけが正常に見える形になる。
+  //   順序は要約に出す優先度（先にあるものが見出しになる）。
+  const checks = [partition, schema, envVerdict, evidence, clock]
+
+  const problems = checks.flatMap((c) => c.problems)
+  const severity = checks.some((c) => c.severity === 'critical')
+    ? 'critical'
+    : checks.some((c) => c.severity === 'warn') ? 'warn' : 'ok'
+  const summary = checks.find((c) => c.severity !== 'ok')?.summary ?? partition.summary
 
   return finish({ severity, summary, problems, runway: partition.runway }, 200)
 }
