@@ -235,6 +235,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const rlCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
     const { error: rlErr } = await admin.from('rate_limits').delete().lt('window_start', rlCutoff)
     if (rlErr) console.error('[vod/cleanup] rate_limits prune failed:', rlErr.message)
+
+    // 命令の受領記録（edge_command_runs）。証跡が欠けたときに
+    // 「命令が届かなかった」のか「届いたが撮れなかった」のかを切り分けるための
+    // 診断用データなので、14 日あれば足りる。回さないと命令の数だけ増え続ける。
+    const { error: ecrErr } = await admin.rpc('prune_edge_command_runs', { p_days: 14 })
+    if (ecrErr) console.error('[vod/cleanup] edge_command_runs prune failed:', ecrErr.message)
   }
 
   if (dryRun || rows.length === 0) {
