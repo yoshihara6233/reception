@@ -13,6 +13,7 @@ import { loadCameras } from './cameras.js'
 import { startGo2rtcSync } from './go2rtc/sync.js'
 import { refreshSupabaseKey, startKeySync } from './supabase.js'
 import { subscribeCommands } from './realtime.js'
+import { allowIngestUrl } from './ingest-guard.js'
 import { startEdgeJobWorker } from './workers/edge-jobs.js'
 import { startClipJobWorker } from './workers/clip-jobs.js'
 import { startNvrClockWatch } from './scheduler/nvr-clock-cron.js'
@@ -160,6 +161,8 @@ async function main() {
           // 取得は captureCameraJpeg が「Frigate → ONVIF直接 → go2rtc」の順で最速経路を選ぶ。
           // 並列＋タイムアウト: カメラ毎に並列化し各撮影を CAPTURE_TIMEOUT_MS で打ち切る
           // （遅い/不通の 1 台が他のカメラをブロックしない）。
+          // 送り先の検証（多層防御・ingest-guard.ts 冒頭に理由）。
+          if (!allowIngestUrl(cmd.ingest_url, config.MONITOR_URL, cmd.action)) break
           const cams = await loadCameras()
           const CAPTURE_TIMEOUT_MS = 25_000
           await Promise.all(cmd.camera_ids.map(async (camId) => {
@@ -204,6 +207,7 @@ async function main() {
           // 発報前後スナップ: 全カメラ×秒オフセットを録画から抽出し ingest_url へ中継。
           // 数分かかるため await せず detached 起動し、コマンドループを即返す
           // （発報直後に利用者がライブ/VOD を見られるようにする）。
+          if (!allowIngestUrl(cmd.ingest_url, config.MONITOR_URL, cmd.action)) break
           const cams = await loadCameras()
           void runAlarmTimelineCapture(
             {

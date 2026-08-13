@@ -53,12 +53,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   //   「invalid device token」として返った。全エッジの bootstrap が同時に落ちたのに、
   //   ログ上はトークン不正と見分けがつかず切り分けに時間を要した。
   //   トークン不一致(401)とサーバ側の失敗(500)は必ず分けて返す。
+  //
+  //   ⚠ ただし **DB のメッセージをクライアントへ返さない**。分けたかったのは
+  //     「トークン不正か、サーバ側の失敗か」であって、列名やスキーマ状態を
+  //     教えることではない。切り分けは下の console.error（Vercel のログ）で足りる。
   if (error) {
     console.error('[bootstrap] edge_devices query failed', error.message)
-    return NextResponse.json(
-      { error: 'bootstrap lookup failed', detail: error.message },
-      { status: 500 },
-    )
+    return NextResponse.json({ error: 'bootstrap lookup failed' }, { status: 500 })
   }
   if (!data) return NextResponse.json({ error: 'invalid device token' }, { status: 401 })
 
