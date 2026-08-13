@@ -175,16 +175,32 @@ describe('evidence_gaps — BCP クリップ', () => {
     expect(g.bcp.not_due).toBe(0)
   })
 
-  it('offset_min が NULL（旧・動画クリップ）は 0 とみなす', async () => {
-    await pool.query(
-      `insert into public.bcp_events (store_id, alert_type, alert_issued_at)
-       values ($1, 'quake', now())`, [storeId])
+  /** offset_min を持たないプレースホルダ行を 1 件作る。 */
+  async function placeholder(createdMinAgo: number): Promise<void> {
     const { rows } = await pool.query(
-      `select id from public.bcp_events where store_id = $1 limit 1`, [storeId])
+      `insert into public.bcp_events (store_id, alert_type, alert_issued_at)
+       values ($1, 'quake', now()) returning id`, [storeId])
     await pool.query(
       `insert into public.bcp_clips (event_id, clip_from, clip_to, upload_status, created_at)
-       values ($1, now(), now(), 'pending', now() - interval '120 minutes')`, [rows[0].id])
+       values ($1, now(), now(), 'pending', now() - make_interval(mins => $2))`,
+      [rows[0].id, createdMinAgo])
+  }
+
+  it('offset_min が NULL のプレースホルダも、十分に古ければ数える', async () => {
+    await placeholder(120)
     expect((await gaps()).bcp.recent).toBe(1)
+  })
+
+  it('★NULL を 0 分とみなさない（撮影中の正常な行を欠落と呼ばない）', async () => {
+    // NULL 行は発令時に作られるカメラ単位のプレースホルダで、エッジは
+    // **全オフセットの撮影を終えてから**削除する（2026-06-27 の是正）。
+    // 45 分前 = 0 分扱いなら「撮影時刻＋猶予 30 分」を過ぎて欠落と誤判定。
+    // 最大オフセット 30 分扱いなら 30+30=60 分後まで待つので、まだ正常。
+    // 本番の実データ（2026-06-27 の残骸 3 件）を見て気づいた穴。
+    await placeholder(45)
+    const g = await gaps()
+    expect(g.bcp.recent).toBe(0)
+    expect(g.bcp.not_due).toBe(1)
   })
 })
 
