@@ -45,11 +45,39 @@ const CODEC_PROBE_MS = 8_000
 const CONNECT_TIMEOUT_MS = 10_000
 /** 一度流れ始めたストリームが、この時間まったく無音なら切って繋ぎ直す。 */
 const STALL_MS = 15_000
+/** 生きているストリームの実測（bytes/packets/キーフレーム間隔）を出す間隔。 */
+const SUMMARY_MS = 60_000
 /** 受信バッファがこれを超えたら同期が壊れたとみなして捨てる。 */
 const MAX_ACC_BYTES = 8_000_000
 
 type Comp = 'H265' | 'H264'
 const COMP_FOR: Record<Codec, Comp> = { h265: 'H265', h264: 'H264' }
+
+/**
+ * カメラごとに「実際に流れてきたコーデック」を覚えておく（プロセスが生きている間）。
+ *
+ * ストリーマは 30 秒アイドルで破棄されるので、覚えないとグリッドを開き直すたびに
+ * H265 から探り直す。H265 を配信していないカメラでは**毎回きっちり外れる**ので、
+ * 実機で 14 秒（失敗3回 + 探索待ち 12 秒）を払っていた。その間そのコマは前の絵のまま。
+ *
+ * ⚠ 記録するのは **実際に PT を受け取ったとき**だけ。COMP 切替は当たるか分からない
+ *   推測なので、覚えると外れた推測が次回に持ち越される。
+ */
+const COMP_MEMO = new Map<string, Comp>()
+
+/** 前回このカメラで実際に流れたコーデック。無ければ H265 から試す。 */
+export function initialComp(key: string): Comp {
+  return COMP_MEMO.get(key) ?? 'H265'
+}
+
+/**
+ * 実際に受信できたコーデックを採用する。**次のストリーマへの引き継ぎとセット**に
+ * してあるのは、片方だけ書いて探索が復活する事故を防ぐため。
+ */
+export function adoptCodec(s: { comp: Comp }, key: string, codec: Codec): void {
+  s.comp = COMP_FOR[codec]
+  COMP_MEMO.set(key, s.comp)
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms))
@@ -229,6 +257,7 @@ async function runStreamLoop(opts: IproNvrLiveOptions, channel: number, s: Strea
       let lastSeq: number | null = null
       let reassembler: NalReassembler | null = null
       const startedAt = Date.now()
+      let lastSummaryAt = Date.now()
 
       for (;;) {
         if (s.stopped || STREAMERS.get(key) !== s || Date.now() - s.lastReqAt > IDLE_MS) { ctrl.abort(); break }
@@ -252,7 +281,7 @@ async function runStreamLoop(opts: IproNvrLiveOptions, channel: number, s: Strea
           if (!s.assembler || s.assembler.codecName !== codec) {
             s.assembler = new KeyframeAssembler(codec)
             reassembler = new NalReassembler(codec)
-            s.comp = COMP_FOR[codec]   // 実際に来ているコーデックを次回以降も要求する
+            adoptCodec(s, key, codec)   // 今回も次のストリーマも、このコーデックで要求する
             logger.info({ key, codec, pt: rtp.payloadType }, 'i-pro-nvr: codec detected')
           }
           if (!reassembler) reassembler = new NalReassembler(codec)
@@ -272,6 +301,22 @@ async function runStreamLoop(opts: IproNvrLiveOptions, channel: number, s: Strea
           logger.info(
             { key, codec: s.assembler.codecName, bytes, elapsedMs: Date.now() - startedAt },
             'i-pro-nvr: first keyframe assembled',
+          )
+        }
+
+        // 定期サマリ。**接続が切れなくなった副作用で `push loop ended` がほぼ出なくなり、
+        // bytes/packets/keyframeIntervalMs を見る場所が消えた**ので、生きている側から出す。
+        // `keyframeIntervalMs` は grid の更新間隔の下限（キーフレームしかデコードしない）
+        // ＝ NVR/カメラのリフレッシュ間隔の実測値になる。
+        if (Date.now() - lastSummaryAt >= SUMMARY_MS) {
+          lastSummaryAt = Date.now()
+          logger.info(
+            {
+              key, comp,
+              uptimeMs: Date.now() - startedAt, bytes, packets,
+              keyframeIntervalMs: s.assembler?.keyframeIntervalMs ?? 0,
+            },
+            'i-pro-nvr: stream alive',
           )
         }
       }
@@ -322,7 +367,7 @@ function ensureStreamer(opts: IproNvrLiveOptions, channel: number): Streamer {
   const key = keyOf(opts.endpoint, channel)
   let s = STREAMERS.get(key)
   if (s) { s.lastReqAt = Date.now(); return s }
-  s = { assembler: null, jpeg: null, jpegKeyAt: 0, decoding: null, comp: 'H265', lastReqAt: Date.now(), stopped: false }
+  s = { assembler: null, jpeg: null, jpegKeyAt: 0, decoding: null, comp: initialComp(key), lastReqAt: Date.now(), stopped: false }
   STREAMERS.set(key, s)
   void runStreamLoop(opts, channel, s, key)
   logger.info({ key }, 'i-pro-nvr: stream started')
