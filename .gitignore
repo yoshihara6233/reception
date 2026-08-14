@@ -27,9 +27,24 @@ coverage/
 .nyc_output/
 
 # Secrets — explicit safety net even though sub-projects already ignore them
-.env
-.env.local
-.env.*.local
+#
+# ⚠ かつてここは `.env` `.env.local` `.env.*.local` と**個別の名前を列挙**していた。
+#   2026-08-14 の検査で、変種が素通りしていたと判明:
+#     .env.demo / .env.production / .env.development / .env.bak / *.pem / id_rsa
+#   `.env.demo` は仮定ではない。**退役した intereco-edge-demo が実際に使っていた
+#   ファイル名**で、service_role 鍵が入っていた（2026-08-03 に現地で発見・削除）。
+#   `vercel env pull` は .env.local を、機器作業のバックアップは .env.bak を作る。
+#   1 回の `git add -A` で本番の秘密が履歴に入り、**履歴からは消せない**。
+#
+#   名前ではなく**形**で塞ぐ。雛形（*.example）だけを戻す。
+#   検査は claude/monitor/src/test/gitignore-blind-spot.test.ts（両方向で挟む）。
+.env*
+!.env*.example
+*.pem
+*.p12
+*.pfx
+id_rsa
+id_ed25519
 
 # gstack workspace state (not part of the codebase)
 .gstack/
