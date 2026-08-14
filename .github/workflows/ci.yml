@@ -211,7 +211,17 @@ jobs:
           bun-version: 1.3.12
       - uses: supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1  # v1.7.1
         with:
-          version: latest
+          # ⚠ `latest` にしないこと。**実行時に GitHub API で解決される**ので
+          #   ①毎回どの版で通ったのか分からない ②API のレート制限で CI が落ちる。
+          #   2026-08-14、実際に PR #311 の e2e が
+          #   `Failed to resolve latest Supabase CLI release: rate limit exceeded`
+          #   で 6 秒で落ちた（テストは 1 件も走らなかった）。
+          #
+          # ⚠ **Dependabot はこの値を更新しない**（github-actions エコシステムが
+          #   見るのは `uses:` の参照だけ）。手で上げること。上げるときは
+          #   ローカルの `supabase --version` と揃える — CI とローカルで
+          #   `supabase start` / `db reset` の挙動が変わると切り分けが濁る。
+          version: 2.114.0
       - name: Install dependencies (workspace)
         run: bun install --frozen-lockfile
       - name: Install Playwright browser

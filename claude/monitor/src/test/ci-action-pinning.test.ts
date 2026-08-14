@@ -66,6 +66,32 @@ describe('GitHub Action の SHA 固定', () => {
     ).toEqual([])
   })
 
+  it('★ツールの版が浮動指定になっていない（latest / main 等）', () => {
+    // Action 自体を SHA 固定しても、**その Action が実行時に取ってくるもの**が
+    // 浮動していると同じ問題が残る。`supabase/setup-cli` の `version: latest` が
+    // まさにそれで、実行時に GitHub API を叩いて解決するため
+    //   ①どの版で通ったのか記録に残らない
+    //   ②API のレート制限で CI が落ちる
+    // 2026-08-14、PR #311 の e2e が
+    // `Failed to resolve latest Supabase CLI release: rate limit exceeded` で
+    // 6 秒で落ちた（テストは 1 件も走らなかった）。
+    const floating: string[] = []
+    for (const f of readdirSync(ROOT).filter((n) => n.endsWith('.yml') || n.endsWith('.yaml'))) {
+      readFileSync(join(ROOT, f), 'utf8').split('\n').forEach((text, i) => {
+        // コメント行は対象外（理由の説明に語が出てくるため）。
+        if (/^\s*#/.test(text)) return
+        if (/^\s*[a-z_-]*(version|ref|tag):\s*(latest|main|master|stable|\*)\s*$/i.test(text)) {
+          floating.push(`${f}:${i + 1} ${text.trim()}`)
+        }
+      })
+    }
+    expect(
+      floating,
+      '実行時に解決される浮動指定です。どの版で通ったか記録に残らず、上流の'
+      + 'API 障害で CI が落ちます。具体的な版を書いてください。',
+    ).toEqual([])
+  })
+
   it('SHA の隣に版のコメントがある（人が読める形を保つ）', () => {
     // SHA だけだと、どの版か分からず更新の判断ができない。Dependabot も
     // このコメントを書き換える前提で動く。
