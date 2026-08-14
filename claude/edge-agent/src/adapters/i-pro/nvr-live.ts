@@ -41,6 +41,10 @@ const KEEPALIVE_MS = 60_000   // status.cgi keepalive 間隔(<90秒)
 const FIRST_FRAME_WAIT_MS = 12_000
 /** この時間キーフレームが来なければ COMP を切り替えて再接続する。 */
 const CODEC_PROBE_MS = 8_000
+/** ヘッダが返るまでの制限。**本体の寿命ではない**（混同すると 10 秒で切れる）。 */
+const CONNECT_TIMEOUT_MS = 10_000
+/** 一度流れ始めたストリームが、この時間まったく無音なら切って繋ぎ直す。 */
+const STALL_MS = 15_000
 /** 受信バッファがこれを超えたら同期が壊れたとみなして捨てる。 */
 const MAX_ACC_BYTES = 8_000_000
 
@@ -62,12 +66,41 @@ async function digestGet(url: string, user: string, pass: string, timeoutMs: num
   return insecureFetch(url, { method: 'GET', headers: { Authorization: buildHttpDigest('GET', url, user, pass, ch) } }, AbortSignal.timeout(timeoutMs))
 }
 
+/**
+ * 接続だけに時間制限を掛けた fetch。**本体の寿命は外部 signal だけで決まる。**
+ *
+ * `AbortSignal.timeout()` を直接渡してはいけない。あれは**本体の受信中も動き続ける**
+ * ので、開きっぱなしのストリームがその時間で必ず切れる（2026-08-14 の実障害）。
+ * ここではヘッダが返った時点（fetch が解決した時点）でタイマーを止め、以後は
+ * 呼び出し側の signal だけが本体を切れるようにする。
+ */
+export function fetchStreamWithConnectTimeout(
+  url: string, init: RequestInit, signal: AbortSignal, connectMs: number,
+): Promise<Response> {
+  const ctl = new AbortController()
+  // 外部 signal は**本体を読んでいる間もずっと**中継し続ける（ここで外さない）。
+  if (signal.aborted) ctl.abort(signal.reason)
+  else signal.addEventListener('abort', () => ctl.abort(signal.reason), { once: true })
+  const timer = setTimeout(
+    () => ctl.abort(new DOMException('connect timed out', 'TimeoutError')),
+    connectMs,
+  )
+  return insecureFetch(url, init, ctl.signal).finally(() => clearTimeout(timer))
+}
+
 /** Digest GET（ストリーミング・本体は呼び出し側で読む）。abort は外部 signal。 */
 async function digestGetStream(url: string, user: string, pass: string, signal: AbortSignal): Promise<Response> {
-  const r1 = await insecureFetch(url, { method: 'GET' }, AbortSignal.timeout(10_000))
+  // ⚠ NVR は `UID=` 付きの要求に digest を要求せず **いきなり 200 を返す**ので、
+  //   401 分岐は通らない。つまりこの1本目の応答がそのままストリーム本体になる。
+  const r1 = await fetchStreamWithConnectTimeout(url, { method: 'GET' }, signal, CONNECT_TIMEOUT_MS)
   if (r1.status !== 401) return r1
   const ch = parseDigestChallenge(r1.headers.get('www-authenticate') ?? '')
-  return insecureFetch(url, { method: 'GET', headers: { Authorization: buildHttpDigest('GET', url, user, pass, ch) } }, signal)
+  return fetchStreamWithConnectTimeout(
+    url,
+    { method: 'GET', headers: { Authorization: buildHttpDigest('GET', url, user, pass, ch) } },
+    signal,
+    CONNECT_TIMEOUT_MS,
+  )
 }
 
 /** NVR のホスト(IP or URL)から HTTPS エンドポイントを組む。NVR は自己署名 HTTPS。 */
@@ -159,17 +192,26 @@ async function runStreamLoop(opts: IproNvrLiveOptions, channel: number, s: Strea
     const comp = s.comp
     let sawKeyframe = false
     let codecDetected = false
-    // 要求した COMP で映像が来ない時に切り替えるための番犬。read() が永久にブロック
-    // する（NVR が接続だけ受けて何も流さない）ケースがあるので、ループ内の時刻比較では
-    // 不十分で、外から abort する必要がある。
-    // ただし **既知の PT が1つでも来ていれば要求コーデックは正しい**。その場合は
-    // キーフレーム待ち（GOP 次第で数秒かかる）なので切り替えない。
+    let stalled = false
+    let lastDataAt = Date.now()
+    const connectedAt = Date.now()
+    // 番犬。`read()` は永久にブロックしうる（NVR が接続だけ受けて何も流さない）ので、
+    // ループ内の時刻比較では届かず、外から abort するしかない。3つを見る:
+    //   ① COMP 違い     … 既知の PT が1つも来ない → COMP を替えて繋ぎ直す
+    //   ② 途中で無音     … 流れていたのに STALL_MS 何も来ない → 繋ぎ直す
+    //   ③ アイドル/停止  … 誰も見ていない・停止要求
+    // ②が要るのは、接続に時間制限を掛けられないため（掛けると開きっぱなしの
+    // ストリームがその時間で必ず切れる。2026-08-14 の実障害）。
     let switchCodec = false
-    const watchdog = setTimeout(() => {
-      if (sawKeyframe || codecDetected) return
-      switchCodec = true
-      ctrl.abort()
-    }, CODEC_PROBE_MS)
+    const watchdog = setInterval(() => {
+      const now = Date.now()
+      if (s.stopped || STREAMERS.get(key) !== s || now - s.lastReqAt > IDLE_MS) { ctrl.abort(); return }
+      if (!codecDetected && !sawKeyframe) {
+        if (now - connectedAt > CODEC_PROBE_MS) { switchCodec = true; ctrl.abort() }
+        return
+      }
+      if (now - lastDataAt > STALL_MS) { stalled = true; ctrl.abort() }
+    }, 1_000)
     try {
       const uid = await getNvrUid(opts)   // NVR共有UID (全カメラで1つ)
       await digestGet(`${opts.endpoint}/cgi-bin/hdrctl.cgi?UID=${uid}&SCREEN=1X&PC=AS60`, opts.username, opts.password, 8_000).catch(() => undefined)
@@ -194,6 +236,7 @@ async function runStreamLoop(opts: IproNvrLiveOptions, channel: number, s: Strea
         if (done) break
         if (value) {
           bytes += value.byteLength
+          lastDataAt = Date.now()   // 無音判定の基準（番犬②）
           acc = Buffer.concat([acc, Buffer.from(new Uint8Array(value))])
         }
         const { parts, rest } = extractMultipartParts(acc)
@@ -219,9 +262,13 @@ async function runStreamLoop(opts: IproNvrLiveOptions, channel: number, s: Strea
           for (const nal of reassembler.push(rtp.payload)) s.assembler.push(nal)
         }
 
-        if (!sawKeyframe && s.assembler?.ready) {
+        // ⚠ `packets > 0` が要る。`s.assembler` は**再接続をまたいで残る**ので、
+        //   前の接続のキーフレームで ready のまま新しい接続の最初の1チャンクを読むと、
+        //   受信ゼロなのに「キーフレームが来た」と誤判定して番犬を解除してしまう
+        //   （実機で `bytes: 14 / elapsedMs: 0` として出ていた。2026-08-14）。
+        if (!sawKeyframe && packets > 0 && s.assembler?.ready) {
           sawKeyframe = true
-          clearTimeout(watchdog)
+          // 番犬は止めない。ここから先は「途中で無音になっていないか」を見続ける。
           logger.info(
             { key, codec: s.assembler.codecName, bytes, elapsedMs: Date.now() - startedAt },
             'i-pro-nvr: first keyframe assembled',
@@ -236,8 +283,16 @@ async function runStreamLoop(opts: IproNvrLiveOptions, channel: number, s: Strea
       if (cur) digestGet(`${opts.endpoint}/cgi-bin/push.cgi?UID=${cur}&CAM=${channel}&CMD=STOP&COMP=${comp}`, opts.username, opts.password, 5_000).catch(() => undefined)
       backoff = 2_000
     } catch (e) {
-      // 番犬による abort は「異常」ではなく想定内の切り替え。待たずに繋ぎ直す。
-      if (!switchCodec) {
+      // 番犬による abort は「異常」ではなく想定内の切り替え／繋ぎ直し。
+      if (switchCodec) {
+        /* COMP を替えて即再接続（finally で切替） */
+      } else if (stalled) {
+        // NVR が黙っただけ。ここで指数バックオフに入れると、画が止まったまま
+        // 最大 20 秒待つことになる（利用者にはフリーズに見える）。短く繋ぎ直す。
+        logger.warn({ key, comp, silentMs: STALL_MS }, 'i-pro-nvr: stream went silent; reconnecting')
+        await sleep(2_000)
+        backoff = 2_000
+      } else {
         const msg = String(e)
         if (/HTTP 503/.test(msg)) invalidateUid(opts.endpoint)   // UID上限等 → 取り直し
         logger.warn({ key, comp, err: msg }, 'i-pro-nvr: stream error; will reconnect')
@@ -245,7 +300,7 @@ async function runStreamLoop(opts: IproNvrLiveOptions, channel: number, s: Strea
         backoff = Math.min(backoff * 2, 20_000)
       }
     } finally {
-      clearTimeout(watchdog)
+      clearInterval(watchdog)
       ctrl.abort()
       if (switchCodec) {
         s.comp = comp === 'H265' ? 'H264' : 'H265'
