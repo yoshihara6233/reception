@@ -56,8 +56,10 @@ afterAll(async () => {
 
 async function addEdge(name: string, token: string): Promise<void> {
   await pool.query(
-    `insert into public.edge_devices (store_id, name, device_token, device_token_hash)
-     values ($1, $2, $3, encode(sha256(convert_to($3::text, 'UTF8')), 'hex'))`, [STORE, name, token])
+    // 平文列は段階2で消えている。DB 側の sha256 で入れて、アプリ側の
+    // createHash と一致することを下の検査で確かめる。
+    `insert into public.edge_devices (store_id, name, device_token_hash)
+     values ($1, $2, encode(sha256(convert_to($3::text, 'UTF8')), 'hex'))`, [STORE, name, token])
 }
 
 describe('edge_devices.device_token_hash', () => {
@@ -93,8 +95,17 @@ describe('edge_devices.device_token_hash', () => {
   it('ハッシュ無しの行は作れない（NOT NULL）', async () => {
     await expect(
       pool.query(
-        `insert into public.edge_devices (store_id, name, device_token)
-         values ($1,'m5-f','no-hash')`, [STORE]),
+        `insert into public.edge_devices (store_id, name) values ($1,'m5-f')`, [STORE]),
     ).rejects.toThrow(/null value|not-null/i)
+  })
+
+  it('★平文列そのものが存在しない（段階2）', async () => {
+    // 「アプリが書かなくなった」だけでは、既存行の平文はそのまま残る。
+    // 列の不在を情報スキーマで直接確かめる。0 件であることが答え。
+    const { rows } = await pool.query(
+      `select column_name from information_schema.columns
+        where table_schema='public' and table_name='edge_devices'
+          and column_name='device_token'`)
+    expect(rows).toHaveLength(0)
   })
 })

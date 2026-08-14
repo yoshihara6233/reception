@@ -392,9 +392,12 @@ describe('エッジ専用スコープ鍵化 Phase B2（残りのテーブルを 
     ).rejects.toThrow(/edge token may only update/)
   })
 
-  it('device_token / camera_tier の書換えもトリガで拒否', async () => {
+  it('store_id / camera_tier の書換えもトリガで拒否', async () => {
+    // 旧版はここで device_token（平文列）を試していた。M-5 段階2で列ごと消えたため、
+    // そのままだと「列が無い」エラーを「トリガが拒否した」と読む形になる。
+    // 引き当て先を、テナントをまたぐ store_id の付け替えに置き換えた。
     await expect(
-      asEdge(E_A1, `update edge_devices set device_token='stolen' where id='${E_A1}' returning id`),
+      asEdge(E_A1, `update edge_devices set store_id='${S_B1}' where id='${E_A1}' returning id`),
     ).rejects.toThrow(/edge token may only update/)
     await expect(
       asEdge(E_A1, `update edge_devices set camera_tier=48 where id='${E_A1}' returning id`),

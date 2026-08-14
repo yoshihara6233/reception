@@ -73,7 +73,8 @@ create table public.edge_devices (
   last_seen_at timestamptz,
   -- Phase B2: エッジが自己申告してよい列 / 触ってはいけない列の両方を持たせる
   -- （edge_devices_guard_edge_update トリガの契約を検証するため）。
-  device_token text,
+  -- 平文の device_token は M-5 段階2で本番から消えた。ここに残すと
+  -- 「本番に無い列」を検査し続けることになるので、こちらも落としている。
   device_token_hash text,
   camera_tier  int not null default 16,
   agent_version text,

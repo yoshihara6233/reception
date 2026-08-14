@@ -51,9 +51,10 @@ export interface EdgeDevice {
   id: string
   store_id: string
   name: string
-  /** @deprecated 段階2で列ごと削除する。認証は device_token_hash で引く（M-5）。 */
-  device_token: string
-  /** device_token の SHA-256(hex)。**認証はこちらを引く。** */
+  /**
+   * 端末トークンの SHA-256(hex)。**平文は DB に無い**（M-5 段階2で列ごと削除）。
+   * 払出時のレスポンスが平文の唯一の出口で、失くしたら再発行しかない。
+   */
   device_token_hash: string
   agent_version: string | null
   status: EdgeStatus
