@@ -19,6 +19,8 @@ const h = vi.hoisted(() => ({
   ops: [] as string[],
   pendingCommand: null as Record<string, unknown> | null,
   insertFails: false,
+  /** 決着の update が行に当たるか。false で「無音の空振り」を再現する。 */
+  finishMatches: true,
   runs: [] as Record<string, unknown>[],
   updates: [] as Record<string, unknown>[],
 }))
@@ -41,11 +43,22 @@ vi.mock('./supabase.js', () => ({
         h.runs.push(row)
         return { error: null }
       },
+      // 実物と同じ形にする: pending_command のクリアは `.eq()` で完了、
+      // 決着は `.eq().select()` まで繋いで**当たった行数**を返す。
       update: (row: Record<string, unknown>) => ({
-        eq: async (_col: string, _v: string) => {
-          if (table === 'edge_devices') h.ops.push('clear:pending_command')
-          else { h.ops.push('finish:edge_command_runs'); h.updates.push(row) }
-          return { error: null }
+        eq: (_col: string, v: string) => {
+          if (table === 'edge_devices') {
+            h.ops.push('clear:pending_command')
+            return Promise.resolve({ error: null })
+          }
+          return {
+            select: async () => {
+              h.ops.push('finish:edge_command_runs')
+              h.updates.push(row)
+              // 0 行でも error は null。これが本番で無音だった形。
+              return { data: h.finishMatches ? [{ request_id: v }] : [], error: null }
+            },
+          }
         },
       }),
     }),
@@ -69,7 +82,9 @@ beforeEach(() => {
   h.runs = []
   h.updates = []
   h.insertFails = false
+  h.finishMatches = true
   h.pendingCommand = { ...CMD }
+  vi.clearAllMocks()
 })
 
 afterEach(() => { vi.useRealTimers() })
@@ -140,6 +155,25 @@ describe('subscribeCommands — 受領の記録', () => {
     await vi.waitFor(() => expect(h.updates.length).toBe(1))
     expect(h.updates[0]).toMatchObject({ ok: false })
     expect(String(h.updates[0].error)).toContain('unknown camera')
+  })
+
+  it('★決着が 0 行だったら鳴らす（本番で全件無音に空振りしていた形）', async () => {
+    // 2026-08-14: edge_command_runs にエッジ用の select ポリシーが無く、
+    // `update ... where` が行を見つけられず 0 行一致。**error は null** なので
+    // `if (error)` だけ見る実装では永久に気づけなかった。
+    // 記録が死んでいることそのものを検知できることを固定する。
+    h.finishMatches = false
+    const { logger } = await import('./logger.js')
+    await runOnce(async () => {})
+    await vi.waitFor(() => expect(vi.mocked(logger.warn)).toHaveBeenCalled())
+    expect(String(vi.mocked(logger.warn).mock.calls.at(-1)?.[1])).toContain('0 rows')
+  })
+
+  it('決着が当たっていれば警告は出さない（誤検知しない）', async () => {
+    const { logger } = await import('./logger.js')
+    await runOnce(async () => {})
+    await vi.waitFor(() => expect(h.updates.length).toBe(1))
+    expect(vi.mocked(logger.warn)).not.toHaveBeenCalled()
   })
 
   it('★記録に失敗しても命令は実行する（監視は実行の前提条件ではない）', async () => {

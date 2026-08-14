@@ -59,9 +59,15 @@ async function recordClaim(cmd: EdgeCommand): Promise<void> {
  * ⚠ **`ok: true` は「撮れた」ではない。**証跡の実処理は detached なので、
  *   ここで分かるのはハンドラを起動できたかまで。`ok: false` は起動時点の
  *   失敗（未知のカメラ・設定不備など）を捕まえる。
+ *
+ * ⚠ **0 行一致はエラーにならない。** 2026-08-14、本番でこの update が全件
+ *   無音で空振りしていた（`edge_command_runs` にエッジ用の select ポリシーが
+ *   無く、`update ... where` が行を見つけられなかった）。PostgREST は 204 を
+ *   返し `error` は null なので、`if (error)` だけでは永久に気づけない。
+ *   だから **更新できた行数を確かめる**。記録が壊れていること自体を鳴らす。
  */
 async function recordFinish(requestId: string, ok: boolean, err?: unknown): Promise<void> {
-  const { error } = await getSupabase()
+  const { data, error } = await getSupabase()
     .from('edge_command_runs')
     .update({
       finished_at: new Date().toISOString(),
@@ -69,7 +75,20 @@ async function recordFinish(requestId: string, ok: boolean, err?: unknown): Prom
       error: ok ? null : String((err as Error)?.message ?? err ?? '').slice(0, 500),
     })
     .eq('request_id', requestId)
-  if (error) logger.debug({ err: error.message }, 'command-run: finish not recorded')
+    .select('request_id')
+
+  if (error) {
+    logger.warn({ err: error.message, request_id: requestId }, 'command-run: finish not recorded')
+    return
+  }
+  if (!data?.length) {
+    // 受領は insert できたのに決着だけ書けない＝権限・ポリシーの非対称。
+    // 実行は続けるが、監視が死んでいることは黙らせない。
+    logger.warn(
+      { request_id: requestId },
+      'command-run: finish matched 0 rows — 受領記録を決着できません（RLS/ポリシー要確認）',
+    )
+  }
 }
 
 export function subscribeCommands(onCommand: (cmd: EdgeCommand) => void | Promise<void>): {
