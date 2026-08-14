@@ -85,15 +85,60 @@ HTTP 200 で返す**。バイト列は正しい JPEG なので SOI/EOI 判定で
 - 機器が返す極小画像は `util/jpeg.ts` の `assertUsableJpeg` で弾き、**取得失敗として扱う**
   （黙って表示すると現地で原因に辿り着けない）。
 
+## 1.8 ストリーミング fetch に `AbortSignal.timeout()` を渡さない（2026-06-19 混入 → 2026-08-14 発見）
+
+**`AbortSignal.timeout(n)` は本体を受信している間も動き続ける。**「接続まで n 秒」のつもりで
+渡すと、**開きっぱなしのストリームが必ず n 秒で切れる**。`nvr-live.ts` の push.cgi が
+これで 10 秒ごとに切れていた（実機ログの切断は例外なく `push connected` の +10.0 秒）。
+
+- **症状はエラーではなく「遅さ」**。切れるたび指数バックオフ(2→4→8→16→20秒)で繋ぎ直すが、
+  `grid.ts` は `LAST_FRAME` を使い続けるので**画は出たまま更新だけ止まる**。
+  管理画面は `healthy`、`edge_command_runs.ok` も true。**「更新が15秒に1回」と人が言うまで
+  誰も気づけなかった。**ログを眺めるだけでは見つからない類。
+- 正しい形: **ヘッダが返った時点でタイマーを止める**（`fetchStreamWithConnectTimeout`）。
+  外部 signal の中継は**外さない**（外すとアイドル停止も COMP 切替も効かなくなる）。
+- 時間制限を外したら**無音検知を必ず入れる**。`read()` は永久にブロックしうるので、
+  ループ内の時刻比較では届かず外から abort するしかない（`STALL_MS`・1秒間隔の監視）。
+- ⚠ **NVR は `UID=` 付きの要求に digest を要求せず、いきなり 200 を返す。**
+  `if (r1.status !== 401) return r1` の 401 分岐（本来の意図の側）には一度も入らない。
+  「認証が要る前提」で書いた分岐が実機では死んでいる、という形がこの機器では起きる。
+- 再接続をまたぐ状態に注意。`s.assembler` は残るので、`ready` のまま新接続の最初の
+  1チャンクを読むと**受信ゼロなのに「キーフレームが来た」と誤判定**する
+  （`bytes: 14 / elapsedMs: 0` が目印）。判定には `packets > 0` を必ず添える。
+- **切れなくなると `push loop ended` が出なくなる**＝ bytes/packets/keyframeIntervalMs の
+  観測点が消える。生きている側から定期サマリ(`stream alive`・60秒)を出しておく。
+
+### グリッドの更新間隔は3段の直列。**遅いと言われたらどの段かを先に測る**
+
+| 段 | 既定 | 場所 |
+|---|---|---|
+| カメラのキーフレーム(GOP) | 実測 **1秒** | `stream alive` の `keyframeIntervalMs` |
+| エッジの合成・アップロード | **2秒** | `GRID_FPS=0.5`（edge-agent config） |
+| 画面の再取得 | **5秒** | `REFRESH_MS`（`MonitorWorkspace.tsx`）← 通常はここが律速 |
+
+2026-08-14 に「15秒かかる」を追ったとき、**GOP が原因だと踏んで外した**。実測すると
+GOP は 1 秒で、律速は画面側の 5 秒（帯域と「たまに確認する用途」という判断で意図的に
+その値。コードにも理由が書いてある）。**推測で機器設定の話にしない。**
+15秒だったのは上の 10 秒切断＋バックオフで、それを直すと設計値の 5 秒に戻る。
+
 ## 2. service_role 鍵ローテはエッジ.envも同期（でないと全停止）
 
-鍵をローテ（旧失効）したら **エッジの env も新キーに更新 → restart**。env の正しい場所（2026-07-19確定）:
-- `intereco-edge`（OTA稼働）: **`/home/intereco/edge/shared/agent.env`**（systemd EnvironmentFile）
-- `intereco-edge-demo`: `/home/intereco/intereco/claude/edge-agent/.env.demo`
-- ⚠ 旧パス `/home/intereco/intereco/claude/edge-agent/.env` の編集は**無効**（OTA化で移動済み。Tokyo移行時もこれで長時間ハマった）
-更新後 `sudo systemctl restart intereco-edge`（demo は intereco-edge-demo）。
-旧キーのままだとエッジが `Unregistered API key` でheartbeat/grid/snapshotが全停止する。
-将来は「初回ブート登録(pull型)」で鍵配布を一元化する設計（docs参照）。
+⚠ **2026-08-14 以降、この節は「戻すとき」専用**。稼働2台とも B4 完了で
+`scoped_only=true`＋`agent.env` から `SUPABASE_SERVICE_ROLE_KEY` を削除済み＝
+**平常時に同期すべき鍵がそもそも無い**（bootstrap がスコープトークンだけを配る）。
+
+稼働2台（**どちらも同じ OTA レイアウト・ユニット名も `intereco-edge`**）:
+- `PoC Beelink` **192.168.0.100** / `demo_AI201` **192.168.0.200**（ログイン名は共通）
+- env: **`/home/intereco/edge/shared/agent.env`**（systemd EnvironmentFile）
+- ⚠ 旧パス `/home/intereco/intereco/claude/edge-agent/.env*` の編集は**無効**
+  （OTA化で移動済み。Tokyo移行時もこれで長時間ハマった）。
+  `intereco-edge-demo`（`.env.demo` 運用）は **2026-08-03 に退役**・行も削除済み。
+
+B4 を戻す場合のみ: `scoped_only=false` に戻し、Supabase から現行鍵を取り直して
+`agent.env` に書き戻す → `sudo systemctl restart intereco-edge`。
+**削除した鍵の控えは意図的に残していない**（出所不明の古い鍵を増やさないため。
+2026-08-03 に旧ディレクトリから失効鍵を含む5本が出てきた反省）。
+鍵が古い/無いままだと `Unregistered API key` で heartbeat/grid/snapshot が全停止する。
 
 ## 3. ライブ視聴（MJPEG/スナップ）の描画とポーリング
 
