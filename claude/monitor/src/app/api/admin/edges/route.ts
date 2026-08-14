@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto'
 import { z } from 'zod'
 import { requireSuperAdmin } from '@/lib/admin/guard'
 import { recordAudit } from '@/lib/admin/audit'
+import { hashDeviceToken } from '@/lib/edge/device-token'
 
 const Body = z.object({
   store_id: z.string().uuid(),
@@ -23,7 +24,9 @@ export async function POST(req: NextRequest) {
     .insert({
       store_id:     parsed.data.store_id,
       name:         parsed.data.name,
+      // 段階1: 平文列は残っている（NOT NULL）ので両方書く。段階2で平文を落とす。
       device_token,
+      device_token_hash: hashDeviceToken(device_token),
       status:       'offline',
     })
     .select('id')

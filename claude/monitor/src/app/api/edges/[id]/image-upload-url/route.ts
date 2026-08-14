@@ -19,6 +19,7 @@ import {
 import {
   edgeImagesWorkerConfigured, signEdgeImageUrl, EDGE_IMAGES_PUT_TTL_SEC,
 } from '@/lib/storage/edge-images-sign'
+import { hashDeviceToken } from '@/lib/edge/device-token'
 
 const Body = z.object({
   // 省略時は grid のみ。カメラ ID を渡すとその分の snapshot URL も返す。
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const { data: edge } = await svc
     .from('edge_devices')
     .select('id')
-    .eq('device_token', token)
+    .eq('device_token_hash', hashDeviceToken(token))
     .maybeSingle()
   // 自分自身の分しか発行しない（他エッジのキーを要求しても弾く）。
   if (!edge || edge.id !== edgeId) {

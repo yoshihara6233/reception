@@ -16,6 +16,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseService } from '@/lib/supabase/server'
+import { hashDeviceToken } from '@/lib/edge/device-token'
 
 export const runtime = 'nodejs'
 
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
   const { data: edge } = await supa
     .from('edge_devices')
     .select('id, store_id')
-    .eq('device_token', token)
+    .eq('device_token_hash', hashDeviceToken(token))
     .maybeSingle()
   if (!edge) return NextResponse.json({ error: 'invalid device token' }, { status: 401 })
 

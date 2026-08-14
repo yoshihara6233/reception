@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { r2Configured, presignClipPut, toR2Path } from '@/lib/baggage/r2'
+import { hashDeviceToken } from '@/lib/edge/device-token'
 
 const Body = z.object({
   sessionId: z.string().uuid(),
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
   const { data: edge } = await svc
     .from('edge_devices')
     .select('id')
-    .eq('device_token', token)
+    .eq('device_token_hash', hashDeviceToken(token))
     .maybeSingle()
   if (!edge) return NextResponse.json({ error: 'invalid device token' }, { status: 401 })
 

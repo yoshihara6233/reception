@@ -21,6 +21,7 @@ import { createSupabaseService } from '@/lib/supabase/server'
 import { notifyAlarm } from '@/lib/alarms/notify'
 import { dispatchAlarmTimeline } from '@/lib/alarms/dispatch'
 import { isStoreOptionEnabled } from '@/lib/admin/tenant-quota'
+import { hashDeviceToken } from '@/lib/edge/device-token'
 
 export const runtime = 'nodejs'
 
@@ -34,7 +35,7 @@ export async function POST(req: NextRequest) {
   const { data: edge } = await supa
     .from('edge_devices')
     .select('id, store_id')
-    .eq('device_token', token)
+    .eq('device_token_hash', hashDeviceToken(token))
     .maybeSingle()
   if (!edge || !edge.store_id) return NextResponse.json({ error: 'invalid device token' }, { status: 401 })
 
