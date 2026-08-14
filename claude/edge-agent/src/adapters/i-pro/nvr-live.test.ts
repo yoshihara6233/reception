@@ -22,7 +22,7 @@ const h = vi.hoisted(() => ({ fetchImpl: null as unknown as (u: string, i: Reque
 vi.mock('../../logger.js', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }))
 vi.mock('../../config.js', () => ({ config: { FFMPEG_BIN: '/usr/bin/ffmpeg' } }))
 
-import { fetchStreamWithConnectTimeout } from './nvr-live.js'
+import { fetchStreamWithConnectTimeout, initialComp, adoptCodec } from './nvr-live.js'
 
 /** ヘッダは delayMs 後に返し、本体は abort されるまで終わらない応答。 */
 function slowHeaders(delayMs: number): Promise<Response> {
@@ -96,5 +96,39 @@ describe('fetchStreamWithConnectTimeout', () => {
     outer.abort()
     await fetchStreamWithConnectTimeout('https://nvr/push.cgi', {}, outer.signal, 10_000)
     expect(bodySignal?.aborted).toBe(true)
+  })
+})
+
+/**
+ * カメラごとのコーデック記憶。
+ *
+ * ストリーマは 30 秒アイドルで破棄されるので、覚えないとグリッドを開き直すたびに
+ * H265 から探り直す。H265 を配信していないカメラでは毎回確実に外れ、実機で
+ * **14 秒**（失敗3回 + 探索待ち 12 秒）を払っていた（2026-08-14 のログ 11:50:41〜52）。
+ * その間そのコマは前の絵のまま固まる。
+ */
+describe('コーデックの記憶', () => {
+  it('未知のカメラは H265 から試す（従来どおり）', () => {
+    expect(initialComp('https://nvr-unknown|9')).toBe('H265')
+  })
+
+  it('★採用したコーデックは、次のストリーマにも引き継がれる（開き直しの探索を省く）', () => {
+    // 「今回の s.comp を直す」だけで「次回に引き継ぐ」を書き忘れると、
+    // 開き直すたびに 14 秒の探索が復活する。両方が起きることを1本で固定する。
+    const key = 'https://nvr-a|2'
+    const s = { comp: 'H265' as const } as { comp: 'H265' | 'H264' }
+    adoptCodec(s, key, 'h264')
+    expect(s.comp).toBe('H264')          // 今回の接続に効く
+    expect(initialComp(key)).toBe('H264') // 次のストリーマにも効く
+  })
+
+  it('記憶はカメラ単位（別チャンネルに漏れない）', () => {
+    adoptCodec({ comp: 'H265' } as { comp: 'H265' | 'H264' }, 'https://nvr-b|1', 'h264')
+    expect(initialComp('https://nvr-b|2')).toBe('H265')
+  })
+
+  it('同じ NVR でもエンドポイントが違えば別扱い', () => {
+    adoptCodec({ comp: 'H265' } as { comp: 'H265' | 'H264' }, 'https://nvr-c|1', 'h264')
+    expect(initialComp('https://nvr-d|1')).toBe('H265')
   })
 })
