@@ -24,8 +24,8 @@ export async function POST(req: NextRequest) {
     .insert({
       store_id:     parsed.data.store_id,
       name:         parsed.data.name,
-      // 段階1: 平文列は残っている（NOT NULL）ので両方書く。段階2で平文を落とす。
-      device_token,
+      // DB にはハッシュだけを置く。平文は下の払出レスポンスが唯一の出口で、
+      // ここを過ぎると誰も（super_admin も DB ダンプも）復元できない。
       device_token_hash: hashDeviceToken(device_token),
       status:       'offline',
     })

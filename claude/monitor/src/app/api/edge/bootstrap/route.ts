@@ -15,7 +15,8 @@
  * 最初に bootstrap を叩いた時点でスコープ用の身元が揃うため、やり忘れが起きない。
  * SECRETS_ENC_KEY 未設定の環境では provisioning しない（平文保存を避ける）。
  *
- * 認証: edge_devices.device_token と一致するトークンのみ。
+ * 認証: 受け取ったトークンの SHA-256 が edge_devices.device_token_hash と
+ *       一致する行のみ。平文は DB に無い（M-5 段階2）。
  *
  * ⚠ 移行中は service_role も従来通り返す。Phase B4（全エッジがスコープ運用に載ったら）で
  *   service_role 返却を撤廃し、device_token 漏洩時の影響限定を完成させる。
@@ -41,7 +42,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   if (!url || !key) return NextResponse.json({ error: 'server not configured' }, { status: 503 })
 
-  // device_token を検証（monitor の env キーで RLS バイパス参照）。
+  // トークンをハッシュ化して引き当てる（monitor の env キーで RLS バイパス参照）。
   const supa = createSupabaseService()
   const { data, error } = await supa
     .from('edge_devices')

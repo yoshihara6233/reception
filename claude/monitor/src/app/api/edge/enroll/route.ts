@@ -66,8 +66,7 @@ export async function POST(req: NextRequest) {
     .insert({
       store_id:    tok.store_id,
       name:        tok.name,
-      // 段階1: 平文列は残っている（NOT NULL）ので両方書く。段階2で平文を落とす。
-      device_token,
+      // DB にはハッシュだけ。平文は 4) の払出レスポンスが唯一の出口。
       device_token_hash: hashDeviceToken(device_token),
       status:      'offline',
       camera_tier: tok.camera_tier,
