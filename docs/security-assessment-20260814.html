@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>脆弱性検査報告 2026-08-14 — Intereco Recorder Monitor</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600&family=Noto+Sans+JP:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ge-paper:#F7F5F1; --ge-ink:#0F0F10; --ge-accent:#2C4A7E;
+  --ge-accent-soft:#EAEFF6;
+  --ge-ok:#2F7A4F; --ge-warn:#B5761A; --ge-danger:#A3332B;
+  --ge-line:#DCD8D1; --ge-mute:#6B6862;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--ge-paper); color:var(--ge-ink);
+  font-family:"Noto Sans JP",system-ui,sans-serif; font-size:14px; line-height:1.85;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:960px; margin:0 auto; padding:48px 24px 96px}
+h1,h2,h3{font-family:"Inter Tight","Noto Sans JP",sans-serif; line-height:1.35; margin:0}
+h1{font-size:32px; font-weight:600; letter-spacing:-.01em}
+h2{font-size:20px; font-weight:600; margin:56px 0 16px; padding-bottom:8px; border-bottom:1px solid var(--ge-line)}
+h3{font-size:16px; font-weight:600; margin:32px 0 8px}
+p{margin:12px 0}
+code,.mono{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:13px; font-variant-numeric:tabular-nums}
+code{background:#EFEDE8; padding:1px 5px; border-radius:4px}
+pre{background:#EFEDE8; border:1px solid var(--ge-line); border-radius:6px; padding:12px 14px; overflow-x:auto; margin:12px 0}
+pre code{background:none; padding:0}
+.lede{color:var(--ge-mute); font-size:13px; margin-top:8px}
+.card{border:1px solid var(--ge-line); border-radius:6px; padding:20px 24px; margin:16px 0; background:#FFFDFA}
+table{width:100%; border-collapse:collapse; margin:16px 0; font-size:13px}
+th,td{text-align:left; padding:8px 10px; border-bottom:1px solid var(--ge-line); vertical-align:top}
+th{font-weight:700; white-space:nowrap}
+td.num,th.num{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; white-space:nowrap}
+.tag{display:inline-block; font-size:11px; font-weight:700; padding:2px 8px; border-radius:4px; white-space:nowrap; font-family:"IBM Plex Mono",monospace}
+.t-high{background:#F6E4E2; color:var(--ge-danger)}
+.t-med{background:#F7ECD9; color:var(--ge-warn)}
+.t-low{background:#EFEDE8; color:var(--ge-mute)}
+.t-ok{background:#E3F0E8; color:var(--ge-ok)}
+.finding{border:1px solid var(--ge-line); border-radius:6px; margin:20px 0; overflow:hidden}
+.finding>header{padding:12px 20px; border-bottom:1px solid var(--ge-line); display:flex; gap:12px; align-items:baseline; flex-wrap:wrap}
+.finding>header .id{font-family:"IBM Plex Mono",monospace; font-weight:500; color:var(--ge-mute)}
+.finding>header .ttl{font-weight:700}
+.finding>div{padding:4px 20px 16px}
+.selected{background:var(--ge-accent-soft); border-left:2px solid var(--ge-accent)}
+dl{margin:8px 0}
+dt{font-weight:700; font-size:12px; color:var(--ge-mute); margin-top:12px}
+dd{margin:2px 0 0}
+ul{margin:8px 0; padding-left:22px}
+li{margin:4px 0}
+.meta{font-size:12px; color:var(--ge-mute); font-family:"IBM Plex Mono",monospace}
+.scroll{overflow-x:auto}
+hr{border:0; border-top:1px solid var(--ge-line); margin:40px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>脆弱性検査報告</h1>
+<p class="lede mono">Intereco Recorder Monitor ／ 2026-08-14 ／ 実施: Claude Opus 5 ／ 対象コミット: 337409bcf (monitor-prod)</p>
+
+<div class="card selected">
+  <h3 style="margin-top:0">この報告の限界（先に読んでください）</h3>
+  <p>本検査は<strong>外部診断の代替として実施したもので、独立性がありません</strong>。対象の設計とコードの多くを実施者自身が書いています。同日中に、実施者が書いた是正が実際には動いていなかった事例が 2 件出ました（<span class="mono">edge_command_runs</span> の RLS、i-PRO ストリームの 10 秒切断）。</p>
+  <p>そのため本検査は<strong>「読んで判断する」比重を下げ、「実際に動かして確かめる」比重を上げて</strong>います。すべての発見に再現手順または実測値を添えました。それでも、以下は本報告では代替できません。</p>
+  <ul>
+    <li>第三者性（契約・顧客提出の要件としての診断）</li>
+    <li>本番環境への実射撃（攻撃の成立可否を実地で確認していない）</li>
+    <li>ネットワーク層・物理・ソーシャルエンジニアリング</li>
+  </ul>
+  <p>SLA 定義書に顧客合意欄があるため、<strong>顧客要件として第三者診断が必要かは別途確認が要ります</strong>。</p>
+</div>
+
+<h2>1. 要約</h2>
+
+<p>重大（Critical）はありません。<strong>認証・認可の実装そのものは堅牢</strong>で、RLS は public の全テーブルで有効、90 本の API ルートはガード棚卸しが CI で強制され、キオスク PIN・署名 URL・秘密の暗号化はいずれも定石どおりでした。</p>
+
+<p>一方、<strong>問題は「アプリの外側」と「検査の側」に集中しています</strong>。依存の監査は仕組みとしては動いていますが結果が読まれず、廃止済みプロジェクトの資格情報が開発機に残り、既存の死角検査そのものに死角がありました。</p>
+
+<div class="scroll">
+<table>
+<thead><tr><th class="num">ID</th><th>重大度</th><th>内容</th><th>状態</th></tr></thead>
+<tbody>
+<tr><td class="num">H-1</td><td><span class="tag t-high">HIGH</span></td><td>依存監査ジョブが構造的に失敗しない（<span class="mono">bun audit || true</span>）</td><td><span class="tag t-ok">是正済</span></td></tr>
+<tr><td class="num">H-2</td><td><span class="tag t-high">HIGH</span></td><td>Next.js に未適用の勧告 9 件（うち該当 4 件）</td><td><span class="tag t-ok">是正済</span></td></tr>
+<tr><td class="num">M-3</td><td><span class="tag t-med">MEDIUM</span></td><td>エッジの <span class="mono">sharp</span>／libvips CVE — カメラ由来の画像を処理する経路</td><td><span class="tag t-ok">是正済</span></td></tr>
+<tr><td class="num">M-4</td><td><span class="tag t-med">MEDIUM</span></td><td>廃止プロジェクトの資格情報が開発機に残置（644）<strong>※初報を訂正・範囲縮小</strong></td><td><span class="tag t-ok">是正済</span></td></tr>
+<tr><td class="num">M-5</td><td><span class="tag t-med">MEDIUM</span></td><td><span class="mono">edge_devices.device_token</span> だけが平文保管</td><td><span class="tag t-ok">是正済</span></td></tr>
+<tr><td class="num">M-6</td><td><span class="tag t-low">取下げ</span></td><td><s>ライブ画像を守る Worker がリポジトリに無く検証不能</s><strong>※初報が誤り。版管理下にあり、検証も実施して問題なし</strong></td><td><span class="tag t-ok">誤報</span></td></tr>
+<tr><td class="num">L-7</td><td><span class="tag t-low">LOW</span></td><td>秘密ファイルが gitignore されない側の検査が無い<strong>※初報を訂正・範囲縮小</strong></td><td><span class="tag t-ok">是正済</span></td></tr>
+<tr><td class="num">L-8</td><td><span class="tag t-low">LOW</span></td><td>認可ガードが「呼ぶだけ」で通る構造（現状の実装は全て正しい）</td><td><span class="tag t-ok">是正済</span></td></tr>
+<tr><td class="num">L-9</td><td><span class="tag t-low">LOW</span></td><td>GitHub Action の SHA 固定が 1 件のみ</td><td><span class="tag t-ok">是正済</span></td></tr>
+</tbody>
+</table>
+</div>
+
+<p>本検査と同日、アカウント層で 2 件を発見し<strong>即日是正済み</strong>です（本文 §5）。GitHub の 2FA 無効と Resend の MFA 無効で、いずれも本番の上流にあたります。</p>
+
+<h2>2. 発見（HIGH）</h2>
+
+<div class="finding">
+  <header><span class="id">H-1</span><span class="ttl">依存監査ジョブが構造的に失敗しない</span><span class="tag t-high">HIGH</span></header>
+  <div>
+    <dl>
+      <dt>事実</dt>
+      <dd><code>.github/workflows/security.yml</code> の <code>bun audit || true</code>。<strong>何件の脆弱性があってもジョブは緑になります。</strong></dd>
+      <dt>実測</dt>
+      <dd>26 件（high 17／moderate 8／low 1）が蓄積。当日の全 PR で「Dependency audit (bun) <span class="mono">pass</span>」と表示されていました。</dd>
+      <dt>なぜ効くか</dt>
+      <dd>設計意図は「情報提供、HIGH は目視で確認」でしたが、<strong>緑のチェックは「依存に問題なし」と区別できません</strong>。読む運用は成立しておらず、結果として H-2（Next.js）が約 2 か月放置されました。</dd>
+      <dt>是正案</dt>
+      <dd>high 以上で失敗させる。既知で受容するものは<strong>期限付きの明示的な除外リスト</strong>に書く（「なぜ受容するか」と「いつ見直すか」を残す）。除外が空でも緑、というのが読める状態です。</dd>
+    </dl>
+  </div>
+</div>
+
+<div class="finding">
+  <header><span class="id">H-2</span><span class="ttl">Next.js に未適用の勧告 9 件</span><span class="tag t-high">HIGH</span></header>
+  <div>
+    <dl>
+      <dt>事実</dt>
+      <dd>現行 <code>next@16.2.9</code>。勧告 9 件はすべて <span class="mono">&gt;=16.0.0 &lt;16.2.11</span> が影響範囲で、<strong>16.2.11 への 1 パッチで全て閉じます</strong>。</dd>
+      <dt>実構成での適用性（CVE 一覧をそのまま採らず、条件を照合しました）</dt>
+      <dd>
+        <div class="scroll">
+        <table>
+          <thead><tr><th>勧告</th><th>判定</th><th>根拠</th></tr></thead>
+          <tbody>
+            <tr><td>middleware / proxy 認可バイパス（CVE-2026-64642）</td><td><span class="tag t-ok">該当せず</span></td><td>条件は <code>config.i18n.locales</code> が単一エントリ。<strong>i18n 設定なし</strong></td></tr>
+            <tr><td>custom server の SSRF</td><td><span class="tag t-ok">該当せず</span></td><td>Vercel 上で稼働（custom server ではない）</td></tr>
+            <tr><td>rewrites 経由の SSRF</td><td><span class="tag t-ok">該当せず</span></td><td><code>next.config.ts</code> に rewrites なし</td></tr>
+            <tr><td>Server Action の DoS</td><td><span class="tag t-med">該当</span></td><td>Server Actions を 7 ファイル以上で使用</td></tr>
+            <tr><td>内部 Server Function の無認証開示</td><td><span class="tag t-med">該当</span></td><td>同上</td></tr>
+            <tr><td>画像最適化 API の SVG DoS</td><td><span class="tag t-med">該当</span></td><td><code>images.remotePatterns</code> 設定あり</td></tr>
+            <tr><td>Cache confusion（2 件）／Edge の無制限ペイロード</td><td><span class="tag t-med">部分的</span></td><td><code>bodySizeLimit: 2mb</code> で一部緩和</td></tr>
+          </tbody>
+        </table>
+        </div>
+      </dd>
+      <dt>評価</dt>
+      <dd><strong>認可バイパスは成立しません。</strong>残るのは DoS と情報開示です。ただし修正費用がパッチ 1 つと極めて小さいので、優先度は高いままです。</dd>
+    </dl>
+  </div>
+</div>
+
+<h2>3. 発見（MEDIUM）</h2>
+
+<div class="finding">
+  <header><span class="id">M-3</span><span class="ttl">エッジの sharp／libvips CVE — カメラ由来の画像を処理する経路</span><span class="tag t-med">MEDIUM</span></header>
+  <div>
+    <dl>
+      <dt>事実</dt>
+      <dd><code>sharp ^0.34.5</code>（最新 0.35.3）に libvips 由来の CVE。使用箇所は <strong>monitor には無く、edge-agent の <code>src/modes/grid.ts</code> のみ</strong>。</dd>
+      <dt>なぜ効くか</dt>
+      <dd>そこは<strong>店舗 LAN のカメラ／NVR から取得した JPEG を合成する経路</strong>です。侵害されたカメラ、あるいは LAN 内に立った攻撃者が細工画像を返せば、libvips のデコード処理に到達します。到達先のエッジは <code>device_token</code> を保持する機です。</dd>
+      <dt>緩和されている点</dt>
+      <dd>同日完了した B4 により、エッジは service_role を保持しません（<code>scoped_only=true</code>・鍵はディスクから削除済み）。侵害されても取得できるのは当該店舗にスコープされたトークンまでです。</dd>
+      <dt>是正案</dt>
+      <dd><code>sharp</code> を 0.35.x へ。OTA で 2 台に配布。</dd>
+    </dl>
+  </div>
+</div>
+
+<div class="finding">
+  <header><span class="id">M-4</span><span class="ttl">廃止プロジェクトの資格情報が開発機に残置</span><span class="tag t-med">MEDIUM</span></header>
+  <div>
+    <div class="card selected" style="margin-top:16px">
+      <p style="margin:0"><strong>初報の訂正</strong>：当初この項目を「本番相当の資格情報一式」と書きましたが、<strong>変数名だけを見て値を確認していませんでした</strong>。実測したところ大半は空欄またはローカル開発用の公開値で、<strong>実際に生きている秘密は 2 本</strong>です。以下は訂正後の内容です。</p>
+    </div>
+    <dl>
+      <dt>実測（値は表示せず、長さ・先頭・接続先のみ確認）</dt>
+      <dd>
+        <div class="scroll">
+        <table>
+          <thead><tr><th>変数</th><th>ファイル</th><th>実態</th><th>危険度</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">ANTHROPIC_API_KEY</td><td class="mono">reception</td><td><span class="mono">sk-ant-…</span> 長さ 108 ＝ 実在する課金対象の鍵</td><td><span class="tag t-med">生きている</span></td></tr>
+            <tr><td class="mono">LINE_CHANNEL_ACCESS_TOKEN</td><td class="mono">OSS-VMS</td><td>長さ 172 ＝ 実在する Messaging API トークン。当該チャネルとして顧客へ送信可能</td><td><span class="tag t-med">生きている</span></td></tr>
+            <tr><td class="mono">CAMERA_PASSWORD ほか</td><td class="mono">OSS-VMS</td><td>実在（8 文字）。対象は <span class="mono">192.168.0.120</span> だが <strong>80/443/554 いずれも無応答＝現在ネットワーク上に無い</strong></td><td><span class="tag t-low">対象不在</span></td></tr>
+            <tr><td class="mono">SUPABASE_SERVICE_ROLE_KEY</td><td class="mono">reception</td><td><strong>ローカル既定鍵</strong>（<span class="mono">NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321</span>）＝公開値</td><td><span class="tag t-ok">秘密でない</span></td></tr>
+            <tr><td class="mono">CRON_SECRET</td><td class="mono">reception</td><td>同じくローカル開発用</td><td><span class="tag t-ok">秘密でない</span></td></tr>
+            <tr><td class="mono">AWS_ACCESS_KEY_ID / SECRET</td><td class="mono">reception</td><td><strong>空欄（長さ 0）</strong></td><td><span class="tag t-ok">該当なし</span></td></tr>
+          </tbody>
+        </table>
+        </div>
+      </dd>
+      <dt>なぜ効くか（訂正後）</dt>
+      <dd>残る 2 本は<strong>いずれもプロジェクト単位ではなくアカウント単位の鍵</strong>で、reception と OSS-VMS を廃止しても失効しません。Anthropic は課金対象、LINE は当該チャネルの名前で顧客にメッセージを送れます。644 は同一マシンの任意のプロセスから読める状態でした。</dd>
+      <dt>既視感</dt>
+      <dd>2026-08-03 にエッジの旧ディレクトリで<strong>同じ形</strong>を発見しています（644 の失効鍵を含む 5 本）。そのとき「退役したら env の掃除まで 1 手順にする」と決めましたが、<strong>開発機の廃止プロジェクトには適用されていませんでした</strong>。</dd>
+      <dt>是正（完了）</dt>
+      <dd>
+        <ul>
+          <li>2 ファイルを <code>chmod 600</code>。<code>192.168.0.120</code> が 80/443/554 いずれも無応答＝現在ネットワーク上に無いことを実測</li>
+          <li><strong>Anthropic の API キー 3 本を失効</strong>。削除前に、シェル環境変数・<code>.zshrc</code>／<code>.zprofile</code>・開発機全体（隠しファイル込み）・monitor 本番の Vercel env を走査し、参照が <code>reception/.env.local</code> 1 件のみであること、3 本とも最終使用 30 日以上前であることを確認</li>
+          <li><strong>LINE のチャネルアクセストークン（長期）とチャネルシークレットを再発行</strong>。既存トークンの有効期限は 0 時間（即時無効）。チャネル自体は削除していない — Messaging API チャネルは LINE 公式アカウントに紐づくため、顧客が友だち登録している可能性を排除できない。目的（漏れたトークンの無効化）は再発行で達成される</li>
+          <li><strong>3 ファイルを削除</strong>（<code>reception/.env.local</code>／<code>OSS-VMS/.env</code>／<code>OSS-VMS/.env.save</code>）。実施者は不可逆操作を行わず、手順を提示して利用者が実行</li>
+        </ul>
+      </dd>
+      <dt>残</dt>
+      <dd>カメラのパスワード（8 文字）が<strong>現役カメラ（WV-U1132A／WV-SW158）と使い回されていないか</strong>の確認のみ。使い回しなら変更、違えば対応不要。対象カメラ自体は不在。</dd>
+      <dt>現在の状態</dt>
+      <dd><code>claude/</code> 配下に残る <code>.env</code> 系は <code>Store Entry Info/.env.local</code>（zaiten・進行中・600）のみ。</dd>
+      <dt>この訂正から得た教訓</dt>
+      <dd><strong>変数名は危険度の証拠にならない。</strong>「SERVICE_ROLE_KEY がある」と「本番の鍵が漏れている」の間には、値を見るという一手が要ります。今回それを飛ばして報告し、必要のない AWS 鍵ローテーションを促すところでした。</dd>
+    </dl>
+  </div>
+</div>
+
+<div class="finding">
+  <header><span class="id">M-5</span><span class="ttl">device_token だけが平文保管</span><span class="tag t-med">MEDIUM</span></header>
+  <div>
+    <dl>
+      <dt>事実</dt>
+      <dd>スキーマ上の認証用の秘密を横並びにすると、<strong>平文はこの 1 本だけ</strong>です。</dd>
+      <dd>
+        <div class="scroll">
+        <table>
+          <thead><tr><th>用途</th><th>列</th><th>保管</th></tr></thead>
+          <tbody>
+            <tr><td>キオスク PIN</td><td class="mono">baggage_kiosk_pins.pin_hash</td><td><span class="tag t-ok">scrypt</span></td></tr>
+            <tr><td>エンロールトークン</td><td class="mono">enrollment_tokens.token_hash</td><td><span class="tag t-ok">ハッシュ</span></td></tr>
+            <tr><td>カメラ／VOD パスワード</td><td class="mono">recorders.password_enc ほか</td><td><span class="tag t-ok">Vault 暗号化</span></td></tr>
+            <tr><td>エッジ auth パスワード</td><td class="mono">edge_devices.auth_password_enc</td><td><span class="tag t-ok">暗号化</span></td></tr>
+            <tr><td><strong>エッジ端末トークン</strong></td><td class="mono">edge_devices.device_token_hash</td><td><span class="tag t-ok">SHA-256</span>（旧 <span class="mono">device_token</span> は列ごと削除）</td></tr>
+          </tbody>
+        </table>
+        </div>
+      </dd>
+      <dt>なぜ効くか</dt>
+      <dd>この値は <code>/api/edge/bootstrap</code>（スコープトークンを発行）と <code>/api/alarms/ingest</code>（発報の受け口）の認証子です。DB を読める経路——super_admin の管理画面、バックアップ、ダンプの流出——が 1 つでもあれば、<strong>任意のエッジになりすませます</strong>。偽の発報を上げ、当該店舗のカメラにスコープされたトークンを受け取れます。</dd>
+      <dt>是正が容易な理由</dt>
+      <dd>同じ設計が<strong>隣のテーブルに既にあります</strong>。<code>enrollment_tokens</code> は <code>token_hash</code> で引いています。<code>device_token</code> も同様にハッシュ列で照合すれば、参照経路を変えずに平文を排除できます。</dd>
+      <dt>是正（2026-08-14・2段階）</dt>
+      <dd><strong>段階1（PR #314）</strong>: <code>device_token_hash</code>（SHA-256・NOT NULL・一意索引）を追加し、backfill したうえで<strong>認証 6 箇所</strong>をハッシュ引きへ切替。平文列は残したまま、払出 2 箇所は両方に書く。<br>
+        <strong>段階2（PR #315）</strong>: 払出から平文を外し、<code>device_token</code> 列を削除。平文の出口は<strong>払出時のレスポンスだけ</strong>になり、以降は super_admin の画面からもバックアップからも復元できません。</dd>
+      <dt>なぜ 2 段階に分けたか</dt>
+      <dd>列の<strong>追加</strong>は旧コードに無害なのでマージ前に当てられますが、<strong>削除</strong>は逆で、平文列へ insert する旧コードが残っていると PostgREST のスキーマエラー＝ 500 になります。2026-08-06 に <code>scoped_only</code> 列でこれを起こし、<strong>全エッジの bootstrap が同時に落ちています</strong>。しかも本日 B4 を完走して service_role をエッジから消したため、bootstrap が壊れると代替経路がありません（スコープトークンの期限 1 時間で停止）。</dd>
+      <dt>実測での確認</dt>
+      <dd>各段階で <code>last_seen_at</code> の鮮度<strong>だけでは判定していません</strong>。heartbeat が使うスコープトークンは有効 1 時間で、切替前に発行されたものが生きていれば<strong>新経路が壊れていても「動いて見える」</strong>ためです。本番デプロイのランタイムログで <code>/api/edge/bootstrap</code> の 200 を、切替時刻より<strong>後</strong>のものだけ数えました。</dd>
+      <dd>
+        <div class="scroll">
+        <table>
+          <thead><tr><th>段階</th><th>本番切替</th><th>切替後の bootstrap 200（JST）</th></tr></thead>
+          <tbody>
+            <tr><td>段階1</td><td class="mono">dpl_5BF1ZW1e…（15:42:50）</td><td class="mono">15:44:48 / 15:47:51 / 15:49:48 / 15:52:51</td></tr>
+            <tr><td>段階2（列の削除）</td><td class="mono">migration 適用（16:14〜16:15）</td><td class="mono">16:17:51 / 16:19:48 / 16:22:51</td></tr>
+          </tbody>
+        </table>
+        </div>
+      </dd>
+      <dd>段階2の直前にあった 16:14:48 の 200 は、適用の前後が確定できない位置にあったため<strong>証拠に数えていません</strong>。間隔から <code>16:17:51 / 16:22:51</code> と <code>16:19:48</code> が別々のエッジで、<strong>2 台とも平文列なしで bootstrap を通しています</strong>。</dd>
+      <dt>検査の追加</dt>
+      <dd>authz の「エッジが自分の認証子を書き換えられない」検査は <code>device_token</code> を対象にしていました。列を消すと<strong>「列が無い」エラーを「トリガが拒否した」と読む</strong>形になり、守っている性質が静かに検査されなくなります。対象をテナントをまたぐ <code>store_id</code> の付け替えへ差し替えました。加えて、情報スキーマで<strong>列の不在そのもの</strong>を見る検査を追加しています（アプリが書かなくなっただけでは既存行の平文は残るため）。</dd>
+    </dl>
+  </div>
+</div>
+
+<div class="finding">
+  <header><span class="id">M-6</span><span class="ttl"><s>ライブ画像を守る Worker がリポジトリに無い</s> — 取り下げ</span><span class="tag t-ok">誤報</span></header>
+  <div>
+    <div class="card selected" style="margin-top:16px">
+      <p style="margin:0"><strong>この指摘は成立しません。</strong>Worker は<strong>最初からバージョン管理下</strong>にありました（<code>claude/cloudflare/edge-images/</code>・<code>claude/cloudflare/live-gate/</code>、6 ファイルすべて追跡済み）。実施者が <code>/Users/junji.y/claude/cloudflare</code>（ホーム側）を見て「無い」と判断したもので、実際はリポジトリ内の <code>claude/cloudflare/</code> です。<strong>探す場所を間違えて、見つからないことを「存在しない」と読みました。</strong></p>
+    </div>
+    <p>取り下げたうえで、本来この項目でやりたかった<strong>検証側のレビューを実施しました</strong>。結果は良好です。</p>
+    <div class="scroll">
+    <table>
+      <thead><tr><th>懸念していた点</th><th>実装（<code>edge-images/src/index.js</code>）</th><th>判定</th></tr></thead>
+      <tbody>
+        <tr><td>署名比較が時間一定か</td><td><code>safeEqual()</code> が XOR 累積の定数時間比較</td><td><span class="tag t-ok">問題なし</span></td></tr>
+        <tr><td><code>exp</code> を実際に検証しているか</td><td>形式（<code>^\d+$</code>）と期限の<strong>両方</strong>を検査</td><td><span class="tag t-ok">問題なし</span></td></tr>
+        <tr><td>キー形式がパストラバーサルを弾くか</td><td>アンカー付き <code>KEY_RE</code>。<strong><code>decodeURIComponent</code> の<em>後</em>に検査</strong>するため <code>%2e%2e%2f</code> も弾ける</td><td><span class="tag t-ok">問題なし</span></td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p>加えて、鍵未設定は 500・例外は 403 の fail-closed、<code>method</code> の署名束縛（HEAD は GET 署名で許可）も適切でした。もう 1 本の <code>live-gate</code>（店舗トンネルの Frigate ライブを守る）も同じ形で、<strong>Cloudflare Access の Service Token を素通しせず Worker 側でも検証</strong>しています。</p>
+    <dl>
+      <dt>残る軽微な観察（是正不要）</dt>
+      <dd><code>exp</code> に上限がありません。Worker は未来であれば何秒先でも受け付けます。実際には署名を発行する monitor 側が PUT 3600 秒 / GET 120 秒に制限しているため境界は保たれており、また署名鍵が漏れた時点で上限の有無は意味を失うため、実害はありません。</dd>
+    </dl>
+  </div>
+</div>
+
+<h2>4. 発見（LOW）</h2>
+
+<div class="finding">
+  <header><span class="id">L-7</span><span class="ttl">死角の検査に死角がある</span><span class="tag t-low">LOW</span></header>
+  <div>
+    <div class="card selected" style="margin-top:0;margin-bottom:16px">
+      <p style="margin:0"><strong>初報の訂正</strong>：当初「<code>claude/monitor/.env.local</code> と <code>claude/edge-agent/.env</code> が TRACKABLE」と書きましたが<strong>誤りです</strong>。判定を <strong>HOME のチェックアウト（別ブランチ <code>feat/baggage-inspection-1a</code>）で実行していました</strong>。そのツリーには <code>claude/monitor/</code> が存在せず、当然その <code>.gitignore</code> も無いため、どのルールにも当たらず「無防備」と出ていました。<code>monitor-prod</code> では<strong>主要な <code>.env</code> は最初から守られています</strong>。以下は訂正後の内容です。</p>
+    </div>
+    <p><code>src/test/gitignore-blind-spot.test.ts</code> は「<strong>追跡済みのソースが ignore に隠れていないか</strong>」を検査します。これは実際の事故（<code>reports/</code> が src 14 ファイルを巻き込んだ件）から生まれた良い検査です。</p>
+    <p>しかし方向が片側だけで、<strong>逆方向——コミットされてはいけないものが ignore されていない——は原理的に拾えません</strong>。</p>
+    <dl>
+      <dt>実際に空いていた穴（<code>monitor-prod</code> で正しく測り直した結果）</dt>
+      <dd>ルートと各プロジェクトの <code>.gitignore</code> は <code>.env</code>・<code>.env.local</code>・<code>.env.*.local</code> と<strong>個別の名前を列挙</strong>しており、変種が素通りしていました。</dd>
+      <dd>
+<pre><code>claude/monitor/.env            ignored
+claude/monitor/.env.local      ignored
+claude/monitor/.env.production ★ TRACKABLE
+claude/monitor/.env.demo       ★ TRACKABLE
+claude/monitor/.env.bak        ★ TRACKABLE
+claude/monitor/secret.pem      ★ TRACKABLE
+claude/monitor/id_rsa          ★ TRACKABLE</code></pre>
+      </dd>
+      <dt>なぜ効くか</dt>
+      <dd><strong><code>.env.demo</code> は仮定ではありません。</strong>退役した <code>intereco-edge-demo</code> が実際に使っていたファイル名で、service_role 鍵が入っていました（2026-08-03 に現地で発見・削除）。<code>.env.save</code> も OSS-VMS に実在しました。<code>vercel env pull</code> は <code>.env.local</code> を、機器作業のバックアップは <code>.env.bak</code> を作ります。<strong><code>git add -A</code> 1 回で本番の秘密が履歴に入り、履歴からは消せません。</strong></dd>
+      <dt>是正（完了・PR #310）</dt>
+      <dd>名前ではなく<strong>形</strong>で塞ぎ（<code>.env*</code> ＋ <code>*.pem</code> 等）、雛形（<code>*.example</code>）だけを戻しました。テストは逆方向を追加し、<strong>両方向で挟む</strong>形にしています。</dd>
+      <dd>
+        <div class="scroll">
+        <table>
+          <thead><tr><th>変異</th><th>落ちる検査</th></tr></thead>
+          <tbody>
+            <tr><td><code>!.env*.example</code> を削除（無視を広げすぎ）</td><td>「.example は追跡できる」</td></tr>
+            <tr><td>名前列挙に戻す（狭すぎ）</td><td>「秘密はどこに置かれても無視される」</td></tr>
+          </tbody>
+        </table>
+        </div>
+      </dd>
+      <dt>この訂正から得た教訓</dt>
+      <dd><strong>作業ツリーを間違えても、それらしい結果が返ります。</strong>この項目の調査中だけで 3 回踏みました — ①HOME のチェックアウトで判定（初報の誤りの原因）／②vitest の cwd が <code>claude/monitor</code> のため <code>claude/monitor/claude/monitor/.env</code> を測っていた／③worktree のルートを取り違えて HOME 側の <code>.gitignore</code> を編集し、当然何も変わらなかった。いずれも本検査全体の主題（§8）と同じ形です。テストのコメントに経緯ごと残しました。</dd>
+    </dl>
+  </div>
+</div>
+
+<div class="finding">
+  <header><span class="id">L-8</span><span class="ttl">認可ガードが「呼ぶだけ」で通る構造</span><span class="tag t-low">LOW</span></header>
+  <div>
+    <p><code>requireAdmin()</code> は例外を投げず <code>{ ok: false, status, error }</code> を<strong>返します</strong>。ガード棚卸し（<code>api-guard-inventory.test.ts</code>）は正規表現でソースを見るため、<strong>「呼んでいる」ことは分かっても「戻り値で止めている」ことは分かりません</strong>。</p>
+    <p>さらに <code>supa</code>（Supabase クライアント）は<strong>成功・失敗の両分岐に存在する</strong>ため、次のコードは <strong>TypeScript の型検査を通ります</strong>——認可を一切していないにもかかわらず。</p>
+<pre><code>const { supa } = await requireAdmin()   // ok を見ずに DB クライアントが手に入る</code></pre>
+    <dl>
+      <dt>実測</dt>
+      <dd>ガードを呼ぶ 35 ルートを走査し、<strong>該当は 0 件</strong>。全てが <code>!ok</code> で早期 return しています。</dd>
+      <dt>したがって</dt>
+      <dd>現時点で脆弱性はありません。指摘は<strong>「現状そうなっているだけで、構造的には防がれていない」</strong>という点です。同日 <code>edge_command_runs</code> で踏んだのと同じ「書けてしまう形」です。</dd>
+      <dt>是正案</dt>
+      <dd>失敗分岐から <code>supa</code> を外す（型で強制する）か、ガードを例外送出に変える。</dd>
+    </dl>
+  </div>
+</div>
+
+<div class="finding">
+  <header><span class="id">L-9</span><span class="ttl">GitHub Action の SHA 固定が 1 件のみ</span><span class="tag t-low">LOW</span></header>
+  <div>
+    <p>SHA 固定は <code>dorny/paths-filter</code> のみ（コメントに「SHA-pinned: supply-chain」と明記あり）。<code>oven-sh/setup-bun@v2</code> と <code>supabase/setup-cli@v1</code> は可変タグです。タグは差し替え可能なので、上流が侵害されると CI に任意コードが入ります。</p>
+    <p><strong>緩和</strong>: CI は本番シークレットを一切参照せず（<code>secrets.</code> の参照ゼロ）、<code>GITHUB_TOKEN</code> の既定権限は <span class="mono">read</span>。被害範囲は限定的です。</p>
+  </div>
+</div>
+
+<h2>5. 同日に是正済み（アカウント層）</h2>
+
+<p>本検査の過程で、<strong>アプリの外側</strong>に 2 件を発見し即日是正しました。従来の点検——外部有識者レビューを含め——は<strong>すべてアプリ内部（authz／RLS／証跡）だけを見ており、その手前のアカウント層は一度も点検されていませんでした</strong>。</p>
+
+<div class="scroll">
+<table>
+<thead><tr><th class="num">ID</th><th>内容</th><th>影響</th><th>状態</th></tr></thead>
+<tbody>
+<tr><td class="num">A-1</td><td>GitHub の 2FA が無効</td><td>GitHub のパスワード 1 本で <strong>本番 Supabase ダッシュボード</strong>（identity が GitHub OAuth 単独）・<strong>本番デプロイ</strong>（<code>monitor-prod</code> へのマージが Vercel を起動）・リポジトリに到達</td><td><span class="tag t-ok">是正済</span></td></tr>
+<tr><td class="num">A-2</td><td>Resend の 2 アカウントとも MFA 無効</td><td><code>genesis-edge.com</code> を差出人にした偽メールとパスワードリセットリンクを発行可能。DKIM/SPF が通るため受信側で本物と区別できない</td><td><span class="tag t-ok">是正済</span></td></tr>
+</tbody>
+</table>
+</div>
+
+<p>A-1 の是正は実測で確認しています。<code>two_factor_authentication: true</code>／TOTP とパスキーの 2 要素登録／push 経路の疎通（<code>git ls-remote</code>）／<strong>プライベートウィンドウで Supabase に GitHub OAuth 経由でログインし直し、2FA を挟んで通ること</strong>。A-2 は MFA を有効化したうえで gmail メンバーを削除し、残存メンバーが管理者かつ MFA 有効であることを画面で確認しました。</p>
+
+<p><strong>残る構造的弱点</strong>: Supabase の Account identities は依然 GitHub 1 本です。GitHub を失うと本番 DB の管理画面も同時に失います。独立した 2 本目の経路を持つべきかは別途判断が要ります。</p>
+
+<h2>6. 問題が無いことを確認した領域</h2>
+
+<p>脆弱性の一覧だけを並べると全体像を誤らせるので、確認して問題が無かったものも記録します。</p>
+
+<div class="scroll">
+<table>
+<thead><tr><th>領域</th><th>確認方法</th><th>結果</th></tr></thead>
+<tbody>
+<tr><td>RLS の網羅</td><td><code>pg_class.relrowsecurity</code> を全 public テーブルで照会</td><td><strong>未有効はゼロ</strong>。ポリシー 0 件のもの（<span class="mono">enrollment_tokens</span>／<span class="mono">baggage_kiosk_pins</span>／<span class="mono">rate_limits</span>／パーティション子表）はいずれも意図した service_role 限定＝既定拒否</td></tr>
+<tr><td>git 履歴の秘密</td><td><code>git log -S</code> で 5 パターンを全履歴走査</td><td><strong>実鍵ゼロ</strong>。<span class="mono">sb_secret_</span> の 6 件は書式説明の文字列（20 文字以上続く実鍵形は 0 件）。AKIA・秘密鍵・Resend・JWT も 0 件</td></tr>
+<tr><td>API ルートの認可</td><td>ガード 35 ルートで <code>!ok</code> の早期 return を走査</td><td><strong>漏れ 0 件</strong>。棚卸し表は CI で強制され、<span class="mono">PUBLIC</span> は理由付きで 3 本に限定</td></tr>
+<tr><td>CI のシークレット</td><td>workflow 内の <code>secrets.</code> 参照を全走査</td><td><strong>参照ゼロ</strong>。CI は本番の秘密に一切触れない</td></tr>
+<tr><td>CI の権限</td><td>GitHub API <code>actions/permissions/workflow</code></td><td><code>default_workflow_permissions: read</code></td></tr>
+<tr><td>ブランチ保護</td><td>GitHub API <code>branches/monitor-prod/protection</code></td><td><span class="mono">enforce_admins: true</span>／force-push 禁止／削除禁止／<span class="mono">ci-passed</span> 必須／strict</td></tr>
+<tr><td>Storage の公開設定</td><td><code>storage.buckets</code> を照会</td><td>両バケットとも <span class="mono">public = false</span>。サイズ上限と MIME 許可リストあり。<code>storage.objects</code> にポリシー 3 件</td></tr>
+<tr><td>署名 URL（生成側）</td><td>実装読解</td><td>HMAC-SHA256／method を署名対象に含む／GET は TTL 120 秒／env 未設定でフェイルクローズ</td></tr>
+<tr><td><strong>署名 URL（検証側 Worker）</strong></td><td>実装読解（<code>claude/cloudflare/</code>・版管理下）</td><td>定数時間比較／<code>exp</code> の形式と期限を検査／キー形式をアンカー付き正規表現で限定（デコード後に検査）／fail-closed。<code>live-gate</code> も同形で Service Token を素通しせず検証</td></tr>
+<tr><td>キオスク認証</td><td>実装読解</td><td>PIN は scrypt、比較は <code>timingSafeEqual</code>、セッション cookie は HMAC-SHA256 ＋時間一定比較</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>7. 是正の優先順</h2>
+
+<p><strong>2026-08-14 時点で、未対応の項目はありません。</strong>M-6 は指摘そのものを取り下げ、他の 8 件は同日中に是正して本番へ反映しました（PR #309 / #310 / #311 / #312 / #313 / #314 / #315）。取り消し線は完了分です。</p>
+
+<div class="scroll">
+<table>
+<thead><tr><th class="num">順</th><th>項目</th><th>手間</th><th>理由</th></tr></thead>
+<tbody>
+<tr><td class="num">—</td><td><s>H-2 <code>next</code> を 16.2.11 へ</s></td><td>—</td><td>パッチ 1 つで勧告 9 件が閉じる。費用対効果が突出</td></tr>
+<tr><td class="num">—</td><td><s>H-1 <code>bun audit</code> を high で失敗させ、受容分は期限付きで明示除外</s></td><td>—</td><td>これを直さないと H-2 が再発する。<strong>個別の脆弱性より、見えない状態そのものが問題</strong></td></tr>
+<tr><td class="num">—</td><td><s>M-4 Anthropic と LINE のトークンを失効 → env ファイルを削除</s></td><td>—</td><td><span class="tag t-ok">2026-08-14 完了</span></td></tr>
+<tr><td class="num">—</td><td><s>M-3 <code>sharp</code> を 0.35.x へ（OTA 配布）</s></td><td>—</td><td>カメラ由来の入力を処理する唯一の経路</td></tr>
+<tr><td class="num">—</td><td><s>L-7 秘密ファイルが ignore される側の検査を追加</s></td><td>—</td><td><span class="tag t-ok">2026-08-14 完了（PR #310）</span></td></tr>
+<tr><td class="num">—</td><td><s>M-5 <code>device_token</code> をハッシュ化</s></td><td>—</td><td><span class="tag t-ok">2026-08-14 完了</span> 2 段階（PR #314 → #315）。切替後の bootstrap 200 を実測してから列を削除</td></tr>
+<tr><td class="num">—</td><td><s>M-6 Worker をバージョン管理下へ</s></td><td>—</td><td><span class="tag t-ok">2026-08-14 取下げ（初報が誤り）</span></td></tr>
+<tr><td class="num">—</td><td><s>L-8 ガードの失敗分岐から <code>supa</code> を外す</s></td><td>—</td><td><span class="tag t-ok">2026-08-14 完了（PR #311）</span></td></tr>
+<tr><td class="num">—</td><td><s>L-9 third-party Action を SHA 固定</s></td><td>—</td><td><span class="tag t-ok">2026-08-14 完了（PR #312・#313）</span></td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>8. 所見</h2>
+
+<p>この製品の<strong>認証・認可の実装は、この規模のチームとしては明らかに水準を超えています</strong>。RLS の全表適用、ガード棚卸しの CI 強制、authz 契約テスト、秘密の暗号化、署名 URL の method 束縛——いずれも「知っているから書いた」ではなく「一度事故を起こして学んだから書いた」痕跡が、コメントに日付付きで残っています。</p>
+
+<p>にもかかわらず本検査で見つかったものは、<strong>ほぼすべてが「検査や仕組みは存在するが、その出力を誰も読んでいない／片側しか見ていない」形</strong>でした。H-1 は監査が緑を返し続け、L-7 は死角検査に死角があり、L-8 は棚卸しが呼び出しの有無しか見ていません。同日に発見した 2 件の実障害（<code>edge_command_runs</code> の無音の空振り、i-PRO ストリームの 10 秒切断）も同じ形です。</p>
+
+<p>したがって次に投資すべきは、<strong>新しい検査を増やすことではなく、既存の検査が「沈黙したとき」に気づける形にすること</strong>だと考えます。緑が「問題なし」なのか「見ていない」なのかを区別できるようにする——それが本検査を通じて最も繰り返し現れた主題でした。</p>
+
+<h3>本検査自身が同じ罠を踏んだこと</h3>
+
+<p>この主題は、検査する側にもそのまま当てはまりました。初報から <strong>3 件を訂正</strong>しています。</p>
+
+<ul>
+  <li><strong>M-4</strong> — 変数名だけを見て「本番相当の資格情報一式」と報告しました。値を確認すると AWS は空欄、Supabase はローカル既定鍵で、実際に生きていたのは 2 本でした。不要な AWS 鍵ローテーションを促すところでした。</li>
+  <li><strong>L-7</strong> — 判定を別ブランチのチェックアウトで実行し、「主要な <code>.env</code> が無防備」と報告しました。実際は最初から守られており、穴は変種（<code>.env.demo</code> 等）だけでした。</li>
+  <li><strong>M-6</strong> — <code>/Users/junji.y/claude/cloudflare</code>（ホーム側）を見て「Worker がリポジトリに無い」と報告しました。実際はリポジトリ内の <code>claude/cloudflare/</code> に 2 本とも版管理されており、<strong>指摘そのものが成立しません</strong>。取り下げたうえで、本来したかった検証（署名の照合ロジック）を実施しました（§6）。</li>
+</ul>
+
+<p>加えて調査中、<strong>0 件を「問題なし」と読みかけた空振りが 4 回</strong>ありました。<code>cd</code> の失敗で 0 ファイルを走査した／パスの <code>[id]</code> がグロブ展開で壊れた／<code>grep</code> の実体が ugrep で隠しファイルを既定で飛ばし <code>.env</code> を 1 つも見ずに「参照なし」と出た／空文字が <code>grep -q</code> で何にでも一致した——いずれも<strong>出力の見た目は「異常なし」と同じ</strong>でした。</p>
+
+<p>手作業の検査であれ自動化された検査であれ、<strong>「見つからなかった」と「見ていなかった」は出力が同じ</strong>です。だから対象件数を先に数える、変異させて落ちることを確かめる、実データで裏を取る——本報告で挙げた是正が、報告そのものにも必要でした。この点は本検査の限界（冒頭）と併せて読んでください。</p>
+
+<hr>
+<p class="meta">検査実施: 2026-08-14 ／ 対象: monitor-prod @ 337409bcf ／ 手法: 静的解析・実 DB 照会（ローカル: 全 migration 適用済）・GitHub API・実機ログ・依存監査 ／ 本番環境への攻撃的テストは実施していません。</p>
+<p class="meta">改訂: 2026-08-14（同日・複数回）— H-1／H-2／M-3 是正（PR #309）、L-7 是正（PR #310）・<strong>初報を訂正</strong>、L-8 是正（PR #311）、L-9 是正（PR #312）＋ Supabase CLI 版固定（PR #313）、M-4 是正完了・<strong>初報を訂正</strong>、<strong>M-6 を取り下げ</strong>（初報が誤り・Worker は版管理下）＋検証側のレビューを §6 に追加、§8 に「本検査自身が同じ罠を踏んだこと」を追加、M-5 是正（PR #314 段階1 → #315 段階2・平文列を削除）。<strong>未対応 0 件。</strong></p>
+
+</div>
+</body>
+</html>
