@@ -46,6 +46,9 @@ const J_A2 = '1a000000-0000-0000-0000-0000000000a2'
 const J_B1 = '1b000000-0000-0000-0000-0000000000b1'
 // jalert_receipts（全国受信ログ・店舗非依存）
 const JR_1 = '7a000000-0000-0000-0000-0000000000a1'
+// edge_command_runs（命令の受領記録）: 受領済み・未決着の行を各エッジに1件
+const R_A1 = '9a000000-0000-0000-0000-0000000000a1'
+const R_B1 = '9b000000-0000-0000-0000-0000000000b1'
 // personas (auth.users.id = admin_users.auth_user_id)
 const U_SUPER  = '00000000-0000-0000-0000-000000000099'
 const U_TADMINA = '00000000-0000-0000-0000-0000000000a0'
@@ -78,7 +81,8 @@ async function asUser(sub: string | null, sql: string): Promise<Record<string, u
   }
 }
 
-const ids = (rows: Record<string, unknown>[]) => rows.map((r) => r.id as string).sort()
+const ids = (rows: Record<string, unknown>[], key = 'id') =>
+  rows.map((r) => r[key] as string).sort()
 
 beforeAll(async () => {
   // スキーマ適用（毎回クリーン）。cwd は claude/monitor（test:authz 実行ディレクトリ）。
@@ -114,6 +118,9 @@ beforeAll(async () => {
       values ('hash_a1', '${S_A1}', '${T_A}', 'pendingA1', now() + interval '1 day');
     insert into public.edge_jobs (id, edge_id) values
       ('${J_A1}','${E_A1}'),('${J_A2}','${E_A2}'),('${J_B1}','${E_B1}');
+    -- 受領済み・未決着の命令記録（決着＝update が通るかを見るため）
+    insert into public.edge_command_runs (request_id, edge_id, action) values
+      ('${R_A1}','${E_A1}','start_grid'),('${R_B1}','${E_B1}','start_grid');
     insert into public.jalert_receipts (id, alert_source, alert_type, title) values
       ('${JR_1}','jma-entry-1','earthquake','震源・震度に関する情報');
     -- Phase B2: 店舗A1(テナントA) と 店舗B1(テナントB) に同じ形の証跡を置く
@@ -298,6 +305,65 @@ describe('edge_jobs RLS（エッジ専用スコープ鍵化 Phase B1）', () => 
   it('エッジA1 は自分宛ジョブを UPDATE できる（1行）', async () => {
     const rows = await asEdge(E_A1, `update edge_jobs set status='running' where id='${J_A1}' returning id`)
     expect(ids(rows)).toEqual([J_A1])
+  })
+})
+
+/**
+ * 命令の受領記録（外部レビュー #6 の是正で追加）。
+ *
+ * ここが無かったせいで、**本番で 3 件の受領記録が永久に未決着のまま**になった
+ * （2026-08-14 発見）。エッジは insert はできるが update が 0 行一致で無音に
+ * 失敗していた。原因は **`update ... where` が select ポリシーも要求する**こと。
+ * 当時この表には super_admin 用の select しか無かった。
+ *
+ * ★ 「insert できる」だけを見ると健全に見える。決着まで通ることを固定する。
+ */
+describe('edge_command_runs RLS（命令の受領記録）', () => {
+  it('エッジA1 は自分の受領記録を insert できる', async () => {
+    const rows = await asEdge(
+      E_A1,
+      `insert into edge_command_runs (request_id, edge_id, action)
+         values ('9c000000-0000-0000-0000-0000000000c1', '${E_A1}', 'start_live')
+         returning request_id`,
+    )
+    expect(rows).toHaveLength(1)
+  })
+
+  it('★自分の受領記録を UPDATE で決着できる（select ポリシー欠落の回帰）', async () => {
+    // これが落ちるときの症状は「エラーも出ないし行も変わらない」。
+    // finished_at が永久に NULL になり、命令が届いた後どうなったのかを
+    // 二度と切り分けられなくなる。
+    const rows = await asEdge(
+      E_A1,
+      `update edge_command_runs set finished_at = now(), ok = true
+         where request_id = '${R_A1}' returning request_id`,
+    )
+    expect(ids(rows, 'request_id')).toEqual([R_A1])
+  })
+
+  it('自分の受領記録は見えるが、他エッジの分は見えない', async () => {
+    expect(ids(await asEdge(E_A1, 'select request_id from edge_command_runs'), 'request_id'))
+      .toEqual([R_A1])
+    expect(ids(await asEdge(E_B1, 'select request_id from edge_command_runs'), 'request_id'))
+      .toEqual([R_B1])
+  })
+
+  it('他エッジの受領記録は決着できない（0行）', async () => {
+    expect(await asEdge(E_A1, `update edge_command_runs set ok = true
+                                 where request_id='${R_B1}' returning request_id`))
+      .toHaveLength(0)
+  })
+
+  it('他エッジ名義の受領は insert できない（受領の捏造を塞ぐ）', async () => {
+    await expect(
+      asEdge(E_A1, `insert into edge_command_runs (request_id, edge_id, action)
+                      values ('9c000000-0000-0000-0000-0000000000c2', '${E_B1}', 'start_grid')
+                      returning request_id`),
+    ).rejects.toThrow(/row-level security/)
+  })
+
+  it('app_metadata.edge_id 無しのトークンは何も見えない', async () => {
+    expect(await asEdge(null, 'select request_id from edge_command_runs')).toHaveLength(0)
   })
 })
 

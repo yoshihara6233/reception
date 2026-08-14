@@ -138,6 +138,19 @@ create table public.edge_jobs (
   created_at timestamptz not null default now()
 );
 
+-- edge_command_runs（20260813120000 + 20260814100000 転記）: エッジが命令を受け取った
+-- 記録。エッジは自分の行を insert し、決着したら update で閉じる。
+-- **update を通すには select ポリシーも要る**（下のポリシー欄参照）。
+create table public.edge_command_runs (
+  request_id  uuid primary key,
+  edge_id     uuid not null references public.edge_devices(id) on delete cascade,
+  action      text not null,
+  claimed_at  timestamptz not null default now(),
+  finished_at timestamptz,
+  ok          boolean,
+  error       text
+);
+
 -- ── Phase B2 の検証対象（エッジが書く証跡系。RLSに必要な列のみ） ──
 create table public.inspection_sessions (
   id        uuid primary key default gen_random_uuid(),
@@ -343,6 +356,23 @@ create policy edge_jobs_edge_select on public.edge_jobs
   for select to authenticated
   using ((auth.jwt() -> 'app_metadata' ->> 'edge_id')::uuid = edge_id);
 create policy edge_jobs_edge_update on public.edge_jobs
+  for update to authenticated
+  using      ((auth.jwt() -> 'app_metadata' ->> 'edge_id')::uuid = edge_id)
+  with check ((auth.jwt() -> 'app_metadata' ->> 'edge_id')::uuid = edge_id);
+
+-- edge_command_runs（20260813120000 + 20260814100000 転記）。
+-- ⚠ select ポリシーは「閲覧のため」ではなく **update を成立させるため**にある。
+--   PostgreSQL は `update ... where` に select ポリシーを適用するので、これが
+--   無いとエッジは自分の書いた行を見つけられず 0 行一致で無音に失敗する
+--   （2026-08-14 に本番で発生。finished_at が永久に NULL のままだった）。
+alter table public.edge_command_runs enable row level security;
+create policy edge_command_runs_edge_select on public.edge_command_runs
+  for select to authenticated
+  using ((auth.jwt() -> 'app_metadata' ->> 'edge_id')::uuid = edge_id);
+create policy edge_command_runs_edge_insert on public.edge_command_runs
+  for insert to authenticated
+  with check ((auth.jwt() -> 'app_metadata' ->> 'edge_id')::uuid = edge_id);
+create policy edge_command_runs_edge_update on public.edge_command_runs
   for update to authenticated
   using      ((auth.jwt() -> 'app_metadata' ->> 'edge_id')::uuid = edge_id)
   with check ((auth.jwt() -> 'app_metadata' ->> 'edge_id')::uuid = edge_id);
