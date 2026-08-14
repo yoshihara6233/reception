@@ -24,6 +24,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { edgeAuthEmail, ensureEdgeAuthPassword, mayWithholdServiceRole } from '@/lib/edge/auth-provision'
+import { hashDeviceToken } from '@/lib/edge/device-token'
 
 /**
  * 手持ちトークンの残り寿命がこれ以上あれば再発行しない（秒）。
@@ -45,7 +46,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const { data, error } = await supa
     .from('edge_devices')
     .select('id, store_id, scoped_only, auth_user_id, auth_password_enc, desired_agent_version, desired_cloudflared_version')
-    .eq('device_token', token)
+    .eq('device_token_hash', hashDeviceToken(token))
     .maybeSingle()
 
   // ⚠ ここを 401 で一括りにしてはいけない。2026-08-06、migration 未適用で

@@ -17,6 +17,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { ALARM_TIMELINE_OFFSETS_SEC, offsetKeySec } from '@/lib/alarms/timeline'
+import { hashDeviceToken } from '@/lib/edge/device-token'
 
 export const runtime = 'nodejs'
 
@@ -32,7 +33,7 @@ export async function POST(req: NextRequest) {
   const { data: edge } = await supa
     .from('edge_devices')
     .select('id, store_id')
-    .eq('device_token', token)
+    .eq('device_token_hash', hashDeviceToken(token))
     .maybeSingle()
   if (!edge || !edge.store_id) return NextResponse.json({ error: 'invalid device token' }, { status: 401 })
 

@@ -47,8 +47,11 @@ beforeAll(async () => {
     `insert into public.stores (tenant_id, name) values ($1, '欠落テスト店') returning id`, [tenantId])
   storeId = s.rows[0].id
   const e = await pool.query(
-    `insert into public.edge_devices (store_id, name, device_token)
-     values ($1, 'gap-edge', 'gap-' || gen_random_uuid()::text) returning id`, [storeId])
+    // device_token_hash は NOT NULL（M-5）。平文と揃えて入れる。
+    `insert into public.edge_devices (store_id, name, device_token, device_token_hash)
+     select $1, 'gap-edge', t, encode(sha256(convert_to(t, 'UTF8')), 'hex')
+       from (select 'gap-' || gen_random_uuid()::text as t) s
+     returning id`, [storeId])
   edgeId = e.rows[0].id
 })
 

@@ -51,7 +51,10 @@ export interface EdgeDevice {
   id: string
   store_id: string
   name: string
+  /** @deprecated 段階2で列ごと削除する。認証は device_token_hash で引く（M-5）。 */
   device_token: string
+  /** device_token の SHA-256(hex)。**認証はこちらを引く。** */
+  device_token_hash: string
   agent_version: string | null
   status: EdgeStatus
   current_mode: EdgeMode | null

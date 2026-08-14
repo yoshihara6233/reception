@@ -384,6 +384,14 @@ describe('エッジ専用スコープ鍵化 Phase B2（残りのテーブルを 
       asEdge(E_A1, `update edge_devices set store_id='${S_B1}' where id='${E_A1}' returning id`),
     ).rejects.toThrow(/edge token may only update/)
   })
+  it('★device_token_hash を自分で書き換えられない（トークンの自己再発行を塞ぐ）', async () => {
+    // 新しい列は自己申告ホワイトリストに入らない＝既定で保護側に倒れる、の実証。
+    // ここが通ると、エッジが自分の認証子を任意の値に付け替えられる（M-5）。
+    await expect(
+      asEdge(E_A1, `update edge_devices set device_token_hash='deadbeef' where id='${E_A1}' returning id`),
+    ).rejects.toThrow(/edge token may only update/)
+  })
+
   it('device_token / camera_tier の書換えもトリガで拒否', async () => {
     await expect(
       asEdge(E_A1, `update edge_devices set device_token='stolen' where id='${E_A1}' returning id`),

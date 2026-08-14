@@ -74,6 +74,7 @@ create table public.edge_devices (
   -- Phase B2: エッジが自己申告してよい列 / 触ってはいけない列の両方を持たせる
   -- （edge_devices_guard_edge_update トリガの契約を検証するため）。
   device_token text,
+  device_token_hash text,
   camera_tier  int not null default 16,
   agent_version text,
   ota_status   text,
