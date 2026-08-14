@@ -1,0 +1,73 @@
+{
+  "$comment": [
+    "bun audit の high/critical を受容する場合、ここに理由と見直し期限を書く。",
+    "audit-gate.mjs が次の3つで落とす:",
+    "  ① 受容していない high/critical がある",
+    "  ② until を過ぎた受容が残っている（＝放置の検知）",
+    "  ③ どの勧告にも当たらない受容が残っている（＝直ったのに書き残している）",
+    "③があるのは、受容リストが古びて『実は直っているのに永久に除外され続ける』のを防ぐため。",
+    "2026-08-14 の検査で、bun audit || true により 26 件が約2か月放置されていたのが発端。"
+  ],
+  "exceptions": [
+    {
+      "ghsa": "GHSA-mh99-v99m-4gvg",
+      "package": "brace-expansion",
+      "reason": "glob 展開の DoS。到達経路は eslint / vitest / tsx / stryker のみ＝開発と CI のみで、本番の実行経路に無い。攻撃者が展開文字列を与える経路が存在しない。上流（直接依存の major 更新）待ち。",
+      "until": "2026-11-30"
+    },
+    {
+      "ghsa": "GHSA-rgw5-rvv9-x895",
+      "package": "brace-expansion",
+      "reason": "同上（別勧告・同一パッケージ・同一到達経路）。",
+      "until": "2026-11-30"
+    },
+    {
+      "ghsa": "GHSA-3jxr-9vmj-r5cp",
+      "package": "brace-expansion",
+      "reason": "同上（別勧告・同一パッケージ・同一到達経路）。",
+      "until": "2026-11-30"
+    },
+    {
+      "ghsa": "GHSA-52cp-r559-cp3m",
+      "package": "js-yaml",
+      "reason": "YAML の二次関数的 CPU 消費。到達経路は eslint の設定読み込みのみ＝開発と CI のみ。解析対象は自分たちの設定ファイルで、攻撃者が YAML を与える経路が無い。",
+      "until": "2026-11-30"
+    },
+    {
+      "ghsa": "GHSA-5p4m-2wfm-xmqj",
+      "package": "js-yaml",
+      "reason": "同上（別勧告・同一到達経路）。",
+      "until": "2026-11-30"
+    },
+    {
+      "ghsa": "GHSA-28wg-ghj8-5hjv",
+      "package": "nanoid",
+      "reason": "不正な size で無限ループ。到達経路は postcss（ビルド時の CSS 変換）のみ。size は postcss が内部で固定値を渡しており、外部入力が届かない。",
+      "until": "2026-11-30"
+    },
+    {
+      "ghsa": "GHSA-2v37-7h3g-55p8",
+      "package": "nanoid",
+      "reason": "同上（別勧告・同一到達経路）。",
+      "until": "2026-11-30"
+    },
+    {
+      "ghsa": "GHSA-6g55-p6wh-862q",
+      "package": "postcss",
+      "reason": "source map 経由の任意ファイル読み取り。ビルド時のみで、入力は自分たちの CSS。next が postcss 8.4.31 を固定しているため単独で上げられない（next の更新待ち）。",
+      "until": "2026-11-30"
+    },
+    {
+      "ghsa": "GHSA-r28c-9q8g-f849",
+      "package": "postcss",
+      "reason": "同上（source map のパストラバーサル・同一到達経路・同一の固定制約）。",
+      "until": "2026-11-30"
+    },
+    {
+      "ghsa": "GHSA-f88m-g3jw-g9cj",
+      "package": "sharp",
+      "reason": "libvips の CVE 群。**実行時に効く edge-agent 側は 0.35.3 へ更新して解消済み**（カメラ由来の画像を処理する唯一の経路）。残るのは next が optionalDependency で持つ next/sharp@0.34.5 のみ。monitor のコードは sharp を一度も import しておらず、Vercel 上では画像最適化はプラットフォーム側が処理するため、この sharp は実行経路に入らない。next が optional 依存を上げるまで待つ。",
+      "until": "2026-11-30"
+    }
+  ]
+}

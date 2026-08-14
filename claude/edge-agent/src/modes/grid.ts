@@ -16,7 +16,7 @@
  * GET that returns a freshly-encoded JPEG. RTSP and ffmpeg stay only in
  * VOD mode where seeking from a precise instant matters.
  */
-import sharp from 'sharp'
+import sharp, { type OverlayOptions } from 'sharp'
 import { config } from '../config.js'
 import { logger } from '../logger.js'
 import { snapshotUrl } from '../rtsp/url.js'
@@ -172,7 +172,7 @@ export async function startGrid(cameras: CameraDescriptor[]): Promise<GridHandle
       ok++
     })
 
-    const layers: sharp.OverlayOptions[] = []
+    const layers: OverlayOptions[] = []
     for (const s of slots) {
       const buf = LAST_FRAME.get(s.camId)  // 今回失敗/再起動でも直近の良いフレームを使う
       if (!buf) continue

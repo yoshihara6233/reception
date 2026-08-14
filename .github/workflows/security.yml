@@ -54,5 +54,11 @@ jobs:
           bun-version: 1.3.12
       - name: Install dependencies (workspace)
         run: bun install --frozen-lockfile
-      - name: bun audit (report)
-        run: bun audit || true   # 情報提供。HIGH是正は docs/security-assessment.md の運用で対応
+      # ⚠ かつて `bun audit || true`（何があっても緑）だった。「HIGH は目視で確認する」
+      #   運用の前提だったが読まれず、**26 件（high 17）が溜まり、その中の Next.js の
+      #   勧告 9 件が約2か月放置**された（2026-08-14 の検査で判明）。
+      #   緑のチェックが「依存に問題なし」と区別できないこと自体が問題だったので、
+      #   受容を明示させるゲートに置き換えた。受容の期限切れと、直ったのに残っている
+      #   受容でも落ちる（.github/scripts/audit-gate.mjs 参照）。
+      - name: Dependency audit gate
+        run: bun .github/scripts/audit-gate.mjs
