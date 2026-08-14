@@ -14,10 +14,28 @@ export const BAGGAGE_ROLES = ['super_admin', 'tenant_admin', 'store_manager', 'b
 
 type AdminProfile = { id: string; role: string; tenant_id: string; store_ids: string[] }
 
+/**
+ * ⚠ **失敗分岐に `supa` を載せないこと。**
+ *
+ * このガードは例外を投げず `{ ok: false, ... }` を**返す**ので、呼ぶだけでは
+ * 何も止まらない。加えて以前は `supa`（DB クライアント）を成功・失敗の
+ * **両方の分岐**に載せていた。その結果、次のコードが **TypeScript の型検査を
+ * 通っていた** — 認可を一切していないにもかかわらず:
+ *
+ *   const { supa } = await requireAdmin()   // ok を見ずに DB クライアントが手に入る
+ *
+ * ルート棚卸し（`api-guard-inventory.test.ts`）は正規表現でソースを見るため、
+ * こう書かれていても「requireAdmin を呼んでいる = admin で守られている」と
+ * 分類する。2026-08-14 の検査時点では 35 ルートすべてが `!ok` で早期 return して
+ * いて実害は無かったが、**現状そうなっているだけで構造的には防がれていなかった**。
+ *
+ * 失敗分岐から外すと、`ok` で絞り込むまで `supa` に触れなくなる（型エラーになる）。
+ * 判定を書き忘れた瞬間にコンパイルが落ちる、という形にしてある。
+ */
 async function requireRole(allowed: readonly string[]) {
   const supa = await createSupabaseServer()
   const { data: { user } } = await supa.auth.getUser()
-  if (!user) return { ok: false as const, status: 401, error: 'unauthorized', supa }
+  if (!user) return { ok: false as const, status: 401, error: 'unauthorized' }
 
   const { data: profile } = await supa
     .from('admin_users')
@@ -26,7 +44,7 @@ async function requireRole(allowed: readonly string[]) {
     .single()
 
   if (!profile || !allowed.includes(profile.role)) {
-    return { ok: false as const, status: 403, error: 'forbidden', supa }
+    return { ok: false as const, status: 403, error: 'forbidden' }
   }
 
   return { ok: true as const, user, profile: profile as AdminProfile, supa }
