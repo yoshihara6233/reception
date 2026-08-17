@@ -31,6 +31,8 @@ const h = vi.hoisted(() => ({
   recorded: [] as { check: string; severity: string; problems: string[] }[],
   emails: [] as { to: string | string[]; subject: string; html: string }[],
   webhooks: [] as string[],
+  /** Resend への問い合わせ結果。既定は「鍵は有効」。 */
+  probe: { status: 200 } as { status: number; name?: string; message?: string } | null,
 }))
 
 // ルートは 2 つの RPC を呼ぶ。**名前で分けないと、片方の答えをもう片方に
@@ -64,6 +66,15 @@ vi.mock('@/lib/email/send', () => ({
 }))
 vi.mock('@/lib/ops/webhook', () => ({
   sendOpsWebhook: async (text: string) => { h.webhooks.push(text); return true },
+}))
+// **判定器は本物を使い、外に出る問い合わせだけ差し替える。**
+// 丸ごとモックすると、ルートが判定結果をどう合成するか（見出しの優先順位・
+// severity の畳み込み）を一度も通らなくなる。
+// なお差し替えないと、テストが本物の api.resend.com に通信してしまう
+// （実際にそうなっていて、'set-for-test' が 400 で弾かれて落ちた）。
+vi.mock('@/lib/ops/notify-channel', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/ops/notify-channel')>()),
+  probeResendKey: async () => h.probe,
 }))
 
 const SECRET = 'test-cron-secret'
@@ -136,6 +147,7 @@ beforeEach(() => {
   h.recorded = []
   h.emails = []
   h.webhooks = []
+  h.probe = { status: 200 }
 })
 afterEach(() => {
   if (savedSecret === undefined) delete process.env.CRON_SECRET
@@ -242,6 +254,42 @@ describe('/api/cron/partition-health', () => {
     await call()
     expect(h.recorded[0].severity).toBe('critical')
     expect(h.recorded[0].problems[0]).toContain('secret_table')
+  })
+
+  it('★Resend の鍵が無効なら critical（実測: 400 validation_error）', async () => {
+    // これが無いと、鍵が死んでいても**次に本物の異常が起きるまで気づけない**。
+    // 8/14 のメンバー削除後、鍵の生死を確かめる手段が人手しか無かった。
+    h.probe = { status: 400, name: 'validation_error', message: 'API key is invalid' }
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const res = await call()
+    expect((await res.json()).severity).toBe('critical')
+    expect(h.recorded[0].problems[0]).toContain('RESEND_API_KEY が無効')
+    // メールも試みる（届かない公算が高いが、原因が別なら届く）。
+    // **Webhook が本命の逃げ道**なので、そちらは必ず出す。
+    expect(h.webhooks).toHaveLength(1)
+    expect(h.webhooks[0]).toContain('RESEND_API_KEY が無効')
+    err.mockRestore()
+  })
+
+  it('★判定できない応答では鳴らさない（誤報で本物を埋もれさせない）', async () => {
+    // 送信専用キーが管理系に何を返すかは実測できていない。
+    // ここで鳴らす実装にすると、運用を変えた日から毎日誤報になる。
+    h.probe = { status: 401, name: 'restricted_api_key', message: 'restricted to only send emails' }
+    const res = await call()
+    expect((await res.json()).severity).toBe('ok')
+    expect(h.emails).toHaveLength(0)
+    expect(h.webhooks).toHaveLength(0)
+  })
+
+  it('★通知先が空なら critical（異常を検出しても届かない）', async () => {
+    delete process.env.ALERT_EMAILS
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const res = await call()
+    expect((await res.json()).severity).toBe('critical')
+    // メールは出せない（宛先が無い）。**Webhook だけが唯一の出口**。
+    expect(h.emails).toHaveLength(0)
+    expect(h.webhooks).toHaveLength(1)
+    err.mockRestore()
   })
 
   it('★実行記録に失敗したら critical に格上げして鳴らす', async () => {

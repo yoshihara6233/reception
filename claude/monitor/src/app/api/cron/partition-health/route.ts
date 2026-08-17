@@ -51,9 +51,20 @@ import {
   evaluateEvidenceGaps,
   type EvidenceFacts,
 } from '@/lib/ops/evidence-gaps'
+import { evaluateNotifyChannel, probeResendKey } from '@/lib/ops/notify-channel'
 import { appBaseUrl } from '@/lib/app-url'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * 通知先の解釈は**ここ 1 箇所**。
+ * 送る側と「宛先ゼロを検出する側」で切り方がずれると、
+ * 「0 件と判定したのに送信側は 1 件と読む（またはその逆）」が起きる。
+ */
+function alertRecipients(): string[] {
+  return (process.env.ALERT_EMAILS ?? '')
+    .split(',').map((s) => s.trim()).filter(Boolean)
+}
 
 function alertHtml(v: PartitionVerdict): string {
   const rows = v.problems.map((p) => `<li>${p}</li>`).join('')
@@ -128,8 +139,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     if (severity !== 'ok') {
       console.error('[partition-health]', v.summary, problems)
-      const recipients = (process.env.ALERT_EMAILS ?? '')
-        .split(',').map((s) => s.trim()).filter(Boolean)
+      const recipients = alertRecipients()
       if (recipients.length) {
         await sendEmail(
           recipients,
@@ -206,6 +216,22 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   if (evidenceErr) return finish(rpcFailed('evidence_gaps', evidenceErr.message), 500)
   const evidence = evaluateEvidenceGaps((evidenceFacts ?? {}) as EvidenceFacts)
 
+  // ── 通知経路そのもの（2026-08-17 追加）────────────────────────────────
+  // ここまでの検査は「異常があれば鳴らす」。だが**鳴らす先が死んでいたら
+  // どれも届かない**。しかも異常が無い日は 1 通も送らないので、経路の故障は
+  // 次に本物の異常が起きるその瞬間まで表に出ない。
+  // 8/14 に Resend のメンバーを削除した後、鍵が生きているか確かめる手段が
+  // 「人がパスワード再設定を叩く」しか無かった（ops_check_runs の alert: は
+  // 8/12 が最後で、送信経路は 5 日間まったく使われていなかった）。
+  // 配達ではなく**鍵の有効性**を毎日問う。テストメールは送らない。
+  const resendKey = process.env.RESEND_API_KEY
+  const notify = evaluateNotifyChannel({
+    apiKeySet:  Boolean(resendKey),
+    recipients: alertRecipients().length,
+    webhookSet: Boolean(process.env.ALERT_WEBHOOK_URL),
+    probe:      resendKey ? await probeResendKey(resendKey) : null,
+  })
+
   // env の欠落も同じ形の判定にそろえて、下の合成に載せる。
   const envVerdict = {
     severity: (envMissing.length > 0 ? 'critical' : 'ok') as 'critical' | 'ok',
@@ -218,7 +244,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   //   両方を直す必要があった。片方を忘れると「problems には出るが summary は
   //   正常のまま」——通知の見出しだけが正常に見える形になる。
   //   順序は要約に出す優先度（先にあるものが見出しになる）。
-  const checks = [partition, schema, envVerdict, evidence, clock]
+  //   通知経路は先頭に置く。これが壊れていると**他のどの指摘も届かない**ので、
+  //   見出しに出るべき優先度が最も高い。
+  const checks = [notify, partition, schema, envVerdict, evidence, clock]
 
   const problems = checks.flatMap((c) => c.problems)
   const severity = checks.some((c) => c.severity === 'critical')
