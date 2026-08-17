@@ -123,11 +123,34 @@ describe('claim_stale_check_alert', () => {
     expect(await rows(ALERT), '通知記録が複数あります').toHaveLength(1)
   })
 
-  it('通知記録には最後の実行時刻が入る（メールに書ける）', async () => {
+  it('★一度も走っていないときの文面が日本語として成立している', async () => {
+    // 旧実装は coalesce(v_last::text, '一度も') を文の途中に差し込んでいたため
+    //   「日次点検が 一度も 以降走っていません」
+    // になっていた。本番の ops_check_runs に実物が残っている（2026-08-12 08:26）。
+    // **障害のときに人が最初に読む一文**で、普段は誰の目にも触れないので、
+    // 壊れていても気づく機会が無い。
+    //
+    // 旧テストは problems[0] に '一度も' が含まれることだけを見ていた。
+    // 壊れた文にも直した文にも '一度も' は入るので、**どちらでも通っていた**。
+    // 文そのものを固定する。
     await claim()
     const [a] = await rows(ALERT)
     expect(a.severity).toBe('critical')
-    expect(a.problems[0]).toContain('一度も')
+    expect(a.problems[0]).toBe(`日次点検（${CHECK}）は一度も走っていません`)
+  })
+
+  it('★実行歴があるときは、いつ以降かを JST で書く', async () => {
+    // 現場が UTC を読み替えなくて済むように。時刻が入らない／UTC のままだと
+    // 「いつから止まっているのか」が一目で分からない。
+    await pool.query('select public.record_check_run($1, $2, $3, $4)', [CHECK, 'ok', [], 1])
+    // 記録を max_age より古くして、鮮度切れの側に倒す。
+    await pool.query(
+      `update public.ops_check_runs set ran_at = now() - interval '3 days'
+        where check_name = $1`, [CHECK])
+    await claim()
+    const [a] = await rows(ALERT)
+    expect(a.problems[0]).toMatch(
+      new RegExp(`^日次点検（${CHECK}）が \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2} \\(JST\\) 以降走っていません$`))
   })
 
   it('復旧すれば古くなくなる', async () => {
