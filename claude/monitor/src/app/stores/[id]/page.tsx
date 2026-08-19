@@ -39,7 +39,7 @@ export default async function StorePage(
 
   const edge    = store.edge_devices?.[0]
   // Attach the owning recorder's vendor to each camera so the workspace can
-  // gate the playback (VOD) button — Phase 1 supports uniview only.
+  // gate the playback (VOD) button — VOD_VENDORS を見て出し分ける。
   const cameras =
     edge?.recorders?.flatMap((r) =>
       r.recorder_cameras.map((c) => ({ ...c, vendor: r.vendor })),

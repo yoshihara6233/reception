@@ -8,14 +8,12 @@
  *
  * Supported today (F106):
  *   - 'ipro'    → CGI snapshot.cgi (?time=<ts> for past on FW v3+)
- *   - 'uniview' → LAPI Media/Video/Snapshot (latest only; past degrades)
  *
  * Frigate is handled directly in modes/bcp.ts because its past-frame path
  * goes through ffmpeg (clip.mp4 → 1 frame extract) and is shaped differently.
  */
 import type { Vendor, CameraDescriptor } from '../types.js'
 import { fetchIproSnapshot } from './ipro.js'
-import { fetchUniviewSnapshot } from './uniview.js'
 
 export interface SnapshotFetchResult {
   body:    Buffer
@@ -46,9 +44,6 @@ export async function fetchBcpSnapshot(
 
   if (vendor === 'ipro') {
     return fetchIproSnapshot(common)
-  }
-  if (vendor === 'uniview') {
-    return fetchUniviewSnapshot(common)
   }
   // 'frigate' is handled by the caller via the historical clip.mp4 + ffmpeg
   // path. Other vendors fall through and the caller will use latest.jpg

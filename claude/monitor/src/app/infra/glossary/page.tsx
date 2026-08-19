@@ -24,7 +24,7 @@ const GROUPS: Group[] = [
     title: '監視対象（機器）',
     items: [
       { term: 'エッジ', read: 'edge', desc: '店舗に置くオンプレ機器。録画装置とクラウドの橋渡しをする。クラウドは店舗内に直接届かないため、能動チェックはエッジが代理で実行する。' },
-      { term: 'レコーダ', read: 'recorder / NVR', desc: 'カメラ映像を録画する装置（ipro / uniview など）。死活はエッジからの ping、容量はエッジからの問い合わせで確認する。' },
+      { term: 'レコーダ', read: 'recorder / NVR', desc: 'カメラ映像を録画する装置（i-PRO NVR / ONVIF カメラ直 など）。死活はエッジからの ping、容量はエッジからの問い合わせで確認する。' },
       { term: 'カメラ', read: 'camera', desc: 'レコーダ配下の各カメラチャンネル。映像が実際に流れているかは probe_camera で確認する。' },
     ],
   },

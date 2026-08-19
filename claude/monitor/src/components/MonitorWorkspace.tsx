@@ -137,7 +137,7 @@ export function MonitorWorkspace({
   // reads live_sessions) stays empty forever.
   const sessionId           = useRef<string | null>(null)
 
-  // VOD replay supports uniview (RTSP replay) and frigate (HTTP MP4 export).
+  // VOD 対応ベンダは VOD_VENDORS が唯一の出どころ（エッジの実装と揃える）。
   // The toolbar button is store-level; the modal lets the user pick which
   // VOD-capable camera to replay and clamps the requested window per vendor.
   const vodCams    = cameras.filter((c) => isVodVendor(c.vendor)) as
@@ -532,14 +532,14 @@ function defaultFromLocal(offsetMin: number): string {
 
 /**
  * Range-picker modal launched from the toolbar 録画 button. Collects a
- * VOD-capable camera (uniview or frigate) + start wall-clock + duration,
+ * VOD-capable camera + start wall-clock + duration,
  * converts the wall-clock to a store-tz (JST) instant, and navigates to the
  * per-camera VOD route. The VOD page sends the actual start_vod command
  * (mirrors the live route).
  *
- * The duration cap depends on the selected camera's vendor: uniview replays
- * as a real RTSP stream (60 min cap), frigate materializes the whole range
- * as a clip.mp4 before the first frame (5 min cap to keep latency sane).
+ * The duration cap depends on the selected camera's vendor: i-PRO NVR は
+ * httpdl.cgi が 1 リクエスト 1 時間までなので 60 分、frigate は clip.mp4 を
+ * 先頭フレームより前に丸ごと生成するので 5 分（遅延とメモリを抑える）。
  */
 function VodRangeModal({
   storeId,
@@ -557,7 +557,7 @@ function VodRangeModal({
   const [range, setRange]   = useState(VOD_RANGE_DEFAULT_MIN)
 
   // Cap follows the currently-selected camera's vendor. When the user switches
-  // from a uniview camera to a frigate one mid-modal, clamp `range` down.
+  // from a 60分許容のカメラを frigate に切り替えたら `range` を丸める。
   const selectedCam = cameras.find((c) => c.id === camId) ?? cameras[0]
   const rangeMax = selectedCam ? VOD_RANGE_MAX_MIN_BY_VENDOR[selectedCam.vendor] : 60
   useEffect(() => {

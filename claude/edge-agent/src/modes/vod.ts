@@ -11,7 +11,7 @@
  *      <video src="/api/vod/<clip_id>"> — native HTML5, no WebRTC.
  *
  * Vendor scope
- *   Frigate only. Uniview/Hikvision/Hanwha/etc. will join in Phase 8.5 via
+ *   Frigate only. 他ベンダは Phase 8.5 で
  *   the existing NvrAdapter `exportVodMp4()` capability (already implemented
  *   for those vendors in F53/F55). Routing through the adapter layer is the
  *   next refactor.

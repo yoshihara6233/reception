@@ -19,7 +19,7 @@ interface Camera {
 }
 interface Recorder {
   id: string
-  vendor: 'ipro' | 'uniview' | 'frigate' | 'onvif-generic' | 'i-pro-nvr'
+  vendor: 'ipro' | 'frigate' | 'onvif-generic' | 'i-pro-nvr'
   model: string | null
   host: string
   rtsp_port: number
@@ -310,7 +310,7 @@ function RecorderList({ edgeId, recorders }: { edgeId: string; recorders: Record
 }
 
 type NewRecorder = {
-  vendor: 'ipro' | 'uniview' | 'frigate' | 'onvif-generic' | 'i-pro-nvr'
+  vendor: 'ipro' | 'frigate' | 'onvif-generic' | 'i-pro-nvr'
   model: string
   host: string
   rtsp_port: number
@@ -321,7 +321,6 @@ type NewRecorder = {
 }
 
 const VENDOR_DEFAULTS: Record<NewRecorder['vendor'], Partial<NewRecorder>> = {
-  uniview:          { rtsp_port: 554,  username: 'admin', password: '' },
   ipro:             { rtsp_port: 554,  username: 'admin', password: '' },
   frigate:          { rtsp_port: 8554, username: '',      password: '' },
   // カメラ直 ONVIF: ONVIF は通常 80、RTSP は 554。1行=1カメラ。
@@ -343,7 +342,9 @@ function vendorLabel(v: NewRecorder['vendor']) {
   if (v === 'frigate')        return 'Frigate (OSS-VMS)'
   if (v === 'onvif-generic')  return 'ONVIFカメラ直'
   if (v === 'i-pro-nvr')      return 'i-PRO NVR(レコーダ経由)'
-  return 'Uniview'
+  // 想定外の値は素の値を出す。以前ここは 'Uniview' を返すフォールバックで、
+  // uniview を消した後は**未知のベンダが全部 Uniview と表示される**形だった。
+  return v
 }
 
 function NewRecorderForm({
@@ -354,7 +355,9 @@ function NewRecorderForm({
   onCancel: () => void
 }) {
   const [r, setR] = useState<NewRecorder>({
-    vendor: 'uniview', model: '', host: '', rtsp_port: 554, onvif_port: null,
+    // 既定は本番で最も使われている ONVIF カメラ直。以前は uniview が既定で、
+    // 登録画面を開くと最初から実装の無いベンダが選ばれていた。
+    vendor: 'onvif-generic', model: '', host: '', rtsp_port: 554, onvif_port: 80,
     username: 'admin', password: '', notes: '',
   })
 
@@ -372,9 +375,8 @@ function NewRecorderForm({
         <Field label="ベンダ">
           <select value={r.vendor} onChange={(e) => changeVendor(e.target.value as NewRecorder['vendor'])}
                   className="w-full rounded border border-slate-300 px-2 py-1">
-            <option value="uniview">Uniview</option>
-            <option value="ipro">i-PRO</option>
             <option value="onvif-generic">ONVIFカメラ直</option>
+            <option value="ipro">i-PRO</option>
             <option value="i-pro-nvr">i-PRO NVR(レコーダ経由)</option>
             <option value="frigate">Frigate (OSS-VMS)</option>
           </select>

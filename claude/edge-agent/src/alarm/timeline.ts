@@ -87,8 +87,8 @@ async function captureRecordingFrame(
     if (nvrFrame) return { buf: nvrFrame, source: 'ipro-nvr-recording' }
   }
 
-  // i-PRO / Uniview: 時刻指定スナップ（v3+ は ?time= で過去、v1/v2 は latest に劣化）
-  if (camera.recorder.vendor === 'ipro' || camera.recorder.vendor === 'uniview') {
+  // i-PRO カメラ直: 時刻指定スナップ（v3+ は ?time= で過去、v1/v2 は latest に劣化）
+  if (camera.recorder.vendor === 'ipro') {
     try {
       const r = await fetchBcpSnapshot(camera, isPast ? new Date(targetMs) : null)
       if (r) {

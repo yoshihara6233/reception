@@ -213,13 +213,9 @@ async function captureOneSnapshot(
     }
   }
 
-  // F106: i-PRO / Uniview dispatch via BCP fetchers. i-PRO v3+ supports
+  // F106: i-PRO dispatch via BCP fetchers. i-PRO v3+ supports
   // ?time=<ts> for the actual past instant; v1/v2 silently degrade to latest.
-  // Uniview LAPI always returns latest (no time-indexed endpoint yet).
-  if (
-    !buf &&
-    (camera.recorder.vendor === 'ipro' || camera.recorder.vendor === 'uniview')
-  ) {
+  if (!buf && camera.recorder.vendor === 'ipro') {
     try {
       const r = await fetchBcpSnapshot(camera, isPast ? new Date(targetMs) : null)
       if (r) {
@@ -236,7 +232,7 @@ async function captureOneSnapshot(
 
   // Fallback / non-supported vendor / future offsets: use the legacy
   // snapshotUrl() builder. For non-Frigate vendors this currently returns
-  // null (snapshotUrl is Frigate-only after F106 — i-PRO/Uniview moved to
+  // null (snapshotUrl is Frigate-only after F106 — i-PRO moved to
   // the bcp-fetchers dispatcher above).
   if (!buf) {
     const src = snapshotUrl({

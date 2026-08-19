@@ -31,7 +31,7 @@ export type EdgeCommand =
 
 export type EdgeState = 'idle' | 'grid' | 'live' | 'vod' | 'bcp' | 'error'
 
-export type Vendor = 'ipro' | 'uniview' | 'frigate' | 'onvif-generic' | 'i-pro-nvr'
+export type Vendor = 'ipro' | 'frigate' | 'onvif-generic' | 'i-pro-nvr'
 
 export interface CameraDescriptor {
   id: string

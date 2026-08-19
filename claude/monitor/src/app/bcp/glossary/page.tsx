@@ -101,8 +101,8 @@ const GROUPS: Group[] = [
       },
       {
         term: '過去フレーム取得 / 他ベンダー対応',
-        read: 'T-5 など過去オフセット — Frigate (F70) + i-PRO/Uniview (F106) 対応済',
-        desc: 'F70 (Frigate) + F106 (i-PRO/Uniview) で対応済。Frigate は clip.mp4 (`/api/<cam>/start/<ts>/end/<ts+1>/clip.mp4`) + ffmpeg `-frames:v 1` で 1 フレーム抽出。i-PRO は `/cgi-bin/snapshot.cgi?ch=N&time=<unix_ts>` で FW v3+ がネイティブ過去フレームを返す (v1/v2 は latest にフォールバック)。Uniview は LAPI に時刻指定エンドポイントが無いため過去オフセット要求でも latest を返す (ONVIF Profile-G 実装は需要次第)。bcp_clips.source カラムで `frigate-recording` / `ipro-historical` / `ipro-latest` / `uniview-latest` / `latest` を区別可能。',
+        read: 'T-5 など過去オフセット — Frigate (F70) + i-PRO (F106) 対応済',
+        desc: 'F70 (Frigate) + F106 (i-PRO) で対応済。Frigate は clip.mp4 (`/api/<cam>/start/<ts>/end/<ts+1>/clip.mp4`) + ffmpeg `-frames:v 1` で 1 フレーム抽出。i-PRO は `/cgi-bin/snapshot.cgi?ch=N&time=<unix_ts>` で FW v3+ がネイティブ過去フレームを返す (v1/v2 は latest にフォールバック)。ONVIF カメラ直は時刻指定のスナップショットを持たないため latest にフォールバックする。bcp_clips.source カラムで `frigate-recording` / `ipro-historical` / `ipro-latest` / `latest` を区別可能（`uniview-latest` は 2026-08-19 の Uniview 削除まで使われていた過去の値）。',
       },
       {
         term: 'BCP クリップ Storage 公開設定',
