@@ -1,5 +1,17 @@
 /**
- * ISO 3166-2:JP（JP-01〜JP-47）→ 都道府県名。stores.area_code の表示ラベルに使う。
+ * 都道府県コード → 名称。**3 つの書式が混在しているので、そのすべてを受ける。**
+ *
+ * ── なぜ書式が混ざっているのか ──────────────────────────────────────────
+ *   stores.area_code      : JIS 市区町村コード 5 桁（例 43100 = 熊本市）
+ *                           J-Alert の照合は先頭 2 桁を都道府県として使う
+ *                           （supabase/functions/jalert-poller/match.ts）
+ *   bcp_events.area_code  : 都道府県コード 2 桁（例 43）
+ *   本ファイルの旧実装     : ISO 3166-2:JP（例 JP-43）
+ *
+ * 旧 prefLabel() は 'JP-43' の形しか引けず、**実データの 43100 / 43 はどちらも
+ * 引けずに生のコードを返していた**。設備・巡回・発報の各設定画面はそれで
+ * 「43100」と表示していた（落ちないので気づけない類の不具合）。
+ * 正規化を 1 箇所に集め、どの書式でも同じ名前を返す。
  */
 export const JP_PREFECTURES: Record<string, string> = {
   'JP-01': '北海道', 'JP-02': '青森県', 'JP-03': '岩手県', 'JP-04': '宮城県',
@@ -16,9 +28,36 @@ export const JP_PREFECTURES: Record<string, string> = {
   'JP-45': '宮崎県', 'JP-46': '鹿児島県', 'JP-47': '沖縄県',
 }
 
-/** area_code を「県名（コード）」ラベルに。未知コードはコードのまま。 */
+/**
+ * どの書式のコードからでも都道府県名を引く。引けなければ null。
+ *
+ * 'JP-43' / '43' / '43100'（JIS 市区町村コード）は、いずれも 熊本県。
+ * 1 桁は先頭 0 を補う（CSV 取込で '4' になっている行がありうるため。'4' → 宮城県）。
+ */
+export function prefName(areaCode: string | null | undefined): string | null {
+  if (!areaCode) return null
+  const raw = String(areaCode).trim()
+  if (!raw) return null
+  const digits = raw.startsWith('JP-') ? raw.slice(3) : raw
+  if (!/^\d{1,5}$/.test(digits)) return null
+  // 5 桁は市区町村コード。都道府県は先頭 2 桁。1 桁は 0 埋め。
+  const two = digits.length === 1 ? `0${digits}` : digits.slice(0, 2)
+  return JP_PREFECTURES[`JP-${two}`] ?? null
+}
+
+/** area_code を「県名（コード）」ラベルに。名前が引けなければコードのまま。 */
 export function prefLabel(areaCode: string | null | undefined): string {
   if (!areaCode) return '未設定'
-  const name = JP_PREFECTURES[areaCode]
-  return name ? `${name}（${areaCode}）` : areaCode
+  const name = prefName(areaCode)
+  return name ? `${name}（${areaCode}）` : String(areaCode)
+}
+
+/**
+ * BCP 画面用。「43 熊本県」の形。コードを先に出すのは、
+ * 一覧が等幅で桁を揃えており、コードの位置が動くと読みにくくなるため。
+ */
+export function areaCodeLabel(areaCode: string | null | undefined): string {
+  if (!areaCode) return '—'
+  const name = prefName(areaCode)
+  return name ? `${areaCode} ${name}` : String(areaCode)
 }

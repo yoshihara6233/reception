@@ -28,6 +28,7 @@
  *   only Service Role can create rows).
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { canFetchVod } from '@/lib/types/db'
 import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 
 interface Body {
@@ -65,9 +66,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const vendor = c.recorders.vendor
 
   // VOD 対応: Frigate / onvif-generic+NVR / i-pro-nvr(レコーダ経由)。
-  const vodOk = vendor === 'frigate'
-    || vendor === 'i-pro-nvr'
-    || (vendor === 'onvif-generic' && !!c.recorders.vod_host)
+  const vodOk = canFetchVod(vendor, c.recorders.vod_host)
   if (!vodOk) {
     return NextResponse.json(
       {

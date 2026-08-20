@@ -28,6 +28,27 @@ export function isVodVendor(v: RecorderVendor): v is VodVendor {
 }
 
 /**
+ * **このカメラから実際に録画を切り出せるか。**判定はここ 1 箇所。
+ *
+ * `isVodVendor()` はベンダ名だけを見る型ガードで、**実運用の可否とは違う**。
+ * onvif-generic はカメラ直なので、VOD ソース(NVR)が設定されていなければ
+ * ベンダが対応でも取れない。この差を呼び出し側それぞれに書かせると必ずずれる。
+ *
+ * 実際にずれた: BCP の 5 分動画メニューを足したとき、画面側は `isVodVendor()`
+ * だけで判定し、API 側は vod_host まで見ていた。**メニューは押せるのに
+ * 押したら 422** という、操作するまで分からない食い違いになっていた。
+ * 以降、画面と API は必ずこの関数を通す。
+ */
+export function canFetchVod(
+  vendor: string,
+  vodHost: string | null | undefined,
+): boolean {
+  if (vendor === 'frigate' || vendor === 'i-pro-nvr') return true
+  if (vendor === 'onvif-generic') return !!vodHost
+  return false
+}
+
+/**
  * Per-vendor cap on the requested VOD window. frigate's clip.mp4 endpoint
  * materializes the whole range before the first frame, so 5 min keeps the
  * first-frame latency and edge memory usage acceptable. i-PRO NVR は
