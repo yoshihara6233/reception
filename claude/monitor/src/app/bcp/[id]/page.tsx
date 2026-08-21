@@ -7,6 +7,7 @@
  *  - Report section (PDF download if generated)
  */
 import Link from 'next/link'
+import { snapshotClipKey, snapshotClipRange } from '@/lib/bcp/snapshot-clip'
 import { SnapshotTile } from './SnapshotTile'
 import { canFetchVod } from '@/lib/types/db'
 import { prefName } from '@/lib/jp-prefectures'
@@ -201,6 +202,36 @@ export default async function BcpEventDetailPage({
   }
   const cameraGroups = [...byCamera.entries()].map(([camId, g]) => ({ camId, ...g }))
 
+  // ── 取得済みの 5 分動画 ────────────────────────────────────────────────
+  // どのコマに動画が既にあるかを、タイル上で分かるようにする。無いと
+  // 「押してみないと分からない」ままで、待つのか即座に来るのかが読めない。
+  //
+  // 照合は VOD の再利用と**同じ 3 点**（camera_id / requested_from / requested_to）。
+  // ここがずれると「あると出したのに作り直しが走る」ことになる。
+  const eventMs = new Date(event.alert_issued_at).getTime()
+  const readyKeys = new Set<string>()
+  if (cameraGroups.length > 0) {
+    // 発令前後の窓に絞る。全期間を引くと、無関係なクリップまで舐めることになる。
+    const winFrom = new Date(eventMs - 60 * 60_000).toISOString()
+    const winTo   = new Date(eventMs + 120 * 60_000).toISOString()
+    const { data: vods } = await supa
+      .from('vod_clips')
+      .select('camera_id, requested_from, requested_to')
+      .in('camera_id', cameraGroups.map((g) => g.camId))
+      .eq('status', 'ready')
+      .gte('requested_from', winFrom)
+      .lte('requested_from', winTo)
+    for (const v of (vods ?? []) as { camera_id: string; requested_from: string; requested_to: string }[]) {
+      // 文字列比較にしない。DB は µ 秒まで持つので、送った ISO と一致しない。
+      readyKeys.add(snapshotClipKey(v.camera_id, v.requested_from, v.requested_to))
+    }
+  }
+  /** このコマの 5 分動画が既にあるか。 */
+  const hasVideoFor = (camId: string, shotAtIso: string): boolean => {
+    const { fromIso, toIso } = snapshotClipRange(shotAtIso)
+    return readyKeys.has(snapshotClipKey(camId, fromIso, toIso))
+  }
+
   // Fetch the latest report (if any). A new bcp_reports row is inserted on each
   // successful webhook/generate run, so an event can have MORE THAN ONE report
   // row — `.single()` would error on duplicates and hide the PDF download link.
@@ -349,6 +380,12 @@ export default async function BcpEventDetailPage({
                     {SNAPSHOT_OFFSETS.map((offset) => {
                       const snap = g.snapshots.find((s) => s.offset_min === offset)
                       const has  = !!(snap && (snap.storage_path || snap.clip_url))
+                      // 5 分動画の起点。**1 回だけ求めて、表示にも照合にも同じ値を渡す。**
+                      // 実際に撮れた時刻(clip_from)を優先し、無い場合だけ
+                      // 発令時刻＋オフセットで補う。2 箇所で別々に計算すると、
+                      // 「動画あり」と出したのに別の区間を要求する形になりうる。
+                      const shotAtIso = snap?.clip_from
+                        ?? new Date(eventMs + offset * 60_000).toISOString()
                       return (
                         <SnapshotTile
                           key={offset}
@@ -359,14 +396,10 @@ export default async function BcpEventDetailPage({
                           cameraName={g.name}
                           label={offsetLabel(offset)}
                           clockLabel={`(${offsetClock(event.alert_issued_at, offset)})`}
-                          // 5 分動画の起点。実際に撮れた時刻(clip_from)を優先し、
-                          // 無い場合だけ発令時刻＋オフセットで補う。
-                          shotAtIso={
-                            snap?.clip_from
-                              ?? new Date(new Date(event.alert_issued_at).getTime() + offset * 60_000).toISOString()
-                          }
+                          shotAtIso={shotAtIso}
                           isCenterpiece={offset === 0}
                           vodOk={g.vodOk}
+                          hasVideo={hasVideoFor(g.camId, shotAtIso)}
                         />
                       )
                     })}
