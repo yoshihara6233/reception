@@ -7,6 +7,9 @@
  *  - Report section (PDF download if generated)
  */
 import Link from 'next/link'
+import { SnapshotTile } from './SnapshotTile'
+import { canFetchVod } from '@/lib/types/db'
+import { prefName } from '@/lib/jp-prefectures'
 import { notFound } from 'next/navigation'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { jmaIntensityLabel } from '@/lib/bcp/intensity'
@@ -46,7 +49,12 @@ interface BcpClip {
   duration_sec: number | null
   upload_status: string
   created_at: string
-  recorder_cameras: { id: string; name: string } | null
+  recorder_cameras: {
+    id: string
+    name: string
+    /** 5 分動画は録画から切り出すので、レコーダが VOD 対応かで可否が決まる。 */
+    recorders: { vendor: string; vod_host: string | null } | null
+  } | null
 }
 
 // F40: snapshot timeline offsets in minutes
@@ -149,7 +157,7 @@ export default async function BcpEventDetailPage({
       id, event_id, camera_id, offset_min, clip_from, clip_to,
       storage_path, clip_url, thumbnail_url,
       duration_sec, upload_status, created_at,
-      recorder_cameras ( id, name )
+      recorder_cameras ( id, name, recorders ( vendor, vod_host ) )
     `)
     .eq('event_id', id)
     .order('camera_id', { ascending: true })
@@ -171,12 +179,18 @@ export default async function BcpEventDetailPage({
     if (aDone !== bDone) return aDone ? a : b
     return new Date(a.created_at) >= new Date(b.created_at) ? a : b
   }
-  const byCamera = new Map<string, { name: string; snapshots: BcpClip[]; legacy: BcpClip[] }>()
+  const byCamera = new Map<string, {
+    name: string; vodOk: boolean; snapshots: BcpClip[]; legacy: BcpClip[]
+  }>()
   for (const c of clips) {
     const camId   = c.camera_id
     const camName = c.recorder_cameras?.name ?? '(unknown camera)'
+    // 5 分動画は録画から切り出す。取れるのは VOD 対応のレコーダだけなので、
+    // ここで判定してメニュー側に渡す（押してから失敗させない）。
+    const rec     = c.recorder_cameras?.recorders ?? null
+    const vodOk   = rec ? canFetchVod(rec.vendor, rec.vod_host) : false
     let g = byCamera.get(camId)
-    if (!g) { g = { name: camName, snapshots: [], legacy: [] }; byCamera.set(camId, g) }
+    if (!g) { g = { name: camName, vodOk, snapshots: [], legacy: [] }; byCamera.set(camId, g) }
     if (c.offset_min == null) {
       g.legacy.push(c)
     } else {
@@ -272,7 +286,12 @@ export default async function BcpEventDetailPage({
             </div>
             <div className="py-3 md:px-4">
               <dt className="mb-0.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">エリアコード</dt>
-              <dd className="font-mono text-slate-700">{event.area_code ?? '—'}</dd>
+              <dd className="text-slate-700">
+                <span className="font-mono">{event.area_code ?? '—'}</span>
+                {prefName(event.area_code) && (
+                  <span className="ml-1.5">{prefName(event.area_code)}</span>
+                )}
+              </dd>
             </div>
             <div className="py-3 md:px-4">
               <dt className="mb-0.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">震度</dt>
@@ -329,53 +348,26 @@ export default async function BcpEventDetailPage({
                   <div className="grid grid-cols-4 gap-2 md:grid-cols-8">
                     {SNAPSHOT_OFFSETS.map((offset) => {
                       const snap = g.snapshots.find((s) => s.offset_min === offset)
-                      const isCenterpiece = offset === 0
+                      const has  = !!(snap && (snap.storage_path || snap.clip_url))
                       return (
-                        <div
+                        <SnapshotTile
                           key={offset}
-                          className={
-                            'group relative overflow-hidden rounded border ' +
-                            (isCenterpiece
-                              ? 'border-red-300 ring-2 ring-red-200'
-                              : 'border-slate-200')
+                          // F76: 画像は /api/bcp/clip/<id> 経由。API がセッションを
+                          // 検証し、短命の署名URLへリダイレクトするので bucket は Private のまま。
+                          clipId={has ? snap!.id : null}
+                          cameraId={g.camId}
+                          cameraName={g.name}
+                          label={offsetLabel(offset)}
+                          clockLabel={`(${offsetClock(event.alert_issued_at, offset)})`}
+                          // 5 分動画の起点。実際に撮れた時刻(clip_from)を優先し、
+                          // 無い場合だけ発令時刻＋オフセットで補う。
+                          shotAtIso={
+                            snap?.clip_from
+                              ?? new Date(new Date(event.alert_issued_at).getTime() + offset * 60_000).toISOString()
                           }
-                        >
-                          {snap && (snap.storage_path || snap.clip_url) ? (
-                            // F76: route through /api/bcp/clip/<id> instead of using
-                            // the raw clip_url. The API verifies the session and
-                            // redirects to a short-lived signed URL, so the
-                            // bcp-clips bucket can be Private.
-                            <a
-                              href={`/api/bcp/clip/${snap.id}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="block aspect-[4/3] bg-slate-900"
-                              title={`${offsetLabel(offset)} — クリックで原寸表示 / 右クリックで保存`}
-                            >
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={`/api/bcp/clip/${snap.id}`}
-                                alt={`${g.name} ${offsetLabel(offset)}`}
-                                className="h-full w-full object-cover transition-transform group-hover:scale-105"
-                              />
-                            </a>
-                          ) : (
-                            <div className="flex aspect-[4/3] items-center justify-center bg-slate-100 text-[10px] text-slate-400">
-                              未取得
-                            </div>
-                          )}
-                          <div
-                            className={
-                              'absolute bottom-0 left-0 right-0 px-1.5 py-0.5 text-center text-[10px] font-semibold ' +
-                              (isCenterpiece
-                                ? 'bg-red-600/80 text-white'
-                                : 'bg-black/55 text-white')
-                            }
-                          >
-                            {offsetLabel(offset)}
-                            <span className="ml-1 font-normal opacity-90">({offsetClock(event.alert_issued_at, offset)})</span>
-                          </div>
-                        </div>
+                          isCenterpiece={offset === 0}
+                          vodOk={g.vodOk}
+                        />
                       )
                     })}
                   </div>

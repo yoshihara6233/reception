@@ -1,7 +1,7 @@
 /**
  * F106: Generic HTTP Digest Authentication helper (RFC 7616 / RFC 2617).
  *
- * Used by BCP snapshot fetchers (i-PRO CGI, Uniview LAPI) and any future
+ * Used by BCP snapshot fetchers (i-PRO CGI) and any future
  * vendor that exposes plain HTTP GET endpoints behind Digest auth.
  *
  * Flow:
@@ -15,7 +15,7 @@
  * on any non-2xx (after auth) or network failure.
  *
  * Algorithm support: MD5 only (the spec also defines SHA-256 / SHA-512-256
- * variants but i-PRO / Uniview firmware still negotiate MD5 exclusively).
+ * variants but i-PRO firmware still negotiates MD5 exclusively).
  */
 import { createHash, randomBytes } from 'crypto'
 

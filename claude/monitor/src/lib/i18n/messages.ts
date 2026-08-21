@@ -108,7 +108,7 @@ export interface Msg {
     maxLabel:    string   // "最大" (shown next to range cap)
     confirm:     string   // "再生する"
     cancel:      string   // "キャンセル"
-    noVod:       string   // gate reason — no VOD-capable cameras (uniview+frigate)
+    noVod:       string   // gate reason — no VOD-capable cameras (VOD_VENDORS 参照)
     // ── Player overlay states (DR2) ──
     connecting:       string   // initial black skeleton
     seeking:          string   // frozen frame + spinner (NEVER black)

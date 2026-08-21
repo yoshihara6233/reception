@@ -32,7 +32,7 @@ export const metadata: Metadata = {
     template: '%s | Intereco Monitor',
     default:  'Intereco Monitor',
   },
-  description: 'i-PRO / Uniview レコーダ統合監視システム',
+  description: 'i-PRO / ONVIF レコーダ統合監視システム',
   applicationName: 'Intereco Monitor',
   appleWebApp: {
     capable: true,

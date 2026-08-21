@@ -71,10 +71,10 @@ describe('normalizeOffsets', () => {
 import { hasBcpSnapshotPath, bcpUnavailableReason } from './bcp-capability.js'
 import type { Vendor } from '../types.js'
 
-const ALL_VENDORS: Vendor[] = ['ipro', 'uniview', 'frigate', 'onvif-generic', 'i-pro-nvr']
+const ALL_VENDORS: Vendor[] = ['ipro', 'frigate', 'onvif-generic', 'i-pro-nvr']
 
 describe('hasBcpSnapshotPath', () => {
-  it.each(['ipro', 'uniview', 'frigate', 'i-pro-nvr'] as Vendor[])(
+  it.each(['ipro', 'frigate', 'i-pro-nvr'] as Vendor[])(
     'has a path for %s without an explicit NVR',
     (vendor) => {
       expect(hasBcpSnapshotPath({ vendor, vodHost: null })).toBe(true)

@@ -7,7 +7,7 @@ import VodPlayer from './vod-player'
 import FrigateHlsPlayer from './frigate-hls-player'
 
 /**
- * VOD (録画再生) route. Reached from the toolbar 録画 button (per-camera, uniview
+ * VOD (録画再生) route. Reached from the toolbar 録画 button (per-camera,
  * only). `from`/`to` are absolute ISO instants chosen in the range picker.
  * `incident` (optional) marks an incident instant on the scrubber when the user
  * arrived from /security.

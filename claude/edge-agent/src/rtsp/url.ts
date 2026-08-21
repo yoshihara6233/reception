@@ -1,21 +1,23 @@
 /**
- * Build playback source URLs for the supported vendors.
+ * グリッド/ライブが使うスナップショット URL の組み立て。
  *
- * i-PRO (network cameras, direct):
- *   live: rtsp://user:pass@<cam_ip>:554/MediaInput/h264/stream_1
- *   stream_1..stream_4 are quality profiles.
+ * Frigate:
+ *   http://<host>:<api_port>/api/<camera_name>/latest.jpg
  *
- * Uniview NVR:
- *   live :  rtsp://user:pass@<nvr_ip>:554/unicast/c{CH}/s{0|1}/live
- *   vod  :  rtsp://user:pass@<nvr_ip>:554/c{CH}/b{startUnix}/e{endUnix}/replay
- *   s0 = main stream, s1 = sub stream.
+ * 他のベンダは null を返す（呼び出し側が暗いセルを描く）。
+ * i-PRO NVR と ONVIF カメラ直はそれぞれ専用の取得経路を持っており、
+ * ここは通らない（grid.ts / live.ts の分岐を参照）。
  *
- * Frigate (OSS-VMS, go2rtc re-stream):
- *   live : rtsp://<host>:8554/<camera_name>
- *   vod  : http://<host>:5000/api/<camera_name>/start/<unixFrom>/end/<unixTo>/clip.mp4
- *   The MP4 export is a single faststart MP4; ffmpeg can stream it as input.
+ * ── 2026-08-19 に削除したもの ────────────────────────────────────────────
+ * liveRtspUrl() と vodSourceUrl() をここから消した。**どちらも呼び出し元が
+ * 無い**まま残っており、vodSourceUrl には Uniview の RTSP replay URL
+ * (`rtsp://.../c<ch>/b<from>/e<to>/replay`) が書かれていた。
+ * 実際の VOD は modes/vod.ts が i-PRO httpdl か Frigate clip.mp4 のどちらか
+ * しか呼ばないので、この関数は一度も動いたことがない。
  *
- * i-PRO NVR VOD goes through ONVIF Profile-G; not built here.
+ * それでも「実装がある」ように見えたため、Uniview は録画対応と誤解され、
+ * クラウド側の VOD_VENDORS にも載っていた——**録画ボタンは出るが押すと
+ * 失敗する**状態を生んだ。動かないコードを残すこと自体が誤解の原因になる。
  */
 
 import type { Vendor } from '../types.js'
@@ -38,83 +40,7 @@ export interface RtspBuilderInput {
   frigateApiPort?: number
 }
 
-function encodeCreds(user: string, pass: string): string {
-  return `${encodeURIComponent(user)}:${encodeURIComponent(pass)}`
-}
-
-export function liveRtspUrl(i: RtspBuilderInput): string {
-  // Frigate VMS re-stream (OSS-VMS): rtsp://<host>:8554/<camera_name>
-  // For grid mode we ask for the substream (`<camera_name>_sub`) because the
-  // main Frigate restream is known to drop frames after the initial keyframe
-  // on some upstream RTSP cameras (the user's config has a comment to that
-  // effect: "メインストリームは i/o timeout で不安定なため除外"). The sub
-  // stream is reliable at the lower resolution and grid only needs ~0.5 fps.
-  if (i.vendor === 'frigate') {
-    const camName = i.frigateCamera ?? `camera_${String(i.channel).padStart(2, '0')}`
-    const stream  = i.substream ? `${camName}_sub` : camName
-    const auth = i.username
-      ? `${encodeCreds(i.username, i.password)}@`
-      : ''
-    return `rtsp://${auth}${i.host}:${i.port}/${stream}`
-  }
-
-  const creds = encodeCreds(i.username, i.password)
-  const auth  = `${creds}@${i.host}:${i.port}`
-  if (i.vendor === 'ipro') {
-    // i-PRO cameras: channel maps to the per-device endpoint, not the path.
-    // For a 16ch site we expect 16 separate camera hosts, each with its own URL.
-    const profile = i.substream ? 'stream_2' : 'stream_1'
-    return `rtsp://${auth}/MediaInput/h264/${profile}`
-  }
-  // uniview
-  const s = i.substream ? 's1' : 's0'
-  return `rtsp://${auth}/unicast/c${i.channel}/${s}/live`
-}
-
-/**
- * Default host port for Frigate's HTTP API (clip.mp4 export). The container
- * exposes 5000 internally; the default assumes Docker maps 5000→5000 on the
- * host. Override via `frigateApiPort` on RtspBuilderInput when the host port
- * has to be remapped (e.g. macOS AirPlay shadows :5000).
- */
 const FRIGATE_API_PORT_DEFAULT = 5000
-
-/**
- * VOD source URL for ffmpeg `-i`. Supports uniview (RTSP replay) and frigate
- * (HTTP MP4 export). i-PRO requires ONVIF Profile-G and is not implemented.
- *
- * Both protocols are accepted by ffmpeg as input; the `-rtsp_transport` flag
- * on the caller side is benignly ignored for HTTP inputs.
- */
-export function vodSourceUrl(
-  i: RtspBuilderInput,
-  fromIso: string,
-  toIso:   string,
-): string {
-  const b = Math.floor(new Date(fromIso).getTime() / 1000)
-  const e = Math.floor(new Date(toIso).getTime()   / 1000)
-
-  if (i.vendor === 'uniview') {
-    const creds = encodeCreds(i.username, i.password)
-    const auth  = `${creds}@${i.host}:${i.port}`
-    return `rtsp://${auth}/c${i.channel}/b${b}/e${e}/replay`
-  }
-  if (i.vendor === 'frigate') {
-    // Frigate's clip.mp4 endpoint generates a single faststart MP4 for the
-    // requested range. Camera name follows the same convention as live.
-    const camName = i.frigateCamera ?? `camera_${String(i.channel).padStart(2, '0')}`
-    const apiPort = i.frigateApiPort ?? FRIGATE_API_PORT_DEFAULT
-    return `http://${i.host}:${apiPort}/api/${camName}/start/${b}/end/${e}/clip.mp4`
-  }
-  throw new Error(
-    `VOD source not implemented for vendor "${i.vendor}" (i-PRO needs ONVIF Profile-G)`,
-  )
-}
-
-/** Redact password from RTSP URL for logging. */
-export function redactRtsp(url: string): string {
-  return url.replace(/^rtsp:\/\/[^:]+:[^@]+@/, 'rtsp://****:****@')
-}
 
 /**
  * URL for a still-image snapshot of the current camera frame.
@@ -123,8 +49,7 @@ export function redactRtsp(url: string): string {
  * stays only for VOD playback where seeking from a specific instant matters.
  *
  * - frigate : http://<host>:<api_port>/api/<camera>/latest.jpg
- * - uniview : (TODO) ONVIF Profile-S snapshot URI — returns null for now,
- *             which makes the grid composer paint a dark placeholder cell.
+ * 対応していないベンダは null を返し、グリッドは暗いセルを描く。
  * - ipro    : (TODO) ONVIF snapshot — same dark placeholder fallback.
  */
 export function snapshotUrl(i: RtspBuilderInput): string | null {

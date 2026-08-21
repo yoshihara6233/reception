@@ -17,7 +17,7 @@ interface Row {
   frigate_camera: string | null
   live_rtsp: string | null
   recorders: {
-    vendor: 'ipro' | 'uniview' | 'frigate' | 'onvif-generic' | 'i-pro-nvr'
+    vendor: 'ipro' | 'frigate' | 'onvif-generic' | 'i-pro-nvr'
     host: string
     rtsp_port: number
     onvif_port: number | null

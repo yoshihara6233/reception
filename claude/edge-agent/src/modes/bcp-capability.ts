@@ -28,7 +28,6 @@ export function hasBcpSnapshotPath(i: BcpCapabilityInput): boolean {
   switch (i.vendor) {
     case 'frigate':   return true   // 録画から過去フレーム ＋ latest.jpg
     case 'ipro':      return true   // snapshot.cgi（FW v3+ は ?time= で過去）
-    case 'uniview':   return true   // LAPI スナップ（現フレームのみに劣化）
     case 'i-pro-nvr': return true   // httpdl.cgi 録画 ＋ push.cgi 現フレーム
     // カメラ直構成。カメラ側に録画が無いので、NVR を併記しない限り過去は作れない。
     case 'onvif-generic': return !!i.vodHost

@@ -9,6 +9,7 @@
  * ツリー表示にする。▶ をクリックすると同行が展開される。
  */
 import { useMemo, useState } from 'react'
+import { prefName } from '@/lib/jp-prefectures'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useLang } from '@/lib/i18n/context'
@@ -319,7 +320,12 @@ function FragmentRows({
         <td className="px-3 py-2 font-mono text-[11px] text-slate-600">
           {fmtJST(g.alert_issued_at)}
         </td>
-        <td className="px-3 py-2 font-mono text-slate-500">{g.area_code ?? '—'}</td>
+        <td className="px-3 py-2 text-slate-500">
+          <span className="font-mono">{g.area_code ?? '—'}</span>
+          {prefName(g.area_code) && (
+            <span className="ml-1.5 text-slate-600">{prefName(g.area_code)}</span>
+          )}
+        </td>
         <td className="px-3 py-2 font-medium text-slate-700">
           {jmaIntensityLabel(g.max_intensity) ?? '—'}
         </td>
