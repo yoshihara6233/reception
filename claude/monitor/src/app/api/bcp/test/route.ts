@@ -8,7 +8,7 @@
  *   lat          : number  — 震源/発令点の緯度
  *   lng          : number  — 震源/発令点の経度
  *   radiusKm     : number  — 対象半径 (km)
- *   alertType    : 'tsunami' | 'earthquake' | 'missile'
+ *   alertType    : 'earthquake' | 'special_warning'
  *   alertIssuedAt: string  — ISO 8601（省略時は now()）
  *
  * Response:
@@ -19,7 +19,9 @@ import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/serv
 import { resolveMonitorScope } from '@/lib/tenant/monitor-scope'
 import { haversineKm } from '@/lib/bcp/geo'
 
-const VALID_ALERT_TYPES = ['tsunami', 'earthquake', 'missile'] as const
+// 津波・ミサイルは 2026-08-21 に非対応（本番ポーラーが起動しない種別を
+// テストからだけ撃てると、動くはずのものが動くように見えてしまう）。
+const VALID_ALERT_TYPES = ['earthquake', 'special_warning'] as const
 
 /** テスト発令を実行してよいロール（viewer / baggage_manager は不可）。 */
 const TRIGGER_ROLES = ['super_admin', 'tenant_admin', 'store_manager']
@@ -175,7 +177,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'lat and lng are required' }, { status: 400 })
   }
   if (!alertType || !VALID_ALERT_TYPES.includes(alertType as AlertType)) {
-    return NextResponse.json({ error: 'alertType must be tsunami | earthquake | missile' }, { status: 400 })
+    return NextResponse.json({ error: 'alertType must be earthquake | special_warning' }, { status: 400 })
   }
 
   const alertIssuedAt = rawAt ? new Date(rawAt).toISOString() : new Date().toISOString()

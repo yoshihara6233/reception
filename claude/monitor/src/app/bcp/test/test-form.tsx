@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Globe2, Waves, Rocket, MapPin, Search, Siren } from 'lucide-react'
+import { Globe2, CloudRain, MapPin, Search, Siren } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -22,9 +22,8 @@ interface ZipResult {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const ALERT_TYPES = [
-  { value: 'earthquake', label: '震度情報',   Icon: Globe2, color: 'border-amber-400 bg-amber-50 text-amber-800' },
-  { value: 'tsunami',    label: '津波情報',   Icon: Waves,  color: 'border-blue-400 bg-blue-50 text-blue-800'   },
-  { value: 'missile',    label: 'ミサイル情報', Icon: Rocket, color: 'border-red-400 bg-red-50 text-red-800'   },
+  { value: 'earthquake',      label: '震度情報', Icon: Globe2,    color: 'border-amber-400 bg-amber-50 text-amber-800' },
+  { value: 'special_warning', label: '特別警報', Icon: CloudRain, color: 'border-red-400 bg-red-50 text-red-800'       },
 ] as const
 
 const RADIUS_OPTIONS = [1, 3, 5, 10, 20, 30, 50, 100]

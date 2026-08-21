@@ -19,9 +19,10 @@ export interface JalertRow {
   detail_url:          string | null
 }
 
-type Filter = 'all' | 'earthquake' | 'tsunami' | 'missile' | 'other'
+type Filter = 'all' | 'earthquake' | 'special_warning' | 'other'
 
-const KNOWN = new Set(['earthquake', 'tsunami', 'missile'])
+/** タブを持つ種別。非対応にした津波・ミサイルの過去分は「その他」に入る。 */
+const KNOWN = new Set(['earthquake', 'special_warning'])
 
 /** JMA MaxInt 生値（'6+','5-' …）を日本式（'6強','5弱'）に。未知はそのまま。 */
 function intensityLabel(raw: string | null): string | null {
@@ -35,10 +36,12 @@ function intensityLabel(raw: string | null): string | null {
 
 function typeMeta(type: string | null): { label: string; cls: string } {
   switch (type) {
-    case 'earthquake': return { label: '地震',     cls: 'bg-amber-100 text-amber-800 border-amber-200' }
-    case 'tsunami':    return { label: '津波',     cls: 'bg-sky-100 text-sky-800 border-sky-200' }
-    case 'missile':    return { label: 'ミサイル', cls: 'bg-red-100 text-red-800 border-red-200' }
-    default:           return { label: 'その他',   cls: 'bg-slate-100 text-slate-700 border-slate-200' }
+    case 'earthquake':      return { label: '地震',     cls: 'bg-amber-100 text-amber-800 border-amber-200' }
+    case 'special_warning': return { label: '特別警報', cls: 'bg-red-100 text-red-800 border-red-200' }
+    // 2026-08-21 に非対応。過去の受信履歴を読めるように残す。
+    case 'tsunami':         return { label: '津波',     cls: 'bg-sky-100 text-sky-800 border-sky-200' }
+    case 'missile':         return { label: 'ミサイル', cls: 'bg-slate-100 text-slate-700 border-slate-200' }
+    default:                return { label: 'その他',   cls: 'bg-slate-100 text-slate-700 border-slate-200' }
   }
 }
 
@@ -62,9 +65,9 @@ export default function JalertList({ rows }: { rows: JalertRow[] }) {
   const [filter, setFilter] = useState<Filter>('all')
 
   const counts = useMemo(() => {
-    const c = { all: rows.length, earthquake: 0, tsunami: 0, missile: 0, other: 0 }
+    const c = { all: rows.length, earthquake: 0, special_warning: 0, other: 0 }
     for (const r of rows) {
-      if (r.alert_type && KNOWN.has(r.alert_type)) c[r.alert_type as 'earthquake' | 'tsunami' | 'missile']++
+      if (r.alert_type && KNOWN.has(r.alert_type)) c[r.alert_type as 'earthquake' | 'special_warning']++
       else c.other++
     }
     return c
@@ -77,11 +80,10 @@ export default function JalertList({ rows }: { rows: JalertRow[] }) {
   }, [rows, filter])
 
   const tabs: { key: Filter; label: string }[] = [
-    { key: 'all',        label: `すべて (${counts.all})` },
-    { key: 'earthquake', label: `地震 (${counts.earthquake})` },
-    { key: 'tsunami',    label: `津波 (${counts.tsunami})` },
-    { key: 'missile',    label: `ミサイル (${counts.missile})` },
-    { key: 'other',      label: `その他 (${counts.other})` },
+    { key: 'all',             label: `すべて (${counts.all})` },
+    { key: 'earthquake',      label: `地震 (${counts.earthquake})` },
+    { key: 'special_warning', label: `特別警報 (${counts.special_warning})` },
+    { key: 'other',           label: `その他 (${counts.other})` },
   ]
 
   return (
@@ -107,7 +109,7 @@ export default function JalertList({ rows }: { rows: JalertRow[] }) {
       {shown.length === 0 ? (
         <div className="rounded-lg border border-slate-200 bg-white p-8 text-center text-sm text-slate-400">
           受信履歴がまだありません。<br />
-          ポーラーが毎分実行され、JMA から該当する発令（地震・津波）を受信するとここに記録されます。
+          ポーラーが毎分実行され、JMA から該当する発令（地震・特別警報）を受信するとここに記録されます。
         </div>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">

@@ -152,7 +152,7 @@ describe('店舗の発動判定（県ごとの震度を使う）', () => {
   // 熊本=震度4 / 長崎=震度3 の実電文。全国最大値(4)を全店舗に当てると
   // しきい値4の長崎の店舗まで発動する（38店舗誤発動の原因の片方）。
   const prefs = parseAffectedPrefs(load('20260808230355_0_VXSE51_010000.xml'))
-  const settings = { quake_min_intensity: '4', tsunami_enabled: true, missile_enabled: true }
+  const settings = { quake_min_intensity: '4', special_warning_enabled: true }
 
   it('熊本市の店舗は震度4で発動する', () => {
     const hit = storeAreaIntensity('43100', prefs)

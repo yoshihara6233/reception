@@ -66,10 +66,12 @@ function statusLabel(s: string, b: Msg['bcpDashboard']): string {
 
 function alertTypeLabel(t: string, b: Msg['bcpDashboard']): string {
   switch (t) {
-    case 'tsunami':    return b.alertTypeTsunami
-    case 'earthquake': return b.alertTypeEarthquake
-    case 'missile':    return b.alertTypeMissile
-    case 'test':       return b.alertTypeTest
+    case 'earthquake':      return b.alertTypeEarthquake
+    case 'special_warning': return b.alertTypeSpecialWarning
+    case 'test':            return b.alertTypeTest
+    // 2026-08-21 に発動対象から外した種別。過去イベントを読めるように残す。
+    case 'tsunami':         return b.alertTypeTsunami
+    case 'missile':         return b.alertTypeMissile
     default:           return t
   }
 }

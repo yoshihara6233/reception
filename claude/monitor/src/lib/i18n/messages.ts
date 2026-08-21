@@ -318,8 +318,11 @@ export interface Msg {
     statusCompleted: string
     statusFailed: string
     severityInfo: string; severityWarn: string; severityDanger: string
+    alertTypeSpecialWarning: string
+    /** 過去イベントの表示にだけ使う（2026-08-21 に発動対象から外した）。 */
     alertTypeTsunami: string
     alertTypeEarthquake: string
+    /** 過去イベントの表示にだけ使う（2026-08-21 に発動対象から外した）。 */
     alertTypeMissile: string
     alertTypeTest: string
     testBadge: string
@@ -728,6 +731,7 @@ const ja: Msg = {
     statusCompleted: '完了',
     statusFailed: '失敗',
     severityInfo: 'info', severityWarn: 'warn', severityDanger: 'danger',
+    alertTypeSpecialWarning: '特別警報',
     alertTypeTsunami: '津波情報',
     alertTypeEarthquake: '震度情報',
     alertTypeMissile: 'ミサイル情報',
@@ -1135,6 +1139,7 @@ const en: Msg = {
     statusCompleted: 'Completed',
     statusFailed: 'Failed',
     severityInfo: 'info', severityWarn: 'warn', severityDanger: 'danger',
+    alertTypeSpecialWarning: 'Emergency Warning',
     alertTypeTsunami: 'Tsunami',
     alertTypeEarthquake: 'Earthquake',
     alertTypeMissile: 'Missile',
@@ -1542,6 +1547,7 @@ const zh: Msg = {
     statusCompleted: '完成',
     statusFailed: '失败',
     severityInfo: 'info', severityWarn: 'warn', severityDanger: 'danger',
+    alertTypeSpecialWarning: '特别警报',
     alertTypeTsunami: '海啸信息',
     alertTypeEarthquake: '地震信息',
     alertTypeMissile: '导弹信息',
@@ -1949,6 +1955,7 @@ const ko: Msg = {
     statusCompleted: '완료',
     statusFailed: '실패',
     severityInfo: 'info', severityWarn: 'warn', severityDanger: 'danger',
+    alertTypeSpecialWarning: '특별경보',
     alertTypeTsunami: '쓰나미 정보',
     alertTypeEarthquake: '지진 정보',
     alertTypeMissile: '미사일 정보',

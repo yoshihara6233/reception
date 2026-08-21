@@ -161,7 +161,7 @@ describe('2026-08-09 岩手県沖 震度4（38店舗誤発動の回帰）', () =
   })
 
   it('震度は全国最大値ではなく、その店舗の県の値で判定する', () => {
-    const settings = { quake_min_intensity: '4', tsunami_enabled: true, missile_enabled: true }
+    const settings = { quake_min_intensity: '4', special_warning_enabled: true }
     const iwate     = storeAreaIntensity('03201', prefs) // 岩手県 → 震度4
     const fukushima = storeAreaIntensity('07201', prefs) // 福島県 → 震度1
 
@@ -178,7 +178,7 @@ describe('2026-08-09 岩手県沖 震度4（38店舗誤発動の回帰）', () =
 })
 
 describe('parseAffectedPrefs の境界', () => {
-  it('津波電文のように都道府県コードが無ければ空を返す（呼び出し側で安全側に倒す）', () => {
+  it('都道府県コードを持たない電文では空を返す（＝対象なし）', () => {
     const tsunami = `<Report><Body><Warning><Item>
 <Area><Name>宮城県</Name><Code>222</Code></Area></Item></Warning></Body></Report>`
     expect(parseAffectedPrefs(tsunami).size).toBe(0)
@@ -191,7 +191,7 @@ describe('parseAffectedPrefs の境界', () => {
 })
 
 describe('intensityRank / shouldTrigger', () => {
-  const settings = { quake_min_intensity: '2', tsunami_enabled: true, missile_enabled: true }
+  const settings = { quake_min_intensity: '2', special_warning_enabled: true }
 
   it('震度3 はしきい値2以上で発動する（今回のケース）', () => {
     expect(shouldTrigger('earthquake', '3', settings)).toBe(true)
@@ -208,10 +208,16 @@ describe('intensityRank / shouldTrigger', () => {
     expect(shouldTrigger('earthquake', '5+', { ...settings, quake_min_intensity: '5-' })).toBe(true)
   })
 
-  it('津波・ミサイルはそれぞれのフラグに従う', () => {
-    expect(shouldTrigger('tsunami', null, settings)).toBe(true)
-    expect(shouldTrigger('tsunami', null, { ...settings, tsunami_enabled: false })).toBe(false)
-    expect(shouldTrigger('missile', null, { ...settings, missile_enabled: false })).toBe(false)
+  it('特別警報は震度に依らず設定だけで決まる', () => {
+    expect(shouldTrigger('special_warning', null, settings)).toBe(true)
+    expect(shouldTrigger('special_warning', null, { ...settings, special_warning_enabled: false })).toBe(false)
+  })
+
+  it('非対応にした津波・ミサイルでは、設定に関わらず発動しない', () => {
+    // 2026-08-21 に対象外とした。ここが true に戻ると、対象を絞れないまま
+    // 全店舗で録画が始まる経路が復活する。
+    expect(shouldTrigger('tsunami', null, settings)).toBe(false)
+    expect(shouldTrigger('missile', null, settings)).toBe(false)
     expect(shouldTrigger('weather', '3', settings)).toBe(false)
   })
 })

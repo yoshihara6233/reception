@@ -63,7 +63,7 @@ export function parseFeedEntries(xml: string): FeedEntry[] {
 
 /**
  * 複数フィードの entry を id で名寄せする。**先に現れたものを優先**。
- * 地震・津波は eqvol.xml にしか無いので複数フィードを併読しており、
+ * 地震は eqvol.xml、気象警報は extra.xml にしか無いので複数フィードを併読しており、
  * 同じ電文が両方に載ることがある。
  */
 export function mergeFeedEntries(feeds: (string | null)[]): FeedEntry[] {
@@ -77,66 +77,68 @@ export function mergeFeedEntries(feeds: (string | null)[]): FeedEntry[] {
   return [...byId.values()]
 }
 
+/** 気象警報電文（VPWW53）のフィードタイトル。特別警報はこの中に入る。 */
+export const WEATHER_WARNING_TITLE = '気象特別警報・警報・注意報'
+
 /**
- * J-Alert（地震・津波・ミサイル）の発令だけを通すタイトル許可リスト。
+ * 地震（震度速報・緊急地震速報・各種地震情報）の電文か。
  *
  * 旧実装は `RELEVANT_TYPES=['VPWW54','VXSE51']` で判定していたが、VPWW54 は
  * 「津波」ではなく**「気象警報・注意報」**だったため、平常時の気象警報が
- * 大量に混入していた（実データで確認）。JMA の地震・津波・国民保護の
- * タイトルは常に説明的なので、タイトルベースのほうが確実。
- *
- * 平常時のフィードは大半が無関係な情報（降灰予報など）で埋まる。
- * 通す条件ではなく**落とす件数**が効いている点に注意。
+ * 大量に混入していた（実データで確認）。JMA の地震のタイトルは常に説明的なので、
+ * タイトルベースのほうが確実。
  */
-export function isRelevantEntry(entry: FeedEntry): boolean {
+export function isEarthquakeEntry(entry: FeedEntry): boolean {
   const t = entry.title
-
-  // 津波を最優先で判定（タイトルに「注意報」を含むため、気象の除外より先に通す）。
-  if (t.includes('津波')) return true
-  // 地震（震度速報・緊急地震速報・各種地震情報）。
-  if (t.includes('震度') || t.includes('緊急地震速報') || t.includes('地震')) return true
-  // 国民保護（弾道ミサイル等）。
-  if (t.includes('ミサイル') || t.includes('弾道') || t.includes('国民保護')) return true
-
-  // それ以外（気象警報・注意報、噴火、降灰予報など）は受信履歴に含めない。
-  return false
-}
-
-/** タイトルから発令種別へ。既知3種に当てはまらなければ生タイトルを切って返す。 */
-export function classifyAlertType(title: string): string {
-  if (title.includes('津波')) return 'tsunami'
-  if (title.includes('震度') || title.includes('地震')) return 'earthquake'
-  if (title.includes('ミサイル') || title.includes('弾道')) return 'missile'
-  return title.slice(0, 50)
-}
-
-export interface AreaScope {
-  /** true = 都道府県を絞れないので全有効店舗を対象にする。 */
-  areaWide: boolean
-  /** true = 地震なのに都道府県が取れない異常。呼び出し側で警告を出す。 */
-  quakeWithoutPref: boolean
+  return t.includes('震度') || t.includes('緊急地震速報') || t.includes('地震')
 }
 
 /**
- * 都道府県が特定できないときに、どこまでを対象にするか。
+ * 気象警報電文か（＝特別警報が入っているかもしれない電文か）。
  *
- * 津波・ミサイルの電文は**津波予報区コード(3桁)しか持たず**、JIS 都道府県を
- * 導出できない。3桁の先頭2桁を取るのは誤りで、無関係な県に一致する
- * （462 → 46 = 鹿児島県。2026-08-09 に 38 店舗へ誤発報した経路）。
- * なので安全側に倒して「全有効店舗を対象」とする——取りこぼすより広く拾う。
- *
- * 一方、地震で都道府県が取れないのは電文の異常なので**対象なし**にする。
- * ここを areaWide にすると、1 通の壊れた電文で全店が録画を始める。
+ * ⚠ **タイトルだけでは特別警報の有無は分からない。** この製品名は平常時も
+ * 同じで、雷注意報 1 件でも「気象特別警報・警報・注意報」として流れてくる
+ * （実測: 19 時間で 245 通、うち特別警報 0 件）。中の `<Kind><Name>` を見るまで
+ * 判定できないので、ここでは「本文を取りに行く候補」までしか決めない。
+ * 実際の判定は match.ts の parseSpecialWarnings。
  */
-export function resolveAreaScope(
-  alertType: string,
-  affectedPrefs: ReadonlyMap<string, string | null>,
-): AreaScope {
-  const prefUnknown = affectedPrefs.size === 0
-  return {
-    areaWide:         prefUnknown && (alertType === 'tsunami' || alertType === 'missile'),
-    quakeWithoutPref: prefUnknown && alertType === 'earthquake',
-  }
+export function isWeatherWarningEntry(entry: FeedEntry): boolean {
+  return entry.title.includes(WEATHER_WARNING_TITLE)
+}
+
+/**
+ * 本文を取りに行く価値がある電文だけを通すタイトル許可リスト。
+ *
+ * 平常時のフィードは大半が無関係な情報（降灰予報など）で埋まる。
+ * 通す条件ではなく**落とす件数**が効いている点に注意。
+ *
+ * 津波・ミサイル(国民保護)は 2026-08-21 に非対応とした（match.ts shouldTrigger の注記）。
+ */
+export function isRelevantEntry(entry: FeedEntry): boolean {
+  return isEarthquakeEntry(entry) || isWeatherWarningEntry(entry)
+}
+
+/** タイトルから発令種別へ。既知に当てはまらなければ生タイトルを切って返す。 */
+export function classifyAlertType(title: string): string {
+  if (title.includes(WEATHER_WARNING_TITLE)) return 'special_warning'
+  if (title.includes('震度') || title.includes('地震')) return 'earthquake'
+  return title.slice(0, 50)
+}
+
+/**
+ * 都道府県を特定できない電文か。**特定できない＝対象なし**として扱う。
+ *
+ * 以前は津波・ミサイルだけ「全有効店舗を対象」に倒していた（areaWide）。
+ * どちらの電文も JIS 都道府県を導出できるコードを持たないためだったが、
+ * 北海道の津波警報で沖縄の店舗が録画を始める形なので、2026-08-21 に
+ * 津波・ミサイルごと非対応にして、この全店フォールバックを廃止した。
+ *
+ * 残った 2 種別（地震・特別警報）はどちらも都道府県を導出できる。
+ * 取れないなら電文の異常なので、広げずに止める。1 通の壊れた電文で
+ * 全店が録画を始めるほうが危険。
+ */
+export function hasNoTargetPref(affectedPrefs: ReadonlyMap<string, string | null>): boolean {
+  return affectedPrefs.size === 0
 }
 
 /** エッジへ送る自動取得コマンド（`start_bcp_capture`）。 */

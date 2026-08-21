@@ -20,8 +20,7 @@ const toInput = (r: BcpStoreSetting): BcpSettingInput => ({
   storeId:           r.storeId,
   enabled:           r.enabled,
   quakeMinIntensity: r.quakeMinIntensity,
-  tsunamiEnabled:    r.tsunamiEnabled,
-  missileEnabled:    r.missileEnabled,
+  specialWarningEnabled: r.specialWarningEnabled,
   notifyEmails:      r.notifyEmails,
   snapshotOffsets:   r.snapshotOffsets,
 })
@@ -30,8 +29,7 @@ const toInput = (r: BcpStoreSetting): BcpSettingInput => ({
 interface BulkPatch {
   enabled?: boolean
   quakeMinIntensity?: string
-  tsunamiEnabled?: boolean
-  missileEnabled?: boolean
+  specialWarningEnabled?: boolean
   snapshotOffsets?: number[]
 }
 
@@ -172,8 +170,7 @@ export function BcpSettingsTable({ initialRows }: { initialRows: BcpStoreSetting
               <th className="px-3 py-2">エリア</th>
               <th className="px-3 py-2">自動作成</th>
               <th className="px-3 py-2">地震</th>
-              <th className="px-3 py-2">津波</th>
-              <th className="px-3 py-2">ミサイル</th>
+              <th className="px-3 py-2">特別警報</th>
               <th className="px-3 py-2">撮影タイミング</th>
               <th className="px-3 py-2">通知先</th>
               <th className="px-3 py-2"></th>
@@ -194,7 +191,7 @@ export function BcpSettingsTable({ initialRows }: { initialRows: BcpStoreSetting
               />
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={10} className="px-3 py-6 text-center text-slate-400">該当する店舗がありません。</td></tr>
+              <tr><td colSpan={9} className="px-3 py-6 text-center text-slate-400">該当する店舗がありません。</td></tr>
             )}
           </tbody>
         </table>
@@ -234,8 +231,7 @@ function FragmentRow({
           </button>
         </td>
         <td className="px-3 py-2 text-slate-600 dark:text-gedink2">{intensityLabel(r.quakeMinIntensity)}</td>
-        <td className="px-3 py-2 text-center">{yn(r.tsunamiEnabled)}</td>
-        <td className="px-3 py-2 text-center">{yn(r.missileEnabled)}</td>
+        <td className="px-3 py-2 text-center">{yn(r.specialWarningEnabled)}</td>
         <td className="px-3 py-2 text-slate-600 dark:text-gedink2">
           <span className="font-semibold">{r.snapshotOffsets.length}枚</span>
           <span className="ml-1 text-slate-400">{offsetsSummary(r.snapshotOffsets)}</span>
@@ -251,7 +247,7 @@ function FragmentRow({
       </tr>
       {expanded && (
         <tr>
-          <td colSpan={10} className="bg-slate-50 px-3 py-3 dark:bg-gedbg3/40">
+          <td colSpan={9} className="bg-slate-50 px-3 py-3 dark:bg-gedbg3/40">
             <BcpSettingsCard row={r} onSaved={onSaved} />
           </td>
         </tr>
@@ -266,10 +262,8 @@ function BulkPanel({ pending, onApply }: { pending: boolean; onApply: (patch: Bu
   const [enabled, setEnabled]         = useState(true)
   const [useInt, setUseInt]           = useState(false)
   const [intensity, setIntensity]     = useState('5+')
-  const [useTsunami, setUseTsunami]   = useState(false)
-  const [tsunami, setTsunami]         = useState(true)
-  const [useMissile, setUseMissile]   = useState(false)
-  const [missile, setMissile]         = useState(true)
+  const [useSpecial, setUseSpecial]   = useState(false)
+  const [special, setSpecial]         = useState(true)
   const [useOffsets, setUseOffsets]   = useState(false)
   const [offsets, setOffsets]         = useState<number[]>([-5, 5])
 
@@ -283,8 +277,7 @@ function BulkPanel({ pending, onApply }: { pending: boolean; onApply: (patch: Bu
     const patch: BulkPatch = {}
     if (useEnabled) patch.enabled = enabled
     if (useInt) patch.quakeMinIntensity = intensity
-    if (useTsunami) patch.tsunamiEnabled = tsunami
-    if (useMissile) patch.missileEnabled = missile
+    if (useSpecial) patch.specialWarningEnabled = special
     if (useOffsets) patch.snapshotOffsets = offsets
     onApply(patch)
   }
@@ -310,16 +303,8 @@ function BulkPanel({ pending, onApply }: { pending: boolean; onApply: (patch: Bu
       </div>
 
       <div className={rowCls}>
-        <label className="flex w-40 items-center gap-1.5"><input type="checkbox" checked={useTsunami} onChange={(e) => setUseTsunami(e.target.checked)} />津波</label>
-        <select disabled={!useTsunami} value={tsunami ? '1' : '0'} onChange={(e) => setTsunami(e.target.value === '1')} className={ctrl}>
-          <option value="1">録画する</option>
-          <option value="0">録画しない</option>
-        </select>
-      </div>
-
-      <div className={rowCls}>
-        <label className="flex w-40 items-center gap-1.5"><input type="checkbox" checked={useMissile} onChange={(e) => setUseMissile(e.target.checked)} />ミサイル(国民保護)</label>
-        <select disabled={!useMissile} value={missile ? '1' : '0'} onChange={(e) => setMissile(e.target.value === '1')} className={ctrl}>
+        <label className="flex w-40 items-center gap-1.5"><input type="checkbox" checked={useSpecial} onChange={(e) => setUseSpecial(e.target.checked)} />特別警報(レベル5)</label>
+        <select disabled={!useSpecial} value={special ? '1' : '0'} onChange={(e) => setSpecial(e.target.value === '1')} className={ctrl}>
           <option value="1">録画する</option>
           <option value="0">録画しない</option>
         </select>

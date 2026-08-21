@@ -63,6 +63,8 @@ const NO_POLICY_OK = new Map<string, string>([
    'キオスクの PIN。API 側（requireKioskStore）でのみ検証する。利用者に直接引かせない。'],
   ['enrollment_tokens',
    'エッジ端末の登録トークン。bootstrap API だけが service role で扱う。'],
+  ['jalert_scanned_entries',
+   '気象電文の走査済みマーク。jalert-poller（service role）だけが読み書きする作業用。'],
 ])
 
 /**

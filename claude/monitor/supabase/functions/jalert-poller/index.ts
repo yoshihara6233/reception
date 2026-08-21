@@ -2,12 +2,12 @@
  * jalert-poller — Supabase Edge Function (Deno)
  *
  * Polls the JMA (Japan Meteorological Agency) Atom feed every 60 seconds.
- * When a relevant J-Alert entry is found (tsunami / earthquake), it:
+ * When a relevant J-Alert entry is found (地震 / 気象特別警報), it:
  *   1. Deduplicates against jalert_receipts.alert_source
  *   2. Fetches the detail XML and extracts area codes + max intensity
  *   3. Records the receipt in jalert_receipts (ALWAYS, store-match independent)
  *      → this is the data source for the "J-Alert 受信履歴" page
- *   4. Matches stores with BCP enabled + per-store trigger condition (震度しきい値/津波/ミサイル)
+ *   4. Matches stores with BCP enabled + per-store trigger condition (震度しきい値 / 特別警報)
  *   5. Inserts bcp_events + bcp_clips、通知メール送信、edge へ start_bcp_capture 発行（自動取得）
  *
  * 自動取得した 8 枚スナップ(軽量JPEG)は edge アップロード後 status='clips_uploaded' となり、
@@ -29,6 +29,7 @@ import {
   parseAreaCodes,
   parseEventId,
   parseMaxIntensity,
+  parseSpecialWarnings,
   shouldTrigger,
   storeAreaIntensity,
 } from './match.ts'
@@ -37,9 +38,10 @@ import {
 import {
   buildBcpCaptureCommand,
   classifyAlertType,
+  hasNoTargetPref,
   isRelevantEntry,
+  isWeatherWarningEntry,
   mergeFeedEntries,
-  resolveAreaScope,
   type FeedEntry,
 } from './flow.ts'
 
@@ -50,16 +52,24 @@ import {
 /**
  * JMA Atom feeds to poll.
  *
- * 地震・津波・噴火は **eqvol.xml**（地震火山）にしか載らない。extra.xml は
- * 「気象警報・注意報」など気象の随時情報のみで、震度速報/津波予報は含まれない。
- * 以前は extra.xml だけを見ていたため、タイトル許可リスト(地震/津波)を整えても
- * フィードに地震エントリが無く /bcp/jalerts が空になっていた（根本原因）。
- * eqvol.xml を最優先で追加し、extra.xml も将来の特別警報等のために併読する。
+ * 地震は **eqvol.xml**（地震火山）にしか載らず、気象警報（特別警報の入れ物）は
+ * **extra.xml** にしか載らない。**2 本とも要る。**
+ * 以前は extra.xml だけを見ていたため、タイトル許可リストを整えてもフィードに
+ * 地震エントリが無く /bcp/jalerts が空になっていた（根本原因）。
  */
 const JMA_FEED_URLS = [
-  'https://www.data.jma.go.jp/developer/xml/feed/eqvol.xml', // 地震・津波・噴火（本命）
-  'https://www.data.jma.go.jp/developer/xml/feed/extra.xml', // 気象の随時情報（特別警報など将来用）
+  'https://www.data.jma.go.jp/developer/xml/feed/eqvol.xml', // 地震（VXSE5x）
+  'https://www.data.jma.go.jp/developer/xml/feed/extra.xml', // 気象警報・注意報（VPWW53＝特別警報の入れ物）
 ]
+
+/**
+ * 気象警報電文を本文まで見に行ったという印の保持期間。
+ *
+ * フィードには 19 時間ぶんの電文が載り続けるので、印が無いと同じ電文を毎分
+ * 取りに行くことになる（実測 245 通 × 60 回/時）。逆に長く持ちすぎても意味は
+ * 無いので、フィードの窓（〜19時間）より十分長く、かつ短い 7 日にする。
+ */
+const SCAN_MARK_RETENTION_DAYS = 7
 const RESEND_API_URL = 'https://api.resend.com/emails'
 // from ドメインは Resend で検証済みのものに限る。旧 'bcp@noreply.intareco.jp' は
 // 所有していないドメインで Resend が 403 を返し、取得開始メールが全滅していた
@@ -94,9 +104,8 @@ interface BcpSettings {
   enabled: boolean
   pre_minutes: number
   post_minutes: number
-  quake_min_intensity: string   // この震度以上の地震でのみ録画起動（JMA MaxInt 表記）
-  tsunami_enabled: boolean      // 津波発令で録画起動するか
-  missile_enabled: boolean      // 国民保護(弾道ミサイル等)で録画起動するか
+  quake_min_intensity: string      // この震度以上の地震でのみ録画起動（JMA MaxInt 表記）
+  special_warning_enabled: boolean // 気象等の特別警報（レベル5）で録画起動するか
   snapshot_offsets: number[] | null  // レポートで撮影するオフセット(分)。既定 [-5,5]
 }
 
@@ -139,8 +148,8 @@ async function pollJalert(): Promise<void> {
     auth: { persistSession: false, autoRefreshToken: false },
   })
 
-  // 1+2. Fetch every JMA feed and merge their entries (dedup by id). 地震/津波は
-  //      eqvol.xml にしか無いので、複数フィードを必ず併読する。
+  // 1+2. Fetch every JMA feed and merge their entries (dedup by id).
+  //      地震は eqvol.xml、気象警報は extra.xml にしか無いので必ず併読する。
   const entries = await fetchAllEntries()
   if (entries.length === 0) {
     console.log('[jalert-poller] No entries in any feed')
@@ -150,7 +159,7 @@ async function pollJalert(): Promise<void> {
   // 3. Filter to relevant types only
   const relevant = entries.filter((e) => isRelevantEntry(e))
   if (relevant.length === 0) {
-    console.log('[jalert-poller] No relevant J-Alert entries (地震/津波/ミサイル)')
+    console.log('[jalert-poller] No relevant J-Alert entries (地震/気象警報)')
     return
   }
 
@@ -201,27 +210,70 @@ async function processEntry(
   supa: any,
   entry: FeedEntry,
 ): Promise<void> {
-  // 4. Dedup — skip if already received. jalert_receipts には店舗マッチに関係なく
-  //    全件記録するため、ここを重複判定の確実なアンカーにする（旧実装は bcp_events
-  //    を見ていたが、無マッチ時は行が無く毎分再処理していた）。
-  const { data: existing } = await supa
-    .from('jalert_receipts')
-    .select('id')
-    .eq('alert_source', entry.id)
-    .limit(1)
+  // 気象警報（VPWW53）は本文を読むまで特別警報の有無が分からない。タイトルは
+  // 雷注意報 1 件でも「気象特別警報・警報・注意報」なので、地震とは重複判定の
+  // 置き場所が違う（特別警報でない電文は受信履歴に残さない＝jalert_scanned_entries）。
+  const isWeather = isWeatherWarningEntry(entry)
 
-  if (existing && existing.length > 0) {
-    console.log(`[jalert-poller] Already received ${entry.id}, skipping`)
-    return
+  // 4. Dedup
+  if (isWeather) {
+    if (await alreadyScanned(supa, entry.id)) return
+  } else {
+    // jalert_receipts には店舗マッチに関係なく全件記録するため、ここを重複判定の
+    // 確実なアンカーにする（旧実装は bcp_events を見ていたが、無マッチ時は行が
+    // 無く毎分再処理していた）。
+    const { data: existing } = await supa
+      .from('jalert_receipts')
+      .select('id')
+      .eq('alert_source', entry.id)
+      .limit(1)
+
+    if (existing && existing.length > 0) {
+      console.log(`[jalert-poller] Already received ${entry.id}, skipping`)
+      return
+    }
   }
 
   console.log(`[jalert-poller] New entry: ${entry.title} (${entry.id})`)
 
   // 5. Fetch detail XML and extract area codes + max intensity
-  const { areaCodes, maxIntensity, affectedPrefs, eventId } = await fetchDetail(entry.linkHref)
+  const detail = await fetchDetail(entry.linkHref)
+
+  // 本文が取れなかった気象電文に印を付けてはいけない。付けると
+  // 「1 回の通信失敗で、その特別警報を二度と見に行かない」形になる。
+  if (isWeather && !detail.ok) {
+    console.error(`[jalert-poller] 気象電文の本文を取得できませんでした（次回再試行）: ${entry.id}`)
+    return
+  }
+
+  const alertType = classifyAlertType(entry.title)
+  let alertTitle = entry.title
+  let affectedPrefs = detail.affectedPrefs
+  let areaCodes = detail.areaCodes
+
+  if (isWeather) {
+    // 6-W. 現に出ている特別警報だけを拾う（解除・注意報・警報は対象外）。
+    const scan = parseSpecialWarnings(detail.xml)
+
+    if (scan.kinds.length === 0) {
+      await markScanned(supa, entry.id, false)
+      return
+    }
+
+    // 受信履歴の見出しは「気象特別警報・警報・注意報」では中身が分からないので、
+    // 実際に出ている種別に置き換える（例: 大雨特別警報, 暴風特別警報）。
+    alertTitle     = scan.kinds.join('・')
+    affectedPrefs  = scan.prefs
+    // 気象電文の区域コードは 1 通で 190 件を超える。受信履歴には対象都道府県
+    // （JIS 2桁）だけを残す。生コードは detail_url の先に元電文がある。
+    areaCodes      = [...scan.prefs.keys()]
+
+    console.log(`[jalert-poller] 特別警報を検知: ${alertTitle} / 対象都道府県 ${areaCodes.join(',') || '(なし)'}`)
+  }
+
   console.log(
     `[jalert-poller] Area codes: ${areaCodes.join(', ') || '(none)'}` +
-    (maxIntensity ? `, MaxInt: ${maxIntensity}` : '') +
+    (detail.maxIntensity ? `, MaxInt: ${detail.maxIntensity}` : '') +
     `, 対象都道府県: ${
       affectedPrefs.size
         ? [...affectedPrefs].map(([p, i]) => `${p}:${i ?? '-'}`).join(' ')
@@ -229,20 +281,19 @@ async function processEntry(
     }`,
   )
 
-  // 6. Find matching stores with BCP enabled（エリア一致＋有効化のみ。発動条件は次段で判定）
-  const alertType = classifyAlertType(entry.title)
   const alertIssuedAt = entry.updated || new Date().toISOString()
 
-  // 津波・ミサイルの電文は津波予報区コード(3桁)しか持たず、JIS 都道府県を導出できない。
-  // 3桁から先頭2桁を取るのは誤り（無関係な県に一致する）なので、ここでは安全側に倒して
-  // 「全有効店舗を対象」とする。地震で都道府県が取れないのは異常なので対象なしとする。
-  const { areaWide, quakeWithoutPref } = resolveAreaScope(alertType, affectedPrefs)
-  if (quakeWithoutPref) {
-    console.warn('[jalert-poller] 地震電文から都道府県を抽出できませんでした（対象なしとして扱います）')
+  // 6. Find matching stores with BCP enabled（エリア一致＋有効化のみ。発動条件は次段で判定）
+  //
+  // 都道府県を特定できない電文は「対象なし」。全店フォールバック（旧 areaWide）は
+  // 津波・ミサイルの非対応化と一緒に廃止した。1 通の壊れた電文で全店が録画を
+  // 始めるほうが危険なため（flow.ts hasNoTargetPref の注記）。
+  if (hasNoTargetPref(affectedPrefs)) {
+    console.warn(`[jalert-poller] ${alertType} の電文から都道府県を抽出できませんでした（対象なしとして扱います）`)
   }
-  const areaStores = await findMatchingStores(supa, affectedPrefs, areaWide)
+  const areaStores = await findMatchingStores(supa, affectedPrefs)
 
-  // 6.5. 店舗ごとの発動条件（震度しきい値 / 津波 ON-OFF / ミサイル ON-OFF）で絞り込む。
+  // 6.5. 店舗ごとの発動条件（震度しきい値 / 特別警報 ON-OFF）で絞り込む。
   //      震度は「その店舗の都道府県で観測された値」で判定する。全国最大値を全店に
   //      当てると、震度1の県の店舗が震度4扱いで発動する（2026-08-09 の障害）。
   const triggeredStores = areaStores.filter(({ intensity, settings }) =>
@@ -253,13 +304,14 @@ async function processEntry(
   //      データ源。東北の地震のように該当店舗が無くても、ここには残る。
   //      matched_store_count は「自動取得を起動した店舗数」。
   await recordReceipt(
-    supa, entry, alertType, areaCodes, maxIntensity, alertIssuedAt, triggeredStores.length,
+    supa, entry, alertType, alertTitle, areaCodes, detail.maxIntensity, alertIssuedAt, triggeredStores.length,
   )
 
   if (triggeredStores.length === 0) {
     console.log(
       `[jalert-poller] 発動条件を満たす店舗なし（エリア一致${areaStores.length}店 / 受信ログには記録済み）`,
     )
+    if (isWeather) await markScanned(supa, entry.id, true)
     return
   }
 
@@ -268,7 +320,7 @@ async function processEntry(
   // 7. 各店舗で自動取得＋通知
   for (const { store, settings, intensity } of triggeredStores) {
     try {
-      await processStore(supa, entry, store, settings, alertType, alertIssuedAt, areaCodes, intensity, eventId)
+      await processStore(supa, entry, store, settings, alertType, alertIssuedAt, areaCodes, intensity, detail.eventId)
     } catch (err) {
       console.error(
         `[jalert-poller] Error processing store ${store.id} (${store.name}):`,
@@ -276,6 +328,57 @@ async function processEntry(
       )
     }
   }
+
+  // 印は最後に付ける。途中で落ちたら印が付かず、次回もう一度取りに行く。
+  if (isWeather) await markScanned(supa, entry.id, true)
+}
+
+// ---------------------------------------------------------------------------
+// 気象電文の走査済みマーク
+// ---------------------------------------------------------------------------
+
+/** すでに本文まで見た気象電文か。 */
+async function alreadyScanned(
+  // deno-lint-ignore no-explicit-any
+  supa: any,
+  entryId: string,
+): Promise<boolean> {
+  const { data, error } = await supa
+    .from('jalert_scanned_entries')
+    .select('entry_id')
+    .eq('entry_id', entryId)
+    .limit(1)
+
+  if (error) {
+    // 読めないときは「未走査」に倒す。取りこぼすより、もう一度取りに行くほうが安全。
+    console.error('[jalert-poller] jalert_scanned_entries query error:', error)
+    return false
+  }
+  return (data?.length ?? 0) > 0
+}
+
+/** 走査済みの印を付ける。ついでに古い印を掃除する。 */
+async function markScanned(
+  // deno-lint-ignore no-explicit-any
+  supa: any,
+  entryId: string,
+  hadAlert: boolean,
+): Promise<void> {
+  const { error } = await supa
+    .from('jalert_scanned_entries')
+    .upsert({ entry_id: entryId, had_alert: hadAlert }, { onConflict: 'entry_id' })
+
+  if (error) {
+    console.error(`[jalert-poller] Failed to mark scanned ${entryId}:`, error)
+    return
+  }
+
+  const cutoff = new Date(Date.now() - SCAN_MARK_RETENTION_DAYS * 86_400_000).toISOString()
+  const { error: delError } = await supa
+    .from('jalert_scanned_entries')
+    .delete()
+    .lt('scanned_at', cutoff)
+  if (delError) console.error('[jalert-poller] scan mark cleanup error:', delError)
 }
 
 // ---------------------------------------------------------------------------
@@ -283,6 +386,10 @@ async function processEntry(
 // ---------------------------------------------------------------------------
 
 interface AlertDetail {
+  /** 本文を取得できたか。false なら以降のフィールドは既定値（判定に使わない）。 */
+  ok: boolean
+  /** 取得した生 XML。気象電文の特別警報判定に使う（地震では未使用）。 */
+  xml: string
   /** 受信ログ用の生コード一覧（監査目的。照合には使わない）。 */
   areaCodes: string[]
   /** 電文全体の最大震度（表示・ログ用。発動判定には使わない）。 */
@@ -294,7 +401,7 @@ interface AlertDetail {
 }
 
 const EMPTY_DETAIL: AlertDetail = {
-  areaCodes: [], maxIntensity: null, affectedPrefs: new Map(), eventId: null,
+  ok: false, xml: '', areaCodes: [], maxIntensity: null, affectedPrefs: new Map(), eventId: null,
 }
 
 async function fetchDetail(linkHref: string): Promise<AlertDetail> {
@@ -308,6 +415,8 @@ async function fetchDetail(linkHref: string): Promise<AlertDetail> {
     }
     const xml = await res.text()
     return {
+      ok:            true,
+      xml,
       areaCodes:     parseAreaCodes(xml),
       maxIntensity:  parseMaxIntensity(xml),
       affectedPrefs: parseAffectedPrefs(xml),
@@ -334,12 +443,11 @@ async function findMatchingStores(
   // deno-lint-ignore no-explicit-any
   supa: any,
   affectedPrefs: ReadonlyMap<string, string | null>,
-  areaWide: boolean,
 ): Promise<StoreWithSettings[]> {
   // Fetch all active BCP settings with their store's area_code
   const { data, error } = await supa
     .from('bcp_settings')
-    .select('id, store_id, notify_emails, enabled, pre_minutes, post_minutes, quake_min_intensity, tsunami_enabled, missile_enabled, snapshot_offsets, stores ( id, name, area_code )')
+    .select('id, store_id, notify_emails, enabled, pre_minutes, post_minutes, quake_min_intensity, special_warning_enabled, snapshot_offsets, stores ( id, name, area_code )')
     .eq('enabled', true)
 
   if (error) {
@@ -354,10 +462,8 @@ async function findMatchingStores(
     if (!store) continue
 
     // 照合ルールは match.ts に集約（JIS 都道府県 2 桁の一致）。
-    // areaWide は津波・ミサイルで都道府県を特定できない場合の安全側フォールバック。
-    const hit = areaWide
-      ? { matched: true, intensity: null }
-      : storeAreaIntensity(store.area_code, affectedPrefs)
+    // 地震も特別警報も、都道府県が取れない電文は 1 店も一致しない（対象なし）。
+    const hit = storeAreaIntensity(store.area_code, affectedPrefs)
 
     if (hit.matched) {
       results.push({
@@ -371,8 +477,7 @@ async function findMatchingStores(
           pre_minutes: row.pre_minutes ?? 3,
           post_minutes: row.post_minutes ?? 3,
           quake_min_intensity: row.quake_min_intensity ?? '5+',
-          tsunami_enabled: row.tsunami_enabled ?? true,
-          missile_enabled: row.missile_enabled ?? true,
+          special_warning_enabled: row.special_warning_enabled ?? true,
           snapshot_offsets: row.snapshot_offsets ?? [-5, 5],
         },
       })
@@ -420,7 +525,10 @@ async function processStore(
   if (jmaEventId) {
     dupQuery = dupQuery.eq('jma_event_id', jmaEventId)
   } else {
-    const DEDUP_WINDOW_MS = 15 * 60_000
+    // 特別警報は EventID を持たず、出ている間ずっと「継続」の電文が流れ続ける
+    // （実測: 同じ府県予報区へ 19 時間で 5 通前後）。15 分窓だと同じ災害で
+    // 何度も録画が始まるので、特別警報だけ窓を広く取る。
+    const DEDUP_WINDOW_MS = alertType === 'special_warning' ? 6 * 3_600_000 : 15 * 60_000
     const issuedMs = new Date(alertIssuedAt).getTime()
     dupQuery = dupQuery
       .gte('alert_issued_at', new Date(issuedMs - DEDUP_WINDOW_MS).toISOString())
@@ -587,6 +695,8 @@ async function recordReceipt(
   supa: any,
   entry: FeedEntry,
   alertType: string,
+  /** 受信履歴に出す見出し。特別警報では実際の種別名に差し替わる。 */
+  alertTitle: string,
   areaCodes: string[],
   maxIntensity: string | null,
   alertIssuedAt: string,
@@ -599,7 +709,7 @@ async function recordReceipt(
       {
         alert_source:        entry.id,
         alert_type:          alertType,
-        title:               entry.title,
+        title:               alertTitle,
         area_codes:          areaCodes,
         max_intensity:       maxIntensity,
         alert_issued_at:     alertIssuedAt,
@@ -612,7 +722,7 @@ async function recordReceipt(
   if (error) {
     console.error(`[jalert-poller] Failed to record receipt for ${entry.id}:`, error)
   } else {
-    console.log(`[jalert-poller] Receipt recorded: ${entry.title} (matched ${matchedStoreCount} store(s))`)
+    console.log(`[jalert-poller] Receipt recorded: ${alertTitle} (matched ${matchedStoreCount} store(s))`)
   }
 }
 
@@ -654,9 +764,8 @@ async function sendAlertEmail(
   })
 
   const testLabel = isTest ? ' TEST' : ''
-  const alertTypeLabel = alertType === 'tsunami' ? '津波情報'
-    : alertType === 'earthquake' ? '震度情報'
-    : alertType === 'missile' ? 'ミサイル情報'
+  const alertTypeLabel = alertType === 'earthquake' ? '震度情報'
+    : alertType === 'special_warning' ? '特別警報（警戒レベル5）'
     : alertType
 
   const subject = `[BCP${testLabel}] Jアラート発令 - ${store.name} (${alertTypeLabel})`
