@@ -2,9 +2,8 @@
  * /admin/bcp — BCP 発動条件（店舗別）
  *
  * J-Alert 連動 BCP 自動録画を、店舗ごとに「どの発令で起動するか」設定する:
- *   - 地震    : 最大震度しきい値（既定 5強以上）
- *   - 津波    : ON/OFF（既定 ON）
- *   - ミサイル : ON/OFF（既定 ON）
+ *   - 地震     : 最大震度しきい値（既定 5強以上）
+ *   - 特別警報 : ON/OFF（既定 ON。気象等の特別警報＝警戒レベル5）
  *   - 録画前後分・通知先
  * 条件未満の発令も /bcp/jalerts の受信履歴には残る（録画を起動しないだけ）。
  */
@@ -23,8 +22,7 @@ interface SettingRow {
   store_id: string
   enabled: boolean
   quake_min_intensity: string | null
-  tsunami_enabled: boolean | null
-  missile_enabled: boolean | null
+  special_warning_enabled: boolean | null
   notify_emails: string[] | null
   snapshot_offsets: number[] | null
 }
@@ -55,7 +53,7 @@ export default async function AdminBcpPage() {
 
   const [storesRes, settingsRes] = await Promise.all([
     storesQuery,
-    supa.from('bcp_settings').select('store_id, enabled, quake_min_intensity, tsunami_enabled, missile_enabled, notify_emails, snapshot_offsets').limit(10_000),
+    supa.from('bcp_settings').select('store_id, enabled, quake_min_intensity, special_warning_enabled, notify_emails, snapshot_offsets').limit(10_000),
   ])
 
   const stores   = (storesRes.data   ?? []) as StoreRow[]
@@ -70,8 +68,7 @@ export default async function AdminBcpPage() {
       areaCode:          st.area_code,
       enabled:           cfg?.enabled ?? false,
       quakeMinIntensity: cfg?.quake_min_intensity ?? '5+',
-      tsunamiEnabled:    cfg?.tsunami_enabled ?? true,
-      missileEnabled:    cfg?.missile_enabled ?? true,
+      specialWarningEnabled: cfg?.special_warning_enabled ?? true,
       notifyEmails:      cfg?.notify_emails ?? [],
       snapshotOffsets:   cfg?.snapshot_offsets ?? [-5, 5],
     }
@@ -86,7 +83,7 @@ export default async function AdminBcpPage() {
       <div className="space-y-3 px-5 py-4">
         <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-xs leading-relaxed text-blue-800/90 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200/80">
           店舗ごとに、J-Alert 連動の<b>BCPレポート自動作成</b>を設定します。
-          地震は<b>最大震度のしきい値</b>、津波・ミサイルは ON/OFF、<b>撮影タイミング</b>で写真枚数を選べます。
+          地震は<b>最大震度のしきい値</b>、特別警報（警戒レベル5）は ON/OFF、<b>撮影タイミング</b>で写真枚数を選べます。
           絞り込み・複数選択して<b>一括設定</b>も可能。条件未満の発令も<b>受信履歴</b>には残ります。
         </div>
         {rows.length === 0 ? (

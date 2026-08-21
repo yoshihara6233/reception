@@ -165,16 +165,20 @@ export function intensityRank(code: string | null): number {
 
 export interface TriggerSettings {
   quake_min_intensity: string
-  tsunami_enabled: boolean
-  missile_enabled: boolean
+  /** 気象等の特別警報（レベル5）で録画を起動するか。 */
+  special_warning_enabled: boolean
 }
 
 /**
  * 店舗の発動条件を満たすか（録画を起動すべきか）。
- *   - 地震   : 最大震度がしきい値以上
- *   - 津波   : tsunami_enabled
- *   - ミサイル: missile_enabled
- *   - その他 : 起動しない
+ *   - 地震     : その店舗の県で観測された最大震度がしきい値以上
+ *   - 特別警報 : special_warning_enabled
+ *   - その他   : 起動しない
+ *
+ * 津波・ミサイル(国民保護)は 2026-08-21 に非対応とした。どちらの電文も
+ * 都道府県を導出できるコードを持たず、「全有効店舗を対象」に倒すしかない。
+ * 北海道の津波警報で沖縄の店舗が録画を始める形になり、店舗数が増えるほど
+ * 誤発報のほうが大きくなるため、扱わないことにした（parseAffectedPrefs の注記）。
  */
 export function shouldTrigger(
   alertType: string,
@@ -184,7 +188,130 @@ export function shouldTrigger(
   if (alertType === 'earthquake') {
     return intensityRank(maxIntensity) >= intensityRank(s.quake_min_intensity)
   }
-  if (alertType === 'tsunami') return s.tsunami_enabled !== false
-  if (alertType === 'missile') return s.missile_enabled !== false
+  if (alertType === 'special_warning') return s.special_warning_enabled !== false
   return false
+}
+
+// ---------------------------------------------------------------------------
+// 気象特別警報（VPWW53「気象特別警報・警報・注意報」）
+// ---------------------------------------------------------------------------
+
+/**
+ * 気象警報電文 1 件ぶんの「種別 × 発表状況 × 発表区域」。
+ *
+ * VPWW53 は 1 通の中に 4 つの区域粒度（府県予報区／一次細分区域／市町村等を
+ * まとめた地域／市町村等）が入り、それぞれ `<Item>` に `<Kind>` と `<Area>` を持つ。
+ */
+export interface WarningItem {
+  /** `<Kind><Name>` の生値。例: '大雨特別警報' / '雷注意報' / '解除' */
+  kind: string
+  /** `<Kind><Status>`。実測値は '発表' / '継続' / '解除' の 3 つ。 */
+  status: string
+  /** その Item の `<Area><Code>`。6桁=府県予報区・細分区域、7桁=市町村等。 */
+  areaCode: string | null
+}
+
+/**
+ * `<Body>` の `<Warning>` を走査して「種別 × 発表状況 × 区域」を取り出す。
+ *
+ * ⚠ **XML 全体から「特別警報」を検索してはならない。** VPWW53 の `<Notice>` には
+ * 平常時でも必ず「［危険警報・氾濫特別警報の発表状況］なし」という定型文が入る。
+ * 素朴に文字列一致を取ると、全国すべての気象電文が特別警報として通る
+ * （実測: 取得した 50 通すべてに この文言が入っていた）。
+ * 判定してよいのは `<Kind><Name>` の中だけ。
+ *
+ * ⚠ **`<Head><Headline><Information>` は見ない。** 同じ `<Item>` / `<Kind>` の形を
+ * しているが、こちらの Kind には `<Status>` が無い（実測: 岡山の 1 通で 5 件）。
+ * 発表なのか解除なのかを区別できないものを混ぜると、解除の電文で録画が始まる。
+ * 区域ごとの発表状況は Body の `<Warning>` に必ず入っているので、そちらだけを使う。
+ *
+ * Body での解除は `<Kind><Name>大雨注意報</Name><Status>解除</Status>` の形。
+ * Name は種別のままなので、**Status を見ないと解除を発表と取り違える**。
+ * （Head 側にだけ現れる `<Name>解除</Name>` という形もあるが、上記のとおり見ない。）
+ */
+export function parseWarningItems(xml: string): WarningItem[] {
+  const items: WarningItem[] = []
+
+  const warningRegex = /<Warning[^>]*>([\s\S]*?)<\/Warning>/g
+  let w: RegExpExecArray | null
+  while ((w = warningRegex.exec(xml)) !== null) {
+    collectItems(w[1], items)
+  }
+
+  return items
+}
+
+function collectItems(warningBody: string, items: WarningItem[]): void {
+  const itemRegex = /<Item>([\s\S]*?)<\/Item>/g
+  let m: RegExpExecArray | null
+  while ((m = itemRegex.exec(warningBody)) !== null) {
+    const body = m[1]
+
+    // 区域は Body 側が <Area>、Head の Information 側が <Areas><Area>。
+    // どちらも最初の <Code> がその Item の区域。
+    const area = body.match(/<Area>\s*<Name>[^<]*<\/Name>\s*<Code>(\d+)<\/Code>/)
+    const areaCode = area ? area[1] : null
+
+    const kindRegex = /<Kind>([\s\S]*?)<\/Kind>/g
+    let k: RegExpExecArray | null
+    while ((k = kindRegex.exec(body)) !== null) {
+      const name = k[1].match(/<Name>([^<]*)<\/Name>/)
+      if (!name) continue
+      const status = k[1].match(/<Status>([^<]*)<\/Status>/)
+      items.push({ kind: name[1].trim(), status: status ? status[1].trim() : '', areaCode })
+    }
+  }
+}
+
+/**
+ * その区域で現に出ている特別警報か。
+ *
+ * **「解除でない」ではなく「発表または継続」で判定する。** Status の値は実測で
+ * 発表 / 継続 / 解除 の 3 つだが、Name も Status も無い `<Kind>`（区域に何も
+ * 出ていない印の「発表警報・注意報はなし」）のような形が他にもありうる。
+ * 知らない値が増えたときに「発動する側」へ倒れないよう、通す値を並べる。
+ */
+function isActiveSpecialWarning(item: WarningItem): boolean {
+  if (!item.kind.includes('特別警報')) return false
+  return item.status === '発表' || item.status === '継続'
+}
+
+export interface SpecialWarningScan {
+  /** 現に出ている特別警報の種別名（重複除去・出現順）。空なら特別警報は無い。 */
+  kinds: string[]
+  /** 対象の JIS 都道府県コード(2桁) → null（震度は無いので常に null）。 */
+  prefs: Map<string, string | null>
+}
+
+/**
+ * 気象警報電文から「現に出ている特別警報」と、その対象都道府県を取り出す。
+ *
+ * 気象警報の区域コードは気象庁独自の 6桁（府県予報区 200000 / 一次細分区域
+ * 200010 / 市町村等をまとめた地域 200011）と 7桁（市町村等 2020100）で、
+ * **先頭 2 桁が JIS 都道府県コードになるよう採番されている**。
+ * 実測で確認済み: 50 府県予報区・4,234 区域コードすべてで先頭2桁が 01〜47 に
+ * 収まり、かつ電文の府県予報区と一致した（例外 0 件）。北海道(012000/013000)・
+ * 鹿児島(460040)・沖縄(471000〜474000) の分割予報区も先頭2桁は正しい。
+ *
+ * これは地震電文の細分区域(3桁)とは別物。3桁のほうは先頭2桁を取ると無関係な県に
+ * 一致する（210岩手県沿岸北部 → 21岐阜県）。**桁数で体系を見分けること。**
+ */
+export function parseSpecialWarnings(xml: string): SpecialWarningScan {
+  const kinds: string[] = []
+  const prefs = new Map<string, string | null>()
+
+  for (const item of parseWarningItems(xml)) {
+    if (!isActiveSpecialWarning(item)) continue
+
+    if (!kinds.includes(item.kind)) kinds.push(item.kind)
+
+    const code = item.areaCode
+    // 6桁(府県予報区・細分区域) と 7桁(市町村等) だけが JIS 都道府県を導出できる。
+    if (!code || code.length < 6 || code.length > 7) continue
+    const pref = code.slice(0, 2)
+    if (!isJisPref(pref)) continue
+    if (!prefs.has(pref)) prefs.set(pref, null)
+  }
+
+  return { kinds, prefs }
 }

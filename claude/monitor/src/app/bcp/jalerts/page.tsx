@@ -45,7 +45,7 @@ export default async function JalertsPage() {
           <div className="flex items-start gap-3">
             <span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-slate-200 text-base"><Radio size={16} strokeWidth={1.5} aria-hidden /></span>
             <p className="min-w-0 flex-1 text-xs leading-relaxed text-slate-600">
-              気象庁フィードから受信した <b>本番 J-Alert（地震・津波）の全件</b>を新着順に表示します。
+              気象庁フィードから受信した <b>本番 J-Alert（地震・特別警報）の全件</b>を新着順に表示します。
               店舗の登録エリアに該当しない発令（例：他地方の地震）も<b>受信した事実として記録</b>され、
               「該当店舗」が <b>対象外</b> と表示されます。テスト発令はここには出ません。
             </p>

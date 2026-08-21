@@ -108,10 +108,10 @@ describe('BCP の二重起動', () => {
     expect(await countEvents()).toBe(1)
   })
 
-  it('★種別が違えば別件（津波と地震は同時に来る）', async () => {
-    // 同じ EventID でも、地震と津波は別の発令として扱う。
+  it('★種別が違えば別件（地震と特別警報は同時に来る）', async () => {
+    // 台風で暴風特別警報が出ている最中の地震など、別の発令として扱う。
     await insertEvent({ alert_type: 'earthquake' })
-    await insertEvent({ alert_type: 'tsunami' })
+    await insertEvent({ alert_type: 'special_warning' })
     expect(await countEvents(), '種別違いまで抑止しています').toBe(2)
   })
 

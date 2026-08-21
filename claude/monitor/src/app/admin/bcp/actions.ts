@@ -11,8 +11,7 @@ export interface BcpSettingInput {
   storeId: string
   enabled: boolean
   quakeMinIntensity: string
-  tsunamiEnabled: boolean
-  missileEnabled: boolean
+  specialWarningEnabled: boolean
   notifyEmails: string[]
   snapshotOffsets: number[]
 }
@@ -21,8 +20,7 @@ interface BcpSettingRow {
   store_id: string
   enabled: boolean
   quake_min_intensity: string
-  tsunami_enabled: boolean
-  missile_enabled: boolean
+  special_warning_enabled: boolean
   notify_emails: string[]
   snapshot_offsets: number[]
 }
@@ -43,9 +41,8 @@ function toDbRow(input: BcpSettingInput): { row: BcpSettingRow } | { error: stri
     row: {
       store_id:            input.storeId,
       enabled:             input.enabled,
-      quake_min_intensity: input.quakeMinIntensity,
-      tsunami_enabled:     input.tsunamiEnabled,
-      missile_enabled:     input.missileEnabled,
+      quake_min_intensity:     input.quakeMinIntensity,
+      special_warning_enabled: input.specialWarningEnabled,
       notify_emails:       input.notifyEmails,
       snapshot_offsets:    offsets,
     },
@@ -53,7 +50,7 @@ function toDbRow(input: BcpSettingInput): { row: BcpSettingRow } | { error: stri
 }
 
 /**
- * 店舗の BCP 発動条件を upsert（有効化・震度しきい値・津波/ミサイルON-OFF・通知先・撮影オフセット）。
+ * 店舗の BCP 発動条件を upsert（有効化・震度しきい値・特別警報ON-OFF・通知先・撮影オフセット）。
  * 書込みは bcp_settings_modify RLS（admin role）で許可。
  */
 export async function upsertBcpSettings(input: BcpSettingInput): Promise<{ ok: boolean; error?: string }> {

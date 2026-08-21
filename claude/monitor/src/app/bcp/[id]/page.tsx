@@ -102,10 +102,12 @@ const STATUS_LABEL: Record<string, string> = {
 }
 
 const ALERT_TYPE_LABEL: Record<string, string> = {
-  tsunami:    '津波情報',
-  earthquake: '震度情報',
-  missile:    'ミサイル情報',
-  test:       'テスト',
+  earthquake:      '震度情報',
+  special_warning: '特別警報',
+  test:            'テスト',
+  // 2026-08-21 に発動対象から外した種別。過去イベントを読めるように残す。
+  tsunami:         '津波情報',
+  missile:         'ミサイル情報',
 }
 
 function fmtDateTime(iso: string | null | undefined): string {

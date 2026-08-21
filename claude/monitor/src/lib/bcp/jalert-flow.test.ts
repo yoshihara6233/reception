@@ -5,9 +5,10 @@ import {
   classifyAlertType,
   extractTag,
   isRelevantEntry,
+  isWeatherWarningEntry,
+  hasNoTargetPref,
   mergeFeedEntries,
   parseFeedEntries,
-  resolveAreaScope,
   type FeedEntry,
 } from '../../../supabase/functions/jalert-poller/flow'
 
@@ -141,26 +142,30 @@ describe('isRelevantEntry（絞り込み）', () => {
     expect(dropped.every((e) => e.title.includes('降灰予報'))).toBe(true)
   })
 
-  it('津波は「注意報」を含んでいても通す', () => {
-    // 気象の「注意報」と字面が被るが、津波を先に判定するので落ちない。
-    expect(isRelevantEntry(entry({ title: '津波注意報' }))).toBe(true)
-    expect(isRelevantEntry(entry({ title: '津波警報・注意報・予報' }))).toBe(true)
-  })
-
   it('地震の各種タイトルを通す', () => {
     for (const t of ['震度速報', '緊急地震速報（警報）', '震源・震度に関する情報', '地震情報']) {
       expect(isRelevantEntry(entry({ title: t })), t).toBe(true)
     }
   })
 
-  it('国民保護（ミサイル）を通す', () => {
-    for (const t of ['弾道ミサイル情報', '国民保護情報']) {
-      expect(isRelevantEntry(entry({ title: t })), t).toBe(true)
+  it('気象警報電文（特別警報の入れ物）を通す', () => {
+    // 中身が雷注意報だけでも、本文を読むまでは分からないので通す。
+    expect(isRelevantEntry(entry({ title: '気象特別警報・警報・注意報' }))).toBe(true)
+    expect(isWeatherWarningEntry(entry({ title: '気象特別警報・警報・注意報' }))).toBe(true)
+  })
+
+  it('★非対応にした津波・ミサイルは落とす', () => {
+    // 2026-08-21 に対象外とした。ここが true に戻ると、都道府県を絞れない
+    // 電文が全店フォールバックへ流れる経路が復活する。
+    for (const t of ['津波注意報', '津波警報・注意報・予報', '弾道ミサイル情報', '国民保護情報']) {
+      expect(isRelevantEntry(entry({ title: t })), t).toBe(false)
     }
   })
 
-  it('★気象警報・注意報は落とす（旧実装が誤って通していたもの）', () => {
-    for (const t of ['気象警報・注意報', '大雨警報', '暴風警報', '記録的短時間大雨情報']) {
+  it('★旧書式の気象警報・注意報は落とす（特別警報が入らない電文）', () => {
+    // VPWW54「気象警報・注意報（Ｈ２７）」など。VPWW53 と同じ内容が別書式で
+    // 流れてくるので、両方通すと同じ発表を二度処理することになる。
+    for (const t of ['気象警報・注意報', '気象警報・注意報（Ｈ２７）', '大雨警報', '記録的短時間大雨情報']) {
       expect(isRelevantEntry(entry({ title: t })), t).toBe(false)
     }
   })
@@ -177,16 +182,20 @@ describe('isRelevantEntry（絞り込み）', () => {
 })
 
 describe('classifyAlertType', () => {
-  it('津波・地震・ミサイルを分類する', () => {
-    expect(classifyAlertType('津波注意報')).toBe('tsunami')
+  it('地震と気象警報を分類する', () => {
     expect(classifyAlertType('震度速報')).toBe('earthquake')
     expect(classifyAlertType('震源・震度に関する情報')).toBe('earthquake')
-    expect(classifyAlertType('弾道ミサイル情報')).toBe('missile')
+    expect(classifyAlertType('気象特別警報・警報・注意報')).toBe('special_warning')
   })
 
-  it('津波を地震より先に見る（「津波地震」を tsunami にする）', () => {
+  it('非対応の津波・ミサイルは既知種別に落とさない（生タイトルのまま）', () => {
+    expect(classifyAlertType('津波注意報')).toBe('津波注意報')
+    expect(classifyAlertType('弾道ミサイル情報')).toBe('弾道ミサイル情報')
+  })
+
+  it('「津波」を含む地震電文は earthquake として扱う', () => {
     // 「遠地地震に関する情報（津波の心配なし）」のように両方含む電文がある。
-    expect(classifyAlertType('遠地地震に関する情報（津波なし）')).toBe('tsunami')
+    expect(classifyAlertType('遠地地震に関する情報（津波なし）')).toBe('earthquake')
   })
 
   it('未知のタイトルは 50 文字に切って返す（捨てない）', () => {
@@ -200,33 +209,15 @@ describe('classifyAlertType', () => {
   })
 })
 
-describe('resolveAreaScope（都道府県が取れないときの対象範囲）', () => {
-  const none = new Map<string, string | null>()
-  const some = new Map<string, string | null>([['43', '5+']])
-
-  it('都道府県が取れていれば areaWide にしない', () => {
-    for (const t of ['earthquake', 'tsunami', 'missile']) {
-      expect(resolveAreaScope(t, some)).toEqual({ areaWide: false, quakeWithoutPref: false })
-    }
+describe('hasNoTargetPref（都道府県が取れないとき）', () => {
+  it('都道府県が取れていれば対象あり', () => {
+    expect(hasNoTargetPref(new Map([['43', '5+']]))).toBe(false)
   })
 
-  it('★津波・ミサイルで県が取れなければ全店対象（取りこぼすより広く拾う）', () => {
-    // 津波・ミサイルの電文は津波予報区コード(3桁)しか持たず、JIS 都道府県を
-    // 導出できない。3桁の先頭2桁を取るのは誤り（462 → 46 = 鹿児島県）。
-    expect(resolveAreaScope('tsunami', none).areaWide).toBe(true)
-    expect(resolveAreaScope('missile', none).areaWide).toBe(true)
-  })
-
-  it('★地震で県が取れなければ対象なし（全店発動させない）', () => {
-    // ここを areaWide にすると、1 通の壊れた電文で全店が録画を始める。
-    const scope = resolveAreaScope('earthquake', none)
-    expect(scope.areaWide, '壊れた地震電文で全店が発動します').toBe(false)
-    expect(scope.quakeWithoutPref, '異常を警告できていません').toBe(true)
-  })
-
-  it('未知の種別で県が取れなくても全店対象にしない', () => {
-    // classifyAlertType が生タイトルを返した場合。既知3種以外は広げない。
-    expect(resolveAreaScope('気象警報・注意報', none))
-      .toEqual({ areaWide: false, quakeWithoutPref: false })
+  it('★取れなければ対象なし（全店フォールバックは廃止）', () => {
+    // 旧 resolveAreaScope は津波・ミサイルだけ「全有効店舗」に倒していた。
+    // 津波・ミサイルの非対応化と一緒に廃止。残る 2 種別（地震・特別警報）は
+    // どちらも都道府県を導出できるので、取れないのは電文の異常。
+    expect(hasNoTargetPref(new Map())).toBe(true)
   })
 })

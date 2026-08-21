@@ -10,8 +10,7 @@ export interface BcpStoreSetting {
   areaCode:          string | null
   enabled:           boolean
   quakeMinIntensity: string
-  tsunamiEnabled:    boolean
-  missileEnabled:    boolean
+  specialWarningEnabled: boolean
   notifyEmails:      string[]
   snapshotOffsets:   number[]
 }
@@ -44,8 +43,7 @@ export const INTENSITY_OPTIONS: { value: string; label: string }[] = [
 export function BcpSettingsCard({ row, onSaved }: { row: BcpStoreSetting; onSaved?: (next: BcpStoreSetting) => void }) {
   const [enabled, setEnabled]   = useState(row.enabled)
   const [intensity, setInt]     = useState(row.quakeMinIntensity)
-  const [tsunami, setTsunami]   = useState(row.tsunamiEnabled)
-  const [missile, setMissile]   = useState(row.missileEnabled)
+  const [special, setSpecial]   = useState(row.specialWarningEnabled)
   const [emails, setEmails]     = useState(row.notifyEmails.join(', '))
   const [offsets, setOffsets]   = useState<number[]>(
     row.snapshotOffsets.length > 0 ? row.snapshotOffsets : [-5, 5],
@@ -69,8 +67,7 @@ export function BcpSettingsCard({ row, onSaved }: { row: BcpStoreSetting; onSave
         storeId:           row.storeId,
         enabled,
         quakeMinIntensity: intensity,
-        tsunamiEnabled:    tsunami,
-        missileEnabled:    missile,
+        specialWarningEnabled: special,
         notifyEmails,
         snapshotOffsets:   offsets,
       })
@@ -78,8 +75,8 @@ export function BcpSettingsCard({ row, onSaved }: { row: BcpStoreSetting; onSave
         setSaved(true); setTimeout(() => setSaved(false), 1500)
         onSaved?.({
           ...row,
-          enabled, quakeMinIntensity: intensity, tsunamiEnabled: tsunami,
-          missileEnabled: missile, notifyEmails, snapshotOffsets: offsets,
+          enabled, quakeMinIntensity: intensity, specialWarningEnabled: special,
+          notifyEmails, snapshotOffsets: offsets,
         })
       }
       else setErr(res.error ?? '保存に失敗しました')
@@ -123,13 +120,13 @@ export function BcpSettingsCard({ row, onSaved }: { row: BcpStoreSetting; onSave
               </select>
             </div>
             <label className="flex items-center gap-2">
-              <input type="checkbox" checked={tsunami} onChange={(e) => setTsunami(e.target.checked)} />
-              津波 発令で録画する
+              <input type="checkbox" checked={special} onChange={(e) => setSpecial(e.target.checked)} />
+              特別警報（警戒レベル5） 発表で録画する
             </label>
-            <label className="flex items-center gap-2">
-              <input type="checkbox" checked={missile} onChange={(e) => setMissile(e.target.checked)} />
-              ミサイル(国民保護) 発令で録画する
-            </label>
+            <p className="text-[10px] leading-relaxed text-slate-400">
+              特別警報は大雨・土砂災害・高潮・大雪・暴風・暴風雪・波浪の各特別警報が対象です。
+              警報・注意報（レベル4以下）では録画しません。
+            </p>
             <p className="text-[10px] leading-relaxed text-slate-400">
               条件未満の発令も「Jアラート受信履歴」には残ります（録画を起動しないだけ）。
             </p>

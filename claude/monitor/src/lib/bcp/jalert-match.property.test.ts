@@ -145,7 +145,7 @@ describe('発動条件', () => {
   it('★震度が強いほど発動しやすい（単調）', () => {
     // 「震度5+ では発動するのに 6- では発動しない」という穴が空かないこと。
     fc.assert(fc.property(intensity(), intensity(), intensity(), (a, b, threshold) => {
-      const s = { quake_min_intensity: threshold, tsunami_enabled: true, missile_enabled: true }
+      const s = { quake_min_intensity: threshold, special_warning_enabled: true }
       if (intensityRank(a) >= intensityRank(b) && shouldTrigger('earthquake', b, s)) {
         expect(shouldTrigger('earthquake', a, s), `${b} で発動して ${a} で発動しません`).toBe(true)
       }
@@ -156,7 +156,7 @@ describe('発動条件', () => {
     fc.assert(fc.property(intensity(), intensity(), intensity(), (obs, lo, hi) => {
       fc.pre(intensityRank(lo) <= intensityRank(hi))
       const at = (t: string) => shouldTrigger('earthquake', obs,
-        { quake_min_intensity: t, tsunami_enabled: true, missile_enabled: true })
+        { quake_min_intensity: t, special_warning_enabled: true })
       if (at(hi)) expect(at(lo), 'しきい値を下げたのに発動しなくなりました').toBe(true)
     }), RUNS)
   })
@@ -165,26 +165,34 @@ describe('発動条件', () => {
     // ランク 0 は「条件未満」。壊れた電文で全店が録画を始めないための下限。
     fc.assert(fc.property(intensity(), (threshold) => {
       expect(shouldTrigger('earthquake', null,
-        { quake_min_intensity: threshold, tsunami_enabled: true, missile_enabled: true })).toBe(false)
+        { quake_min_intensity: threshold, special_warning_enabled: true })).toBe(false)
     }), RUNS)
   })
 
   it('未知の種別では発動しない', () => {
     fc.assert(fc.property(
-      fc.string().filter((s) => !['earthquake', 'tsunami', 'missile'].includes(s)),
+      fc.string().filter((s) => !['earthquake', 'special_warning'].includes(s)),
       fc.option(intensity(), { nil: null }),
       (type, int) => {
         expect(shouldTrigger(type, int,
-          { quake_min_intensity: '1', tsunami_enabled: true, missile_enabled: true })).toBe(false)
+          { quake_min_intensity: '1', special_warning_enabled: true })).toBe(false)
       }), RUNS)
   })
 
-  it('津波・ミサイルは震度に依らず設定だけで決まる', () => {
-    fc.assert(fc.property(fc.option(intensity(), { nil: null }), fc.boolean(), fc.boolean(),
-      (int, tsunami, missile) => {
-        const s = { quake_min_intensity: '7', tsunami_enabled: tsunami, missile_enabled: missile }
-        expect(shouldTrigger('tsunami', int, s)).toBe(tsunami)
-        expect(shouldTrigger('missile', int, s)).toBe(missile)
+  it('特別警報は震度に依らず設定だけで決まる', () => {
+    fc.assert(fc.property(fc.option(intensity(), { nil: null }), fc.boolean(),
+      (int, special) => {
+        const s = { quake_min_intensity: '7', special_warning_enabled: special }
+        expect(shouldTrigger('special_warning', int, s)).toBe(special)
+      }), RUNS)
+  })
+
+  it('★非対応の種別（津波・ミサイル）はどんな設定でも発動しない', () => {
+    fc.assert(fc.property(fc.option(intensity(), { nil: null }), fc.boolean(),
+      (int, special) => {
+        const s = { quake_min_intensity: '1', special_warning_enabled: special }
+        expect(shouldTrigger('tsunami', int, s)).toBe(false)
+        expect(shouldTrigger('missile', int, s)).toBe(false)
       }), RUNS)
   })
 })
