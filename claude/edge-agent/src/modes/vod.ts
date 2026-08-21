@@ -26,7 +26,10 @@ import { getSupabase } from '../supabase.js'
 import { logger } from '../logger.js'
 import { config } from '../config.js'
 import { downloadIproNvrMp4 } from '../adapters/i-pro/nvr-vod.js'
-import { remuxFaststart, transcodeHevcToH264IfNeeded } from '../util/window-mp4.js'
+import {
+  fitWithinUploadLimit, remuxFaststart, transcodeHevcToH264IfNeeded,
+} from '../util/window-mp4.js'
+import { maxFittableSec } from '../util/upload-fit.js'
 import type { CameraDescriptor } from '../types.js'
 
 // 中央クライアント（鍵ローテ同期対応）に委譲。
@@ -61,6 +64,20 @@ export async function startVod(i: StartVodInput): Promise<VodHandle> {
   if (rec.vendor !== 'frigate' && !useIproNvr) {
     throw new Error(
       `VOD unsupported: vendor=${rec.vendor} (frigate / onvif-generic+NVR / i-pro-nvr のみ対応)`,
+    )
+  }
+
+  // **長すぎる要求は、NVR を触る前に断る。**
+  // 取ってから「保存できません」では、NVR の同時処理枠と数十秒を無駄にする。
+  // 上限を超える長さは縮小してもどのみち収まらない（帯域が下限を割る）。
+  const capBytes = config.VOD_MAX_UPLOAD_BYTES
+  const wantSec  = (new Date(i.toIso).getTime() - new Date(i.fromIso).getTime()) / 1000
+  const maxSec   = maxFittableSec(capBytes)
+  if (wantSec > maxSec) {
+    throw new Error(
+      `要求した ${Math.round(wantSec / 60)} 分は保存できません`
+      + `（上限 ${(capBytes / 1048576).toFixed(0)} MB では最長 ${Math.floor(maxSec / 60)} 分）。`
+      + '範囲を短くして取り直してください',
     )
   }
 
@@ -142,13 +159,32 @@ export async function startVod(i: StartVodInput): Promise<VodHandle> {
       }
 
       // 3. Upload to Storage.
+      // **サイズは必ず残す。** Storage が上限超過で弾いたとき、返るのは
+      // 「The object exceeded the maximum allowed size」だけで、何 MB だったかが
+      // どこにも残らない。実際 2026-08-21 の BCP 5 分クリップでこれに当たり、
+      // 原因が「上限が低い」のか「映像が大きい」のか切り分けられなかった。
+      // Storage の上限に収める。上限内ならこの呼び出しは何もしない。
+      buf = await fitWithinUploadLimit(buf, i.clipId, capBytes)
+      if (stopped) return
+
+      const mb = (buf.length / 1048576).toFixed(1)
+      logger.info(
+        { clipId: i.clipId, bytes: buf.length, mb, from: i.fromIso, to: i.toIso },
+        'vod: uploading clip',
+      )
       const { error: upErr } = await getSupa().storage
         .from(BUCKET)
         .upload(storagePath, buf, {
           contentType: 'video/mp4',
           upsert:      true,
         })
-      if (upErr) throw new Error(`storage_upload: ${upErr.message}`)
+      if (upErr) {
+        // 画面に出る文言なので、数字を載せて次の一手が分かるようにする。
+        const hint = /maximum allowed size|exceeded/i.test(upErr.message)
+          ? `（${mb} MB。バケット vod-clips の上限を超えています）`
+          : ''
+        throw new Error(`storage_upload: ${upErr.message}${hint}`)
+      }
 
       // 4. Flip the row to ready.
       const elapsedSec = (Date.now() - startedAt) / 1000

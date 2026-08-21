@@ -11,6 +11,7 @@
  * ここは vod.ts と clip-jobs ワーカの両方から使う。ffprobe による尺計測も提供する。
  */
 import { spawn } from 'node:child_process'
+import { AUDIO_KBPS, planFit, stillTooLargeReason } from './upload-fit.js'
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -194,4 +195,80 @@ export async function fetchWindowMp4(
   }
 
   throw new Error(`window MP4 unsupported: vendor=${rec.vendor}`)
+}
+
+
+/* ───────────────────────── アップロード上限に収める ───────────────────────── */
+
+/**
+ * Storage の 1 ファイル上限に収まるまでビットレートを落とす。
+ * **判断は upload-fit.ts（純粋な算術）、実行がここ。**
+ *
+ * ・上限内ならそのまま返す（再エンコードしない）
+ * ・超えるときだけ、長さから逆算した帯域で作り直す
+ * ・どう作り直しても収まらない長さは、理由付きで断る
+ */
+export async function fitWithinUploadLimit(
+  input: Buffer,
+  id: string,
+  capBytes: number,
+): Promise<Buffer> {
+  if (input.length <= capBytes) return input
+
+  const durationSec = await probeDurationSec(input, id)
+  const plan = planFit(input.length, durationSec ?? 0, capBytes)
+  if (plan.kind === 'as-is')  return input
+  if (plan.kind === 'reject') throw new Error(plan.reason)
+
+  const scale = plan.downscale ? ['-vf', "scale='-2:min(720,ih)'"] : []
+  logger.info(
+    {
+      id, bytes: input.length, durationSec,
+      videoKbps: plan.videoKbps, downscale: plan.downscale,
+      capMb: +(capBytes / 1048576).toFixed(0),
+    },
+    'window-mp4: over upload limit → re-encoding to fit',
+  )
+
+  await mkdir(WORK_DIR, { recursive: true })
+  const inPath  = join(WORK_DIR, `${id}.big.mp4`)
+  const outPath = join(WORK_DIR, `${id}.fit.mp4`)
+  try {
+    await writeFile(inPath, input)
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn(config.FFMPEG_BIN, [
+        '-hide_banner', '-loglevel', 'warning',
+        '-i', inPath,
+        ...scale,
+        '-c:v', 'libx264', '-preset', 'veryfast',
+        // maxrate/bufsize を付けて上振れを抑える。付けないと平均は合っても
+        // 動きの多い場面で膨らみ、結局上限を超える。
+        '-b:v', `${plan.videoKbps}k`,
+        '-maxrate', `${Math.floor(plan.videoKbps * 1.2)}k`,
+        '-bufsize', `${plan.videoKbps * 2}k`,
+        '-profile:v', 'main', '-pix_fmt', 'yuv420p',
+        '-c:a', 'aac', '-b:a', `${AUDIO_KBPS}k`,
+        '-movflags', '+faststart', '-f', 'mp4', '-y', outPath,
+      ], { stdio: ['ignore', 'pipe', 'pipe'] })
+      armKillTimer(proc, FFMPEG_KILL_MS)
+      let stderr = ''
+      proc.stderr?.on('data', (b: Buffer) => { stderr += b.toString() })
+      proc.on('error', reject)
+      proc.on('exit', (code) => code === 0
+        ? resolve()
+        : reject(new Error(`ffmpeg fit exit ${code}: ${stderr.slice(0, 300)}`)))
+    })
+    const out = await readFile(outPath)
+    // **収まったことを確かめてから返す。** 見積り違いで超えたまま上げると、
+    // また Storage 側で弾かれ、原因の分からない失敗に戻る。
+    if (out.length > capBytes) throw new Error(stillTooLargeReason(out.length, capBytes))
+    logger.info(
+      { id, before: input.length, after: out.length, videoKbps: plan.videoKbps },
+      'window-mp4: re-encoded to fit upload limit',
+    )
+    return out
+  } finally {
+    await unlink(inPath).catch(() => {})
+    await unlink(outPath).catch(() => {})
+  }
 }

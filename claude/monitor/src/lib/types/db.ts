@@ -49,16 +49,26 @@ export function canFetchVod(
 }
 
 /**
- * Per-vendor cap on the requested VOD window. frigate's clip.mp4 endpoint
- * materializes the whole range before the first frame, so 5 min keeps the
- * first-frame latency and edge memory usage acceptable. i-PRO NVR は
- * httpdl が 1 リクエスト 1 時間までなので 60 分。
+ * 要求できる VOD 区間の上限（分）。
+ *
+ * ⚠ **効いているのは NVR の仕様ではなく、保存先の 1 ファイル上限。**
+ *   i-PRO の httpdl は 1 リクエスト 1 時間まで受けるので、以前はここを 60 に
+ *   していた。だが Supabase Storage の上限（既定 50MB）に対し、60 分の録画が
+ *   収まるはずがない。**選べるのに保存できない**状態で、押して初めて失敗が
+ *   分かる形だった（2026-08-21、BCP の 5 分クリップで表面化）。
+ *
+ *   エッジは長さから逆算した帯域で作り直し、収まらない長さは取得前に断る
+ *   （edge-agent の util/upload-fit.ts）。45MB・下限 300kbps + 音声 64kbps で
+ *   計算すると上限は 16.4 分なので、余裕を見て 15 分にそろえた。
+ *   **Storage の上限を上げたら、両方を上げること。**
+ *
+ *   frigate は別の理由で 5 分。clip.mp4 は全区間を作り終えてから 1 フレーム目を
+ *   返すため、長いとエッジのメモリと初期表示が持たない。
  */
 export const VOD_RANGE_MAX_MIN_BY_VENDOR: Record<VodVendor, number> = {
   frigate: 5,
-  // i-PRO NVR httpdl は 1リクエスト ≤ 1時間。実用上は短めに。
-  'onvif-generic': 60,
-  'i-pro-nvr': 60,
+  'onvif-generic': 15,
+  'i-pro-nvr': 15,
 }
 
 export interface Store {

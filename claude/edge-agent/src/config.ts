@@ -41,6 +41,11 @@ const Env = z.object({
   // optional so existing .env files keep validating cleanly.
   LIVEKIT_URL:               z.string().url().optional(),
 
+  // Supabase Storage の 1 ファイル上限。プロジェクト全体の設定（既定 50MB）に
+  // 合わせる。少し余裕を残すのは、MP4 のコンテナ overhead と multipart 分で
+  // 実測が見積りを数 % 上回ることがあるため。上限を上げたらここも上げる。
+  VOD_MAX_UPLOAD_BYTES:   z.coerce.number().int().positive().default(45 * 1024 * 1024),
+
   FFMPEG_BIN:             z.string().default('/usr/bin/ffmpeg'),
   FFPROBE_BIN:            z.string().default('/usr/bin/ffprobe'),
   GO2RTC_BIN:             z.string().default('/usr/local/bin/go2rtc'),
