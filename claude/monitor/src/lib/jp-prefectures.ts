@@ -45,6 +45,19 @@ export function prefName(areaCode: string | null | undefined): string | null {
   return JP_PREFECTURES[`JP-${two}`] ?? null
 }
 
+/**
+ * どの書式のコードからでも**都道府県コード 2 桁**を取り出す。
+ * グループ化のキーに使う。引けなければ null。
+ */
+export function prefCode(areaCode: string | null | undefined): string | null {
+  if (!areaCode) return null
+  const raw = String(areaCode).trim()
+  const digits = raw.startsWith('JP-') ? raw.slice(3) : raw
+  if (!/^\d{1,5}$/.test(digits)) return null
+  const two = digits.length === 1 ? `0${digits}` : digits.slice(0, 2)
+  return JP_PREFECTURES[`JP-${two}`] ? two : null
+}
+
 /** area_code を「県名（コード）」ラベルに。名前が引けなければコードのまま。 */
 export function prefLabel(areaCode: string | null | undefined): string {
   if (!areaCode) return '未設定'

@@ -5,6 +5,7 @@
  * Mobile:         Full-width content + bottom nav + slide-in StoreDrawer
  */
 import { redirect } from 'next/navigation'
+import { prefCode } from '@/lib/jp-prefectures'
 import { getServerClient, getSessionUser } from '@/lib/tenant/session'
 import { jmaIntensityLabel } from '@/lib/bcp/intensity'
 import { resolveTenantFeatures } from '@/lib/tenant/features'
@@ -68,7 +69,13 @@ export async function AppShell({
 
   const byArea = new Map<string, { id: string; name: string; area_code: string | null; edge_devices: { status: string; last_seen_at: string | null }[] | null }[]>()
   for (const s of (storeRes.data ?? []) as { id: string; name: string; area_code: string | null; edge_devices: { status: string; last_seen_at: string | null }[] | null }[]) {
-    const a = s.area_code ?? '未分類'
+    // **都道府県（先頭 2 桁）でまとめる。**
+    // stores.area_code は JIS 市区町村コード（例 43100 = 熊本市）なので、
+    // 完全一致でまとめると同じ県が市ごとに割れる。今は全店が県レベルの
+    // コード（01000 等）なので割れていないが、市区町村コードが入った時点で
+    // 「熊本県」が 2 つ並ぶことになる。J-Alert の照合も先頭 2 桁を見ている
+    // （supabase/functions/jalert-poller/match.ts）ので、そちらに揃える。
+    const a = prefCode(s.area_code) ?? '未分類'
     if (!byArea.has(a)) byArea.set(a, [])
     byArea.get(a)!.push(s)
   }
