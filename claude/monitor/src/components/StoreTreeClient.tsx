@@ -1,6 +1,7 @@
 'use client'
 
 import Link, { useLinkStatus } from 'next/link'
+import { prefName } from '@/lib/jp-prefectures'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Siren } from 'lucide-react'
 import { deriveEdgeStatus } from '@/lib/edge-status'
@@ -196,7 +197,9 @@ export function TreeClient({
                 onClick={() => setCollapsed((c) => ({ ...c, [g.area]: !c[g.area] }))}
                 className="cursor-pointer px-3 py-1 font-bold text-slate-700 select-none"
               >
-                {isOpen ? '▾' : '▸'} {g.area} <span className="text-slate-400">({g.stores.length})</span>
+                {isOpen ? '▾' : '▸'} {g.area}
+                {prefName(g.area) && <span className="ml-1.5">{prefName(g.area)}</span>}
+                <span className="ml-1.5 text-slate-400">({g.stores.length})</span>
               </div>
               {isOpen &&
                 g.stores.map((s) => {

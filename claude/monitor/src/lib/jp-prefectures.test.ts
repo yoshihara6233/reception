@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { areaCodeLabel, prefLabel, prefName } from './jp-prefectures'
+import { areaCodeLabel, prefCode, prefLabel, prefName } from './jp-prefectures'
 
 /**
  * 都道府県コードの正規化。
@@ -81,5 +81,33 @@ describe('表示ラベル', () => {
   it('areaCodeLabel は未設定を — にする', () => {
     expect(areaCodeLabel(null)).toBe('—')
     expect(areaCodeLabel('99')).toBe('99')
+  })
+})
+
+
+describe('prefCode — グループ化のキー', () => {
+  it('★市区町村コードから都道府県 2 桁を取り出す', () => {
+    // 完全一致でまとめると、同じ県が市ごとに割れて「熊本県」が 2 つ並ぶ。
+    expect(prefCode('43100')).toBe('43')
+    expect(prefCode('43201')).toBe('43')
+  })
+
+  it('県レベルのコードもそのまま 2 桁', () => {
+    expect(prefCode('01000')).toBe('01')
+    expect(prefCode('01')).toBe('01')
+  })
+
+  it('ISO 形式も受ける', () => {
+    expect(prefCode('JP-13')).toBe('13')
+  })
+
+  it('★存在しない番号は null（未分類に落とす）', () => {
+    expect(prefCode('99999')).toBeNull()
+    expect(prefCode('東京')).toBeNull()
+    expect(prefCode(null)).toBeNull()
+  })
+
+  it('★同じ県の別の市が同じキーになる（グループが割れない）', () => {
+    expect(prefCode('43100')).toBe(prefCode('43201'))
   })
 })
