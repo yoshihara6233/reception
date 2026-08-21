@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { SNAPSHOT_CLIP_MINUTES, snapshotClipRange } from '@/lib/bcp/snapshot-clip'
 
 /**
  * BCP スナップショット 1 枚のタイル。**右クリックで 5 分の動画を取り出せる。**
@@ -26,8 +27,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
  *   GET  /api/vod/<id>       → 取得
  */
 
-/** 切り出す長さ。スナップの間隔と同じ 5 分。 */
-const CLIP_MINUTES = 5
+/** 切り出す長さ。定義は lib/bcp/snapshot-clip.ts（照合側と共有）。 */
+const CLIP_MINUTES = SNAPSHOT_CLIP_MINUTES
 /** 状態確認の間隔。エッジが NVR から落として上げるまで数十秒かかる。 */
 const POLL_MS = 3_000
 /** 待ち切りの上限。これを過ぎたら諦めて理由を出す。 */
@@ -47,7 +48,7 @@ type Phase = 'idle' | 'working' | 'done' | 'error'
 const inFlight = new Set<string>()
 
 export function SnapshotTile({
-  clipId, cameraId, cameraName, label, clockLabel, shotAtIso, isCenterpiece, vodOk,
+  clipId, cameraId, cameraName, label, clockLabel, shotAtIso, isCenterpiece, vodOk, hasVideo,
 }: {
   /** bcp_clips.id（JPEG 側）。画像の取得と保存に使う。 */
   clipId: string | null
@@ -61,9 +62,13 @@ export function SnapshotTile({
   shotAtIso: string | null
   isCenterpiece: boolean
   vodOk: boolean
+  /** この区間の 5 分動画が既にあるか。あるなら待たずに落ちてくる。 */
+  hasVideo: boolean
 }) {
   const [menu, setMenu]   = useState<{ x: number; y: number } | null>(null)
   const [phase, setPhase] = useState<Phase>('idle')
+  // 取得した直後にも印を出す（サーバ再取得を待たせない）。
+  const [got, setGot]     = useState(hasVideo)
   const [note, setNote]   = useState<string>('')
   /**
    * **アンマウントで取得を打ち切らない。**
@@ -114,10 +119,11 @@ export function SnapshotTile({
     if (!shotAtIso) { show('error', 'このコマの時刻が分かりません'); return }
     show('working', '録画を切り出しています（画面を移動しても続きます）')
 
-    const from = new Date(shotAtIso)
-    const to   = new Date(from.getTime() + CLIP_MINUTES * 60_000)
+    // **照合側（page.tsx）と同じ計算を使う。** ここがずれると
+    // 「動画あり」と出したのに作り直しが走る。
+    const { fromIso, toIso } = snapshotClipRange(shotAtIso)
     // 同じ区間を二重に走らせない。戻ってきてもう一度押したときの重複を防ぐ。
-    const key = `${cameraId}|${from.toISOString()}`
+    const key = `${cameraId}|${fromIso}`
     if (inFlight.has(key)) return
     inFlight.add(key)
 
@@ -127,8 +133,8 @@ export function SnapshotTile({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           camera_id: cameraId,
-          from_iso:  from.toISOString(),
-          to_iso:    to.toISOString(),
+          from_iso:  fromIso,
+          to_iso:    toIso,
         }),
       })
       if (!res.ok) {
@@ -163,6 +169,7 @@ export function SnapshotTile({
       a.href = `/api/vod/${id}`
       a.download = `${cameraName}_${clockLabel.replace(/[()：:]/g, '')}_${CLIP_MINUTES}min.mp4`
       document.body.appendChild(a); a.click(); a.remove()
+      setGot(true)
       show('done', `${CLIP_MINUTES} 分の動画を取得しました`)
       setTimeout(() => { if (alive.current) setPhase('idle') }, 4_000)
     } catch (e) {
@@ -201,6 +208,16 @@ export function SnapshotTile({
         <div className="flex aspect-[4/3] items-center justify-center bg-slate-100 text-[10px] text-slate-400">
           未取得
         </div>
+      )}
+
+      {/* 取得済みの印。押す前に「待つのか、すぐ来るのか」が分かるようにする。 */}
+      {got && phase === 'idle' && (
+        <span
+          className="absolute left-1 top-1 rounded-sm bg-black/60 px-1 py-px text-[9px] font-semibold text-white"
+          title={`${CLIP_MINUTES} 分の動画は取得済みです（右クリックですぐダウンロード）`}
+        >
+          動画あり
+        </span>
       )}
 
       <div
@@ -243,11 +260,15 @@ export function SnapshotTile({
               disabled={!vodOk || phase === 'working'}
               className="block w-full px-3 py-2 text-left hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
             >
-              この時刻から {CLIP_MINUTES} 分の動画を取得
+              {got
+                ? `${CLIP_MINUTES} 分の動画をダウンロード`
+                : `この時刻から ${CLIP_MINUTES} 分の動画を取得`}
               <span className="mt-0.5 block text-[10px] text-slate-500">
-                {vodOk
-                  ? `${label} ${clockLabel} から ${CLIP_MINUTES} 分間`
-                  : 'このカメラのレコーダは録画の切り出しに対応していません'}
+                {!vodOk
+                  ? 'このカメラのレコーダは録画の切り出しに対応していません'
+                  : got
+                    ? '取得済みです。待たずに始まります'
+                    : `${label} ${clockLabel} から ${CLIP_MINUTES} 分間・数十秒かかります`}
               </span>
             </button>
           </li>
