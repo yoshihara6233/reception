@@ -62,9 +62,15 @@ describe('schema_invariants()', () => {
 
   it('パーティションの子と台帳のテーブルは「ポリシー無し」の指摘に出さない', async () => {
     // 事実としては返るが、判断側が台帳と正規表現で落とす。
+    //
+    // ⚠ 月を直書きしない。生成 migration は「実行時点の now() 起点」で作るので、
+    //   固定月（旧: live_sessions_202608）は月が進むと DB reset で生成されなくなり、
+    //   このテストが 9/1 に時限で落ちた。正規表現で「どれか 1 つ以上」を見る。
     const facts = await invariants()
-    expect(facts.no_policy, 'パーティションの子が事実に出ていません')
-      .toEqual(expect.arrayContaining(['live_sessions_202608', 'rate_limits']))
+    const partitionChildren = (facts.no_policy ?? []).filter((t) => /^live_sessions_\d{6}$/.test(t))
+    expect(partitionChildren.length, 'パーティションの子が事実に出ていません').toBeGreaterThan(0)
+    expect(facts.no_policy, '台帳のテーブルが事実に出ていません')
+      .toEqual(expect.arrayContaining(['rate_limits']))
     expect(evaluateSchemaInvariants(facts).problems).toEqual([])
   })
 
