@@ -26,5 +26,8 @@
   },
   "dependencies": {
     "qrcode.react": "^4.2.0"
+  },
+  "overrides": {
+    "browserslist": "^4.28.7"
   }
 }
