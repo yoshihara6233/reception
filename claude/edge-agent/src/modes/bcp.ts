@@ -34,8 +34,10 @@ import { fetchBcpSnapshot } from '../bcp-fetchers/index.js'
 import {
   fetchFrigateHistoricalFrame,
   fetchIproNvrHistoricalFrame,
+  fetchNvmsHistoricalFrame,
 } from '../security/recording-frame.js'
 import { captureIproNvrJpeg } from '../adapters/i-pro/nvr-live.js'
+import { fetchNvmsSnapshot, nvmsEndpoint } from '../adapters/nvms/client.js'
 import { captureAtMs, normalizeOffsets } from './bcp-timing.js'
 import { measureNvrClockOffsetSec } from '../util/nvr-clock.js'
 import {
@@ -179,6 +181,25 @@ async function captureOneSnapshot(
       targetMs,
     )
     if (nvrFrame) { buf = nvrFrame; source = 'ipro-nvr-recording' }
+  }
+
+  // nvms: ライブ・録画とも NVMS の REST 経由。過去は範囲エクスポート、
+  // 引けない場合（保持期間外・録画停止帯）は現フレームで代替する。
+  if (!buf && camera.recorder.vendor === 'nvms') {
+    const r = camera.recorder
+    const o = { endpoint: nvmsEndpoint(r.host), apiKey: r.password }
+    if (isPast) {
+      const frame = await fetchNvmsHistoricalFrame(o, camera.channel, targetMs)
+      if (frame) { buf = frame; source = 'nvms-recording' }
+    }
+    if (!buf) {
+      try {
+        buf = await fetchNvmsSnapshot({ ...o, timeoutMs: 10_000 }, camera.channel)
+        source = 'nvms-latest'
+      } catch (e) {
+        logger.debug({ err: (e as Error).message, channel: camera.channel }, 'bcp: NVMS live snapshot failed')
+      }
+    }
   }
 
   // i-pro-nvr: カメラ網が業務網から分離され、エッジから NVR にしか到達できない

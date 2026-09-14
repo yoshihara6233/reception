@@ -17,6 +17,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { config } from '../config.js'
 import { logger } from '../logger.js'
+import { downloadNvmsExportMp4, nvmsEndpoint } from '../adapters/nvms/client.js'
 import { downloadIproNvrMp4 } from '../adapters/i-pro/nvr-vod.js'
 import type { CameraDescriptor } from '../types.js'
 
@@ -149,6 +150,7 @@ export function supportsWindowMp4(camera: CameraDescriptor): boolean {
   const rec = camera.recorder
   return rec.vendor === 'frigate'
     || rec.vendor === 'i-pro-nvr'
+    || rec.vendor === 'nvms'
     || (rec.vendor === 'onvif-generic' && !!rec.vod_host)
 }
 
@@ -177,6 +179,15 @@ export async function fetchWindowMp4(
     const raw = Buffer.from(await r.arrayBuffer())
     if (raw.length < 1024) throw new Error(`empty_clip (bytes=${raw.length})`)
     return await remuxFaststart(raw, id)
+  }
+
+  if (rec.vendor === 'nvms') {
+    // NVMS: 範囲エクスポート（標準MP4）。HEVC 録画のみ H.264 へ変換。
+    const buf = await downloadNvmsExportMp4(
+      { endpoint: nvmsEndpoint(rec.host), apiKey: rec.password, timeoutMs: 120_000 },
+      camera.channel, new Date(fromIso), new Date(toIso),
+    )
+    return await transcodeHevcToH264IfNeeded(buf, id)
   }
 
   if (isOnvifNvrVod || isNvrVod) {

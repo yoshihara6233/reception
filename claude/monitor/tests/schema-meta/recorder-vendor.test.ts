@@ -44,7 +44,7 @@ async function allowedInDb(): Promise<string[]> {
 }
 
 /** アプリ側の RecorderVendor。型は実行時に読めないので、ここに写して固定する。 */
-const APP_VENDORS: RecorderVendor[] = ['ipro', 'frigate', 'onvif-generic', 'i-pro-nvr']
+const APP_VENDORS: RecorderVendor[] = ['ipro', 'frigate', 'onvif-generic', 'i-pro-nvr', 'nvms']
 
 describe('recorders.vendor', () => {
   it('★DB の CHECK 制約とアプリの RecorderVendor が一致する', async () => {

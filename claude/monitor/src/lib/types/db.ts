@@ -3,7 +3,7 @@
 
 export type EdgeStatus = 'offline' | 'idle' | 'grid' | 'live' | 'vod' | 'error'
 export type EdgeMode   = 'grid' | 'live' | 'vod'
-export type RecorderVendor = 'ipro' | 'frigate' | 'onvif-generic' | 'i-pro-nvr'
+export type RecorderVendor = 'ipro' | 'frigate' | 'onvif-generic' | 'i-pro-nvr' | 'nvms'
 
 /**
  * Vendors whose recorders support VOD playback today.
@@ -19,9 +19,10 @@ export type RecorderVendor = 'ipro' | 'frigate' | 'onvif-generic' | 'i-pro-nvr'
  *   is generated before the first frame, so we cap the requested window
  *   tighter for frigate (see VOD_RANGE_MAX_MIN_BY_VENDOR).
  * - i-pro-nvr / onvif-generic + vod_host : i-PRO NVR の httpdl.cgi で取得。
+ * - nvms    : NVMS（自社オンプレ VMS）の範囲エクスポート（結合+トリム済みMP4・SHA-256付き）。
  * - ipro    : not supported; needs ONVIF Profile-G (Phase 2 work).
  */
-export const VOD_VENDORS = ['frigate', 'onvif-generic', 'i-pro-nvr'] as const
+export const VOD_VENDORS = ['frigate', 'onvif-generic', 'i-pro-nvr', 'nvms'] as const
 export type VodVendor = (typeof VOD_VENDORS)[number]
 export function isVodVendor(v: RecorderVendor): v is VodVendor {
   return (VOD_VENDORS as readonly RecorderVendor[]).includes(v)
@@ -43,7 +44,7 @@ export function canFetchVod(
   vendor: string,
   vodHost: string | null | undefined,
 ): boolean {
-  if (vendor === 'frigate' || vendor === 'i-pro-nvr') return true
+  if (vendor === 'frigate' || vendor === 'i-pro-nvr' || vendor === 'nvms') return true
   if (vendor === 'onvif-generic') return !!vodHost
   return false
 }
@@ -69,6 +70,8 @@ export const VOD_RANGE_MAX_MIN_BY_VENDOR: Record<VodVendor, number> = {
   frigate: 5,
   'onvif-generic': 15,
   'i-pro-nvr': 15,
+  // NVMS 自体は 60 分まで受けるが、縛りは保存先の 1 ファイル上限（上記）。
+  nvms: 15,
 }
 
 export interface Store {

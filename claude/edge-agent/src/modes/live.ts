@@ -20,6 +20,7 @@ import { captureRtspKeyframe, injectRtspCreds } from '../rtsp/keyframe.js'
 import { resolveOnvifRtspUrl } from '../adapters/onvif/onvif-rtsp.js'
 import { getOnvifSnapshotUrl, fetchOnvifJpeg } from '../adapters/onvif/onvif-snapshot.js'
 import { captureIproNvrJpeg, buildIproNvrEndpoint } from '../adapters/i-pro/nvr-live.js'
+import { fetchNvmsSnapshot, nvmsEndpoint } from '../adapters/nvms/client.js'
 import { assertUsableJpeg } from '../util/jpeg.js'
 import { uploadCameraSnapshot } from '../upload/storage.js'
 import type { CameraDescriptor } from '../types.js'
@@ -39,6 +40,10 @@ const LIVE_INTERVAL_MS = 1_000
  */
 function buildCapture(cam: CameraDescriptor): () => Promise<Buffer> {
   const r = cam.recorder
+  if (r.vendor === 'nvms') {
+    const o = { endpoint: nvmsEndpoint(r.host), apiKey: r.password, timeoutMs: 8_000 }
+    return () => fetchNvmsSnapshot(o, cam.channel)
+  }
   if (r.vendor === 'i-pro-nvr') {
     const endpoint = buildIproNvrEndpoint(r.host, r.onvif_port)
     return () => captureIproNvrJpeg(
