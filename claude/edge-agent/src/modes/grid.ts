@@ -24,6 +24,7 @@ import { captureRtspKeyframe, injectRtspCreds } from '../rtsp/keyframe.js'
 import { resolveOnvifRtspUrl } from '../adapters/onvif/onvif-rtsp.js'
 import { getOnvifSnapshotUrl, fetchOnvifJpeg } from '../adapters/onvif/onvif-snapshot.js'
 import { captureIproNvrJpeg, buildIproNvrEndpoint } from '../adapters/i-pro/nvr-live.js'
+import { fetchNvmsSnapshot, nvmsEndpoint } from '../adapters/nvms/client.js'
 import { assertUsableJpeg } from '../util/jpeg.js'
 import { uploadGridJpeg } from '../upload/storage.js'
 import type { CameraDescriptor } from '../types.js'
@@ -90,6 +91,18 @@ export async function startGrid(cameras: CameraDescriptor[]): Promise<GridHandle
     // ONVIF カメラ直: RTSP→ffmpeg keyframe (H.264/H.265 両対応)
     if (cam.recorder.vendor === 'onvif-generic') {
       slots.push({ pos: cam.grid_pos, camId: cam.id, capture: buildOnvifCapture(cam) })
+      continue
+    }
+
+    // NVMS 経由: REST スナップ（API キー認証。解析用 1fps 出力のオンデマンド開始）。
+    // 初回は 404 になりうる（出力起動中）— LAST_FRAME 保持と毎秒ループで自然回復する。
+    if (cam.recorder.vendor === 'nvms') {
+      const r = cam.recorder
+      const o = { endpoint: nvmsEndpoint(r.host), apiKey: r.password, timeoutMs: 8_000 }
+      slots.push({
+        pos: cam.grid_pos, camId: cam.id,
+        capture: () => fetchNvmsSnapshot(o, cam.channel),
+      })
       continue
     }
 

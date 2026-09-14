@@ -29,6 +29,7 @@ import { downloadIproNvrMp4 } from '../adapters/i-pro/nvr-vod.js'
 import {
   fitWithinUploadLimit, remuxFaststart, transcodeHevcToH264IfNeeded,
 } from '../util/window-mp4.js'
+import { downloadNvmsExportMp4, nvmsEndpoint } from '../adapters/nvms/client.js'
 import { maxFittableSec } from '../util/upload-fit.js'
 import type { CameraDescriptor } from '../types.js'
 
@@ -61,9 +62,10 @@ export async function startVod(i: StartVodInput): Promise<VodHandle> {
   const isOnvifNvrVod = rec.vendor === 'onvif-generic' && !!rec.vod_host
   const isNvrVod = rec.vendor === 'i-pro-nvr'
   const useIproNvr = isOnvifNvrVod || isNvrVod
-  if (rec.vendor !== 'frigate' && !useIproNvr) {
+  const isNvms = rec.vendor === 'nvms'
+  if (rec.vendor !== 'frigate' && !useIproNvr && !isNvms) {
     throw new Error(
-      `VOD unsupported: vendor=${rec.vendor} (frigate / onvif-generic+NVR / i-pro-nvr のみ対応)`,
+      `VOD unsupported: vendor=${rec.vendor} (frigate / onvif-generic+NVR / i-pro-nvr / nvms のみ対応)`,
     )
   }
 
@@ -115,7 +117,16 @@ export async function startVod(i: StartVodInput): Promise<VodHandle> {
 
       // 2. ソースMP4を取得（vendor別）。
       let buf: Buffer
-      if (useIproNvr) {
+      if (isNvms) {
+        // NVMS: 範囲エクスポート（結合+トリム済み標準MP4・SHA-256照合付き）。
+        // NVMS は録画を元コーデックのまま保存する — HEVC カメラの録画のみ H.264 へ変換。
+        const o = { endpoint: nvmsEndpoint(rec.host), apiKey: rec.password, timeoutMs: 120_000 }
+        logger.info({ clipId: i.clipId, cameraId: i.camera.channel, from: i.fromIso, to: i.toIso }, 'vod: fetching NVMS export')
+        buf = await downloadNvmsExportMp4(o, i.camera.channel, new Date(i.fromIso), new Date(i.toIso))
+        if (stopped) return
+        buf = await transcodeHevcToH264IfNeeded(buf, i.clipId)
+        if (stopped) return
+      } else if (useIproNvr) {
         // i-PRO NVR: httpdl.cgi で録画MP4を取得（標準MP4・remux不要）。
         //  - onvif-generic+vod_host: NVR は vod_host、CH は vod_channel
         //  - i-pro-nvr:             NVR は recorder.host、CH は camera.channel

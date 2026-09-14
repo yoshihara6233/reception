@@ -23,6 +23,10 @@ describe('canFetchVod', () => {
     expect(canFetchVod('frigate', null)).toBe(true)
   })
 
+  it('NVMS は範囲エクスポートで取れる（vod_host 不要・同一ホスト同一キー）', () => {
+    expect(canFetchVod('nvms', null)).toBe(true)
+  })
+
   it('★onvif-generic は VOD ソース(NVR)があれば可', () => {
     expect(canFetchVod('onvif-generic', 'https://nvr.example.local')).toBe(true)
   })

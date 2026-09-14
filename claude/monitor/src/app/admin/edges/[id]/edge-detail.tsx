@@ -19,7 +19,7 @@ interface Camera {
 }
 interface Recorder {
   id: string
-  vendor: 'ipro' | 'frigate' | 'onvif-generic' | 'i-pro-nvr'
+  vendor: 'ipro' | 'frigate' | 'onvif-generic' | 'i-pro-nvr' | 'nvms'
   model: string | null
   host: string
   rtsp_port: number
@@ -310,7 +310,7 @@ function RecorderList({ edgeId, recorders }: { edgeId: string; recorders: Record
 }
 
 type NewRecorder = {
-  vendor: 'ipro' | 'frigate' | 'onvif-generic' | 'i-pro-nvr'
+  vendor: 'ipro' | 'frigate' | 'onvif-generic' | 'i-pro-nvr' | 'nvms'
   model: string
   host: string
   rtsp_port: number
@@ -330,11 +330,17 @@ const VENDOR_DEFAULTS: Record<NewRecorder['vendor'], Partial<NewRecorder>> = {
   // dlogin.cgi が 401 になり、ライブが一切出ない（2026-08-06 実機で踏んだ）。
   // ポートは NVR の HTTPS ポート（既定 443）。
   'i-pro-nvr':      { rtsp_port: 554,  onvif_port: 443, username: 'ADMIN', password: '' },
+  // NVMS(自社オンプレVMS) 経由: host=NVMSのIP(:ポート。省略時 8080)。認証は API キーのみ
+  // （パスワード欄に入れる。**operator 権限で発行** — 範囲エクスポートに必要）。
+  // username は未使用（'api' 固定で埋める）。RTSP/ONVIF ポートも未使用。
+  nvms:             { rtsp_port: 554,  onvif_port: null, username: 'api', password: '' },
 }
 
 /** ONVIF ポート欄の意味はベンダで変わる（i-PRO NVR は CGI を叩く HTTPS ポート）。 */
 function portLabel(v: NewRecorder['vendor']): string {
-  return v === 'i-pro-nvr' ? 'NVR HTTPS ポート' : 'ONVIF ポート (任意)'
+  if (v === 'i-pro-nvr') return 'NVR HTTPS ポート'
+  if (v === 'nvms')      return '（未使用・ポートはホスト欄に）'
+  return 'ONVIF ポート (任意)'
 }
 
 function vendorLabel(v: NewRecorder['vendor']) {
@@ -342,6 +348,7 @@ function vendorLabel(v: NewRecorder['vendor']) {
   if (v === 'frigate')        return 'Frigate (OSS-VMS)'
   if (v === 'onvif-generic')  return 'ONVIFカメラ直'
   if (v === 'i-pro-nvr')      return 'i-PRO NVR(レコーダ経由)'
+  if (v === 'nvms')           return 'NVMS(自社オンプレVMS)'
   // 想定外の値は素の値を出す。以前ここは 'Uniview' を返すフォールバックで、
   // uniview を消した後は**未知のベンダが全部 Uniview と表示される**形だった。
   return v
@@ -379,6 +386,7 @@ function NewRecorderForm({
             <option value="ipro">i-PRO</option>
             <option value="i-pro-nvr">i-PRO NVR(レコーダ経由)</option>
             <option value="frigate">Frigate (OSS-VMS)</option>
+            <option value="nvms">NVMS(自社オンプレVMS)</option>
           </select>
         </Field>
         <Field label="機種 / メモ">
@@ -410,7 +418,7 @@ function NewRecorderForm({
           </Field>
         )}
         {!isFrigate && (
-          <Field label="パスワード">
+          <Field label={r.vendor === 'nvms' ? 'API キー (operator)' : 'パスワード'}>
             <input required type="password" value={r.password}
                    onChange={(e) => setR({ ...r, password: e.target.value })}
                    className="w-full rounded border border-slate-300 px-2 py-1" />
@@ -430,6 +438,14 @@ function NewRecorderForm({
           </Field>
         )}
       </div>
+      {r.vendor === 'nvms' && (
+        <p className="mt-2 rounded bg-amber-50 border border-amber-200 px-2 py-1.5 text-[10px] text-amber-800">
+          ホストは NVMS のIP（ポート省略時は <code>8080</code>。<code>192.168.1.10:8080</code> の形で指定可）。
+          <b>パスワード欄には NVMS の API キー</b>（設定 › API キーで <b>operator 権限</b>で発行）を入れます。
+          録画クリップの取得（範囲エクスポート）が operator 以上のためで、viewer キーではライブは映っても録画が 403 になります。
+          ユーザ名・RTSP/ONVIF ポートは使いません。クラスタ構成では窓口 1 ノードの IP で全カメラを取得できます。
+        </p>
+      )}
       {r.vendor === 'i-pro-nvr' && (
         <p className="mt-2 rounded bg-amber-50 border border-amber-200 px-2 py-1.5 text-[10px] text-amber-800">
           ユーザ名は <b>NVR 本体の管理者</b>（既定 <code>ADMIN</code>）です。カメラ側のユーザを入れるとログインに失敗し、
@@ -649,7 +665,7 @@ function RecorderCard({ recorder }: { recorder: Recorder }) {
                      className="w-full rounded border border-slate-300 px-2 py-1 font-mono"
                      placeholder={recorder.vendor === 'i-pro-nvr' ? '443' : '80'} />
             </Field>
-            <Field label={recorder.vendor === 'i-pro-nvr' ? 'ユーザ名 (NVR本体・既定 ADMIN)' : 'ユーザ名'}>
+            <Field label={recorder.vendor === 'i-pro-nvr' ? 'ユーザ名 (NVR本体・既定 ADMIN)' : recorder.vendor === 'nvms' ? 'ユーザ名（NVMSでは未使用）' : 'ユーザ名'}>
               <input value={rec.username} onChange={(e) => setRec({ ...rec, username: e.target.value })}
                      className="w-full rounded border border-slate-300 px-2 py-1" placeholder="admin" />
             </Field>

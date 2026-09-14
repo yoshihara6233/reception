@@ -16,6 +16,7 @@ import { join } from 'node:path'
 import { config } from '../config.js'
 import { logger } from '../logger.js'
 import { downloadIproNvrMp4 } from '../adapters/i-pro/nvr-vod.js'
+import { downloadNvmsExportMp4 } from '../adapters/nvms/client.js'
 
 /**
  * MP4 バッファの先頭（または seekSec 秒地点）のフレームを JPEG 化する。失敗時 null。
@@ -141,6 +142,34 @@ export async function fetchIproNvrHistoricalFrame(
     return (await extractFirstFrame(mp4, seekSec)) ?? (await extractFirstFrame(mp4))
   } catch (e) {
     logger.debug({ err: (e as Error).message, channel }, 'frame: i-PRO NVR historical frame failed')
+    return null
+  }
+}
+
+/**
+ * NVMS の録画から、指定時刻のフレームを 1 枚取り出す。失敗時 null。
+ * VOD と同じ範囲エクスポート経路で対象±数秒の MP4 を取得し ffmpeg でフレーム化する。
+ *
+ * NVMS のエクスポートは秒精度（i-PRO httpdl の分丸めが無い）ので、対象の 2 秒前
+ * から窓を取り 2 秒シークで対象時刻を拾う。+8 秒の余白は GOP 欠け対策。
+ */
+export async function fetchNvmsHistoricalFrame(
+  nvms:     { endpoint: string; apiKey: string },
+  cameraId: number,
+  targetMs: number,
+): Promise<Buffer | null> {
+  try {
+    const PRE_SEC = 2
+    const mp4 = await downloadNvmsExportMp4(
+      { endpoint: nvms.endpoint, apiKey: nvms.apiKey, timeoutMs: 30_000 },
+      cameraId,
+      new Date(targetMs - PRE_SEC * 1000),
+      new Date(targetMs + 8_000),
+    )
+    if (!mp4 || mp4.length < 1024) return null
+    return (await extractFirstFrame(mp4, PRE_SEC)) ?? (await extractFirstFrame(mp4))
+  } catch (e) {
+    logger.debug({ err: (e as Error).message, cameraId }, 'frame: NVMS historical frame failed')
     return null
   }
 }
