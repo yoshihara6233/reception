@@ -145,6 +145,21 @@ describe('エッジ命令の allowlist', () => {
       expect(h.written?.request_id).toEqual(expect.any(String))
     })
 
+    it('start_grid + camera_ids（フォルダページ・M1）はそのまま命令に載る', async () => {
+      const ids = ['11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222']
+      const r = await send({ action: 'start_grid', camera_ids: ids })
+      expect(r.status).toBe(200)
+      expect(h.written).toMatchObject({ action: 'start_grid', camera_ids: ids })
+    })
+
+    it('start_grid の camera_ids は 16 台まで（17 台は 400）', async () => {
+      const ids = Array.from({ length: 17 }, (_, i) =>
+        `${String(i).padStart(8, '0')}-0000-4000-8000-000000000000`)
+      const r = await send({ action: 'start_grid', camera_ids: ids })
+      expect(r.status).toBe(400)
+      expect(h.written).toBeNull()
+    })
+
     it('start_live', async () => {
       const r = await send({ action: 'start_live', camera_id: CAM })
       expect(r.status).toBe(200)

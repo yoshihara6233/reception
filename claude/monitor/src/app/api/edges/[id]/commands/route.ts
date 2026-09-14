@@ -40,7 +40,10 @@ const IsoLike = z
 
 /** ユーザ経路で受理する命令。ここに無いものは 400。 */
 const UserCommand = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('start_grid') }),
+  // camera_ids: フォルダページ表示（Phase 1.5 M1）。渡すとエッジはこの並びで
+  // 16面を合成する。省略時は従来どおり grid_pos 0..15。旧エッジは未知フィールドを
+  // 読み飛ばすだけなので互換は崩れない。
+  z.object({ action: z.literal('start_grid'), camera_ids: z.array(z.string().uuid()).min(1).max(16).optional() }),
   z.object({ action: z.literal('stop_grid') }),
   z.object({ action: z.literal('stop_stream') }),
   z.object({ action: z.literal('start_live'), camera_id: z.string().uuid() }),
