@@ -19,6 +19,7 @@ import {
   type VodVendor,
 } from '@/lib/types/db'
 import { cancelPendingStop, scheduleStop } from '@/lib/edge-stop-registry'
+import { buildGridGroups, GRID_PAGE_SIZE } from '@/lib/grid-groups'
 import { SaveJpegButton } from '@/components/SaveJpegButton'
 
 /** ファイル名に使えない文字をアンダースコアに（日本語は保持）。 */
@@ -50,7 +51,14 @@ const VOD_RANGE_DEFAULT_MIN = 5
 // /grid → /live raced and the live snapshot froze.
 const GRID_STOP_DELAY_MS = 200
 
-type Cam = { id: string; channel: number; name: string; grid_pos: number; vendor: RecorderVendor }
+// フォルダページの巡回間隔（M1）。表示している間だけ現グループの次ページへ送る。
+const ROTATE_MS = 30_000
+
+type Cam = {
+  id: string; channel: number; name: string; grid_pos: number; vendor: RecorderVendor
+  /** NVMS フォルダの表示名（例: '本社 / 3F'）。null = 未分類 or 非NVMS。 */
+  folder_path?: string | null
+}
 
 function GridCell({
   cam,
@@ -115,6 +123,23 @@ export function MonitorWorkspace({
   const [lastRefreshMs, setLastRefreshMs] = useState<number | null>(null)
   const [refreshCount,  setRefreshCount]  = useState(0)
   const [page, setPage]     = useState(0)
+
+  // ── フォルダページ（Phase 1.5 M1）──────────────────────────────────
+  // folder_path 持ちのカメラがある、または 17 台以上 → 固定スロットをやめて
+  // 「フォルダ = グループ、16 台 = 1 ページ」。合成対象は start_grid の
+  // camera_ids でエッジへ渡す（無印の start_grid は従来どおり grid_pos）。
+  const groups   = buildGridGroups(cameras, t.workspace.folderUnclassified)
+  const grouped  = cameras.some((c) => c.folder_path) || cameras.length > GRID_PAGE_SIZE
+  const [groupKey, setGroupKey] = useState<string | null>(null)
+  const [gpage, setGpage]       = useState(0)
+  const [rotate, setRotate]     = useState(false)
+  const selGroup = groups.find((g) => g.key === groupKey) ?? groups[0] ?? null
+  const gPages   = selGroup?.pages.length ?? 0
+  const gpageClamped = gPages > 0 ? Math.min(gpage, gPages - 1) : 0
+  const pageCams = grouped ? (selGroup?.pages[gpageClamped] ?? []) : []
+  // コマンド送信時に常に最新の並びを読むための ref（effect の閉包の古さ対策）。
+  const pageIdsRef = useRef<string[]>([])
+  pageIdsRef.current = grouped ? pageCams.map((c) => c.id) : []
   const [err]               = useState<string | null>(null)
   const [vodOpen, setVodOpen] = useState(false)
   // Consecutive failed loads of the stitched grid JPEG. Reset to 0 on every
@@ -144,10 +169,10 @@ export function MonitorWorkspace({
     Array<Cam & { vendor: VodVendor }>
   const vodEnabled = !!edgeId && vodCams.length > 0
 
-  // 16 cells, null for empty slots
-  const cells: (Cam | null)[] = Array.from({ length: 16 }, (_, i) =>
-    cameras.find((c) => c.grid_pos === i) ?? null,
-  )
+  // 16 cells, null for empty slots（グループ表示中は選択ページの並び）
+  const cells: (Cam | null)[] = grouped
+    ? Array.from({ length: 16 }, (_, i) => pageCams[i] ?? null)
+    : Array.from({ length: 16 }, (_, i) => cameras.find((c) => c.grid_pos === i) ?? null)
 
   // Mobile 4-split: each "page" is a 2×2 quadrant of the 4×4 composite, so the
   // phone shows 4 cameras large (and tappable) instead of the unreadable 16.
@@ -166,10 +191,15 @@ export function MonitorWorkspace({
 
   async function sendCommand(action: 'start_grid' | 'stop_grid') {
     if (!edgeId) return
+    const body: { action: string; camera_ids?: string[] } = { action }
+    // グループ表示中は選択ページの並びで合成させる（旧エッジは未知フィールドを無視）。
+    if (action === 'start_grid' && pageIdsRef.current.length > 0) {
+      body.camera_ids = pageIdsRef.current
+    }
     await fetch(`/api/edges/${edgeId}/commands`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action }),
+      body: JSON.stringify(body),
     }).catch(console.error)
   }
 
@@ -256,6 +286,27 @@ export function MonitorWorkspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, edgeId])
 
+  // ページ/グループ切替 → 合成対象だけ差し替える。セッション行・更新タイマーは
+  // 主エフェクトの持ち物なので触らない（切替のたびに監査ログが割れるのを防ぐ）。
+  const selKey = selGroup ? `${selGroup.key}:${gpageClamped}` : ''
+  const selMounted = useRef(false)
+  useEffect(() => {
+    if (!selMounted.current) { selMounted.current = true; return } // 初回は主エフェクトが送信済み
+    if (!active || !edgeId || !grouped) return
+    void sendCommand('start_grid')
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setGridErrStreak(0)
+    refreshGridUrl()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selKey])
+
+  // 巡回: 現グループのページを 30 秒ごとに送る（1 ページなら何もしない）。
+  useEffect(() => {
+    if (!rotate || !active || gPages <= 1) return
+    const iv = setInterval(() => setGpage((prev) => (prev + 1) % gPages), ROTATE_MS)
+    return () => clearInterval(iv)
+  }, [rotate, active, gPages])
+
   return (
     <main className="flex h-full flex-col overflow-hidden bg-slate-100">
       {/* ── Toolbar ────────────────────────────────────────────────────── */}
@@ -312,6 +363,61 @@ export function MonitorWorkspace({
           </button>
         </div>
       </div>
+
+      {/* ── フォルダページ: グループタブ + ページ送り + 巡回（M1） ── */}
+      {grouped && groups.length > 0 && (
+        <div className="flex items-center gap-2 border-b border-slate-200 bg-white px-3 py-1.5">
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+            {groups.map((g) => {
+              const on = g.key === (selGroup?.key ?? '')
+              const count = g.pages.reduce((n, pg) => n + pg.length, 0)
+              return (
+                <button
+                  key={g.key}
+                  onClick={() => { setGroupKey(g.key); setGpage(0) }}
+                  className={
+                    'whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11px] transition ' +
+                    (on
+                      ? 'border-blue-600 bg-blue-600 text-white'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50')
+                  }
+                >
+                  {g.label}
+                  <span className={'ml-1 font-mono text-[10px] tabular-nums ' + (on ? 'text-blue-100' : 'text-slate-400')}>
+                    {count}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+          {gPages > 1 && (
+            <div className="flex flex-shrink-0 items-center gap-1 font-mono text-[11px] tabular-nums text-slate-600">
+              <button
+                onClick={() => setGpage((prev) => (prev - 1 + gPages) % gPages)}
+                className="rounded border border-slate-200 px-1.5 py-0.5 hover:bg-slate-50"
+                aria-label="prev page"
+              >◀</button>
+              <span>{gpageClamped + 1} / {gPages}</span>
+              <button
+                onClick={() => setGpage((prev) => (prev + 1) % gPages)}
+                className="rounded border border-slate-200 px-1.5 py-0.5 hover:bg-slate-50"
+                aria-label="next page"
+              >▶</button>
+              <button
+                onClick={() => setRotate((v) => !v)}
+                className={
+                  'ml-1 rounded border px-2 py-0.5 text-[11px] ' +
+                  (rotate
+                    ? 'border-blue-600 bg-blue-50 text-blue-700'
+                    : 'border-slate-200 text-slate-500 hover:bg-slate-50')
+                }
+              >
+                {t.workspace.rotatePages}{rotate ? ' 30s' : ''}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {vodOpen && (
         <VodRangeModal

@@ -84,6 +84,8 @@ export interface Msg {
   }
   workspace: {
     split16:           string
+    folderUnclassified: string
+    rotatePages:        string
     unclassified:      string
     edgeNotRegistered: string
     pressToStart:      string
@@ -510,6 +512,8 @@ const ja: Msg = {
   },
   workspace: {
     split16:           '16分割',
+    folderUnclassified: '未分類',
+    rotatePages:        '巡回',
     unclassified:      '未分類',
     edgeNotRegistered: 'エッジサーバ未登録',
     pressToStart:      '監視ボタンで開始',
@@ -918,6 +922,8 @@ const en: Msg = {
   },
   workspace: {
     split16:           '16-Split',
+    folderUnclassified: 'Unfiled',
+    rotatePages:        'Rotate',
     unclassified:      'Uncategorized',
     edgeNotRegistered: 'No edge server',
     pressToStart:      'Press Monitor to start',
@@ -1326,6 +1332,8 @@ const zh: Msg = {
   },
   workspace: {
     split16:           '16分割',
+    folderUnclassified: '未分类',
+    rotatePages:        '轮巡',
     unclassified:      '未分类',
     edgeNotRegistered: '未注册边缘服务器',
     pressToStart:      '点击监控按钮开始',
@@ -1734,6 +1742,8 @@ const ko: Msg = {
   },
   workspace: {
     split16:           '16분할',
+    folderUnclassified: '미분류',
+    rotatePages:        '순환',
     unclassified:      '미분류',
     edgeNotRegistered: '엣지 서버 미등록',
     pressToStart:      '모니터링 버튼으로 시작',

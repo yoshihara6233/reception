@@ -40,7 +40,7 @@ interface EdgePayload {
     // 秘密そのものは返さない。設定済みか否かだけ渡す。
     has_password: boolean
     vod_has_password: boolean
-    recorder_cameras: { id: string; channel: number; name: string; grid_pos: number; enabled: boolean; frigate_camera: string | null; hls_url: string | null; live_rtsp: string | null }[]
+    recorder_cameras: { id: string; channel: number; name: string; grid_pos: number; enabled: boolean; frigate_camera: string | null; hls_url: string | null; live_rtsp: string | null; folder_path: string | null }[]
   }[]
 }
 
@@ -72,7 +72,7 @@ export default async function EdgeEditPage(
       recorders (
         id, vendor, model, host, rtsp_port, onvif_port, username, notes,
         live_host, vod_host, vod_username, vod_channel, password_enc, vod_password_enc,
-        recorder_cameras ( id, channel, name, grid_pos, enabled, frigate_camera, hls_url, live_rtsp )
+        recorder_cameras ( id, channel, name, grid_pos, enabled, frigate_camera, hls_url, live_rtsp, folder_path )
       )
     `)
     .eq('id', id)

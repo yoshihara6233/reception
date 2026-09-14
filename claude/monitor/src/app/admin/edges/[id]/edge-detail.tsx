@@ -13,6 +13,7 @@ interface Camera {
   frigate_camera: string | null
   hls_url: string | null      // go2rtc stream URL 上書き
   live_rtsp: string | null    // go2rtc 自動登録 RTSP ソース
+  folder_path?: string | null // NVMS フォルダ（同期で上書きされる・表示のみ）
   _new?: boolean              // local-only marker
   _del?: boolean
   _dirty?: boolean
@@ -627,7 +628,31 @@ function RecorderCard({ recorder }: { recorder: Recorder }) {
     else alert(`削除失敗: ${res.status}`)
   }
 
-  const visible = cams.filter((c) => !c._del)
+  // ── 大規模カメラ向けの絞り込み（Phase 1.5 M2）─────────────────────
+  // nvms（同期で数百〜数万台になりうる）または 50 台超のとき、検索・フォルダ・
+  // ページングを出す。従来の少数台構成では何も変わらない。
+  const [q, setQ]               = useState('')
+  const [folderSel, setFolderSel] = useState('')
+  const [camPage, setCamPage]   = useState(0)
+  const CAM_PAGE_SIZE = 50
+  const bigList = recorder.vendor === 'nvms' || cams.length > CAM_PAGE_SIZE
+
+  const alive = cams.filter((c) => !c._del)
+  const folders = [...new Set(alive.map((c) => c.folder_path).filter((f): f is string => !!f))]
+    .sort((a, b) => a.localeCompare(b, 'ja'))
+  const filtered = !bigList ? alive : alive.filter((c) => {
+    if (folderSel && (c.folder_path ?? '') !== folderSel) return false
+    if (!q) return true
+    const needle = q.toLowerCase()
+    return c.name.toLowerCase().includes(needle)
+      || (c.folder_path ?? '').toLowerCase().includes(needle)
+      || String(c.channel).includes(needle)
+  })
+  const camPages = Math.max(1, Math.ceil(filtered.length / CAM_PAGE_SIZE))
+  const camPageClamped = Math.min(camPage, camPages - 1)
+  const visible = bigList
+    ? filtered.slice(camPageClamped * CAM_PAGE_SIZE, (camPageClamped + 1) * CAM_PAGE_SIZE)
+    : filtered
 
   return (
     <div className="rounded border border-slate-200">
@@ -760,11 +785,46 @@ function RecorderCard({ recorder }: { recorder: Recorder }) {
           </div>
         </div>
       )}
+      {recorder.vendor === 'nvms' && (
+        <p className="border-b border-slate-100 bg-blue-50/60 px-3 py-1.5 text-[10px] text-slate-600">
+          カメラは NVMS から<b>自動同期</b>されます（10 分ごと・エッジ経由）。名前・フォルダ・有効/無効は
+          NVMS 側の変更が優先され、ここでの編集は次回同期で上書きされます。ch = NVMS のカメラ ID です。
+        </p>
+      )}
+      {bigList && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-3 py-1.5 text-xs">
+          <input value={q} onChange={(e) => { setQ(e.target.value); setCamPage(0) }}
+                 placeholder="カメラ名・フォルダ・ch で検索"
+                 className="w-56 rounded border border-slate-200 px-2 py-1" />
+          {folders.length > 0 && (
+            <select value={folderSel} onChange={(e) => { setFolderSel(e.target.value); setCamPage(0) }}
+                    className="max-w-[16rem] rounded border border-slate-200 px-2 py-1">
+              <option value="">すべてのフォルダ</option>
+              {folders.map((f) => <option key={f} value={f}>{f}</option>)}
+            </select>
+          )}
+          <span className="ml-auto font-mono text-[11px] tabular-nums text-slate-500">
+            {filtered.length.toLocaleString()} 台
+          </span>
+          {camPages > 1 && (
+            <span className="flex items-center gap-1 font-mono text-[11px] tabular-nums text-slate-600">
+              <button onClick={() => setCamPage((v) => Math.max(0, v - 1))}
+                      className="rounded border border-slate-200 px-1.5 py-0.5">◀</button>
+              {camPageClamped + 1} / {camPages}
+              <button onClick={() => setCamPage((v) => Math.min(camPages - 1, v + 1))}
+                      className="rounded border border-slate-200 px-1.5 py-0.5">▶</button>
+            </span>
+          )}
+        </div>
+      )}
       <table className="w-full text-xs">
         <thead className="bg-slate-50/60 text-[10px] font-bold uppercase tracking-wider text-slate-500">
           <tr>
             <th className="px-2 py-1.5 text-left w-14">ch</th>
             <th className="px-2 py-1.5 text-left">カメラ名</th>
+            {recorder.vendor === 'nvms' && (
+              <th className="px-2 py-1.5 text-left w-44">フォルダ (NVMS)</th>
+            )}
             {recorder.vendor === 'frigate' && (
               <th className="px-2 py-1.5 text-left w-36">Frigate カメラ名</th>
             )}
@@ -781,7 +841,8 @@ function RecorderCard({ recorder }: { recorder: Recorder }) {
             return (
               <tr key={c.id ?? `new-${i}`} className="border-t border-slate-100">
                 <td className="px-2 py-1">
-                  <input type="number" value={c.channel} min={1} max={64}
+                  <input type="number" value={c.channel} min={1}
+                         max={recorder.vendor === 'nvms' ? undefined : 64}
                          onChange={(e) => update(realIdx, { channel: Number(e.target.value) })}
                          className="w-12 rounded border border-slate-200 px-1 py-0.5 font-mono" />
                 </td>
@@ -789,6 +850,9 @@ function RecorderCard({ recorder }: { recorder: Recorder }) {
                   <input value={c.name} onChange={(e) => update(realIdx, { name: e.target.value })}
                          className="w-full rounded border border-slate-200 px-1 py-0.5" />
                 </td>
+                {recorder.vendor === 'nvms' && (
+                  <td className="px-2 py-1 text-[10px] text-slate-500">{c.folder_path ?? '—'}</td>
+                )}
                 {recorder.vendor === 'frigate' && (
                   <td className="px-2 py-1">
                     <input value={c.frigate_camera ?? ''}

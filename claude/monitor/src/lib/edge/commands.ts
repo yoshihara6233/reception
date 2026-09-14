@@ -9,7 +9,8 @@
  */
 
 export type EdgeCommand =
-  | { action: 'start_grid';  request_id: string }
+  // camera_ids?: フォルダページの16面をこの並びで合成（省略=従来の grid_pos 0..15）
+  | { action: 'start_grid';  request_id: string; camera_ids?: string[] }
   | { action: 'stop_grid';   request_id: string }
   // start_live: edge polls the camera's HTTP snapshot endpoint and uploads
   // each JPEG to per-camera storage. No LiveKit, no WHIP — just `camera_id`.

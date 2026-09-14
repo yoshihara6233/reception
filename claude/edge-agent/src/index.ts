@@ -16,6 +16,7 @@ import { subscribeCommands } from './realtime.js'
 import { allowIngestUrl } from './ingest-guard.js'
 import { startEdgeJobWorker } from './workers/edge-jobs.js'
 import { startClipJobWorker } from './workers/clip-jobs.js'
+import { startNvmsSyncWorker } from './workers/nvms-sync.js'
 import { startNvrClockWatch } from './scheduler/nvr-clock-cron.js'
 import { StateMachine } from './state-machine.js'
 import { heartbeat } from './upload/storage.js'
@@ -69,6 +70,7 @@ async function main() {
   // 手荷物検査（M5）: inspection_clip_jobs をポーリングし、検査窓を NVR から切り出して
   // baggage-clips へアップ。自エッジ担当カメラ・切り出し可能 vendor のジョブのみ処理。
   const clipJobs = startClipJobWorker()
+  const nvmsSync = startNvmsSyncWorker()
 
   // 発報受け口: i-PRO/NVR の HTTP アラーム通知・外部 Webhook を LAN で受けて中継する
   // （ALARM_LISTEN_PORT>0 かつ MONITOR_URL 設定時のみ起動。それ以外は no-op）。
@@ -80,7 +82,20 @@ async function main() {
         case 'start_grid': {
           const cams = await loadCameras()
           if (!cams.length) return logger.warn('no cameras configured')
-          await fsm.toGrid(cams)
+          // camera_ids があればフォルダページ表示（Phase 1.5 M1）: この並びで16面を
+          // 合成する。grid_pos を並び順で上書きするだけで、以降は従来のスロット
+          // 合成がそのまま使える（grid.ts 無改修）。
+          let target = cams
+          if (cmd.camera_ids?.length) {
+            const byId = new Map(cams.map((c) => [c.id, c]))
+            target = cmd.camera_ids
+              .flatMap((id) => { const c = byId.get(id); return c ? [c] : [] })
+              .map((c, i) => ({ ...c, grid_pos: i }))
+            if (!target.length) {
+              return logger.warn({ requested: cmd.camera_ids.length }, 'start_grid: camera_ids に該当するカメラがありません')
+            }
+          }
+          await fsm.toGrid(target)
           break
         }
         case 'stop_grid':
@@ -255,6 +270,7 @@ async function main() {
     await rt.close()
     jobs.close()
     clipJobs.close()
+    nvmsSync.close()
     alarmListener.close()
     await fsm.toIdle()
     await fsm.stopSfu()

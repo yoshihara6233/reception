@@ -12,6 +12,7 @@ import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
 import { getT } from '@/lib/i18n/server'
 import { LifecycleSummary } from '@/components/nvr/LifecycleSummary'
+import { NvmsHealthSection } from './NvmsHealthSection'
 import { deriveEdgeStatus } from '@/lib/edge-status'
 import { MONITOR_STALE_SECONDS } from '@intereco/shared'
 
@@ -173,6 +174,9 @@ export default async function InfraDashboard() {
 
         {/* F48.D: NVR 機材ライフサイクル サマリ */}
         <LifecycleSummary />
+
+        {/* Phase 1.5 M3: NVMS 死活サマリ（nvms レコーダが無ければ非表示） */}
+        <NvmsHealthSection />
 
         {/* 凡例 */}
         <div className="flex flex-wrap gap-4 text-[11px] text-slate-600 dark:text-gedink2">

@@ -12,7 +12,7 @@ interface StorePayload {
     id: string
     recorders: {
       vendor: RecorderVendor
-      recorder_cameras: { id: string; channel: number; name: string; grid_pos: number }[]
+      recorder_cameras: { id: string; channel: number; name: string; grid_pos: number; folder_path: string | null; enabled: boolean }[]
     }[]
   }[]
 }
@@ -28,7 +28,7 @@ export default async function StorePage(
     .select(`
       id, name, area_code,
       edge_devices ( id,
-        recorders ( vendor, recorder_cameras ( id, channel, name, grid_pos ) )
+        recorders ( vendor, recorder_cameras ( id, channel, name, grid_pos, folder_path, enabled ) )
       )
     `)
     .eq('id', id)
@@ -40,9 +40,13 @@ export default async function StorePage(
   const edge    = store.edge_devices?.[0]
   // Attach the owning recorder's vendor to each camera so the workspace can
   // gate the playback (VOD) button — VOD_VENDORS を見て出し分ける。
+  // enabled=false は NVMS 同期で「NVMS 側から消えたカメラ」。表示しない
+  // （行は消さない — 過去のクリップ・BCP が camera_id を参照しているため）。
   const cameras =
     edge?.recorders?.flatMap((r) =>
-      r.recorder_cameras.map((c) => ({ ...c, vendor: r.vendor })),
+      r.recorder_cameras
+        .filter((c) => c.enabled !== false)
+        .map((c) => ({ ...c, vendor: r.vendor })),
     ) ?? []
 
   // F47: NVR 設定はモニタリングユーザに見せず、/admin/stores/[id]/nvr に分離した。
