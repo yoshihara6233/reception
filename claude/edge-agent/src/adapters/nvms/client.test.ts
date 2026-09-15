@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { createHash } from 'node:crypto'
 import {
   nvmsEndpoint, fetchNvmsSnapshot, downloadNvmsExportMp4, nvmsExportStatusMessage,
+  fetchNvmsGrid, NvmsGridUnsupportedError,
 } from './client'
 
 const opts = { endpoint: 'http://192.168.10.5:8080', apiKey: 'nvms_testkey' }
@@ -102,5 +103,37 @@ describe('nvmsExportStatusMessage', () => {
   })
   it('403 は operator キーが要ることを言う', () => {
     expect(nvmsExportStatusMessage(403, new Date())).toContain('operator')
+  })
+})
+
+describe('fetchNvmsGrid（合成グリッド API）', () => {
+  it('cameras の並び順どおりの URL と Bearer キーで grid.jpg を叩く', async () => {
+    const jpeg = Buffer.alloc(4096, 0xff)
+    const calls = mockFetch(200, jpeg)
+    const { jpeg: got, missing } = await fetchNvmsGrid(opts, [100, 65, 300], 1280, 720)
+    expect(got.length).toBe(4096)
+    expect(missing).toBe('')
+    expect(calls[0].url).toBe('http://192.168.10.5:8080/api/v1/grid.jpg?cameras=100,65,300&w=1280&h=720')
+    expect((calls[0].init.headers as Record<string, string>).Authorization).toBe('Bearer nvms_testkey')
+  })
+  it('X-Grid-Missing ヘッダを missing として返す', async () => {
+    mockFetch(200, Buffer.alloc(4096), { 'X-Grid-Missing': '65,300' })
+    const { missing } = await fetchNvmsGrid(opts, [100, 65, 300], 1280, 720)
+    expect(missing).toBe('65,300')
+  })
+  it('★404 は NvmsGridUnsupportedError（旧版 nvmsd）— 呼び出し側の恒久フォールバック用', async () => {
+    // 新版は引数が正しければ常に 200 を返す契約なので、404 = このルートが無い旧版。
+    mockFetch(404, 'not found')
+    await expect(fetchNvmsGrid(opts, [1], 1280, 720)).rejects.toBeInstanceOf(NvmsGridUnsupportedError)
+  })
+  it('401/403 はキーの問題だと分かる文で投げる（Unsupported ではない）', async () => {
+    mockFetch(403, 'forbidden')
+    const p = fetchNvmsGrid(opts, [1], 1280, 720)
+    await expect(p).rejects.toThrow(/API キーが無効か権限不足/)
+    await expect(fetchNvmsGrid(opts, [1], 1280, 720)).rejects.not.toBeInstanceOf(NvmsGridUnsupportedError)
+  })
+  it('極端に小さい応答は壊れた画像として弾く', async () => {
+    mockFetch(200, Buffer.alloc(100))
+    await expect(fetchNvmsGrid(opts, [1], 1280, 720)).rejects.toThrow(/too small/)
   })
 })
