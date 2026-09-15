@@ -24,7 +24,10 @@ import { captureRtspKeyframe, injectRtspCreds } from '../rtsp/keyframe.js'
 import { resolveOnvifRtspUrl } from '../adapters/onvif/onvif-rtsp.js'
 import { getOnvifSnapshotUrl, fetchOnvifJpeg } from '../adapters/onvif/onvif-snapshot.js'
 import { captureIproNvrJpeg, buildIproNvrEndpoint } from '../adapters/i-pro/nvr-live.js'
-import { fetchNvmsSnapshot, nvmsEndpoint } from '../adapters/nvms/client.js'
+import {
+  fetchNvmsSnapshot, fetchNvmsGrid, nvmsEndpoint, NvmsGridUnsupportedError,
+} from '../adapters/nvms/client.js'
+import { planNvmsGrid } from '../adapters/nvms/grid-plan.js'
 import { assertUsableJpeg } from '../util/jpeg.js'
 import { uploadGridJpeg } from '../upload/storage.js'
 import type { CameraDescriptor } from '../types.js'
@@ -55,6 +58,13 @@ const ONVIF_RTSP_CACHE = new Map<string, string>()
  * しないよう、最後の良いフレームを使い続ける。
  */
 const LAST_FRAME = new Map<string, Buffer>()
+
+/**
+ * grid.jpg (合成グリッド API) が 404 を返した NVMS エンドポイント。
+ * 旧版 nvmsd と判定してプロセス再起動まで記憶し、カメラ別合成を使い続ける。
+ * NVMS 側を更新したらエッジの restart / OTA で再プローブされる。
+ */
+const NVMS_GRID_UNSUPPORTED = new Set<string>()
 
 /**
  * onvif-generic 用のセル取得を構築。
@@ -159,9 +169,45 @@ export async function startGrid(cameras: CameraDescriptor[]): Promise<GridHandle
   const fullW = cellW * GRID_COLS
   const fullH = cellH * GRID_ROWS
 
+  // NVMS 単独レコーダで grid_pos が 0..n-1 の連番なら、NVMS 側の合成グリッド API
+  // (GET /api/v1/grid.jpg) 1 本で済ませる。旧版 (404) はカメラ別合成へ恒久フォールバック、
+  // 一時障害はその回だけスキップ（Storage 上の前回画像が残るので暗転しない）。
+  const nvmsGrid = planNvmsGrid(cameras)
+
+  /** @returns true = この回は完了（合成 API で処理済み or スキップ）。false = カメラ別合成へ。 */
+  async function iterateNvmsComposite(): Promise<boolean> {
+    if (!nvmsGrid) return false
+    const endpoint = nvmsEndpoint(nvmsGrid.host)
+    if (NVMS_GRID_UNSUPPORTED.has(endpoint)) return false
+    try {
+      const { jpeg, missing } = await fetchNvmsGrid(
+        { endpoint, apiKey: nvmsGrid.apiKey, timeoutMs: 8_000 },
+        nvmsGrid.channels, config.GRID_WIDTH, config.GRID_HEIGHT,
+      )
+      assertUsableJpeg(jpeg, 'nvms-grid')
+      await uploadGridJpeg(jpeg, nvmsGrid.camIds)
+      if (missing) {
+        // 起動中/オフライン/落ちたノードのカメラ。数周期で埋まらなければ調査対象。
+        logger.debug({ missing }, 'grid: nvms 合成に未掲載のカメラあり')
+      }
+      logger.debug({ cameras: nvmsGrid.channels.length }, 'grid: nvms composite uploaded')
+      return true
+    } catch (e) {
+      if (e instanceof NvmsGridUnsupportedError) {
+        NVMS_GRID_UNSUPPORTED.add(endpoint)
+        logger.info({ endpoint }, 'grid: この NVMS は grid.jpg 未対応（旧版）— カメラ別合成へ切替')
+        return false  // 同じ回のうちにカメラ別合成で1枚作る
+      }
+      logger.warn({ err: String(e) }, 'grid: nvms 合成取得に失敗 — この回はスキップ（前回画像を維持）')
+      return true
+    }
+  }
+
   // One iteration: fetch all snapshots in parallel, resize each to a cell,
   // composite onto a dark base, encode as JPEG, upload.
   async function iterate(): Promise<void> {
+    if (await iterateNvmsComposite()) return
+
     const fetches = await Promise.allSettled(
       slots.map((s) => s.capture()),
     )

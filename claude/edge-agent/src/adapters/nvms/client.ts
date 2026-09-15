@@ -120,3 +120,44 @@ export async function downloadNvmsExportMp4(
   logger.info({ cameraId, bytes: buf.length, sha256: want ? 'verified' : 'absent' }, 'nvms: export downloaded')
   return buf
 }
+
+/**
+ * 旧版 NVMS（grid.jpg 未実装）を表す。呼び出し側はこのエンドポイントを
+ * 「非対応」と記憶してカメラ別合成へフォールバックする（プロセス再起動まで）。
+ */
+export class NvmsGridUnsupportedError extends Error {}
+
+/**
+ * 合成グリッド (GET /api/v1/grid.jpg) を 1 枚取得（docs/GRID_API_SPEC.md）。
+ * cameraIds の並び順がそのままタイル位置。サーバ側の契約:
+ *   - 引数が正しければ常に 200（フレームが無くても全面暗色 JPEG）
+ *   - 載せられなかった ID は X-Grid-Missing ヘッダに列挙
+ *   - w/h のタイル寸法・cover・暗色はエッジ現行合成と同一
+ * 404 は「このルートが無い＝grid.jpg 未実装の旧版」だけ（新版は 200/400/401/403
+ * しか返さない）。viewer 権限で足りるが、レコーダ登録は operator キーなので同じ
+ * キーをそのまま使う。
+ */
+export async function fetchNvmsGrid(
+  o: NvmsOpts,
+  cameraIds: number[],
+  w: number,
+  h: number,
+): Promise<{ jpeg: Buffer; missing: string }> {
+  const url = `${o.endpoint}/api/v1/grid.jpg?cameras=${cameraIds.join(',')}&w=${w}&h=${h}`
+  const res = await fetch(url, {
+    headers: headers(o),
+    signal:  AbortSignal.timeout(o.timeoutMs ?? 8_000),
+  })
+  if (res.status === 404) {
+    throw new NvmsGridUnsupportedError(
+      'nvms grid.jpg 404: この NVMS は合成グリッド未対応（旧版）— カメラ別合成へフォールバック',
+    )
+  }
+  if (res.status === 401 || res.status === 403) {
+    throw new Error(`nvms grid ${res.status}: API キーが無効か権限不足`)
+  }
+  if (!res.ok) throw new Error(`nvms grid HTTP ${res.status}`)
+  const jpeg = Buffer.from(await res.arrayBuffer())
+  if (jpeg.length < 512) throw new Error(`nvms grid too small (${jpeg.length} bytes)`)
+  return { jpeg, missing: res.headers.get('x-grid-missing') ?? '' }
+}
