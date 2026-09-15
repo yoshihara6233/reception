@@ -6,8 +6,8 @@ import { QRCodeSVG } from 'qrcode.react'
 import { CircleCheck, TriangleAlert } from 'lucide-react'
 
 type StoreOption = { id: string; name: string; area_code: string | null }
-type Config = 'relay' | 'hq_direct' | 'frigate_unit'
-type Step = 'config' | 'form' | 'qr' | 'done'
+type Config = 'relay' | 'hq_direct' | 'frigate_unit' | 'nvms_uplink'
+type Step = 'config' | 'form' | 'qr' | 'done' | 'token'
 type Enrollment = { id: string; token: string; expires_at: string; origin: string }
 
 const TIERS = [16, 32, 48] as const
@@ -15,7 +15,7 @@ const TIERS = [16, 32, 48] as const
 export function EdgeNewForm({ storeCandidates }: { storeCandidates: StoreOption[] }) {
   const router = useRouter()
   const [step, setStep]     = useState<Step>('config')
-  const [config]            = useState<Config>('relay')   // GA は relay のみ有効
+  const [config, setConfig] = useState<Config>('relay')   // GA は relay + nvms_uplink
   const [storeId, setStoreId] = useState('')
   const [tier, setTier]     = useState<number>(16)
   const [name, setName]     = useState('')
@@ -23,6 +23,9 @@ export function EdgeNewForm({ storeCandidates }: { storeCandidates: StoreOption[
   const [err, setErr]       = useState<string | null>(null)
   const [enroll, setEnroll] = useState<Enrollment | null>(null)
   const [edgeId, setEdgeId] = useState<string | null>(null)
+  // NVMS 内蔵アップリンク: 直接発行された device_token（この画面が唯一の表示機会）
+  const [uplink, setUplink] = useState<{ id: string; token: string } | null>(null)
+  const [copied, setCopied] = useState(false)
   const pollRef             = useRef<NodeJS.Timeout | null>(null)
 
   // エンロール完了をポーリング（used_at がつけば edge_id が返る）。
@@ -58,6 +61,22 @@ export function EdgeNewForm({ storeCandidates }: { storeCandidates: StoreOption[
     setStep('qr')
   }
 
+  // NVMS 内蔵アップリンク: QR エンロールを介さず edge 行と device_token を直接発行。
+  // トークンは nvmsd の環境変数に手で設定する運用（NVMS/docs/UPLINK_SPEC.md §2）。
+  async function issueUplink() {
+    setBusy(true); setErr(null)
+    const res = await fetch('/api/admin/edges', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ store_id: storeId, name }),
+    })
+    setBusy(false)
+    if (!res.ok) { const j = await res.json().catch(() => ({})); return setErr(j.error ?? `発行失敗: ${res.status}`) }
+    const j = await res.json() as { id: string; device_token: string }
+    setUplink({ id: j.id, token: j.device_token })
+    setStep('token')
+  }
+
   async function reissue() {
     if (!enroll) return
     setBusy(true); setErr(null)
@@ -73,9 +92,56 @@ export function EdgeNewForm({ storeCandidates }: { storeCandidates: StoreOption[
     return (
       <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-5 text-sm">
         <h2 className="font-bold text-slate-900">拠点構成を選択</h2>
-        <ConfigCard active={config === 'relay'} title="② 中継ユニット (relay)" desc="既存NVR + 中継ユニット。QRで現地ユニットを自己登録。【GA本命】" onClick={() => setStep('form')} />
+        <ConfigCard active={config === 'relay'} title="② 中継ユニット (relay)" desc="既存NVR + 中継ユニット。QRで現地ユニットを自己登録。【GA本命】" onClick={() => { setConfig('relay'); setStep('form') }} />
+        <ConfigCard active={config === 'nvms_uplink'} title="④ NVMS 内蔵アップリンク (nvms_uplink)" desc="現地ユニットなし。NVMS (nvmsd) がクラウドへ直接接続。トークンを発行して環境変数に設定" onClick={() => { setConfig('nvms_uplink'); setStep('form') }} />
         <ConfigCard disabled title="① 本部直結 (hq_direct)" desc="拠点機器なし・本部からNVRへ直接接続" badge="GA後" />
         <ConfigCard disabled title="③ Frigate録画 (frigate_unit)" desc="録画も自前ユニットで実施" badge="GA後" />
+      </div>
+    )
+  }
+
+  // ── Step: NVMS 内蔵アップリンクのトークン表示（一度きり） ──
+  if (step === 'token' && uplink) {
+    return (
+      <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-5 text-sm">
+        <h2 className="flex items-center gap-1.5 font-bold text-slate-900">
+          <CircleCheck size={18} strokeWidth={1.5} className="text-emerald-600" aria-hidden /> エッジを登録しました — デバイストークン
+        </h2>
+        <div className="rounded border border-slate-200 p-3">
+          <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">デバイストークン（64桁）</p>
+          <code className="block break-all rounded bg-slate-900 px-2 py-1.5 font-mono text-[11px] text-emerald-200">{uplink.token}</code>
+          <div className="mt-2 flex items-center gap-2">
+            <button
+              onClick={() => { void navigator.clipboard.writeText(uplink.token).then(() => setCopied(true)) }}
+              className="rounded border border-slate-300 bg-white px-3 py-1 text-xs"
+            >
+              {copied ? 'コピーしました' : 'コピー'}
+            </button>
+            <p className="inline-flex items-center gap-1 text-[10px] text-slate-400">
+              <TriangleAlert size={13} strokeWidth={1.5} aria-hidden /> この画面を離れると再表示できません（DB にはハッシュのみ保存）
+            </p>
+          </div>
+        </div>
+
+        <div className="rounded border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+          <p className="mb-1 font-bold text-slate-700">NVMS 側の設定（nvmsd の環境変数 2 つ → 再起動）</p>
+          <code className="block rounded bg-white px-2 py-1.5 font-mono text-[11px] leading-relaxed ring-1 ring-slate-200">
+            NVMS_UPLINK_URL={typeof window !== 'undefined' ? window.location.origin : ''}<br />
+            NVMS_UPLINK_TOKEN=（上のトークン）
+          </code>
+          <p className="mt-1.5">起動後 20 秒以内に一覧で「nvmsd/版」として生存表示され、カメラ・フォルダは 10 分以内に自動同期されます。続けてこのエッジにレコーダ（ベンダ NVMS）を登録してください。</p>
+        </div>
+
+        <div className="flex gap-2 border-t border-slate-100 pt-3">
+          <button onClick={() => router.push(`/admin/edges/${uplink.id}`)}
+                  className="rounded bg-blue-600 px-4 py-1.5 text-sm font-medium text-white">
+            続けてレコーダを登録 →
+          </button>
+          <button onClick={() => router.push('/admin/edges')}
+                  className="rounded border border-slate-200 bg-white px-4 py-1.5 text-sm">
+            一覧に戻る
+          </button>
+        </div>
       </div>
     )
   }
@@ -138,11 +204,12 @@ export function EdgeNewForm({ storeCandidates }: { storeCandidates: StoreOption[
     )
   }
 
-  // ── Step: 登録フォーム（store + tier + name） ──
+  // ── Step: 登録フォーム（store + tier + name。nvms_uplink はティア不要） ──
+  const isUplink = config === 'nvms_uplink'
   return (
-    <form onSubmit={(e) => { e.preventDefault(); void issue() }} className="space-y-4 rounded-lg border border-slate-200 bg-white p-5 text-sm">
+    <form onSubmit={(e) => { e.preventDefault(); void (isUplink ? issueUplink() : issue()) }} className="space-y-4 rounded-lg border border-slate-200 bg-white p-5 text-sm">
       <div className="flex items-center gap-2 text-xs text-slate-500">
-        <span className="rounded bg-blue-50 px-2 py-0.5 font-medium text-blue-700">② 中継ユニット (relay)</span>
+        <span className="rounded bg-blue-50 px-2 py-0.5 font-medium text-blue-700">{isUplink ? '④ NVMS 内蔵アップリンク (nvms_uplink)' : '② 中継ユニット (relay)'}</span>
         <button type="button" onClick={() => setStep('config')} className="underline">構成を変更</button>
       </div>
 
@@ -158,13 +225,15 @@ export function EdgeNewForm({ storeCandidates }: { storeCandidates: StoreOption[
         <span className="mt-1 block text-[11px] text-slate-500">エッジ未登録の店舗のみ表示（候補 {storeCandidates.length} 件）</span>
       </label>
 
-      <label className="block">
-        <span className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">カメラ台数ティア</span>
-        <select value={tier} onChange={(e) => setTier(Number(e.target.value))}
-                className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm">
-          {TIERS.map((t) => <option key={t} value={t}>{t} 台</option>)}
-        </select>
-      </label>
+      {!isUplink && (
+        <label className="block">
+          <span className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">カメラ台数ティア</span>
+          <select value={tier} onChange={(e) => setTier(Number(e.target.value))}
+                  className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm">
+            {TIERS.map((t) => <option key={t} value={t}>{t} 台</option>)}
+          </select>
+        </label>
+      )}
 
       <label className="block">
         <span className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">エッジ名（識別用）</span>
@@ -178,7 +247,7 @@ export function EdgeNewForm({ storeCandidates }: { storeCandidates: StoreOption[
       <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
         <button type="submit" disabled={busy || !storeId || !name}
                 className="rounded bg-blue-600 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50">
-          {busy ? '発行中…' : 'QRを発行'}
+          {busy ? '発行中…' : isUplink ? 'トークンを発行' : 'QRを発行'}
         </button>
       </div>
     </form>
