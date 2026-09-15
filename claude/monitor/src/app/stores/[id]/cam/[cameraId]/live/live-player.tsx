@@ -230,7 +230,10 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
         onSwitch={switchMode}
         remainingSec={expired ? null : remainingSec}
       />
-      <div className="relative flex-1">
+      {/* min-h-0: flex 子の既定 min-height:auto を外す。無いと中の <img h-full object-contain>
+          が「画面の残り高さ」でなく画像の内在サイズ（w-full に合わせた高さ）まで枠を押し広げ、
+          横長画面で映像の下端が画面外にはみ出す（640×360 の静止画ライブで実発生）。 */}
+      <div className="relative min-h-0 flex-1">
         {limitReached ? (
           <LiveLimitOverlay />
         ) : expired ? (

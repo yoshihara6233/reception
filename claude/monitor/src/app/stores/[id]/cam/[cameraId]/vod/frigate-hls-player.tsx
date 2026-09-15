@@ -160,7 +160,9 @@ export default function FrigateHlsPlayer({ cameraId, storeId, frigateCamera, fro
           <span className="text-[10px] text-slate-400">Frigate ネイティブHLS・シーク可</span>
         </span>
       </div>
-      <div className="relative flex-1 bg-black">
+      {/* min-h-0: live-player と同じ理由（flex 子の min-height:auto を外さないと
+          <video h-full object-contain> が枠を内在サイズまで押し広げ、下端がはみ出す）。 */}
+      <div className="relative min-h-0 flex-1 bg-black">
         {limitReached ? (
           <div className="absolute inset-0 flex items-center justify-center p-4">
             <div className="max-w-md rounded-lg bg-amber-950/90 px-5 py-4 text-center text-sm text-amber-100 ring-1 ring-amber-700">
