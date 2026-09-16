@@ -15,6 +15,10 @@
  *   { eventIds: { storeId, storeName, eventId }[] }
  */
 import { NextRequest, NextResponse } from 'next/server'
+import {
+  planNvmsBcpForEdges,
+  nvmsBcpRows,
+} from '../../../../../supabase/functions/jalert-poller/flow'
 import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { resolveMonitorScope } from '@/lib/tenant/monitor-scope'
 import { haversineKm } from '@/lib/bcp/geo'
@@ -40,7 +44,13 @@ interface StoreRow {
 
 interface EdgeDevice {
   id: string
-  recorders: { recorder_cameras: { id: string; name: string }[] }[]
+  recorders: {
+    id: string
+    vendor: string
+    bcp_capture_mode: string | null
+    bcp_folder_paths: string[] | null
+    recorder_cameras: { id: string; name: string; channel: number; folder_path: string | null; enabled: boolean | null }[]
+  }[]
 }
 
 
@@ -76,24 +86,37 @@ async function activateStore(
   // 2. Fetch active edge devices
   const { data: edges } = await supa
     .from('edge_devices')
-    .select('id, recorders ( recorder_cameras ( id, name ) )')
+    .select('id, recorders ( id, vendor, bcp_capture_mode, bcp_folder_paths, recorder_cameras ( id, name, channel, folder_path, enabled ) )')
     .eq('store_id', store.id)
     .neq('status', 'offline')
 
   const activeEdges = (edges ?? []) as unknown as EdgeDevice[]
 
   // 3. Insert bcp_clips
-  const clipInserts = activeEdges.flatMap((edge) =>
-    (edge.recorders ?? []).flatMap((rec) =>
-      (rec.recorder_cameras ?? []).map((cam) => ({
-        event_id:      eventId,
-        camera_id:     cam.id,
-        clip_from:     clipFrom,
-        clip_to:       clipTo,
-        upload_status: 'pending',
-      }))
+  //    Phase 2b: nvms レコーダは全カメラ方式から外し、計画（UPLINK_CLIPS_SPEC.md）に
+  //    置き換える — 発令 3 経路（poller / test / retrieve）とも flow.ts の同一実装。
+  const clipInserts: { event_id: string; camera_id: string; clip_from: string; clip_to: string; upload_status: string; offset_min?: number }[] =
+    activeEdges.flatMap((edge) =>
+      (edge.recorders ?? []).filter((rec) => rec.vendor !== 'nvms').flatMap((rec) =>
+        (rec.recorder_cameras ?? []).map((cam) => ({
+          event_id:      eventId,
+          camera_id:     cam.id,
+          clip_from:     clipFrom,
+          clip_to:       clipTo,
+          upload_status: 'pending',
+        }))
+      )
     )
-  )
+  const { byEdge: nvmsPlanByEdge, truncated: nvmsTruncated } = planNvmsBcpForEdges(activeEdges, offsets.length)
+  if (nvmsTruncated) console.warn(`[bcp-test] event ${eventId}: nvms BCP 計画が上限 512 枚で打ち切り`)
+  {
+    const { clipRows, gridRows } = nvmsBcpRows(nvmsPlanByEdge, eventId, alertIssuedAt, offsets)
+    clipInserts.push(...clipRows)
+    if (gridRows.length > 0) {
+      const { error: gridErr } = await supa.from('bcp_grid_shots').insert(gridRows)
+      if (gridErr) throw new Error(`bcp_grid_shots insert failed: ${gridErr.message}`)
+    }
+  }
 
   let insertedClips: { id: string; camera_id: string }[] = []
   if (clipInserts.length > 0) {
@@ -111,12 +134,13 @@ async function activateStore(
 
   // 5. Write pending_command to each edge
   for (const edge of activeEdges) {
-    const edgeClips = (edge.recorders ?? []).flatMap((rec) =>
+    const edgeClips = (edge.recorders ?? []).filter((rec) => rec.vendor !== 'nvms').flatMap((rec) =>
       (rec.recorder_cameras ?? []).map((cam) => ({
         clipId:   cameraToClip.get(cam.id) ?? '',
         cameraId: cam.id,
       }))
     )
+    const nvmsPlan = nvmsPlanByEdge.get(edge.id)
 
     await supa.from('edge_devices').update({
       pending_command: {
@@ -124,6 +148,10 @@ async function activateStore(
         request_id: crypto.randomUUID(),
         eventId,
         clips:      edgeClips.map((c) => ({ clipId: c.clipId, cameraId: c.cameraId })),
+        ...(nvmsPlan?.gridPages.length
+          ? { grid_pages: nvmsPlan.gridPages.map((p) => ({ page_no: p.page_no, folder_path: p.folder_path, channels: p.channels })) }
+          : {}),
+        ...(nvmsPlan?.cameras.length ? { cameras: nvmsPlan.cameras } : {}),
         // エッジは clipFrom を T+0（発令時刻）として扱う。旧VOD方式の
         // 「発令 − pre分」を渡すと全コマが pre 分過去にずれる（2026-07-13 是正）。
         clipFrom:   alertIssuedAt,
