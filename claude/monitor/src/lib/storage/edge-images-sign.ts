@@ -23,8 +23,20 @@ export const EDGE_IMAGES_PUT_TTL_SEC = 3600
 /** ブラウザ配信（302先）用 TTL。短くしてリプレイ窓を絞る。 */
 export const EDGE_IMAGES_GET_TTL_SEC = 120
 
+/**
+ * env は必ず trim して読む。Vercel のダッシュボードに値を貼ると前後に改行や
+ * 空白が紛れることがあり、素のまま連結すると presign URL に混入する。
+ * Node 側の URL パーサは改行を黙って除去するためクラウドでは「動いてしまい」、
+ * URL を厳密に扱うクライアント（Go の nvmsd）で初めて表面化した（2026-09-16 実発生）。
+ * secret に紛れた場合は署名不一致で全滅するので、こちらも同様に守る。
+ */
+function envTrimmed(name: string): string | undefined {
+  const v = process.env[name]?.trim()
+  return v || undefined
+}
+
 export function edgeImagesWorkerConfigured(): boolean {
-  return !!(process.env.EDGE_IMAGES_BASE_URL && process.env.EDGE_IMAGES_SIGNING_SECRET)
+  return !!(envTrimmed('EDGE_IMAGES_BASE_URL') && envTrimmed('EDGE_IMAGES_SIGNING_SECRET'))
 }
 
 /** Worker と一致させる正規化文字列。 */
@@ -42,8 +54,8 @@ export function signEdgeImageUrl(
   key: string,
   ttlSec?: number,
 ): string | null {
-  const base   = process.env.EDGE_IMAGES_BASE_URL
-  const secret = process.env.EDGE_IMAGES_SIGNING_SECRET
+  const base   = envTrimmed('EDGE_IMAGES_BASE_URL')
+  const secret = envTrimmed('EDGE_IMAGES_SIGNING_SECRET')
   if (!base || !secret) return null
 
   const ttl = ttlSec ?? (method === 'PUT' ? EDGE_IMAGES_PUT_TTL_SEC : EDGE_IMAGES_GET_TTL_SEC)
