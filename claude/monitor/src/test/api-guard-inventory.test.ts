@@ -122,6 +122,11 @@ const EXPECTED: Record<string, Guard> = {
   '/api/baggage/clips/[id]': 'session-only',
   '/api/baggage/debug/sessions': 'baggage-store',
   '/api/baggage/edge/clip-upload': 'device-token',
+  '/api/edge/bcp-grid-complete': 'device-token',
+  '/api/edge/bcp-grid-upload-url': 'device-token',
+  '/api/edge/bcp-shot-upload-url': 'device-token',
+  '/api/edge/clip-complete': 'device-token',
+  '/api/edge/clip-upload-url': 'device-token',
   '/api/edge/commands/next': 'device-token',
   '/api/edge/commands/result': 'device-token',
   '/api/edge/heartbeat': 'device-token',
@@ -150,6 +155,7 @@ const EXPECTED: Record<string, Guard> = {
   '/api/bcp/[id]/retrieve': 'admin',
   '/api/bcp/[id]/snapshots.zip': 'session-only',
   '/api/bcp/clip/[id]': 'session-only',
+  '/api/bcp/grid-shot/[id]': 'session-only',
   '/api/bcp/events': 'admin',
   '/api/bcp/test': 'tenant-scope',
   '/api/bcp/test/stores': 'session-only',
@@ -238,7 +244,10 @@ describe('API ルートの認可ガード棚卸し', () => {
     // 減らす分には自由。増やすときはこの数字ごと見直すこと。
     // 25 は /api/geocode を PUBLIC からここへ移した分（無認証をやめた＝強化）。
     // 弱化で増やしたのではない点に注意。減らす分には自由。
+    // 26 = Phase 2b の /api/bcp/grid-shot/[id]（合成タイムラインの画像プロキシ）。
+    // /api/bcp/clip/[id] と同型 — 利用者スコープで bcp_grid_shots を読み（RLS =
+    // 親イベントの店舗可視性が認可）、通ったときだけ署名 URL へ 302。
     const n = Object.values(actual).filter((g) => g === 'session-only').length
-    expect(n).toBeLessThanOrEqual(25)
+    expect(n).toBeLessThanOrEqual(26)
   })
 })

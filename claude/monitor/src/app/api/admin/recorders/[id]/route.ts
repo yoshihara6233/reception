@@ -19,6 +19,9 @@ const PatchBody = z.object({
   vod_username: z.string().nullable().optional(),
   vod_password: z.string().optional(),              // 空欄=現状維持。非空のみ更新
   vod_channel:  z.coerce.number().int().min(1).max(64).nullable().optional(),
+  // Phase 2b（nvms のみ意味を持つ）: BCP 収集方式と対象フォルダ。
+  bcp_capture_mode: z.enum(['grid', 'per_camera']).optional(),
+  bcp_folder_paths: z.array(z.string().min(1).max(500)).max(200).nullable().optional(),
 })
 
 /** 空文字は NULL に正規化（UI でクリア＝NULL にできるように）。 */

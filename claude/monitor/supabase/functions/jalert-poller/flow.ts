@@ -151,6 +151,12 @@ export interface BcpCaptureCommand {
   clipFrom: string
   clipTo: string
   offsets: number[]
+  // ── Phase 2b（nvms アップリンク向け・UPLINK_CLIPS_SPEC.md §3.1）──────
+  // どちらも省略時は無し。従来エッジは未知フィールドとして読み飛ばす。
+  /** 合成モード: ページ計画（タイル順 = channels の並び）。 */
+  grid_pages?: { page_no: number; folder_path: string | null; channels: number[] }[]
+  /** カメラ個別モード: UUID と NVMS カメラ ID の組。 */
+  cameras?: { camera_id: string; channel: number }[]
 }
 
 /**
@@ -184,8 +190,11 @@ export function buildBcpCaptureCommand(params: {
   alertIssuedAt: string
   clipTo: string
   offsets?: number[] | null
+  /** Phase 2b: nvms アップリンク向けの計画（無ければフィールド自体を載せない）。 */
+  gridPages?: { page_no: number; folder_path: string | null; channels: number[] }[]
+  cameras?: { camera_id: string; channel: number }[]
 }): BcpCaptureCommand {
-  return {
+  const cmd: BcpCaptureCommand = {
     action:     'start_bcp_capture',
     request_id: params.requestId,
     eventId:    params.eventId,
@@ -194,4 +203,202 @@ export function buildBcpCaptureCommand(params: {
     clipTo:     params.clipTo,
     offsets:    params.offsets ?? [-5, 5],
   }
+  if (params.gridPages?.length) cmd.grid_pages = params.gridPages
+  if (params.cameras?.length)   cmd.cameras    = params.cameras
+  return cmd
+}
+
+// ── Phase 2b: NVMS レコーダの BCP 計画（NVMS/docs/UPLINK_CLIPS_SPEC.md）──────
+//
+// NVMS は 1 レコーダ 1,000 台級がありうるため、従来の「全カメラ×8枚」を送らない。
+// レコーダ設定（bcp_capture_mode / bcp_folder_paths）に従い、
+//   grid       = フォルダ→16台ページ割りの合成静止画（既定）
+//   per_camera = カメラ個別（対象フォルダを絞った運用向け）
+// のどちらかを計画する。**総ショット数は 1 イベント 512 枚で打ち切り**（暴走防止）。
+// ページ割りの規則は表示側（monitor/src/lib/grid-groups.ts buildGridGroups）と同じ:
+// フォルダ名 ja ロケール昇順・未分類は最後・フォルダ内は channel 昇順・16台ずつ。
+
+export const NVMS_BCP_MAX_SHOTS = 512
+export const NVMS_BCP_PAGE_SIZE = 16
+
+export interface NvmsBcpCamera {
+  id: string
+  channel: number
+  folder_path: string | null
+  enabled?: boolean | null
+}
+
+export interface NvmsBcpRecorder {
+  id: string
+  bcp_capture_mode?: string | null   // 'grid'（null/不明もこちら） | 'per_camera'
+  bcp_folder_paths?: string[] | null // null/空 = 全フォルダ
+  cameras: NvmsBcpCamera[]
+}
+
+export interface NvmsGridPage {
+  recorder_id: string
+  /** イベント内で通し（レコーダを跨いでも重複しない）。 */
+  page_no: number
+  folder_path: string | null
+  /** タイル順の NVMS カメラ ID（channel）。 */
+  channels: number[]
+}
+
+export interface NvmsBcpPlan {
+  grid_pages: NvmsGridPage[]
+  cameras: { camera_id: string; channel: number }[]
+  /** 512 枚上限で切り捨てが起きたか（ログ・警告用）。 */
+  truncated: boolean
+}
+
+/** 対象カメラの絞り込みと整列（両モード共通の前段）。 */
+function nvmsBcpTargets(rec: NvmsBcpRecorder): NvmsBcpCamera[] {
+  const folders = rec.bcp_folder_paths ?? null
+  const cams = rec.cameras.filter((c) => {
+    if (c.enabled === false) return false
+    if (folders && folders.length > 0) {
+      return c.folder_path !== null && folders.includes(c.folder_path)
+    }
+    return true
+  })
+  // フォルダ名 ja 昇順（未分類 = null は最後）→ channel 昇順。表示側と同じ並び。
+  return cams.sort((a, b) => {
+    if (a.folder_path === b.folder_path) return a.channel - b.channel
+    if (a.folder_path === null) return 1
+    if (b.folder_path === null) return -1
+    const f = a.folder_path.localeCompare(b.folder_path, 'ja')
+    return f !== 0 ? f : a.channel - b.channel
+  })
+}
+
+export function planNvmsBcp(recorders: NvmsBcpRecorder[], offsetsCount: number): NvmsBcpPlan {
+  const perShot = Math.max(1, offsetsCount)
+  let budget = Math.floor(NVMS_BCP_MAX_SHOTS / perShot)  // ページ数 or カメラ台数の上限
+  let truncated = false
+  let pageNo = 0
+  const plan: NvmsBcpPlan = { grid_pages: [], cameras: [], truncated: false }
+
+  for (const rec of recorders) {
+    const targets = nvmsBcpTargets(rec)
+    if (targets.length === 0) continue
+
+    if (rec.bcp_capture_mode === 'per_camera') {
+      for (const cam of targets) {
+        if (budget <= 0) { truncated = true; break }
+        plan.cameras.push({ camera_id: cam.id, channel: cam.channel })
+        budget--
+      }
+      continue
+    }
+
+    // grid（既定）: フォルダごとに 16 台ずつページへ。フォルダを跨いで同居させない
+    // （タブ表示と同じ規則 — 1 ページ = 1 フォルダの続き番号）。
+    let i = 0
+    while (i < targets.length) {
+      const folder = targets[i].folder_path
+      const chunk: number[] = []
+      while (i < targets.length && targets[i].folder_path === folder && chunk.length < NVMS_BCP_PAGE_SIZE) {
+        chunk.push(targets[i].channel)
+        i++
+      }
+      if (budget <= 0) { truncated = true; break }
+      pageNo++
+      plan.grid_pages.push({ recorder_id: rec.id, page_no: pageNo, folder_path: folder, channels: chunk })
+      budget--
+    }
+  }
+
+  plan.truncated = truncated
+  return plan
+}
+
+/** 発令経路（poller / /api/bcp/test / /api/bcp/[id]/retrieve）共通の入力形。 */
+export interface NvmsEdgeForPlan {
+  id: string
+  recorders: {
+    id: string
+    vendor: string
+    bcp_capture_mode?: string | null
+    bcp_folder_paths?: string[] | null
+    recorder_cameras: NvmsBcpCamera[] | null
+  }[] | null
+}
+
+export interface NvmsEdgePlan {
+  gridPages: NvmsGridPage[]
+  cameras: { camera_id: string; channel: number }[]
+}
+
+/**
+ * エッジ集合ぶんの nvms BCP 計画。page_no は**イベント内で通し**
+ * （エッジ・レコーダを跨いでも重複しない — アップロード受け口が
+ * (event_id, page_no, offset_min) で行を引くため）。
+ */
+export function planNvmsBcpForEdges(
+  edges: NvmsEdgeForPlan[],
+  offsetsCount: number,
+): { byEdge: Map<string, NvmsEdgePlan>; truncated: boolean } {
+  const byEdge = new Map<string, NvmsEdgePlan>()
+  let truncated = false
+  let pageNoBase = 0
+  for (const edge of edges) {
+    const nvmsRecs = (edge.recorders ?? []).filter((r) => r.vendor === 'nvms')
+    if (nvmsRecs.length === 0) continue
+    const plan = planNvmsBcp(
+      nvmsRecs.map((r) => ({
+        id: r.id,
+        bcp_capture_mode: r.bcp_capture_mode ?? null,
+        bcp_folder_paths: r.bcp_folder_paths ?? null,
+        cameras: r.recorder_cameras ?? [],
+      })),
+      offsetsCount,
+    )
+    truncated = truncated || plan.truncated
+    const gridPages = plan.grid_pages.map((p) => ({ ...p, page_no: p.page_no + pageNoBase }))
+    pageNoBase += plan.grid_pages.length
+    if (gridPages.length > 0 || plan.cameras.length > 0) {
+      byEdge.set(edge.id, { gridPages, cameras: plan.cameras })
+    }
+  }
+  return { byEdge, truncated }
+}
+
+/**
+ * 計画 → 先置き行（bcp_clips の per-offset 行 / bcp_grid_shots 行）。
+ * clip_from/to は「そのコマの狙い時刻」（エッジ実装が書く形と同じ）。
+ */
+export function nvmsBcpRows(
+  byEdge: Map<string, NvmsEdgePlan>,
+  eventId: string,
+  alertIssuedAt: string,
+  offsets: number[],
+): {
+  clipRows: { event_id: string; camera_id: string; clip_from: string; clip_to: string; upload_status: string; offset_min: number }[]
+  gridRows: { event_id: string; recorder_id: string; folder_path: string | null; page_no: number; channels: number[]; offset_min: number; upload_status: string }[]
+} {
+  const alertMs = new Date(alertIssuedAt).getTime()
+  const clipRows: ReturnType<typeof nvmsBcpRows>['clipRows'] = []
+  const gridRows: ReturnType<typeof nvmsBcpRows>['gridRows'] = []
+  for (const plan of byEdge.values()) {
+    for (const cam of plan.cameras) {
+      for (const off of offsets) {
+        const target = new Date(alertMs + off * 60_000).toISOString()
+        clipRows.push({
+          event_id: eventId, camera_id: cam.camera_id,
+          clip_from: target, clip_to: target,
+          upload_status: 'pending', offset_min: off,
+        })
+      }
+    }
+    for (const p of plan.gridPages) {
+      for (const off of offsets) {
+        gridRows.push({
+          event_id: eventId, recorder_id: p.recorder_id, folder_path: p.folder_path,
+          page_no: p.page_no, channels: p.channels, offset_min: off,
+          upload_status: 'pending',
+        })
+      }
+    }
+  }
+  return { clipRows, gridRows }
 }

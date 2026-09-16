@@ -42,7 +42,10 @@ import {
   isRelevantEntry,
   isWeatherWarningEntry,
   mergeFeedEntries,
+  planNvmsBcpForEdges,
+  nvmsBcpRows,
   type FeedEntry,
+  type NvmsEdgePlan,
 } from './flow.ts'
 
 // ---------------------------------------------------------------------------
@@ -113,7 +116,20 @@ interface EdgeDevice {
   id: string
   store_id: string
   status: string
-  recorders: { id: string; recorder_cameras: { id: string; name: string }[] }[]
+  recorders: {
+    id: string
+    vendor: string
+    // Phase 2b（nvms のみ意味を持つ）: BCP 収集方式と対象フォルダ
+    bcp_capture_mode: string | null
+    bcp_folder_paths: string[] | null
+    recorder_cameras: {
+      id: string
+      name: string
+      channel: number
+      folder_path: string | null
+      enabled: boolean | null
+    }[]
+  }[]
 }
 
 
@@ -595,7 +611,8 @@ async function processStore(
     .from('edge_devices')
     .select(`
       id, store_id, status,
-      recorders ( id, recorder_cameras ( id, name ) )
+      recorders ( id, vendor, bcp_capture_mode, bcp_folder_paths,
+        recorder_cameras ( id, name, channel, folder_path, enabled ) )
     `)
     .eq('store_id', store.id)
     .neq('status', 'offline')
@@ -616,12 +633,40 @@ async function processStore(
   }
 
   // c. Insert bcp_clips placeholders — one per camera
-  const clipInserts: { event_id: string; camera_id: string; clip_from: string; clip_to: string; upload_status: string }[] = []
+  //
+  // Phase 2b: vendor='nvms' のレコーダは従来の「全カメラ」から外し、レコーダ設定
+  // （bcp_capture_mode / bcp_folder_paths）に基づく計画に置き換える
+  // （NVMS/docs/UPLINK_CLIPS_SPEC.md。1,000台級で 8,000 枚にしないため）。
+  //  - grid（既定）    : bcp_grid_shots にページ×オフセットの行を pending で先置き
+  //  - per_camera      : bcp_clips に (camera, offset) ごとの行を pending で先置き
+  //    （どちらも「期待枚数 = 先置き行数」— アップロード受け口が決着させ、
+  //      全決着でイベントが clips_uploaded に進む）
+  // ⚠ nvms の BCP はアップリンク内蔵（nvmsd）専用。エッジ端末の nvms アダプタ
+  //    経由（Phase 1 の橋渡し構成）では BCP を発令しない形になる。
+  const clipInserts: { event_id: string; camera_id: string; clip_from: string; clip_to: string; upload_status: string; offset_min?: number }[] = []
   for (const edge of activeEdges) {
     for (const recorder of edge.recorders ?? []) {
+      if (recorder.vendor === 'nvms') continue
       for (const camera of recorder.recorder_cameras ?? []) {
         clipInserts.push({ event_id: eventId, camera_id: camera.id, clip_from: clipFrom, clip_to: clipTo, upload_status: 'pending' })
       }
+    }
+  }
+
+  // Phase 2b: nvms レコーダの計画（flow.ts の共有ヘルパ。/api/bcp/test・retrieve と同一実装）。
+  // オフセットはコマンドに載せる値と**同一の式**で確定する（builder の既定と同じ）。
+  const cmdOffsets: number[] = settings.snapshot_offsets ?? [-5, 5]
+  const { byEdge: nvmsPlanByEdge, truncated: nvmsTruncated } =
+    planNvmsBcpForEdges(activeEdges, cmdOffsets.length)
+  if (nvmsTruncated) {
+    console.warn(`[jalert-poller] event ${eventId}: nvms BCP 計画が上限 512 枚で打ち切り`)
+  }
+  {
+    const { clipRows, gridRows } = nvmsBcpRows(nvmsPlanByEdge, eventId, alertIssuedAt, cmdOffsets)
+    clipInserts.push(...clipRows)
+    if (gridRows.length > 0) {
+      const { error: gridErr } = await supa.from('bcp_grid_shots').insert(gridRows)
+      if (gridErr) console.error(`[jalert-poller] Failed to insert bcp_grid_shots for event ${eventId}:`, gridErr)
     }
   }
 
@@ -647,10 +692,12 @@ async function processStore(
   for (const edge of activeEdges) {
     const edgeClips: { clipId: string; cameraId: string }[] = []
     for (const recorder of edge.recorders ?? []) {
+      if (recorder.vendor === 'nvms') continue  // Phase 2b: 計画（grid_pages/cameras）側で運ぶ
       for (const camera of recorder.recorder_cameras ?? []) {
         edgeClips.push({ clipId: cameraToClip.get(camera.id) ?? '', cameraId: camera.id })
       }
     }
+    const nvmsPlan: NvmsEdgePlan | undefined = nvmsPlanByEdge.get(edge.id)
     // ⚠ clipFrom には **発令時刻そのもの**を渡す（clipFrom 変数＝発令−pre分 ではない）。
     //   エッジはこれを T+0 として各オフセットを計算する。詳細は
     //   buildBcpCaptureCommand の説明を参照（2026-08-13 是正）。
@@ -661,6 +708,10 @@ async function processStore(
       alertIssuedAt,
       clipTo,
       offsets:       settings.snapshot_offsets,
+      gridPages:     nvmsPlan?.gridPages.map((p) => ({
+        page_no: p.page_no, folder_path: p.folder_path, channels: p.channels,
+      })),
+      cameras:       nvmsPlan?.cameras,
     })
     const { error: cmdError } = await supa
       .from('edge_devices')

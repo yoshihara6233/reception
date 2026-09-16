@@ -15,11 +15,21 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/admin/guard'
+import {
+  planNvmsBcpForEdges,
+  nvmsBcpRows,
+} from '../../../../../../supabase/functions/jalert-poller/flow'
 import { createSupabaseService } from '@/lib/supabase/server'
 
 interface EdgeRow {
   id: string
-  recorders: { id: string; recorder_cameras: { id: string; name: string }[] }[]
+  recorders: {
+    id: string
+    vendor: string
+    bcp_capture_mode: string | null
+    bcp_folder_paths: string[] | null
+    recorder_cameras: { id: string; name: string; channel: number; folder_path: string | null; enabled: boolean | null }[]
+  }[]
 }
 
 export async function POST(
@@ -69,7 +79,7 @@ export async function POST(
   // 3. 稼働中エッジ（オフライン以外）＋レコーダ＋カメラ
   const { data: edgesData, error: edgesErr } = await svc
     .from('edge_devices')
-    .select('id, recorders ( id, recorder_cameras ( id, name ) )')
+    .select('id, recorders ( id, vendor, bcp_capture_mode, bcp_folder_paths, recorder_cameras ( id, name, channel, folder_path, enabled ) )')
     .eq('store_id', event.store_id)
     .neq('status', 'offline')
   if (edgesErr) {
@@ -84,15 +94,33 @@ export async function POST(
   }
 
   // 4. bcp_clips プレースホルダ（カメラごと1行）を挿入
-  const clipInserts: { event_id: string; camera_id: string; clip_from: string; clip_to: string; upload_status: string }[] = []
+  //    Phase 2b: nvms レコーダは計画（UPLINK_CLIPS_SPEC.md）に置き換える。
+  const clipInserts: { event_id: string; camera_id: string; clip_from: string; clip_to: string; upload_status: string; offset_min?: number }[] = []
   for (const edge of edges) {
     for (const rec of edge.recorders ?? []) {
+      if (rec.vendor === 'nvms') continue
       for (const cam of rec.recorder_cameras ?? []) {
         clipInserts.push({ event_id: eventId, camera_id: cam.id, clip_from: clipFrom, clip_to: clipTo, upload_status: 'pending' })
       }
     }
   }
-  if (clipInserts.length === 0) {
+  const { byEdge: nvmsPlanByEdge, truncated: nvmsTruncated } = planNvmsBcpForEdges(edges, offsets.length)
+  if (nvmsTruncated) console.warn(`[bcp-retrieve] event ${eventId}: nvms BCP 計画が上限 512 枚で打ち切り`)
+  {
+    const { clipRows, gridRows } = nvmsBcpRows(nvmsPlanByEdge, eventId, alertIssuedAt, offsets)
+    clipInserts.push(...clipRows)
+    if (gridRows.length > 0) {
+      // 再取得（同一イベントで2回目以降）は既存行を保つ — pending はそのまま
+      // 再利用され、決着済みの行を作り直さない。
+      const { error: gridErr } = await svc.from('bcp_grid_shots')
+        .upsert(gridRows, { onConflict: 'event_id,page_no,offset_min', ignoreDuplicates: true })
+      if (gridErr) {
+        return NextResponse.json({ error: 'grid_shot_insert_failed', message: gridErr.message }, { status: 500 })
+      }
+    }
+  }
+  const hasGridPlan = [...nvmsPlanByEdge.values()].some((p) => p.gridPages.length > 0)
+  if (clipInserts.length === 0 && !hasGridPlan) {
     return NextResponse.json({ error: 'no_cameras', message: 'このエッジに登録されたカメラがありません。' }, { status: 409 })
   }
 
@@ -109,15 +137,21 @@ export async function POST(
   for (const edge of edges) {
     const clips: { clipId: string; cameraId: string }[] = []
     for (const rec of edge.recorders ?? []) {
+      if (rec.vendor === 'nvms') continue
       for (const cam of rec.recorder_cameras ?? []) {
         clips.push({ clipId: cameraToClip.get(cam.id) ?? '', cameraId: cam.id })
       }
     }
+    const nvmsPlan = nvmsPlanByEdge.get(edge.id)
     const command = {
       action: 'start_bcp_capture',
       request_id: crypto.randomUUID(),
       eventId,
       clips,
+      ...(nvmsPlan?.gridPages.length
+        ? { grid_pages: nvmsPlan.gridPages.map((p) => ({ page_no: p.page_no, folder_path: p.folder_path, channels: p.channels })) }
+        : {}),
+      ...(nvmsPlan?.cameras.length ? { cameras: nvmsPlan.cameras } : {}),
       // エッジは clipFrom を T+0（発令時刻）として各オフセットの取得時刻を計算する。
       // 旧VOD方式の「発令 − pre分」を渡すと全コマが pre 分だけ過去にずれ、タイルの
       // ラベル時刻と実画像が一致しなくなる（2026-07-13 是正）。
