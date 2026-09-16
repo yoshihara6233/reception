@@ -19,7 +19,7 @@ import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
 import { GenerateReportButton } from './GenerateReportButton'
 import { RetrieveRecordingButton } from './RetrieveRecordingButton'
-import { Camera, FileText } from 'lucide-react'
+import { Camera, FileText, LayoutGrid } from 'lucide-react'
 
 interface BcpEvent {
   id: string
@@ -211,6 +211,29 @@ export default async function BcpEventDetailPage({
   // 照合は VOD の再利用と**同じ 3 点**（camera_id / requested_from / requested_to）。
   // ここがずれると「あると出したのに作り直しが走る」ことになる。
   const eventMs = new Date(event.alert_issued_at).getTime()
+
+  // Phase 2b: 合成タイムライン（nvms・bcp_grid_shots）。ページ（16台）ごとに 1 段。
+  // 利用者スコープで読む＝RLS（親イベントの店舗可視性）が認可を兼ねる。
+  interface GridShotRow {
+    id: string; folder_path: string | null; page_no: number; channels: number[]
+    offset_min: number; upload_status: string; dark_channels: number[]
+  }
+  const { data: gridShotData } = await supa
+    .from('bcp_grid_shots')
+    .select('id, folder_path, page_no, channels, offset_min, upload_status, dark_channels')
+    .eq('event_id', id)
+    .order('page_no', { ascending: true })
+    .order('offset_min', { ascending: true })
+  const gridShots = (gridShotData ?? []) as GridShotRow[]
+  const gridPages: { pageNo: number; folder: string | null; channels: number[]; shots: GridShotRow[] }[] = []
+  for (const s of gridShots) {
+    const last = gridPages[gridPages.length - 1]
+    if (last && last.pageNo === s.page_no) last.shots.push(s)
+    else gridPages.push({ pageNo: s.page_no, folder: s.folder_path, channels: s.channels, shots: [s] })
+  }
+  /** ページ内で一度でも欠落したカメラ ID（注記用の和集合）。 */
+  const pageDarkChannels = (pg: { shots: GridShotRow[] }): number[] =>
+    [...new Set(pg.shots.flatMap((s) => s.dark_channels ?? []))].sort((a, b) => a - b)
   const readyKeys = new Set<string>()
   if (cameraGroups.length > 0) {
     // 発令前後の窓に絞る。全期間を引くと、無関係なクリップまで舐めることになる。
@@ -436,6 +459,68 @@ export default async function BcpEventDetailPage({
             </div>
           )}
         </div>
+
+        {/* Phase 2b: 合成タイムライン（16分割・nvms）。無い店舗ではセクションごと出さない */}
+        {gridPages.length > 0 && (
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <div className="border-b border-slate-100 px-4 py-3">
+              <h2 className="text-sm font-bold text-slate-900">
+                合成タイムライン（16分割）
+                <span className="ml-2 text-[11px] font-normal text-slate-400">
+                  ({gridPages.length} ページ・フォルダ→16台ごとの合成静止画)
+                </span>
+              </h2>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {gridPages.map((pg) => {
+                const dark = pageDarkChannels(pg)
+                return (
+                  <div key={pg.pageNo} className="px-4 py-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <h3 className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-800">
+                        <LayoutGrid size={13} strokeWidth={1.5} aria-hidden />
+                        {pg.folder ?? '未分類'}
+                        <span className="font-normal text-slate-400">ページ{pg.pageNo}・{pg.channels.length} 台</span>
+                      </h3>
+                      <span className="text-[10px] text-slate-400">
+                        {pg.shots.filter((s) => s.upload_status === 'completed').length} / {pg.shots.length} 取得済
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-2 md:grid-cols-8">
+                      {pg.shots.map((s) => (
+                        <div key={s.id} className="text-center">
+                          <div className="mb-0.5 text-[10px] font-semibold text-slate-500">
+                            {offsetLabel(s.offset_min)}
+                            <span className="ml-1 font-normal text-slate-400">({offsetClock(event.alert_issued_at, s.offset_min)})</span>
+                          </div>
+                          {s.upload_status === 'completed' ? (
+                            <a href={`/api/bcp/grid-shot/${s.id}`} target="_blank" rel="noreferrer">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={`/api/bcp/grid-shot/${s.id}`}
+                                alt={`${pg.folder ?? '未分類'} ページ${pg.pageNo} ${offsetLabel(s.offset_min)}`}
+                                className="aspect-video w-full rounded border border-slate-200 bg-slate-900 object-cover"
+                              />
+                            </a>
+                          ) : (
+                            <div className="flex aspect-video w-full items-center justify-center rounded border border-dashed border-slate-200 bg-slate-50 text-[10px] text-slate-400">
+                              {s.upload_status === 'failed' ? '取得失敗' : '待機中'}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    {dark.length > 0 && (
+                      <p className="mt-2 text-[11px] text-amber-700">
+                        未収録カメラあり: ID {dark.slice(0, 8).join(', ')}{dark.length > 8 ? ` 他${dark.length - 8}台` : ''}（該当時点は暗色タイル）
+                      </p>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Report section */}
         <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">

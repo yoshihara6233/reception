@@ -90,6 +90,8 @@ export interface BcpReportProps {
     uploadStatus: string
     /** F40 offset minutes (-5, 0, 5, 10, 15, 20, 25, 30). Null for legacy. */
     offsetMin?: number | null
+    /** Phase 2b: 合成ショットの欠落注記（例: 未収録 3 台）。 */
+    note?: string
   }>
   generatedAt: string // ISO string
 }
@@ -318,6 +320,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingTop: 1,
   },
+  // Phase 2b: 合成ショットの欠落注記（未収録カメラの明示 — 証跡なので黙らせない）
+  imageNote: {
+    fontSize: 6,
+    color: '#B5761A',
+    textAlign: 'center',
+    paddingTop: 1,
+  },
   imageBox: {
     aspectRatio: 16 / 9,
     backgroundColor: C.imageBg,
@@ -483,6 +492,9 @@ export function BcpReport({ event, store, clips, generatedAt }: BcpReportProps) 
                       <Text style={styles.imageTimestamp}>
                         {formatJst(clip.clipFrom)}
                       </Text>
+                      {clip.note ? (
+                        <Text style={styles.imageNote}>{clip.note}</Text>
+                      ) : null}
                     </View>
                   ))}
                 </View>

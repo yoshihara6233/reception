@@ -33,6 +33,9 @@ interface Recorder {
   vod_channel: number | null
   vod_has_password: boolean
   has_password: boolean       // 値は返さない。設定済みか否かのみ
+  // Phase 2b（nvms のみ）: BCP 収集方式と対象フォルダ
+  bcp_capture_mode: 'grid' | 'per_camera' | null
+  bcp_folder_paths: string[] | null
   recorder_cameras: Camera[]
 }
 interface EdgePayload {
@@ -521,6 +524,19 @@ function RecorderCard({ recorder }: { recorder: Recorder }) {
   const [recBusy, setRecBusy] = useState(false)
   const [recMsg,  setRecMsg]  = useState<string | null>(null)
 
+  // Phase 2b（nvms のみ）: BCP 収集方式と対象フォルダ。null = 全フォルダ。
+  const [bcpMode, setBcpMode] = useState<'grid' | 'per_camera'>(recorder.bcp_capture_mode ?? 'grid')
+  const [bcpFolders, setBcpFolders] = useState<string[] | null>(recorder.bcp_folder_paths)
+  const bcpFolderChoices = [...new Set(
+    recorder.recorder_cameras.map((c) => c.folder_path).filter((f): f is string => !!f),
+  )].sort((a, b) => a.localeCompare(b, 'ja'))
+  function toggleBcpFolder(f: string) {
+    setBcpFolders((prev) => {
+      const cur = prev ?? []
+      return cur.includes(f) ? cur.filter((x) => x !== f) : [...cur, f]
+    })
+  }
+
   async function saveRecorder() {
     setRecBusy(true); setRecMsg(null)
     const body: Record<string, unknown> = {
@@ -535,6 +551,11 @@ function RecorderCard({ recorder }: { recorder: Recorder }) {
     }
     if (rec.password)     body.password     = rec.password       // 非空のみ更新
     if (rec.vod_password) body.vod_password = rec.vod_password   // 非空のみ更新
+    if (recorder.vendor === 'nvms') {
+      body.bcp_capture_mode = bcpMode
+      // 「全フォルダ」= null。選択モードで 0 件は事故（証跡ゼロ）なので null に倒す。
+      body.bcp_folder_paths = bcpFolders && bcpFolders.length > 0 ? bcpFolders : null
+    }
     const res = await fetch(`/api/admin/recorders/${recorder.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -726,6 +747,50 @@ function RecorderCard({ recorder }: { recorder: Recorder }) {
                      placeholder={recorder.vod_has_password ? '••••••（変更しない場合は空欄）' : ''} />
             </Field>
           </div>
+          {/* Phase 2b: BCP 証跡の方式と対象フォルダ（nvms のみ・UPLINK_CLIPS_SPEC.md §6） */}
+          {recorder.vendor === 'nvms' && (
+            <div className="mt-3 rounded border border-slate-200 bg-white p-3">
+              <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">BCP 証跡（NVMS）</p>
+              <div className="flex flex-wrap gap-4 text-xs">
+                <label className="inline-flex items-center gap-1.5">
+                  <input type="radio" name={`bcpmode-${recorder.id}`} checked={bcpMode === 'grid'}
+                         onChange={() => setBcpMode('grid')} />
+                  合成（16分割・既定）
+                </label>
+                <label className="inline-flex items-center gap-1.5">
+                  <input type="radio" name={`bcpmode-${recorder.id}`} checked={bcpMode === 'per_camera'}
+                         onChange={() => setBcpMode('per_camera')} />
+                  カメラ個別（対象を絞った運用向け）
+                </label>
+              </div>
+              <div className="mt-2 text-xs">
+                <label className="inline-flex items-center gap-1.5">
+                  <input type="checkbox" checked={bcpFolders === null}
+                         onChange={(e) => setBcpFolders(e.target.checked ? null : [])} />
+                  全フォルダを対象にする
+                </label>
+                {bcpFolders !== null && (
+                  bcpFolderChoices.length === 0 ? (
+                    <p className="mt-1.5 text-[11px] text-slate-400">フォルダは NVMS からの同期後に選択できます（未分類のみの場合は「全フォルダ」を使ってください）。</p>
+                  ) : (
+                    <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
+                      {bcpFolderChoices.map((f) => (
+                        <label key={f} className="inline-flex items-center gap-1.5">
+                          <input type="checkbox" checked={bcpFolders.includes(f)} onChange={() => toggleBcpFolder(f)} />
+                          {f}
+                        </label>
+                      ))}
+                    </div>
+                  )
+                )}
+              </div>
+              <p className="mt-2 text-[10px] text-slate-400">
+                発報時の証跡は 1 イベントあたり最大 512 枚（合成 64 ページ / 個別 64 台 × 8 時点）で打ち切られます。
+                対象を選択しても 0 件のまま保存すると「全フォルダ」に戻ります。
+              </p>
+            </div>
+          )}
+
           <div className="mt-2 flex items-center justify-end gap-2">
             {recMsg && <span className="text-xs text-emerald-700">{recMsg}</span>}
             <button onClick={saveRecorder} disabled={recBusy}

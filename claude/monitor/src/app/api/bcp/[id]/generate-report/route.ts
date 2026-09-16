@@ -29,6 +29,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { generateBcpReportPdf, type BcpReportProps } from '@/lib/pdf/bcp-report'
+import { fetchGridShotReportClips } from '@/lib/bcp/grid-shots-report'
 
 interface BcpEventRow {
   id:               string
@@ -170,7 +171,12 @@ export async function POST(
       }
     }))
 
-    if (clips.length === 0) {
+    // Phase 2b: 合成タイムライン（nvms・bcp_grid_shots）を疑似カメラとして合流。
+    const gridClips = await fetchGridShotReportClips(
+      supa, eventId, event.alert_issued_at, PDF_SIGNED_TTL,
+    )
+
+    if (clips.length === 0 && gridClips.length === 0) {
       return NextResponse.json(
         { error: 'no_snapshots', message: 'No snapshots available for this event yet.' },
         { status: 422 },
@@ -195,17 +201,20 @@ export async function POST(
         name:    store.name,
         address: store.address ?? undefined,
       },
-      clips: clips.map((c) => ({
-        id:           c.id,
-        cameraName:   c.recorder_cameras?.name ?? '(不明)',
-        clipFrom:     c.clip_from,
-        clipTo:       c.clip_to,
-        durationSec:  c.duration_sec ?? 0,
-        // F76: signed URL (or legacy clip_url) — see clipUrlMap above.
-        clipUrl:      clipUrlMap.get(c.id),
-        uploadStatus: c.upload_status,
-        offsetMin:    c.offset_min ?? null,
-      })),
+      clips: [
+        ...clips.map((c) => ({
+          id:           c.id,
+          cameraName:   c.recorder_cameras?.name ?? '(不明)',
+          clipFrom:     c.clip_from,
+          clipTo:       c.clip_to,
+          durationSec:  c.duration_sec ?? 0,
+          // F76: signed URL (or legacy clip_url) — see clipUrlMap above.
+          clipUrl:      clipUrlMap.get(c.id),
+          uploadStatus: c.upload_status,
+          offsetMin:    c.offset_min ?? null,
+        })),
+        ...gridClips,
+      ],
       generatedAt,
     }
 

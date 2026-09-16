@@ -25,6 +25,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { generateBcpReportPdf, type BcpReportProps } from '@/lib/pdf/bcp-report'
+import { fetchGridShotReportClips } from '@/lib/bcp/grid-shots-report'
 import { sendEmail, bcpCompletedEmail } from '@/lib/email/send'
 import { absoluteUrl } from '@/lib/app-url'
 
@@ -222,15 +223,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         name:    store.name,
         address: store.address ?? undefined,
       },
-      clips: clips.map((c) => ({
-        id:           c.id,
-        cameraName:   c.recorder_cameras?.name ?? '(不明)',
-        clipFrom:     c.clip_from,
-        clipTo:       c.clip_to,
-        durationSec:  c.duration_sec ?? 0,
-        clipUrl:      imageByClip.get(c.id) ?? undefined,
-        uploadStatus: c.upload_status,
-      })),
+      clips: [
+        ...clips.map((c) => ({
+          id:           c.id,
+          cameraName:   c.recorder_cameras?.name ?? '(不明)',
+          clipFrom:     c.clip_from,
+          clipTo:       c.clip_to,
+          durationSec:  c.duration_sec ?? 0,
+          clipUrl:      imageByClip.get(c.id) ?? undefined,
+          uploadStatus: c.upload_status,
+        })),
+        // Phase 2b: 合成タイムライン（nvms・bcp_grid_shots）を疑似カメラとして合流。
+        ...(await fetchGridShotReportClips(supa, eventId, event.alert_issued_at, SIGNED_TTL)),
+      ],
       generatedAt,
     }
 
