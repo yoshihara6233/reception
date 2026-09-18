@@ -13,6 +13,19 @@
 import { createSupabaseServer } from '@/lib/supabase/server'
 
 interface DownCam { id: number; name: string; folder_path?: string | null }
+// errors / restarts_24h は保守自動化・案B（NVMS/docs/DIAGNOSTICS_SPEC.md §1）。
+// 未対応ビルドはキーごと送ってこないので、無ければ何も描かない。
+interface NvmsErrors {
+  count_24h?: number
+  warn_24h?: number
+  last?: {
+    at?: string
+    level?: string
+    source?: string
+    node?: number
+    message?: string
+  } | null
+}
 interface NvmsHealth {
   cameras_total?: number
   cameras_online?: number
@@ -22,6 +35,8 @@ interface NvmsHealth {
   nodes_total?: number
   nodes_ok?: number
   nvms_version?: string
+  errors?: NvmsErrors
+  restarts_24h?: number
 }
 interface Row {
   id: string
@@ -69,6 +84,7 @@ export async function NvmsHealthSection() {
           const h = r.health
           const stale = !r.health_at || now - new Date(r.health_at).getTime() > STALE_MS
           const offline = h?.cameras_offline ?? 0
+          const errCount = h?.errors?.count_24h ?? 0
           const storeName = r.edge_devices?.stores?.name ?? r.edge_devices?.name ?? '—'
           const nodes = h?.nodes_total != null ? `${h.nodes_ok ?? '—'} / ${h.nodes_total}` : null
           return (
@@ -76,7 +92,7 @@ export async function NvmsHealthSection() {
               <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
                 <span
                   className="inline-block h-2.5 w-2.5 rounded-full"
-                  style={{ background: stale ? '#A3332B' : offline > 0 ? '#B5761A' : '#2F7A4F' }}
+                  style={{ background: stale ? '#A3332B' : offline > 0 || errCount > 0 ? '#B5761A' : '#2F7A4F' }}
                 />
                 <b className="text-slate-900">{r.model || 'NVMS'}</b>
                 <span className="text-slate-400">{storeName} ・ {r.host}</span>
@@ -99,7 +115,20 @@ export async function NvmsHealthSection() {
                     <span>異常 <b className={'font-mono tabular-nums ' + (offline > 0 ? 'text-amber-700' : '')}>{offline.toLocaleString()}</b></span>
                     {h?.disk_days_left != null && <span>容量残 <b className="font-mono tabular-nums">{Math.floor(h.disk_days_left)}</b> 日</span>}
                     {nodes && <span>ノード <b className="font-mono tabular-nums">{nodes}</b></span>}
+                    {h?.errors?.count_24h != null && (
+                      <span>エラー 24h <b className={'font-mono tabular-nums ' + (errCount > 0 ? 'text-amber-700' : '')}>{errCount.toLocaleString()}</b> 件</span>
+                    )}
+                    {(h?.restarts_24h ?? 0) > 0 && (
+                      <span>再起動 24h <b className="font-mono tabular-nums text-amber-700">{h!.restarts_24h!.toLocaleString()}</b> 回</span>
+                    )}
                   </div>
+                  {errCount > 0 && h?.errors?.last?.message && (
+                    <p className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-slate-700">
+                      <span className="mr-2 font-mono tabular-nums text-slate-400">{fmtAgo(h.errors.last.at ?? null, now)}</span>
+                      {h.errors.last.source && <span className="mr-1 text-slate-500">[{h.errors.last.source}{h.errors.last.node != null ? ` node${h.errors.last.node}` : ''}]</span>}
+                      {h.errors.last.message.slice(0, 300)}
+                    </p>
+                  )}
                   {(h?.down?.length ?? 0) > 0 && (
                     <ul className="mt-2 space-y-0.5 text-[11px] text-slate-600">
                       {h!.down!.slice(0, 8).map((c) => (
