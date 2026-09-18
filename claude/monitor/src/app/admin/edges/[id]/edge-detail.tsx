@@ -296,7 +296,7 @@ function OtaPanel({ edge }: { edge: EdgePayload }) {
 function NvmsdOtaPanel({ edge }: { edge: EdgePayload }) {
   const router = useRouter()
   const running = (edge.agent_version ?? '').replace(/^nvmsd\//, '')
-  const [releases, setReleases] = useState<{ version: string }[] | null>(null)
+  const [releases, setReleases] = useState<{ version: string; created_at: string }[] | null>(null)
   const [desired, setDesired] = useState(edge.desired_agent_version ?? '')
   const [winStart, setWinStart] = useState(edge.update_window_start?.slice(0, 5) ?? '')
   const [winEnd, setWinEnd] = useState(edge.update_window_end?.slice(0, 5) ?? '')
@@ -315,6 +315,15 @@ function NvmsdOtaPanel({ edge }: { edge: EdgePayload }) {
   }, [])
 
   const pending = !!edge.desired_agent_version && running !== edge.desired_agent_version
+
+  // 「戻す」配備は不可（OTA_SPEC 付録A・2026-09-18 取り下げ）: 拠点側の検証が
+  // 古い版を拒む。版文字列は順序比較できないので、台帳の登録日時で
+  // 「選ぼうとしている版が稼働版より古い可能性」を検知して警告する
+  // （稼働版が台帳に無い初期は判定不能＝警告なし。静的な注意書きが下にある）。
+  const runningRel = releases?.find((r) => r.version === running)
+  const selectedRel = releases?.find((r) => r.version === desired)
+  const downgradeLikely = !!runningRel && !!selectedRel && desired !== running &&
+    new Date(selectedRel.created_at).getTime() < new Date(runningRel.created_at).getTime()
 
   async function put(body: Record<string, unknown>, okMsg: string) {
     setBusy(true); setMsg(null)
@@ -384,6 +393,12 @@ function NvmsdOtaPanel({ edge }: { edge: EdgePayload }) {
               リリースが未登録です。先に <a href="/admin/nvmsd-releases" className="underline">nvmsd リリース</a> で登録してください。
             </p>
           )}
+          {downgradeLikely && (
+            <p className="mt-1 rounded border border-red-200 bg-red-50 px-2 py-1 text-[10px] text-red-700">
+              この版は稼働版より前に登録されたものです。<b>「戻す」配備は拠点側で拒否され失敗します</b>
+              （版を戻すには DB 復元を含む別手順が必要 — G・VMS と要相談）。
+            </p>
+          )}
         </Field>
         <Field label="更新時間帯 開始（JST・空=既定 02:00）">
           <input type="time" value={winStart} onChange={(e) => setWinStart(e.target.value)}
@@ -410,6 +425,7 @@ function NvmsdOtaPanel({ edge }: { edge: EdgePayload }) {
       <p className="mt-2 text-[10px] text-slate-400">
         nvmsd は <code>/api/edge/agent-update</code> を約10分間隔でポーリングし、時間帯内（既定 02:00〜05:00 JST）に
         G・VMS 署名を検証してから自己更新します。失敗時は旧版へ自動ロールバックし、同じ版へは再挑戦しません。
+        <b>現在より古い版への「戻す」配備は拠点側で拒否されます</b>（失敗が記録に並ぶだけで拠点は壊れません）。
         検証拠点で「目標版で稼働中」を確認してから他拠点へ広げてください（段階配備）。
       </p>
     </section>

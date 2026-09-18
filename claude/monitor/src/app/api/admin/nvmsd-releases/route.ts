@@ -37,8 +37,14 @@ export async function GET() {
 
 const PostBody = z.object({
   version: z.string().regex(NVMSD_VERSION_RE),
-  // Ed25519 署名は 64 バイト＝base64 で 88 文字。将来方式が変わっても収まる程度に緩く。
-  sig: z.string().min(16).max(512).regex(/^[A-Za-z0-9+/=\s]+$/),
+  // 署名は G・VMS の既存マニフェスト方式（付録A・2026-09-18 決定）:
+  // `nvmsupd1.<base64 マニフェスト>.<base64 署名>` のドット区切り文字列。
+  // クラウドは中身を解釈せず「文字列として預かってそのまま配る」——
+  // ここで base64 だけに縛るとドットで弾いてしまうため、制御文字・空白の
+  // 混入だけを拒む（印字可能 ASCII のみ）。
+  sig: z.string().transform((s) => s.trim()).pipe(
+    z.string().min(16).max(4096).regex(/^[\x21-\x7E]+$/),
+  ),
   notes: z.string().max(1000).optional(),
 })
 
@@ -48,8 +54,7 @@ export async function POST(req: NextRequest) {
 
   const parsed = PostBody.safeParse(await req.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
-  const { version, notes } = parsed.data
-  const sig = parsed.data.sig.replace(/\s+/g, '')
+  const { version, notes, sig } = parsed.data
 
   const svc = createSupabaseService()
   const path = nvmsdReleasePath(version)
