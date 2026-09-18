@@ -48,6 +48,14 @@ export async function GET(req: NextRequest) {
   }
 
   if (!row.update_force && !inUpdateWindow(nowJstMinutes(), row.update_window_start, row.update_window_end)) {
+    // 時間帯外の 204（OTA_SPEC §4 基準4前半）。204 は拠点側に記録が残らないため、
+    // 「目標版はあるが窓の外なので配らなかった」ことをここに残す。次の夜間帯での
+    // 自然配備で、この行 → 窓到来で 200、という流れがログだけで追える。
+    console.info(
+      `agent-update: outside window, holding update (edge ${edge.id}, ` +
+      `desired ${desired}, running ${running || 'unknown'}, ` +
+      `window ${row.update_window_start ?? '02:00'}-${row.update_window_end ?? '05:00'} JST)`,
+    )
     return new NextResponse(null, { status: 204 })
   }
 
