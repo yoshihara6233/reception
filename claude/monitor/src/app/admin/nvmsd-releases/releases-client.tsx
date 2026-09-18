@@ -21,6 +21,13 @@ interface EdgeRow {
   stores: { name: string } | null
 }
 
+// OS 標準の「ファイルを選択」はボタンに見えない（利用者フィードバック 2026-09-18）。
+// 他の二次ボタンと同じ枠付きの見た目に揃える。
+const FILE_INPUT_CLS =
+  'block w-full text-xs text-slate-500 file:mr-3 file:cursor-pointer file:rounded ' +
+  'file:border file:border-slate-300 file:bg-white file:px-3 file:py-1 ' +
+  'file:text-xs file:font-medium file:text-blue-700 hover:file:bg-slate-50'
+
 function fmtBytes(n: number): string {
   if (n >= 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`
   return `${Math.ceil(n / 1024)} KB`
@@ -107,12 +114,12 @@ export function ReleasesClient({ releases, edges }: { releases: Release[]; edges
           <label className="block text-xs">
             <span className="mb-1 block font-medium text-slate-600">バイナリ（nvmsd-&lt;version&gt;-linux-*）</span>
             <input type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                   className="block w-full text-xs" />
+                   className={FILE_INPUT_CLS} />
           </label>
           <label className="block text-xs">
             <span className="mb-1 block font-medium text-slate-600">署名ファイル（.sig・マニフェスト署名文字列 nvmsupd1.…）</span>
-            <input type="file" accept=".sig,.txt" onChange={(e) => setSigFile(e.target.files?.[0] ?? null)}
-                   className="block w-full text-xs" />
+            <input type="file" accept=".sig,.nvsig,.txt" onChange={(e) => setSigFile(e.target.files?.[0] ?? null)}
+                   className={FILE_INPUT_CLS} />
           </label>
           <label className="block text-xs">
             <span className="mb-1 block font-medium text-slate-600">バージョン</span>
