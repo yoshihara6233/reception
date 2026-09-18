@@ -27,6 +27,7 @@ interface EdgePayload {
   update_window_start: string | null
   update_window_end: string | null
   update_force: boolean
+  ota_mode: 'onsite' | 'auto'
   stores: { name: string; area_code: string | null }
   recorders: {
     id: string
@@ -76,7 +77,7 @@ export default async function EdgeEditPage(
       nvr_clock_offset_sec, nvr_clock_checked_at,
       cloudflared_version, desired_agent_version, desired_cloudflared_version,
       ota_status, ota_updated_at, ota_last_error,
-      update_window_start, update_window_end, update_force,
+      update_window_start, update_window_end, update_force, ota_mode,
       stores ( name, area_code ),
       recorders (
         id, vendor, model, host, rtsp_port, onvif_port, username, notes,

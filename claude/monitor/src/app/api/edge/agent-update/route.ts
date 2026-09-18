@@ -30,15 +30,29 @@ export async function GET(req: NextRequest) {
   const svc = createSupabaseService()
   const { data: row } = await svc
     .from('edge_devices')
-    .select('desired_agent_version, agent_version, update_window_start, update_window_end, update_force')
+    .select('desired_agent_version, agent_version, update_window_start, update_window_end, update_force, ota_mode')
     .eq('id', edge.id)
     .maybeSingle()
   if (!row) return new NextResponse(null, { status: 204 })
 
   const desired = row.desired_agent_version
+  const running = (row.agent_version ?? '').replace(/^nvmsd\//, '')
+
+  // 現地更新モード（既定・OTA_SPEC 付録A 2026-09-18）: クラウドからは配らない。
+  // 複数台の拠点は現地の画面から更新して録画欠損を避ける。目標版が設定されて
+  // いても 204。フラグの取り違え防止に、保留したことはログへ残す。
+  if (row.ota_mode !== 'auto') {
+    if (desired && running !== desired) {
+      console.info(
+        `agent-update: onsite mode, cloud push disabled ` +
+        `(edge ${edge.id}, desired ${desired}, running ${running || 'unknown'})`,
+      )
+    }
+    return new NextResponse(null, { status: 204 })
+  }
+
   if (!desired) return new NextResponse(null, { status: 204 })
 
-  const running = (row.agent_version ?? '').replace(/^nvmsd\//, '')
   if (running === desired) {
     // 目標到達。即時フラグが残っていたら降ろす（1 回きりの指示）。
     if (row.update_force) {

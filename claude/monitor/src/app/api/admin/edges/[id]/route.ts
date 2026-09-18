@@ -25,6 +25,8 @@ const PatchBody = z.object({
   update_window_start: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional().or(z.literal('')),
   update_window_end:   z.string().regex(/^\d{2}:\d{2}$/).nullable().optional().or(z.literal('')),
   update_force:        z.boolean().optional(),
+  // nvmsd OTA の配信モード（onsite=現地・既定 / auto=クラウド配信）。
+  ota_mode:            z.enum(['onsite', 'auto']).optional(),
 })
 
 export async function PUT(
