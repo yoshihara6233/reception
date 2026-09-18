@@ -142,6 +142,35 @@ export function nvrPlaybackSemaphore(endpoint: string): Semaphore {
   return sem
 }
 
+/**
+ * httpdl の X-RecData-Satus を、**現場が次に何をすればいいか分かる文**にする。
+ *
+ * ⚠ この文はそのまま画面に出る（vod_clips.error → BCP のタイル）。
+ *   旧実装は status=1 を「指定時間帯に録画なし」とだけ返していた。事実だが
+ *   **不具合のように読める**。実際 2026-08-21 の調査で、6 週間前の録画を
+ *   要求した失敗を「取得できないバグ」と読みかけた（保存期間切れだった）。
+ *
+ * 保存期間切れと断定はしない。その時間帯だけ録画が無い（停止中・設定変更）
+ * こともあるため、両方を挙げて現場に確認先を示す。
+ */
+export function nvrVodStatusMessage(status: number, from: Date): string {
+  const jst = new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+  }).format(from)
+  switch (status) {
+    case 1:
+      return `${jst} の録画が見つかりません。`
+        + 'レコーダの保存期間を過ぎているか、その時間帯は録画されていない可能性があります'
+    case 2:
+      return 'この録画は MP4 で取り出せません（JPEG 記録のカメラ）'
+    case 3:
+      return 'レコーダが混み合っています。少し時間をおいて、もう一度お試しください'
+    default:
+      return `レコーダが取得できないと応答しました（status=${status}）`
+  }
+}
+
 export async function downloadIproNvrMp4(
   opts:    IproNvrVodOptions,
   channel: number,
@@ -169,12 +198,7 @@ async function downloadIproNvrMp4Inner(
     const res = await digestGet(url, opts.username, opts.password, t)
     if (!res.ok) throw new Error(`i-PRO NVR httpdl HTTP ${res.status}`)
     const { mp4, status } = extractMp4FromMultipart(Buffer.from(await res.arrayBuffer()))
-    if (status !== 0) {
-      const reason = status === 1 ? '指定時間帯に録画なし'
-        : status === 2 ? 'コーデック非対応(MP4はJPEG不可)'
-        : status === 3 ? '同時処理超過' : `status=${status}`
-      throw new Error(`i-PRO NVR VOD 取得不可: ${reason}`)
-    }
+    if (status !== 0) throw new Error(nvrVodStatusMessage(status, from))
     if (mp4.length < 8) throw new Error('i-PRO NVR VOD: 空のMP4')
     return mp4
   } finally {

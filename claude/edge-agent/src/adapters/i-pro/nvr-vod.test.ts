@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
-  toIproUtcStamp, iproVodMinuteRange, extractMp4FromMultipart, iproNvrLogin, downloadIproNvrMp4, nvrPlaybackSemaphore,
+  toIproUtcStamp, iproVodMinuteRange, extractMp4FromMultipart, iproNvrLogin, downloadIproNvrMp4, nvrPlaybackSemaphore, nvrVodStatusMessage,
 } from './nvr-vod'
 
 const opts = { endpoint: 'https://192.168.0.250', username: 'ADMIN', password: 'Admin123' }
@@ -125,7 +125,10 @@ describe('downloadIproNvrMp4', () => {
       .mockResolvedValueOnce(new Response('', { status: 401, headers: { 'www-authenticate': 'Digest realm="r", nonce="n"' } }))
       .mockResolvedValueOnce(new Response(body, { status: 200 }))
       .mockResolvedValueOnce(new Response('', { status: 200 }))
-    await expect(downloadIproNvrMp4(opts, 1, new Date(), new Date())).rejects.toThrow(/録画なし/)
+    // 文言そのものではなく**性質**を見る。「録画なし」という語を固定すると、
+    // 現場に伝わる文へ直したときにテストだけが落ちる（実際そうなった）。
+    await expect(downloadIproNvrMp4(opts, 1, new Date(), new Date()))
+      .rejects.toThrow(/見つかりません/)
   })
 })
 
@@ -159,5 +162,33 @@ describe('nvrPlaybackSemaphore（NVR 1台あたり再生 DL 同時 2 本制限�
   it('endpoint ごとに独立（別 NVR の枠を食わない）・表記ゆれは同一視', () => {
     expect(nvrPlaybackSemaphore('https://10.0.0.1')).not.toBe(nvrPlaybackSemaphore('https://10.0.0.2'))
     expect(nvrPlaybackSemaphore('https://10.0.0.3/')).toBe(nvrPlaybackSemaphore('HTTPS://10.0.0.3'))
+  })
+})
+
+describe('nvrVodStatusMessage — 現場が読む文', () => {
+  const from = new Date('2026-07-06T23:38:35.866Z')   // JST 2026-07-07 08:38
+
+  it('★録画なしは「見つからない」＋要求時刻＋考えられる理由', () => {
+    // 旧実装は「指定時間帯に録画なし」だけで、不具合のように読めた。
+    // 2026-08-21 の調査で、6 週間前の録画を要求した失敗を
+    // 「取得できないバグ」と読みかけた（実際は保存期間切れ）。
+    const m = nvrVodStatusMessage(1, from)
+    expect(m).toContain('2026/07/07')
+    expect(m).toContain('08:38')
+    expect(m).toContain('保存期間')
+    // **断定しない。** その時間帯だけ録画が無いこともある。
+    expect(m).toContain('録画されていない可能性')
+  })
+
+  it('MP4 で取り出せない記録は、原因（JPEG 記録）を書く', () => {
+    expect(nvrVodStatusMessage(2, from)).toContain('JPEG')
+  })
+
+  it('★同時処理超過は「もう一度」と伝える（利用者の手で直せる）', () => {
+    expect(nvrVodStatusMessage(3, from)).toContain('もう一度')
+  })
+
+  it('未知の status も status 番号を残す（切り分けの手掛かりを消さない）', () => {
+    expect(nvrVodStatusMessage(9, from)).toContain('status=9')
   })
 })
