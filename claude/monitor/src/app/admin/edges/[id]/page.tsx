@@ -104,6 +104,14 @@ export default async function EdgeEditPage(
     })),
   }
 
+  // 診断バンドル（保守自動化①・案A）。nvmsd アップリンク以外は空のまま。
+  const { data: bundles } = await supa
+    .from('diagnostic_bundles')
+    .select('request_id, status, bytes, error, created_at, uploaded_at')
+    .eq('edge_id', id)
+    .order('created_at', { ascending: false })
+    .limit(20)
+
   return (
     <AdminShell pathname="/admin/edges" section="admin">
       <PageHeader
@@ -115,7 +123,7 @@ export default async function EdgeEditPage(
         ]}
       />
       <div className="px-5 py-5">
-        <EdgeDetail edge={edge} />
+        <EdgeDetail edge={edge} bundles={bundles ?? []} />
       </div>
     </AdminShell>
   )
