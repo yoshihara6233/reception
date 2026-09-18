@@ -99,7 +99,9 @@ export function ReleasesClient({ releases, edges }: { releases: Release[]; edges
         <h2 className="mb-1 font-bold text-slate-900">リリース登録</h2>
         <p className="mb-3 text-xs text-slate-500">
           G・VMS がビルドし <b>G・VMS の鍵で署名した</b>リリースを登録します（クラウドは配送路 —
-          正当性の検証は nvmsd が埋め込み公開鍵で行います）。SHA-256 はアップロード実体からサーバが計算します。
+          正当性の検証は nvmsd が埋め込み公開鍵で行います）。署名はマニフェスト方式の文字列
+          （<code className="font-mono">nvmsupd1.…</code>・版と SHA-256 を署名の中に含む）をそのまま預かります。
+          SHA-256 はアップロード実体からサーバが計算します。
         </p>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <label className="block text-xs">
@@ -108,7 +110,7 @@ export function ReleasesClient({ releases, edges }: { releases: Release[]; edges
                    className="block w-full text-xs" />
           </label>
           <label className="block text-xs">
-            <span className="mb-1 block font-medium text-slate-600">署名ファイル（.sig・base64）</span>
+            <span className="mb-1 block font-medium text-slate-600">署名ファイル（.sig・マニフェスト署名文字列 nvmsupd1.…）</span>
             <input type="file" accept=".sig,.txt" onChange={(e) => setSigFile(e.target.files?.[0] ?? null)}
                    className="block w-full text-xs" />
           </label>
