@@ -51,6 +51,8 @@ export function getAdminNav(t: Msg, opts?: { isSuper?: boolean; baggage?: boolea
       // デッドリンク（/admin/recorders）はナビから除外。
       // F49.J: NVR 機種マスタ (EOL/EOS 管理)
       { href: '/admin/nvr-models', label: 'NVR 機種',   icon: '🛰' },
+      // 保守自動化②: nvmsd リリース台帳と配備状況 (NVMS/docs/OTA_SPEC.md)
+      { href: '/admin/nvmsd-releases', label: 'nvmsd リリース', icon: '⬆' },
       { href: '/admin/limits',     label: t.adminNav.limits, icon: '⏱' },
       // 運営(super_admin)自身の行動履歴。テナント側/admin/auditには運営の行を出さない
       // （PR#213）ため、運営の説明責任はこのページで担保する。全テナント横断。

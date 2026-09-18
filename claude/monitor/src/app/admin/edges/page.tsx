@@ -11,9 +11,17 @@ interface Row {
   name: string
   status: string
   agent_version: string | null
+  desired_agent_version: string | null
   last_seen_at: string | null
   stores: { id: string; name: string; area_code: string | null } | null
   recorders: { id: string }[]
+}
+
+/** 目標版が設定済みで未到達なら「更新待ち」（OTA_SPEC §6 の成否観測）。 */
+function otaPending(e: Row): boolean {
+  if (!e.desired_agent_version) return false
+  const running = (e.agent_version ?? '').replace(/^nvmsd\//, '')
+  return running !== e.desired_agent_version
 }
 
 const STATUS_STYLE: Record<string, string> = {
@@ -42,7 +50,7 @@ export default async function EdgesAdmin({
   let query = supa
     .from('edge_devices')
     .select(`
-      id, name, status, agent_version, last_seen_at,
+      id, name, status, agent_version, desired_agent_version, last_seen_at,
       stores ( id, name, area_code ),
       recorders ( id )
     `)
@@ -105,7 +113,14 @@ export default async function EdgesAdmin({
                       {e.status}
                     </span>
                   </td>
-                  <td className="px-3 py-2 font-mono">{e.agent_version ?? t.common.dash}</td>
+                  <td className="px-3 py-2 font-mono">
+                    {e.agent_version ?? t.common.dash}
+                    {otaPending(e) && (
+                      <span className="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 font-sans text-[10px] font-semibold text-amber-700">
+                        更新待ち → {e.desired_agent_version}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-3 py-2">{e.recorders?.length ?? 0}</td>
                   <td className="px-3 py-2 text-slate-500">
                     {e.last_seen_at ? new Date(e.last_seen_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : t.common.dash}

@@ -64,6 +64,7 @@ const EXPECTED: Record<string, Guard> = {
   '/admin/edges/new':             'super-admin',
   '/admin/import':                'admin',
   '/admin/limits':                'admin',        // 本文でさらに super_admin に絞る
+  '/admin/nvmsd-releases':        'super-admin',
   '/admin/nvr-models':            'super-admin',
   '/admin/nvr-models/[id]':       'super-admin',
   '/admin/ops-audit':             'super-admin',

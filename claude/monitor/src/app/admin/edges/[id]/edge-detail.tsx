@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Trash2, Settings, Search, Plug, X } from 'lucide-react'
 
@@ -50,6 +50,10 @@ interface EdgePayload {
   ota_status: string | null
   ota_updated_at: string | null
   ota_last_error: string | null
+  // nvmsd OTA（NVMS/docs/OTA_SPEC.md）: 更新許可時間帯（JST）と即時フラグ
+  update_window_start: string | null
+  update_window_end: string | null
+  update_force: boolean
   stores: { name: string; area_code: string | null }
   recorders: Recorder[]
 }
@@ -136,8 +140,11 @@ export function EdgeDetail({ edge }: { edge: EdgePayload }) {
         </div>
       </section>
 
-      {/* 自律OTA */}
-      <OtaPanel edge={edge} />
+      {/* 自律OTA: nvmsd 内蔵アップリンクは配布物も更新経路も別物（agent-update
+          ポーリング＋G・VMS 署名検証）なので専用パネルに分ける。 */}
+      {edge.agent_version?.startsWith('nvmsd/')
+        ? <NvmsdOtaPanel edge={edge} />
+        : <OtaPanel edge={edge} />}
 
       {/* Recorders */}
       <RecorderList edgeId={edge.id} recorders={edge.recorders} />
@@ -259,6 +266,137 @@ function OtaPanel({ edge }: { edge: EdgePayload }) {
       <p className="mt-2 text-[10px] text-slate-400">
         per-device＝カナリア。1台で <b>正常</b> を確認してから「全店舗へ promote」で段階展開します。
         エッジは <code>/api/edge/bootstrap</code> を約5分間隔で pull し、目標版に追従して自己更新・健全性検証・自動ロールバックします。
+      </p>
+    </section>
+  )
+}
+
+/**
+ * nvmsd OTA パネル（NVMS/docs/OTA_SPEC.md §3・§6）。
+ *
+ * エッジ箱の OtaPanel と別物: 目標版は自由入力でなくリリース台帳から選ぶ
+ * （登録の無い版を配って agent-update が黙る事故を防ぐ）。時間帯（JST・
+ * 既定 02:00-05:00）はサーバ側判定なので、ここは値の置き場だけ。
+ * 「今すぐ更新」は時間帯を無視する 1 回きりのフラグ（目標到達で自動解除）。
+ */
+function NvmsdOtaPanel({ edge }: { edge: EdgePayload }) {
+  const router = useRouter()
+  const running = (edge.agent_version ?? '').replace(/^nvmsd\//, '')
+  const [releases, setReleases] = useState<{ version: string }[] | null>(null)
+  const [desired, setDesired] = useState(edge.desired_agent_version ?? '')
+  const [winStart, setWinStart] = useState(edge.update_window_start?.slice(0, 5) ?? '')
+  const [winEnd, setWinEnd] = useState(edge.update_window_end?.slice(0, 5) ?? '')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+  const dirty =
+    desired !== (edge.desired_agent_version ?? '') ||
+    winStart !== (edge.update_window_start?.slice(0, 5) ?? '') ||
+    winEnd !== (edge.update_window_end?.slice(0, 5) ?? '')
+
+  useEffect(() => {
+    fetch('/api/admin/nvmsd-releases')
+      .then((r) => (r.ok ? r.json() : { releases: [] }))
+      .then((j) => setReleases(j.releases ?? []))
+      .catch(() => setReleases([]))
+  }, [])
+
+  const pending = !!edge.desired_agent_version && running !== edge.desired_agent_version
+
+  async function put(body: Record<string, unknown>, okMsg: string) {
+    setBusy(true); setMsg(null)
+    const res = await fetch(`/api/admin/edges/${edge.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    setBusy(false)
+    if (!res.ok) { const j = await res.json().catch(() => ({})); setMsg(j.error ?? `保存失敗: ${res.status}`); return }
+    setMsg(okMsg); router.refresh()
+  }
+
+  function save() {
+    void put(
+      { desired_agent_version: desired, update_window_start: winStart, update_window_end: winEnd },
+      desired ? '目標版を設定しました（時間帯内の次回ポーリングで適用）' : '目標版を解除しました',
+    )
+  }
+
+  function forceNow() {
+    if (!edge.desired_agent_version) return
+    if (!confirm(`時間帯を無視して今すぐ ${edge.desired_agent_version} へ更新させますか？\n（検証拠点向け。適用確認後にフラグは自動で降ります）`)) return
+    void put({ update_force: true }, '即時更新フラグを立てました（次回ポーリング＝最長10分以内に適用開始）')
+  }
+
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white p-5 text-sm">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="font-bold text-slate-900">自動バージョンアップ（nvmsd）</h2>
+        <span className={'rounded px-2 py-0.5 text-[11px] font-semibold ' + (
+          !edge.desired_agent_version ? 'bg-slate-100 text-slate-600'
+            : pending ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700')}>
+          {!edge.desired_agent_version ? '指示なし' : pending ? '更新待ち' : '目標版で稼働中'}
+        </span>
+      </div>
+
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
+        <Row k="稼働版" v={<span className="font-mono">{running || '—'}</span>} />
+        <Row k="目標版" v={<span className="font-mono">{edge.desired_agent_version ?? '—'}</span>} />
+      </dl>
+      {edge.update_force && (
+        <p className="mt-2 flex items-center gap-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800">
+          即時更新フラグが立っています（時間帯を無視して適用・目標到達で自動解除）
+          <button onClick={() => void put({ update_force: false }, '即時更新フラグを解除しました')}
+                  disabled={busy} className="ml-auto rounded border border-amber-300 px-2 py-0.5 text-[10px]">
+            解除
+          </button>
+        </p>
+      )}
+
+      <div className="mt-4 grid grid-cols-1 gap-3 border-t border-slate-100 pt-3 md:grid-cols-3">
+        <Field label="目標版（リリース台帳から選択・空=指示なし）">
+          <select value={desired} onChange={(e) => setDesired(e.target.value)}
+                  className="w-full rounded border border-slate-300 px-2 py-1 font-mono text-xs">
+            <option value="">— 指示なし —</option>
+            {/* 台帳に無い既存値（手動設定の名残）も選択肢に残して保存できるようにする */}
+            {edge.desired_agent_version && !releases?.some((r) => r.version === edge.desired_agent_version) && (
+              <option value={edge.desired_agent_version}>{edge.desired_agent_version}（台帳未登録）</option>
+            )}
+            {(releases ?? []).map((r) => (
+              <option key={r.version} value={r.version}>{r.version}</option>
+            ))}
+          </select>
+          {releases !== null && releases.length === 0 && (
+            <p className="mt-1 text-[10px] text-amber-700">
+              リリースが未登録です。先に <a href="/admin/nvmsd-releases" className="underline">nvmsd リリース</a> で登録してください。
+            </p>
+          )}
+        </Field>
+        <Field label="更新時間帯 開始（JST・空=既定 02:00）">
+          <input type="time" value={winStart} onChange={(e) => setWinStart(e.target.value)}
+                 className="w-full rounded border border-slate-300 px-2 py-1 font-mono text-xs" />
+        </Field>
+        <Field label="更新時間帯 終了（JST・空=既定 05:00）">
+          <input type="time" value={winEnd} onChange={(e) => setWinEnd(e.target.value)}
+                 className="w-full rounded border border-slate-300 px-2 py-1 font-mono text-xs" />
+        </Field>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+        {msg && <span className="mr-auto text-xs text-emerald-700">{msg}</span>}
+        <button onClick={forceNow} disabled={busy || !edge.desired_agent_version || !pending}
+                title={pending ? '' : '目標版が未設定か、既に到達済みです'}
+                className="rounded border border-slate-300 bg-white px-3 py-1 text-xs disabled:opacity-50">
+          今すぐ更新（時間帯を無視）
+        </button>
+        <button onClick={save} disabled={busy || !dirty}
+                className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white disabled:opacity-50">
+          {busy ? '保存中…' : '保存'}
+        </button>
+      </div>
+      <p className="mt-2 text-[10px] text-slate-400">
+        nvmsd は <code>/api/edge/agent-update</code> を約10分間隔でポーリングし、時間帯内（既定 02:00〜05:00 JST）に
+        G・VMS 署名を検証してから自己更新します。失敗時は旧版へ自動ロールバックし、同じ版へは再挑戦しません。
+        検証拠点で「目標版で稼働中」を確認してから他拠点へ広げてください（段階配備）。
       </p>
     </section>
   )
