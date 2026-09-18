@@ -10,12 +10,14 @@ import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { recordAudit } from '@/lib/admin/audit'
-import { generateEnrollToken, hashEnrollToken, enrollExpiryIso } from '@/lib/admin/enrollment'
+import { generateEnrollToken, hashEnrollToken, enrollExpiryIso, generateShortCode, hashShortCode } from '@/lib/admin/enrollment'
 
 const Body = z.object({
   store_id:    z.string().uuid(),
   name:        z.string().min(1).max(120),
   camera_tier: z.coerce.number().int().refine((n) => [16, 32, 48].includes(n), 'tier must be 16/32/48').default(16),
+  // 'edge'（エッジ箱・既定）/ 'nvms'（nvmsd アップリンク。claim 時にレコーダ自動作成）。
+  kind:        z.enum(['edge', 'nvms']).default('edge'),
 })
 
 export async function POST(req: NextRequest) {
@@ -24,7 +26,7 @@ export async function POST(req: NextRequest) {
 
   const parsed = Body.safeParse(await req.json())
   if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
-  const { store_id, name, camera_tier } = parsed.data
+  const { store_id, name, camera_tier, kind } = parsed.data
 
   // 認可: その店舗が呼び出し管理者から見えるか（RLS セッションで確認）→ tenant_id を取得。
   // 見えない店舗には発行不可（テナント越権防止）。tenant_id は store 由来。
@@ -35,13 +37,16 @@ export async function POST(req: NextRequest) {
   const token = generateEnrollToken()
   const token_hash = hashEnrollToken(token)
   const expires_at = enrollExpiryIso()
+  // nvms は QR（強い64hexトークン）に加えて手入力の短縮コードも用意する。
+  const shortCode = kind === 'nvms' ? generateShortCode() : null
+  const short_code_hash = shortCode ? hashShortCode(shortCode) : null
 
   // 挿入は service client（enrollment_tokens は RLS ポリシー無し=service のみ）。
   const svc = createSupabaseService()
   const { data, error } = await svc
     .from('enrollment_tokens')
     .insert({
-      token_hash, store_id, tenant_id: store.tenant_id, name, camera_tier,
+      token_hash, short_code_hash, kind, store_id, tenant_id: store.tenant_id, name, camera_tier,
       expires_at, created_by: guard.user.id,
     })
     .select('id, expires_at')
@@ -54,9 +59,9 @@ export async function POST(req: NextRequest) {
     targetType: 'enrollment',
     targetId: data.id,
     storeId: store_id,
-    changes: { name, camera_tier, expires_at: data.expires_at },
+    changes: { name, camera_tier, kind, expires_at: data.expires_at },
   })
 
-  // 生トークンはここでのみ返す（再表示不可。失くしたら再発行）。
-  return NextResponse.json({ id: data.id, token, expires_at: data.expires_at })
+  // 生トークン・短縮コードはここでのみ返す（再表示不可。失くしたら再発行）。
+  return NextResponse.json({ id: data.id, token, short_code: shortCode, kind, expires_at: data.expires_at })
 }

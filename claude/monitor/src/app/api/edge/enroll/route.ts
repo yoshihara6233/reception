@@ -15,12 +15,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { randomBytes } from 'node:crypto'
 import { z } from 'zod'
+import { encryptSecret } from '@intereco/shared'
 import { createSupabaseService } from '@/lib/supabase/server'
-import { hashEnrollToken } from '@/lib/admin/enrollment'
+import { hashEnrollToken, hashShortCode } from '@/lib/admin/enrollment'
 import { clientIp, rateLimitAllows } from '@/lib/rate-limit'
 import { hashDeviceToken } from '@/lib/edge/device-token'
 
-const Body = z.object({ token: z.string().min(16).max(256) })
+// QR は 64hex トークン、手入力は短縮コード（例 A7K3Q-2F9MZ）。どちらでも受ける。
+// 短縮コードは十数文字なので 8 文字から通す。
+const Body = z.object({
+  token: z.string().min(8).max(256).optional(),
+  code:  z.string().min(8).max(256).optional(),
+}).refine((b) => b.token || b.code, 'token or code required')
 
 /**
  * IP あたりの試行上限。
@@ -46,17 +52,23 @@ export async function POST(req: NextRequest) {
   const parsed = Body.safeParse(await req.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
 
-  const token_hash = hashEnrollToken(parsed.data.token)
   const nowIso = new Date().toISOString()
 
-  // 1) 事前検証（未使用・未失効）。よくある不正トークンはエッジ行を作らず即 403。
-  const { data: tok } = await svc
+  // 1) 事前検証（未使用・未失効）。QR の 64hex は token_hash、手入力の短縮コードは
+  //    short_code_hash で引く。まず token_hash、無ければ short_code_hash の 2 段引き
+  //    （どちらも同じ行に解決する）。不正は行を作らず 403。
+  const raw = parsed.data.token ?? parsed.data.code ?? ''
+  const cols = ['token_hash', hashEnrollToken(raw)] as const
+  const lookup = (col: string, hash: string) => svc
     .from('enrollment_tokens')
-    .select('id, store_id, name, camera_tier, used_at, expires_at')
-    .eq('token_hash', token_hash)
+    .select('id, kind, store_id, name, camera_tier, used_at, expires_at')
+    .eq(col, hash)
     .is('used_at', null)
     .gt('expires_at', nowIso)
     .maybeSingle()
+
+  let tok = (await lookup(cols[0], cols[1])).data
+  if (!tok) tok = (await lookup('short_code_hash', hashShortCode(raw))).data
   if (!tok) return NextResponse.json({ error: 'invalid_or_expired_token' }, { status: 403 })
 
   // 2) エッジ行を作成（device_token 払出）。store/name/tier はトークン由来。
@@ -89,7 +101,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'token_already_used' }, { status: 403 })
   }
 
-  // 4) 払出。エッジは device_token で heartbeat / /api/edge/bootstrap を行う。
+  // 3.5) nvms は vendor='nvms' のレコーダも自動作成（ENROLLMENT_SPEC §3）。
+  //   nvms-sync/グリッド/BCP は事前レコーダを要する。アップリンク型では
+  //   クラウドはレコーダに接続しに行かない（nvmsd が押し出す）ため、
+  //   host/username/password は表示用の暫定値でよい。nvmsd は recorder_id を
+  //   GET /api/edge/recorders で学ぶ。失敗しても払い出しは続ける（同期開始前に
+  //   管理画面から補完できる）。
+  if (tok.kind === 'nvms') {
+    const { error: recErr } = await svc.from('recorders').insert({
+      edge_id:      edge.id,
+      vendor:       'nvms',
+      model:        tok.name,
+      host:         'uplink',            // 暫定（uplink 型は接続先を持たない）
+      username:     '',
+      password_enc: encryptSecret(''),
+    })
+    if (recErr) console.warn(`enroll: nvms recorder autocreate failed (edge ${edge.id}): ${recErr.message}`)
+  }
+
+  // 4) 払出。エッジは device_token で heartbeat / アップリンクを行う
+  //    （nvms は device_token = NVMS_UPLINK_TOKEN）。
   return NextResponse.json(
     { edge_id: edge.id, device_token },
     { headers: { 'Cache-Control': 'no-store' } },

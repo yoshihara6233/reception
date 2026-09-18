@@ -4,6 +4,8 @@ import {
   hashEnrollToken,
   enrollExpiryIso,
   ENROLL_TTL_MS,
+  generateShortCode,
+  hashShortCode,
 } from './enrollment'
 
 describe('enrollment token util', () => {
@@ -40,5 +42,32 @@ describe('enrollment token util', () => {
     const iso = enrollExpiryIso(now)
     expect(new Date(iso).getTime()).toBe(now + ENROLL_TTL_MS)
     expect(ENROLL_TTL_MS).toBe(24 * 60 * 60 * 1000)
+  })
+})
+
+describe('short code util（nvms 手入力コード）', () => {
+  it('曖昧文字を除いた集合・XXXXX-XXXXX 形式', () => {
+    const c = generateShortCode()
+    expect(c).toMatch(/^[2-9A-HJKMNP-TV-Z]{5}-[2-9A-HJKMNP-TV-Z]{5}$/)
+    // 紛らわしい 0/O/1/I/L/U を含まない
+    expect(c).not.toMatch(/[01ILOU]/)
+  })
+
+  it('十分にユニーク', () => {
+    const set = new Set(Array.from({ length: 200 }, () => generateShortCode()))
+    expect(set.size).toBe(200)
+  })
+
+  it('表記ぶれ（小文字・空白・ハイフン）を正規化して同じハッシュ', () => {
+    const base = hashShortCode('A7K3Q-2F9MZ')
+    expect(hashShortCode('a7k3q-2f9mz')).toBe(base)
+    expect(hashShortCode('A7K3Q2F9MZ')).toBe(base)
+    expect(hashShortCode(' a7k3q 2f9mz ')).toBe(base)
+    expect(hashShortCode('A7K3Q-2F9MX')).not.toBe(base)
+  })
+
+  it('トークンとコードのハッシュ空間は分離（同じ文字列でも衝突しない）', () => {
+    // hashEnrollToken(raw) と hashShortCode(raw) は別ドメイン（prefix 付き）。
+    expect(hashShortCode('abc')).not.toBe(hashEnrollToken('abc'))
   })
 })
