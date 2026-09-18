@@ -57,8 +57,17 @@ interface EdgePayload {
   stores: { name: string; area_code: string | null }
   recorders: Recorder[]
 }
+// 診断バンドル（保守自動化①・案A・NVMS/docs/DIAGNOSTICS_SPEC.md §2）
+interface DiagBundle {
+  request_id: string
+  status: 'pending' | 'completed' | 'failed'
+  bytes: number | null
+  error: string | null
+  created_at: string
+  uploaded_at: string | null
+}
 
-export function EdgeDetail({ edge }: { edge: EdgePayload }) {
+export function EdgeDetail({ edge, bundles = [] }: { edge: EdgePayload; bundles?: DiagBundle[] }) {
   const router = useRouter()
   const [go2rtcHost, setGo2rtcHost] = useState(edge.go2rtc_host ?? '')
   const [hostBusy, setHostBusy]     = useState(false)
@@ -145,6 +154,11 @@ export function EdgeDetail({ edge }: { edge: EdgePayload }) {
       {edge.agent_version?.startsWith('nvmsd/')
         ? <NvmsdOtaPanel edge={edge} />
         : <OtaPanel edge={edge} />}
+
+      {/* 診断バンドル（案A）— nvmsd アップリンクのみ */}
+      {edge.agent_version?.startsWith('nvmsd/') && (
+        <DiagnosticsPanel edgeId={edge.id} bundles={bundles} />
+      )}
 
       {/* Recorders */}
       <RecorderList edgeId={edge.id} recorders={edge.recorders} />
@@ -398,6 +412,103 @@ function NvmsdOtaPanel({ edge }: { edge: EdgePayload }) {
         G・VMS 署名を検証してから自己更新します。失敗時は旧版へ自動ロールバックし、同じ版へは再挑戦しません。
         検証拠点で「目標版で稼働中」を確認してから他拠点へ広げてください（段階配備）。
       </p>
+    </section>
+  )
+}
+
+const DIAG_STATUS: Record<DiagBundle['status'], { label: string; cls: string }> = {
+  pending:   { label: '収集中', cls: 'bg-amber-100 text-amber-700' },
+  completed: { label: '到着',   cls: 'bg-emerald-100 text-emerald-700' },
+  failed:    { label: '失敗',   cls: 'bg-red-100 text-red-700' },
+}
+
+/**
+ * 診断バンドル（DIAGNOSTICS_SPEC §2）: 発行 → nvmsd がログ一式を tar.gz で
+ * アップロード → ここからダウンロード。未対応ビルドはコマンドを黙って
+ * 読み飛ばすため、10 分待って収集中のままなら「未対応 or 収集失敗」と案内する。
+ */
+function DiagnosticsPanel({ edgeId, bundles }: { edgeId: string; bundles: DiagBundle[] }) {
+  const router = useRouter()
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+
+  async function issue() {
+    setBusy(true); setMsg(null)
+    const res = await fetch(`/api/admin/edges/${edgeId}/diagnostics`, { method: 'POST' })
+    const j = await res.json().catch(() => ({}))
+    setBusy(false)
+    if (!res.ok) {
+      setMsg(j.error === 'command_pending'
+        ? '別のコマンドが配信待ちです。数秒おいて再実行してください'
+        : (j.error ?? `発行失敗: ${res.status}`))
+      return
+    }
+    setMsg('取得を発行しました（通常は数分でここに現れます）')
+    router.refresh()
+  }
+
+  const stalled = (b: DiagBundle) =>
+    b.status === 'pending' && Date.now() - new Date(b.created_at).getTime() > 10 * 60_000
+
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white p-5 text-sm">
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <h2 className="font-bold text-slate-900">診断情報（G・VMS）</h2>
+          <p className="mt-0.5 text-[11px] text-slate-500">
+            ログ・設定（秘匿値はマスク済み）・稼働状態の一式を取得します。映像は含まれません。保持 30 日。
+          </p>
+        </div>
+        <button onClick={issue} disabled={busy}
+                className="rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50">
+          {busy ? '発行中…' : '診断情報を取得'}
+        </button>
+      </div>
+      {msg && <p className="mb-2 text-xs text-emerald-700">{msg}</p>}
+
+      {bundles.length === 0 ? (
+        <p className="text-xs text-slate-400">取得履歴はまだありません。</p>
+      ) : (
+        <table className="w-full text-xs">
+          <thead className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            <tr>
+              <th className="py-1.5 pr-3 text-left">発行日時</th>
+              <th className="py-1.5 pr-3 text-left">状態</th>
+              <th className="py-1.5 pr-3 text-right">サイズ</th>
+              <th className="py-1.5 pr-3 text-left">備考</th>
+              <th className="py-1.5"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {bundles.map((b) => {
+              const meta = DIAG_STATUS[b.status]
+              return (
+                <tr key={b.request_id} className="border-t border-slate-100">
+                  <td className="py-1.5 pr-3 font-mono tabular-nums text-slate-600">
+                    {new Date(b.created_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}
+                  </td>
+                  <td className="py-1.5 pr-3">
+                    <span className={'rounded px-2 py-0.5 text-[11px] font-semibold ' + meta.cls}>{meta.label}</span>
+                  </td>
+                  <td className="py-1.5 pr-3 text-right font-mono tabular-nums">
+                    {b.bytes != null ? `${(b.bytes / 1024 / 1024).toFixed(1)} MB` : '—'}
+                  </td>
+                  <td className="py-1.5 pr-3 text-slate-500">
+                    {b.status === 'failed' && (b.error ?? '収集失敗')}
+                    {stalled(b) && '応答なし — nvmsd が未対応ビルドか、収集に失敗しています'}
+                  </td>
+                  <td className="py-1.5 text-right">
+                    {b.status === 'completed' && (
+                      <a href={`/api/admin/diagnostics/${b.request_id}/download`}
+                         className="text-blue-600 hover:underline">ダウンロード</a>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      )}
     </section>
   )
 }

@@ -30,7 +30,8 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
   const { request_id, ok, error: errMsg } = parsed.data
 
-  const { error } = await createSupabaseService()
+  const svc = createSupabaseService()
+  const { error } = await svc
     .from('edge_command_runs')
     .update({
       finished_at: new Date().toISOString(),
@@ -40,6 +41,20 @@ export async function POST(req: NextRequest) {
     .eq('request_id', request_id)
     .eq('edge_id', edge.id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // 診断バンドル（DIAGNOSTICS_SPEC §2.3）は result の ok=true をもって「到着」と
+  // 扱う — 完了通知の専用エンドポイントを作らない取り決め。診断以外の
+  // request_id は先置き行が無いので 0 行一致で素通り（冪等）。
+  await svc
+    .from('diagnostic_bundles')
+    .update({
+      status: ok ? 'completed' : 'failed',
+      error: ok ? null : (errMsg ?? null),
+      uploaded_at: ok ? new Date().toISOString() : null,
+    })
+    .eq('request_id', request_id)
+    .eq('edge_id', edge.id)
+    .eq('status', 'pending')
 
   return new NextResponse(null, { status: 204 })
 }
