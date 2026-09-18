@@ -10,6 +10,7 @@
  * 専用 cron を増やさず、使われるたびに片づける方式。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { requireSuperAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { recordAudit, storeIdForEdge } from '@/lib/admin/audit'
@@ -18,15 +19,26 @@ export const dynamic = 'force-dynamic'
 
 const BUCKET = 'diagnostics'
 const LOG_HOURS = 48
-const MAX_BYTES = 50 * 1024 * 1024
+const DEFAULT_MAX_BYTES = 50 * 1024 * 1024
+const MIN_MAX_BYTES = 1024 * 1024  // 1 MiB（切り詰め確認の下限）
 const RETENTION_DAYS = 30
 
+// max_bytes は任意。切り詰め動作（古いログから落とす・DIAGNOSTICS_SPEC 基準5）を
+// 50 MiB 溜まるのを待たずに確認するため、1 MiB まで下げられる。
+const Body = z.object({
+  max_bytes: z.number().int().min(MIN_MAX_BYTES).max(DEFAULT_MAX_BYTES).optional(),
+}).nullable().optional()
+
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   ctx: { params: Promise<{ id: string }> },
 ) {
   const guard = await requireSuperAdmin()
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status })
+
+  const parsed = Body.safeParse(await req.json().catch(() => null))
+  if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
+  const maxBytes = parsed.data?.max_bytes ?? DEFAULT_MAX_BYTES
 
   const { id } = await ctx.params
   const svc = createSupabaseService()
@@ -70,7 +82,7 @@ export async function POST(
         action: 'collect_diagnostics',
         request_id: requestId,
         log_hours: LOG_HOURS,
-        max_bytes: MAX_BYTES,
+        max_bytes: maxBytes,
       },
       pending_command_at: new Date().toISOString(),
     })
@@ -83,7 +95,7 @@ export async function POST(
     targetType: 'edge',
     targetId: id,
     storeId: await storeIdForEdge(guard.supa, id),
-    changes: { request_id: requestId },
+    changes: { request_id: requestId, max_bytes: maxBytes },
   })
 
   return NextResponse.json({ ok: true, request_id: requestId })

@@ -54,6 +54,7 @@ interface EdgePayload {
   update_window_start: string | null
   update_window_end: string | null
   update_force: boolean
+  ota_mode: 'onsite' | 'auto'
   stores: { name: string; area_code: string | null }
   recorders: Recorder[]
 }
@@ -315,6 +316,7 @@ function NvmsdOtaPanel({ edge }: { edge: EdgePayload }) {
   }, [])
 
   const pending = !!edge.desired_agent_version && running !== edge.desired_agent_version
+  const isAuto = edge.ota_mode === 'auto'
 
   // 「戻す」配備は不可（OTA_SPEC 付録A・2026-09-18 取り下げ）: 拠点側の検証が
   // 古い版を拒む。版文字列は順序比較できないので、台帳の登録日時で
@@ -365,6 +367,30 @@ function NvmsdOtaPanel({ edge }: { edge: EdgePayload }) {
         <Row k="稼働版" v={<span className="font-mono">{running || '—'}</span>} />
         <Row k="目標版" v={<span className="font-mono">{edge.desired_agent_version ?? '—'}</span>} />
       </dl>
+
+      {/* 配信モード（OTA_SPEC 付録A・2026-09-18）: 更新で録画が約5秒欠けるため、
+          複数台の拠点は現地更新（欠損なし）、1台の拠点は自動、と切り分ける。既定は現地。 */}
+      <div className="mt-4 border-t border-slate-100 pt-3">
+        <div className="mb-1 text-xs font-medium text-slate-600">配信モード</div>
+        <div className="flex flex-wrap gap-2">
+          {([
+            ['onsite', '現地更新（既定）', 'クラウドから配信しない。画面から現地で更新（録画欠損なし）。複数台の拠点向け。'],
+            ['auto', '自動更新', 'クラウドから配信。更新中に録画が約5秒欠ける。1台のみの拠点向け。'],
+          ] as const).map(([val, label, desc]) => (
+            <button key={val} type="button" disabled={busy || edge.ota_mode === val}
+                    onClick={() => void put({ ota_mode: val }, val === 'auto' ? '自動更新にしました' : '現地更新にしました')}
+                    title={desc}
+                    className={'flex-1 min-w-[180px] rounded border px-3 py-2 text-left text-xs ' + (
+                      edge.ota_mode === val
+                        ? 'border-blue-300 bg-blue-50 text-blue-900'
+                        : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50')}>
+              <div className="font-semibold">{edge.ota_mode === val ? '● ' : '○ '}{label}</div>
+              <div className="mt-0.5 text-[10px] font-normal text-slate-500">{desc}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+
       {edge.update_force && (
         <p className="mt-2 flex items-center gap-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800">
           即時更新フラグが立っています（時間帯を無視して適用・目標到達で自動解除）
@@ -375,9 +401,16 @@ function NvmsdOtaPanel({ edge }: { edge: EdgePayload }) {
         </p>
       )}
 
-      <div className="mt-4 grid grid-cols-1 gap-3 border-t border-slate-100 pt-3 md:grid-cols-3">
+      {!isAuto && (
+        <p className="mt-3 rounded border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
+          現地更新モードです。目標版を設定してもクラウドからは配信しません（拠点側は 204）。
+          自動更新にすると下の設定が有効になります。
+        </p>
+      )}
+
+      <div className={'mt-4 grid grid-cols-1 gap-3 border-t border-slate-100 pt-3 md:grid-cols-3' + (isAuto ? '' : ' pointer-events-none opacity-40')}>
         <Field label="目標版（リリース台帳から選択・空=指示なし）">
-          <select value={desired} onChange={(e) => setDesired(e.target.value)}
+          <select value={desired} onChange={(e) => setDesired(e.target.value)} disabled={!isAuto}
                   className="w-full rounded border border-slate-300 px-2 py-1 font-mono text-xs">
             <option value="">— 指示なし —</option>
             {/* 台帳に無い既存値（手動設定の名残）も選択肢に残して保存できるようにする */}
@@ -401,23 +434,23 @@ function NvmsdOtaPanel({ edge }: { edge: EdgePayload }) {
           )}
         </Field>
         <Field label="更新時間帯 開始（JST・空=既定 02:00）">
-          <input type="time" value={winStart} onChange={(e) => setWinStart(e.target.value)}
+          <input type="time" value={winStart} onChange={(e) => setWinStart(e.target.value)} disabled={!isAuto}
                  className="w-full rounded border border-slate-300 px-2 py-1 font-mono text-xs" />
         </Field>
         <Field label="更新時間帯 終了（JST・空=既定 05:00）">
-          <input type="time" value={winEnd} onChange={(e) => setWinEnd(e.target.value)}
+          <input type="time" value={winEnd} onChange={(e) => setWinEnd(e.target.value)} disabled={!isAuto}
                  className="w-full rounded border border-slate-300 px-2 py-1 font-mono text-xs" />
         </Field>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
         {msg && <span className="mr-auto text-xs text-emerald-700">{msg}</span>}
-        <button onClick={forceNow} disabled={busy || !edge.desired_agent_version || !pending}
-                title={pending ? '' : '目標版が未設定か、既に到達済みです'}
+        <button onClick={forceNow} disabled={busy || !isAuto || !edge.desired_agent_version || !pending}
+                title={!isAuto ? '自動更新モードのときだけ使えます' : pending ? '' : '目標版が未設定か、既に到達済みです'}
                 className="rounded border border-slate-300 bg-white px-3 py-1 text-xs disabled:opacity-50">
           今すぐ更新（時間帯を無視）
         </button>
-        <button onClick={save} disabled={busy || !dirty}
+        <button onClick={save} disabled={busy || !isAuto || !dirty}
                 className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white disabled:opacity-50">
           {busy ? '保存中…' : '保存'}
         </button>
@@ -448,9 +481,13 @@ function DiagnosticsPanel({ edgeId, bundles }: { edgeId: string; bundles: DiagBu
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
 
-  async function issue() {
+  async function issue(maxBytes?: number) {
     setBusy(true); setMsg(null)
-    const res = await fetch(`/api/admin/edges/${edgeId}/diagnostics`, { method: 'POST' })
+    const res = await fetch(`/api/admin/edges/${edgeId}/diagnostics`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(maxBytes ? { max_bytes: maxBytes } : {}),
+    })
     const j = await res.json().catch(() => ({}))
     setBusy(false)
     if (!res.ok) {
@@ -459,7 +496,9 @@ function DiagnosticsPanel({ edgeId, bundles }: { edgeId: string; bundles: DiagBu
         : (j.error ?? `発行失敗: ${res.status}`))
       return
     }
-    setMsg('取得を発行しました（通常は数分でここに現れます）')
+    setMsg(maxBytes
+      ? `上限 ${Math.round(maxBytes / 1024 / 1024)} MiB で取得を発行しました（切り詰め確認）`
+      : '取得を発行しました（通常は数分でここに現れます）')
     router.refresh()
   }
 
@@ -475,10 +514,18 @@ function DiagnosticsPanel({ edgeId, bundles }: { edgeId: string; bundles: DiagBu
             ログ・設定（秘匿値はマスク済み）・稼働状態の一式を取得します。映像は含まれません。保持 30 日。
           </p>
         </div>
-        <button onClick={issue} disabled={busy}
-                className="rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50">
-          {busy ? '発行中…' : '診断情報を取得'}
-        </button>
+        <div className="flex flex-col items-end gap-1">
+          <button onClick={() => void issue()} disabled={busy}
+                  className="rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50">
+            {busy ? '発行中…' : '診断情報を取得'}
+          </button>
+          {/* 切り詰め動作（古いログから落とす・DIAGNOSTICS_SPEC 基準5）を
+              50 MiB 溜まるのを待たずに確認する。 */}
+          <button onClick={() => void issue(1024 * 1024)} disabled={busy}
+                  className="text-[10px] text-slate-500 underline disabled:opacity-50">
+            上限 1 MiB で取得（切り詰め確認）
+          </button>
+        </div>
       </div>
       {msg && <p className="mb-2 text-xs text-emerald-700">{msg}</p>}
 
