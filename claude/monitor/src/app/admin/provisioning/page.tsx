@@ -4,6 +4,7 @@ import { PageHeader } from '@/components/admin/PageHeader'
 import { AdminDenied } from '@/components/admin/AdminDenied'
 import { requireAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
+import { resolveAdminContext } from '@/lib/tenant/acting'
 import { getT } from '@/lib/i18n/server'
 import { ProvisioningClient, type ProvRow } from './provisioning-client'
 
@@ -24,10 +25,21 @@ export default async function ProvisioningPage() {
   if (!guard.ok) { if (guard.status === 401) redirect('/login'); return <AdminDenied pathname="/admin/provisioning" /> }
   const t = await getT()
 
-  // 見える店舗（RLS）。ここが認可の要 — 以降は必ずこの store_id 群で絞る。
-  const { data: storeRows } = await guard.supa
+  // テナント文脈（他の①設定ページと同じ「操作中テナント方式」）。
+  // super_admin=操作中テナント / tenant_admin=自テナント / 店舗ロール=担当店舗。
+  // これで絞らないと super_admin の店舗一覧に全テナントが出てしまう。
+  const ctx = await resolveAdminContext(guard.supa)
+
+  // 見える店舗。RLS に加えてテナント文脈でも絞る（表示と発行対象の両方）。
+  let storeQuery = guard.supa
     .from('stores').select('id, name, area_code').order('name').limit(1000)
+  if (ctx.storeIds) storeQuery = storeQuery.in('id', ctx.storeIds)
+  else if (ctx.tenantId) storeQuery = storeQuery.eq('tenant_id', ctx.tenantId)
+  const { data: storeRows } = await storeQuery
   const stores = (storeRows ?? []) as { id: string; name: string; area_code: string | null }[]
+  // 発行はテナント文脈が確定している時のみ（super_admin 未選択で他テナントへ
+  // 誤発行する事故を防ぐ。店舗ページの「新規作成はテナント確定時のみ」と同じ）。
+  const canIssue = !!ctx.tenantId || !!ctx.storeIds
   const storeName = new Map(stores.map((s) => [s.id, s.name]))
   const allowedIds = stores.map((s) => s.id)
 
@@ -112,7 +124,7 @@ export default async function ProvisioningPage() {
         crumb={[{ href: '/admin', label: t.breadcrumb.admin }, { href: '/admin/provisioning', label: '拠点導入' }]}
       />
       <div className="p-5">
-        <ProvisioningClient stores={stores} rows={rows} />
+        <ProvisioningClient stores={stores} rows={rows} canIssue={canIssue} />
       </div>
     </AdminShell>
   )

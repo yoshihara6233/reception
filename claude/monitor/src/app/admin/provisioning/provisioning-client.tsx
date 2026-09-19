@@ -34,7 +34,7 @@ function fmtExpiry(iso: string): string {
   return `あと ${Math.max(1, Math.round(ms / 60_000))} 分`
 }
 
-export function ProvisioningClient({ stores, rows }: { stores: Store[]; rows: ProvRow[] }) {
+export function ProvisioningClient({ stores, rows, canIssue = true }: { stores: Store[]; rows: ProvRow[]; canIssue?: boolean }) {
   const router = useRouter()
   const [storeId, setStoreId] = useState('')
   const [name, setName] = useState('')
@@ -83,6 +83,11 @@ export function ProvisioningClient({ stores, rows }: { stores: Store[]; rows: Pr
           対象店舗を選んで発行すると、現地入力用の <b>QR と短縮コード</b>が 1 度だけ表示されます。
           コードは 24 時間・1 回限り。現地ではクラウド URL とこのコードだけで立ち上がります。
         </p>
+        {!canIssue && (
+          <p className="mb-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+            操作中テナントを選択すると発行できます（上部の「切替」から）。誤って別テナントへ発行しないための制限です。
+          </p>
+        )}
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <label className="block text-xs">
             <span className="mb-1 block font-medium text-slate-600">店舗</span>
@@ -103,7 +108,7 @@ export function ProvisioningClient({ stores, rows }: { stores: Store[]; rows: Pr
         </div>
         <div className="mt-3 flex items-center justify-end gap-3">
           {err && <span className="mr-auto text-xs text-red-700">{err}</span>}
-          <button onClick={issue} disabled={busy || !storeId || !name.trim()}
+          <button onClick={issue} disabled={busy || !canIssue || !storeId || !name.trim()}
                   className="rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50">
             {busy ? '発行中…' : 'コードを発行'}
           </button>
