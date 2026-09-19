@@ -496,8 +496,11 @@ function DiagnosticsPanel({ edgeId, bundles }: { edgeId: string; bundles: DiagBu
         : (j.error ?? `発行失敗: ${res.status}`))
       return
     }
+    const capLabel = maxBytes && maxBytes < 1024 * 1024
+      ? `${Math.round(maxBytes / 1024)} KiB`
+      : maxBytes ? `${Math.round(maxBytes / 1024 / 1024)} MiB` : ''
     setMsg(maxBytes
-      ? `上限 ${Math.round(maxBytes / 1024 / 1024)} MiB で取得を発行しました（切り詰め確認）`
+      ? `上限 ${capLabel} で取得を発行しました（切り詰め確認）`
       : '取得を発行しました（通常は数分でここに現れます）')
     router.refresh()
   }
@@ -520,10 +523,11 @@ function DiagnosticsPanel({ edgeId, bundles }: { edgeId: string; bundles: DiagBu
             {busy ? '発行中…' : '診断情報を取得'}
           </button>
           {/* 切り詰め動作（古いログから落とす・DIAGNOSTICS_SPEC 基準5）を
-              50 MiB 溜まるのを待たずに確認する。 */}
-          <button onClick={() => void issue(1024 * 1024)} disabled={busy}
+              50 MiB 溜まるのを待たずに確認する。自然なバンドルは ~0.2MB のことが
+              あるため、上限はそれより小さい 0.1 MiB にして確実に発動させる。 */}
+          <button onClick={() => void issue(100 * 1024)} disabled={busy}
                   className="text-[10px] text-slate-500 underline disabled:opacity-50">
-            上限 1 MiB で取得（切り詰め確認）
+            上限 0.1 MiB で取得（切り詰め確認）
           </button>
         </div>
       </div>

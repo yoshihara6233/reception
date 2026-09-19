@@ -20,7 +20,9 @@ export const dynamic = 'force-dynamic'
 const BUCKET = 'diagnostics'
 const LOG_HOURS = 48
 const DEFAULT_MAX_BYTES = 50 * 1024 * 1024
-const MIN_MAX_BYTES = 1024 * 1024  // 1 MiB（切り詰め確認の下限）
+// 切り詰め確認の下限。自然なバンドルは ~0.2MB のことがあり、それより小さい上限で
+// なければ「古いログを落とす」動作が発動しない。実証用に 64 KiB まで下げられる。
+const MIN_MAX_BYTES = 64 * 1024
 const RETENTION_DAYS = 30
 
 // max_bytes は任意。切り詰め動作（古いログから落とす・DIAGNOSTICS_SPEC 基準5）を
