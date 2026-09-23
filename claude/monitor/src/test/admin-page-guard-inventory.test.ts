@@ -68,6 +68,7 @@ const EXPECTED: Record<string, Guard> = {
   '/admin/nvr-models':            'super-admin',
   '/admin/nvr-models/[id]':       'super-admin',
   '/admin/ops-audit':             'super-admin',
+  '/admin/licenses':              'admin',
   '/admin/provisioning':          'admin',
   '/admin/ops-users':             'super-admin',
   '/admin/ops-users/[id]':        'super-admin',

@@ -34,6 +34,8 @@ export function getAdminNav(t: Msg, opts?: { isSuper?: boolean; baggage?: boolea
     { href: '/admin/users',      label: t.adminNav.users,     icon: '⚇' },
     // 拠点導入（エンロールコード発行＋立ち上げ状況）。パートナー(tenant_admin)が使う。
     { href: '/admin/provisioning', label: '拠点導入', icon: '⏻' },
+    // ライセンス管理（G・VMS 署名ライセンスの発行/差し替え/失効）。パートナーが使う。
+    { href: '/admin/licenses', label: 'ライセンス', icon: '🔑' },
     // 手荷物検査の「内容設定」（同意文言・STEP等）はテナント側の持ち物＝①。
     // 「使えるか(ON/OFF=課金)」は②のテナント編集フラグで運営が制御する。
     ...(opts?.baggage !== false
