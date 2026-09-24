@@ -180,6 +180,7 @@ const EXPECTED: Record<string, Guard> = {
   '/api/cron/usage-rollup': 'cron',
   '/api/edge/bootstrap': 'device-token',
   '/api/edge/config': 'device-token',
+  '/api/edge/events': 'device-token',
   '/api/edge/license': 'device-token',
   '/api/edge/enroll': 'device-token',
   '/api/edges/[id]/cam/[cameraId]/snapshot': 'edge-view',
