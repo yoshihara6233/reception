@@ -11,7 +11,18 @@ export interface FleetRow {
   running: string | null; desiredVer: string | null; verPending: boolean
   cfgState: 'none' | 'pending' | 'applied'
   licenseOrg: string | null; licenseExpires: string | null; licenseExpired: boolean
+  // 拠点が報告した実際の権利（health.license.state ＋ 台数超過・台帳との不一致）
+  licenseSite: string | null
   attention: boolean
+}
+
+const SITE_LICENSE: Record<string, { label: string; bad: boolean }> = {
+  valid:            { label: '拠点: 有効', bad: false },
+  expired:          { label: '拠点: 期限切れ（増設停止）', bad: true },
+  unlicensed:       { label: '拠点: 評価版', bad: false },
+  machine_mismatch: { label: '拠点: 機器不一致', bad: true },
+  over_limit:       { label: '拠点: 台数超過', bad: true },
+  not_applied:      { label: '拠点: 未適用', bad: true },
 }
 
 function ago(iso: string | null): string {
@@ -107,6 +118,11 @@ export function FleetClient({ rows }: { rows: FleetRow[] }) {
                       <span className={r.licenseExpired ? 'text-red-700 font-semibold' : 'text-slate-600'}>
                         {r.licenseExpires ?? '無期限'}{r.licenseExpired && '（期限切れ）'}
                       </span>
+                    )}
+                    {r.licenseSite && SITE_LICENSE[r.licenseSite] && (
+                      <div className={'text-[10px] ' + (SITE_LICENSE[r.licenseSite].bad ? 'font-semibold text-red-700' : 'text-slate-500')}>
+                        {SITE_LICENSE[r.licenseSite].label}
+                      </div>
                     )}
                   </td>
                   <td className="px-3 py-2.5 text-right">

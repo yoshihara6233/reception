@@ -5,10 +5,15 @@
  * nvmsd は config_version が変わった時だけ適用する（冪等）。判断はサーバ側:
  * その edge の nvms レコーダの config_version と、edge が heartbeat で報告した
  * applied_config_version を突き合わせ、同一なら 204。
+ *
+ * 配る直前にも許可キー（EdgeConfigSchema）で**キー単位に**ふるう。契約から外したキー
+ * （motion_sensitivity 等）が過去の保存に残っていても配らない。nvmsd は 1 つでもキーを
+ * 捨てた版の applied を上げない（付録A.1）ので、残骸があると永久に「反映待ち」になるため。
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { authenticateEdge } from '@/lib/edge/device-auth'
+import { allowedConfig } from '@/lib/edge/edge-config'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,7 +47,7 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json(
-    { config_version: rec.config_version, recorderId: rec.id, config: rec.desired_config },
+    { config_version: rec.config_version, recorderId: rec.id, config: allowedConfig(rec.desired_config) },
     { headers: { 'Cache-Control': 'no-store' } },
   )
 }
