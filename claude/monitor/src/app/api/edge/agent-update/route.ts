@@ -12,11 +12,15 @@
  *   無視する 1 回きりの指示で、目標到達を確認したら自動で降ろす。
  * - バージョンは一致/不一致しか見ない（semver 解釈をしない・OTA_SPEC §2）。
  *   「戻す」配備も同じ仕組みで成立する。
+ * - 配布物は (版・形式・arch) で選ぶ。形式・arch は heartbeat の名乗り（pkg_format /
+ *   pkg_arch）で、名乗りの無い拠点は deb / amd64。合う配布物が無ければ 204
+ *   （Ubuntu に rpm を配ると適用役が毎回失敗を報告するだけなので、届けない）。
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { authenticateEdge } from '@/lib/edge/device-auth'
 import { inUpdateWindow, nowJstMinutes } from '@/lib/edge/update-window'
+import { edgePkg } from '@/lib/admin/nvmsd-releases'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,7 +34,7 @@ export async function GET(req: NextRequest) {
   const svc = createSupabaseService()
   const { data: row } = await svc
     .from('edge_devices')
-    .select('desired_agent_version, agent_version, update_window_start, update_window_end, update_force, ota_mode')
+    .select('desired_agent_version, agent_version, update_window_start, update_window_end, update_force, ota_mode, pkg_format, pkg_arch')
     .eq('id', edge.id)
     .maybeSingle()
   if (!row) return new NextResponse(null, { status: 204 })
@@ -73,15 +77,21 @@ export async function GET(req: NextRequest) {
     return new NextResponse(null, { status: 204 })
   }
 
+  const pkg = edgePkg(row)
   const { data: rel } = await svc
     .from('nvmsd_releases')
     .select('version, storage_path, sha256, sig, bytes')
     .eq('version', desired)
+    .eq('pkg_format', pkg.format)
+    .eq('pkg_arch', pkg.arch)
     .maybeSingle()
   if (!rel) {
-    // 目標版がリリース台帳に無い＝登録漏れ。配れないので黙って 204
-    // （管理 UI は台帳から選ばせるので通常は起きない）。
-    console.warn(`agent-update: release not found for desired version "${desired}" (edge ${edge.id})`)
+    // 目標版のうち、この拠点の形式・arch の配布物が台帳に無い＝登録漏れ。配れないので 204
+    // （管理画面のエッジ詳細に「この拠点の形式の配布物が未登録」と出る）。
+    console.warn(
+      `agent-update: no release for desired "${desired}" ` +
+      `(${pkg.format}/${pkg.arch}) (edge ${edge.id})`,
+    )
     return new NextResponse(null, { status: 204 })
   }
 

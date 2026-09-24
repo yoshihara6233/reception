@@ -24,6 +24,9 @@ const Body = z.object({
   mac: z.string().max(64).optional(),
   // 適用できた設定版（CONFIG_PUSH_SPEC §3.2）。desired と一致で「反映済み」。
   applied_config_version: z.number().int().min(0).optional(),
+  // OTA の配り分け（形式・CPU 種別）。nvmsd が更新の適用役と同じ判定で名乗る。
+  pkg_format: z.enum(['deb', 'rpm']).optional(),
+  pkg_arch: z.enum(['amd64', 'arm64']).optional(),
 })
 
 export async function POST(req: NextRequest) {
@@ -32,7 +35,7 @@ export async function POST(req: NextRequest) {
 
   const parsed = Body.safeParse(await req.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
-  const { status, agent_version, mac, applied_config_version } = parsed.data
+  const { status, agent_version, mac, applied_config_version, pkg_format, pkg_arch } = parsed.data
 
   const payload: Record<string, unknown> = {
     status,
@@ -41,6 +44,8 @@ export async function POST(req: NextRequest) {
   if (agent_version) payload.agent_version = agent_version
   if (mac) payload.reported_mac = mac
   if (applied_config_version !== undefined) payload.applied_config_version = applied_config_version
+  if (pkg_format) payload.pkg_format = pkg_format
+  if (pkg_arch) payload.pkg_arch = pkg_arch
 
   const { error } = await createSupabaseService()
     .from('edge_devices')

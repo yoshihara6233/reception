@@ -3,10 +3,13 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Trash2, Upload } from 'lucide-react'
+import { PKG_ARCHES, PKG_FORMATS, edgePkg, type PkgArch, type PkgFormat } from '@/lib/admin/nvmsd-releases'
 
 interface Release {
   id: string
   version: string
+  pkg_format: PkgFormat
+  pkg_arch: PkgArch
   sha256: string
   bytes: number
   notes: string | null
@@ -18,8 +21,12 @@ interface EdgeRow {
   agent_version: string | null
   desired_agent_version: string | null
   update_force: boolean
+  pkg_format: string | null
+  pkg_arch: string | null
   stores: { name: string } | null
 }
+
+const FORMAT_LABEL: Record<PkgFormat, string> = { deb: 'deb（Ubuntu）', rpm: 'rpm（Rocky）' }
 
 // OS 標準の「ファイルを選択」はボタンに見えない（利用者フィードバック 2026-09-18）。
 // 他の二次ボタンと同じ枠付きの見た目に揃える。
@@ -38,6 +45,8 @@ export function ReleasesClient({ releases, edges }: { releases: Release[]; edges
   const [file, setFile] = useState<File | null>(null)
   const [sigFile, setSigFile] = useState<File | null>(null)
   const [version, setVersion] = useState('')
+  const [pkgFormat, setPkgFormat] = useState<PkgFormat>('deb')
+  const [pkgArch, setPkgArch] = useState<PkgArch>('amd64')
   const [notes, setNotes] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
@@ -52,10 +61,10 @@ export function ReleasesClient({ releases, edges }: { releases: Release[]; edges
       const r1 = await fetch('/api/admin/nvmsd-releases/upload-url', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ version: v, bytes: file.size }),
+        body: JSON.stringify({ version: v, bytes: file.size, pkg_format: pkgFormat, pkg_arch: pkgArch }),
       })
       const j1 = await r1.json().catch(() => ({}))
-      if (!r1.ok) throw new Error(j1.error === 'version_exists' ? 'このバージョンは登録済みです' : (j1.error ?? `upload-url ${r1.status}`))
+      if (!r1.ok) throw new Error(j1.error === 'version_exists' ? `この版の ${pkgFormat} / ${pkgArch} は登録済みです` : (j1.error ?? `upload-url ${r1.status}`))
 
       // 2) バイナリを直接 PUT
       setMsg('アップロード中…')
@@ -72,12 +81,12 @@ export function ReleasesClient({ releases, edges }: { releases: Release[]; edges
       const r3 = await fetch('/api/admin/nvmsd-releases', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ version: v, sig, notes: notes.trim() || undefined }),
+        body: JSON.stringify({ version: v, sig, notes: notes.trim() || undefined, pkg_format: pkgFormat, pkg_arch: pkgArch }),
       })
       const j3 = await r3.json().catch(() => ({}))
-      if (!r3.ok) throw new Error(j3.error === 'version_exists' ? 'このバージョンは登録済みです' : (j3.error ?? `登録失敗 ${r3.status}`))
+      if (!r3.ok) throw new Error(j3.error === 'version_exists' ? `この版の ${pkgFormat} / ${pkgArch} は登録済みです` : (j3.error ?? `登録失敗 ${r3.status}`))
 
-      setMsg(`登録しました: ${v}（SHA-256 ${String(j3.sha256).slice(0, 12)}…）`)
+      setMsg(`登録しました: ${v}・${pkgFormat} / ${pkgArch}（SHA-256 ${String(j3.sha256).slice(0, 12)}…）`)
       setFile(null); setSigFile(null); setVersion(''); setNotes('')
       router.refresh()
     } catch (e) {
@@ -89,7 +98,7 @@ export function ReleasesClient({ releases, edges }: { releases: Release[]; edges
   }
 
   async function remove(rel: Release) {
-    if (!confirm(`リリース ${rel.version} を取り下げますか？\n（どこかのエッジが目標版にしている間は消せません）`)) return
+    if (!confirm(`リリース ${rel.version}（${rel.pkg_format} / ${rel.pkg_arch}）を取り下げますか？\n（この形式のエッジが目標版にしている間は消せません）`)) return
     const res = await fetch(`/api/admin/nvmsd-releases/${rel.id}`, { method: 'DELETE' })
     const j = await res.json().catch(() => ({}))
     if (!res.ok) {
@@ -109,6 +118,8 @@ export function ReleasesClient({ releases, edges }: { releases: Release[]; edges
           正当性の検証は nvmsd が埋め込み公開鍵で行います）。署名はマニフェスト方式の文字列
           （<code className="font-mono">nvmsupd1.…</code>・版と SHA-256 を署名の中に含む）をそのまま預かります。
           SHA-256 はアップロード実体からサーバが計算します。
+          <b>同じ版の deb と rpm は、形式を選んでそれぞれ登録</b>してください（署名も別々）。
+          版の名前を変えての登録（<code className="font-mono">0.1.66-rpm</code> など）は拠点で拒否されます。
         </p>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <label className="block text-xs">
@@ -127,6 +138,22 @@ export function ReleasesClient({ releases, edges }: { releases: Release[]; edges
                    className="w-full rounded border border-slate-300 px-2 py-1 font-mono text-xs"
                    placeholder="例: 0.1.56-abc1234" />
           </label>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="block text-xs">
+              <span className="mb-1 block font-medium text-slate-600">形式</span>
+              <select value={pkgFormat} onChange={(e) => setPkgFormat(e.target.value as PkgFormat)}
+                      className="w-full rounded border border-slate-300 px-2 py-1 text-xs">
+                {PKG_FORMATS.map((f) => <option key={f} value={f}>{FORMAT_LABEL[f]}</option>)}
+              </select>
+            </label>
+            <label className="block text-xs">
+              <span className="mb-1 block font-medium text-slate-600">CPU</span>
+              <select value={pkgArch} onChange={(e) => setPkgArch(e.target.value as PkgArch)}
+                      className="w-full rounded border border-slate-300 px-2 py-1 font-mono text-xs">
+                {PKG_ARCHES.map((a) => <option key={a} value={a}>{a}</option>)}
+              </select>
+            </label>
+          </div>
           <label className="block text-xs">
             <span className="mb-1 block font-medium text-slate-600">メモ（任意）</span>
             <input value={notes} onChange={(e) => setNotes(e.target.value)}
@@ -151,6 +178,7 @@ export function ReleasesClient({ releases, edges }: { releases: Release[]; edges
           <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500">
             <tr>
               <th className="px-4 py-2 text-left">バージョン</th>
+              <th className="px-4 py-2 text-left">形式 / CPU</th>
               <th className="px-4 py-2 text-left">SHA-256</th>
               <th className="px-4 py-2 text-right">サイズ</th>
               <th className="px-4 py-2 text-left">メモ</th>
@@ -162,6 +190,7 @@ export function ReleasesClient({ releases, edges }: { releases: Release[]; edges
             {releases.map((r) => (
               <tr key={r.id} className="border-t border-slate-100">
                 <td className="px-4 py-2 font-mono font-medium">{r.version}</td>
+                <td className="px-4 py-2 font-mono text-slate-600">{r.pkg_format} / {r.pkg_arch}</td>
                 <td className="px-4 py-2 font-mono text-slate-500">{r.sha256.slice(0, 16)}…</td>
                 <td className="px-4 py-2 text-right font-mono tabular-nums">{fmtBytes(r.bytes)}</td>
                 <td className="px-4 py-2 text-slate-600">{r.notes ?? '—'}</td>
@@ -177,7 +206,7 @@ export function ReleasesClient({ releases, edges }: { releases: Release[]; edges
               </tr>
             ))}
             {releases.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-6 text-center text-slate-400">リリースはまだ登録されていません</td></tr>
+              <tr><td colSpan={7} className="px-4 py-6 text-center text-slate-400">リリースはまだ登録されていません</td></tr>
             )}
           </tbody>
         </table>
@@ -194,6 +223,7 @@ export function ReleasesClient({ releases, edges }: { releases: Release[]; edges
             <tr>
               <th className="px-4 py-2 text-left">エッジ</th>
               <th className="px-4 py-2 text-left">店舗</th>
+              <th className="px-4 py-2 text-left">形式 / CPU</th>
               <th className="px-4 py-2 text-left">稼働版</th>
               <th className="px-4 py-2 text-left">目標版</th>
               <th className="px-4 py-2 text-left">状態</th>
@@ -202,7 +232,13 @@ export function ReleasesClient({ releases, edges }: { releases: Release[]; edges
           <tbody>
             {edges.map((e) => {
               const running = (e.agent_version ?? '').replace(/^nvmsd\//, '')
-              const state = !e.desired_agent_version
+              const pkg = edgePkg(e)
+              // 目標版はあるが、この拠点の形式・arch の配布物が無い（拠点は 204・届かない）。
+              const missing = !!e.desired_agent_version && running !== e.desired_agent_version &&
+                !releases.some((r) => r.version === e.desired_agent_version && r.pkg_format === pkg.format && r.pkg_arch === pkg.arch)
+              const state = missing
+                ? { label: `${pkg.format} / ${pkg.arch} の配布物が未登録`, cls: 'bg-red-100 text-red-700' }
+                : !e.desired_agent_version
                 ? { label: '指示なし', cls: 'bg-slate-100 text-slate-500' }
                 : running === e.desired_agent_version
                   ? { label: '一致', cls: 'bg-emerald-100 text-emerald-700' }
@@ -213,6 +249,10 @@ export function ReleasesClient({ releases, edges }: { releases: Release[]; edges
                     <a href={`/admin/edges/${e.id}`} className="text-blue-600 hover:underline">{e.name}</a>
                   </td>
                   <td className="px-4 py-2">{e.stores?.name ?? '—'}</td>
+                  <td className="px-4 py-2 font-mono text-slate-600">
+                    {pkg.format} / {pkg.arch}
+                    {!e.pkg_format && <span className="ml-1 font-sans text-[10px] text-slate-400">（名乗りなし）</span>}
+                  </td>
                   <td className="px-4 py-2 font-mono">{running || '—'}</td>
                   <td className="px-4 py-2 font-mono">{e.desired_agent_version ?? '—'}</td>
                   <td className="px-4 py-2">
@@ -222,7 +262,7 @@ export function ReleasesClient({ releases, edges }: { releases: Release[]; edges
               )
             })}
             {edges.length === 0 && (
-              <tr><td colSpan={5} className="px-4 py-6 text-center text-slate-400">nvmsd アップリンクのエッジがまだありません</td></tr>
+              <tr><td colSpan={6} className="px-4 py-6 text-center text-slate-400">nvmsd アップリンクのエッジがまだありません</td></tr>
             )}
           </tbody>
         </table>

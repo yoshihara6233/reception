@@ -22,13 +22,13 @@ export default async function NvmsdReleasesPage() {
   const [{ data: releases }, { data: edges }] = await Promise.all([
     svc
       .from('nvmsd_releases')
-      .select('id, version, sha256, bytes, notes, created_at')
+      .select('id, version, pkg_format, pkg_arch, sha256, bytes, notes, created_at')
       .order('created_at', { ascending: false })
       .limit(100),
     // 配備状況: nvmsd アップリンクのエッジだけ（agent_version の接頭辞で見分ける）。
     svc
       .from('edge_devices')
-      .select('id, name, agent_version, desired_agent_version, update_force, stores ( name )')
+      .select('id, name, agent_version, desired_agent_version, update_force, pkg_format, pkg_arch, stores ( name )')
       .like('agent_version', 'nvmsd/%')
       .order('name')
       .limit(500),
