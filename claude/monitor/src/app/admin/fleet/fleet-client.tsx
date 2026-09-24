@@ -13,6 +13,8 @@ export interface FleetRow {
   licenseOrg: string | null; licenseExpires: string | null; licenseExpired: boolean
   // 拠点が報告した実際の権利（health.license.state ＋ 台数超過・台帳との不一致）
   licenseSite: string | null
+  // 未適用のとき、拠点が報告した拒否理由（health.license.last_rejected.reason）
+  licenseRejectReason: string | null
   attention: boolean
 }
 
@@ -123,6 +125,9 @@ export function FleetClient({ rows }: { rows: FleetRow[] }) {
                       <div className={'text-[10px] ' + (SITE_LICENSE[r.licenseSite].bad ? 'font-semibold text-red-700' : 'text-slate-500')}>
                         {SITE_LICENSE[r.licenseSite].label}
                       </div>
+                    )}
+                    {r.licenseRejectReason && (
+                      <div className="text-[10px] text-slate-500">{r.licenseRejectReason}</div>
                     )}
                   </td>
                   <td className="px-3 py-2.5 text-right">
