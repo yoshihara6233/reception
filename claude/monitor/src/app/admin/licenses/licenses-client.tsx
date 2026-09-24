@@ -58,7 +58,11 @@ export function LicensesClient({ edges, rows, canIssue }: { edges: EdgeOpt[]; ro
   }
 
   async function revoke(r: LicRow) {
-    if (!confirm(`${r.org ?? r.edge} のライセンスを失効しますか？\n次回取得で拠点は権利を失います（録画は継続・追加/上位機能が停止）。`)) return
+    if (!confirm(
+      `${r.org ?? r.edge} のライセンスを台帳上で失効にしますか？\n\n`
+      + 'これは台帳の記録だけです。拠点の nvmsd は署名の無い取り下げでは権利を外しません（クラウド侵害で全拠点を一斉に外せないため）。\n'
+      + '拠点に効かせるには、G・VMS に「期限を切ったライセンス」を新しい発行日で署名してもらい、上の欄から差し替え登録してください。',
+    )) return
     const res = await fetch(`/api/admin/licenses/${r.id}`, { method: 'DELETE' })
     const j = await res.json().catch(() => ({}))
     if (!res.ok) { alert(j.error ?? `失効失敗: ${res.status}`); return }
@@ -74,6 +78,11 @@ export function LicensesClient({ edges, rows, canIssue }: { edges: EdgeOpt[]; ro
           G・VMS が<b>署名したライセンス</b>を登録します（クラウドは配送路 — 正当性は nvmsd が埋め込み公開鍵で検証）。
           機器の MAC を G・VMS に伝えて署名を受け、その文字列をここに貼り付けてください。
         </p>
+        <ul className="mb-3 list-disc space-y-0.5 pl-5 text-[11px] text-slate-500">
+          <li>再発行・期限延長・<b>失効</b>は、どれも G・VMS が<b>新しい発行日</b>で署名したものの差し替えで行います（失効＝期限を切ったライセンス）。</li>
+          <li>拠点は、いま効いているものより<b>古い発行日</b>のライセンスを受け付けません（巻き戻し防止）。</li>
+          <li>期限切れでも録画・閲覧は止まりません。止まるのはカメラの増設です。</li>
+        </ul>
         {!canIssue && (
           <p className="mb-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
             操作中テナントを選択すると登録できます（上部の「切替」から）。
@@ -109,7 +118,7 @@ export function LicensesClient({ edges, rows, canIssue }: { edges: EdgeOpt[]; ro
         <label className="mt-3 block text-xs">
           <span className="mb-1 block font-medium text-slate-600">ライセンス（G・VMS 署名済み文字列をそのまま貼り付け）</span>
           <textarea value={blob} onChange={(e) => setBlob(e.target.value)} disabled={!canIssue} rows={3}
-                    className="w-full rounded border border-slate-300 px-2 py-1.5 font-mono text-[11px]" placeholder="nvmslic1.… など（中身はクラウドで解釈しません）" />
+                    className="w-full rounded border border-slate-300 px-2 py-1.5 font-mono text-[11px]" placeholder="NVMSLIC1.… （1 行・中身はクラウドで解釈しません）" />
         </label>
         <div className="mt-3 flex items-center justify-end gap-3">
           {err && <span className="mr-auto text-xs text-red-700">{err}</span>}
@@ -159,7 +168,7 @@ export function LicensesClient({ edges, rows, canIssue }: { edges: EdgeOpt[]; ro
                     <td className="px-4 py-2.5 text-right">
                       {r.status === 'active' && (
                         <button onClick={() => revoke(r)} className="inline-flex items-center gap-1 rounded border border-red-200 px-2 py-0.5 text-[11px] text-red-700 hover:bg-red-50">
-                          <Trash2 size={12} strokeWidth={1.5} aria-hidden /> 失効
+                          <Trash2 size={12} strokeWidth={1.5} aria-hidden /> 台帳で失効
                         </button>
                       )}
                     </td>

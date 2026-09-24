@@ -7,6 +7,9 @@
  * 案B（死活へのエラー要約同乗）が定期サマリ、A2 が「待たずに上げる割り込み」。
  *
  * 202 = 受領。重複（event_type+node が短時間に連続）はサーバが抑制する。
+ *
+ * 復旧（node_up / recording_resumed / disk_ok・severity info）も受ける（G・VMS 提案・
+ * 付録A.4 を採用）。復旧は対になる未処理の障害イベントを closed にし、「復旧」として通知する。
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -21,8 +24,8 @@ const DEDUP_WINDOW_SEC = 120
 
 const Body = z.object({
   recorderId: z.string().uuid().optional(),
-  event_type: z.enum(['node_down', 'recording_stopped', 'disk_low']),
-  severity:   z.enum(['critical', 'warning']).default('critical'),
+  event_type: z.enum(['node_down', 'recording_stopped', 'disk_low', 'node_up', 'recording_resumed', 'disk_ok']),
+  severity:   z.enum(['critical', 'warning', 'info']).default('critical'),
   node:       z.number().int().optional(),
   at:         z.string().optional(),
   // 秘匿値マスク済みの短い本文（案B と同じ約束）。
@@ -31,6 +34,12 @@ const Body = z.object({
 
 const LABEL: Record<string, string> = {
   node_down: 'ノード離脱', recording_stopped: '録画停止', disk_low: '容量逼迫',
+  node_up: 'ノード復帰', recording_resumed: '録画再開', disk_ok: '容量回復',
+}
+
+/** 復旧 → 対になる障害。 */
+const RECOVERS: Record<string, string> = {
+  node_up: 'node_down', recording_resumed: 'recording_stopped', disk_ok: 'disk_low',
 }
 
 export async function POST(req: NextRequest) {
@@ -39,11 +48,26 @@ export async function POST(req: NextRequest) {
 
   const parsed = Body.safeParse(await req.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
-  const { event_type, severity, node, at, message } = parsed.data
+  const { event_type, node, at, message } = parsed.data
+  const recovers = RECOVERS[event_type] ?? null
+  // 復旧は常に info（送り手の severity 指定に依らない）。
+  const severity = recovers ? 'info' : parsed.data.severity
   const occurredAt = at ?? new Date().toISOString()
-  const dedupKey = `nvms:${event_type}:${node ?? '-'}`
+  // 重複抑制キーは severity まで含める。disk_low は warning（満杯が近い）と critical（保護録画まで
+  // 消した）が同じ種別で来るため、event_type+node だけだと warning 直後の critical を握り潰す。
+  const nodeKey = node ?? '-'
+  const dedupKey = `nvms:${event_type}:${nodeKey}:${severity}`
 
   const svc = createSupabaseService()
+
+  // 復旧: 対になる未処理の障害イベントを閉じる（一覧に「落ちたまま」が残らないように）。
+  if (recovers) {
+    await svc.from('alarm_events')
+      .update({ status: 'closed' })
+      .eq('store_id', edge.store_id)
+      .in('dedup_key', [`nvms:${recovers}:${nodeKey}:critical`, `nvms:${recovers}:${nodeKey}:warning`])
+      .eq('status', 'new')
+  }
 
   // 重複抑制（同一 store+dedup_key が窓内）。連続する同種イベントで通知を溢れさせない。
   const since = new Date(Date.now() - DEDUP_WINDOW_SEC * 1000).toISOString()
@@ -62,7 +86,7 @@ export async function POST(req: NextRequest) {
     .from('alarm_events')
     .insert({
       store_id: edge.store_id, camera_id: null, source: 'nvms',
-      event_type, occurred_at: occurredAt, status: 'new', dedup_key: dedupKey,
+      event_type, occurred_at: occurredAt, status: recovers ? 'closed' : 'new', dedup_key: dedupKey,
     })
     .select('id')
     .single()
@@ -76,7 +100,8 @@ export async function POST(req: NextRequest) {
   const edgeName = ed?.name ?? edge.id
 
   // 即通知（運用アラート経路・best-effort。失敗しても受領は返す）。
-  const text = `【G・VMS ${severity === 'critical' ? '重大' : '警告'}】${storeName} / ${edgeName}`
+  const tag = severity === 'critical' ? '重大' : severity === 'warning' ? '警告' : '復旧'
+  const text = `【G・VMS ${tag}】${storeName} / ${edgeName}`
     + `: ${LABEL[event_type] ?? event_type}`
     + (node != null ? `（node${node}）` : '')
     + (message ? ` — ${message}` : '')

@@ -39,6 +39,7 @@ interface Recorder {
   // A1 設定遠隔投入（nvms のみ）
   desired_config: Record<string, unknown> | null
   config_version: number
+  config_rejected: { key: string; reason: string }[]
   recorder_cameras: Camera[]
 }
 interface EdgePayload {
@@ -601,7 +602,6 @@ function ConfigPushPanel({ recorder, appliedVersion }: { recorder: Recorder; app
   const [vals, setVals] = useState<Record<string, string>>({
     retention_days: cfg.retention_days != null ? String(cfg.retention_days) : '',
     live_hevc_passthrough: cfg.live_hevc_passthrough === true ? 'on' : cfg.live_hevc_passthrough === false ? 'off' : '',
-    motion_sensitivity: cfg.motion_sensitivity != null ? String(cfg.motion_sensitivity) : '',
     snapshot_offsets: Array.isArray(cfg.snapshot_offsets) ? (cfg.snapshot_offsets as number[]).join(',') : '',
   })
   const [busy, setBusy] = useState(false)
@@ -615,13 +615,22 @@ function ConfigPushPanel({ recorder, appliedVersion }: { recorder: Recorder; app
 
   function set(k: string, v: string) { setVals((s) => ({ ...s, [k]: v })) }
 
+  // 保持日数を下げる変更は録画消去＝不可逆。nvmsd は拠点側の許可が無いと適用しない（付録A.3）。
+  const prevRetention = typeof cfg.retention_days === 'number' ? cfg.retention_days : null
+  const nextRetention = vals.retention_days.trim() ? Number(vals.retention_days) : null
+  const retentionDecrease = prevRetention != null && nextRetention != null && nextRetention < prevRetention
+
   async function save() {
+    if (retentionDecrease && !confirm(
+      `保持日数を ${prevRetention} 日 → ${nextRetention} 日に下げます。\n`
+      + '下げると古い録画が消え、取り消せません。\n'
+      + '拠点側で許可（NVMS_REMOTE_RETENTION_DECREASE=true）が無い拠点では反映されず「反映待ち」のままになります。\n\n配信しますか？',
+    )) return
     setBusy(true); setMsg(null); setErr(null)
     // 空欄のキーは送らない（＝そのキーは設定しない）。
     const body: Record<string, unknown> = {}
     if (vals.retention_days.trim()) body.retention_days = Number(vals.retention_days)
     if (vals.live_hevc_passthrough) body.live_hevc_passthrough = vals.live_hevc_passthrough === 'on'
-    if (vals.motion_sensitivity.trim()) body.motion_sensitivity = Number(vals.motion_sensitivity)
     if (vals.snapshot_offsets.trim()) {
       const arr = vals.snapshot_offsets.split(',').map((s) => Number(s.trim())).filter((n) => Number.isFinite(n))
       if (arr.length) body.snapshot_offsets = arr
@@ -650,7 +659,12 @@ function ConfigPushPanel({ recorder, appliedVersion }: { recorder: Recorder; app
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <label className="block text-xs"><span className="mb-1 block font-medium text-slate-600">録画の保持日数（1〜3650）</span>
           <input value={vals.retention_days} onChange={(e) => set('retention_days', e.target.value.replace(/[^0-9]/g, ''))}
-                 className="w-full rounded border border-slate-300 px-2 py-1 font-mono text-xs" placeholder="例: 30" /></label>
+                 className="w-full rounded border border-slate-300 px-2 py-1 font-mono text-xs" placeholder="例: 30" />
+          <span className={'mt-1 block text-[11px] ' + (retentionDecrease ? 'font-semibold text-amber-700' : 'text-slate-500')}>
+            {retentionDecrease
+              ? `${prevRetention} 日から下げる変更です。拠点側の許可が無いと反映されません（録画消去は取り消せません）`
+              : '増やす変更はそのまま反映。下げる変更は拠点側の許可が必要です'}
+          </span></label>
         <label className="block text-xs"><span className="mb-1 block font-medium text-slate-600">H.265 そのまま配信</span>
           <select value={vals.live_hevc_passthrough} onChange={(e) => set('live_hevc_passthrough', e.target.value)}
                   className="w-full rounded border border-slate-300 px-2 py-1 text-xs">
@@ -658,13 +672,20 @@ function ConfigPushPanel({ recorder, appliedVersion }: { recorder: Recorder; app
             <option value="on">オン（そのまま配信）</option>
             <option value="off">オフ（サーバ変換）</option>
           </select></label>
-        <label className="block text-xs"><span className="mb-1 block font-medium text-slate-600">動体検知しきい値（0.00〜1.00）</span>
-          <input value={vals.motion_sensitivity} onChange={(e) => set('motion_sensitivity', e.target.value.replace(/[^0-9.]/g, ''))}
-                 className="w-full rounded border border-slate-300 px-2 py-1 font-mono text-xs" placeholder="例: 0.30" /></label>
-        <label className="block text-xs"><span className="mb-1 block font-medium text-slate-600">BCP スナップ オフセット（分・カンマ区切り）</span>
+        <label className="block text-xs"><span className="mb-1 block font-medium text-slate-600">BCP スナップ オフセット（分・各 −60〜60・カンマ区切り）</span>
           <input value={vals.snapshot_offsets} onChange={(e) => set('snapshot_offsets', e.target.value.replace(/[^0-9,\- ]/g, ''))}
                  className="w-full rounded border border-slate-300 px-2 py-1 font-mono text-xs" placeholder="例: -5,5,10,30" /></label>
       </div>
+      {state.label === '反映待ち' && recorder.config_rejected.length > 0 && (
+        <div className="mt-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+          <p className="mb-1 font-semibold">拠点が受け付けなかった設定（最新の死活報告より）</p>
+          <ul className="space-y-0.5">
+            {recorder.config_rejected.map((r, i) => (
+              <li key={i}><span className="font-mono">{r.key}</span>{r.reason ? `: ${r.reason}` : ''}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="mt-3 flex items-center justify-end gap-3">
         {err && <span className="mr-auto text-xs text-red-700">{err}</span>}
         {msg && !err && <span className="mr-auto text-xs text-emerald-700">{msg}</span>}

@@ -77,9 +77,16 @@ export default async function FleetPage() {
       const cfgPending = cfgVer > 0 && (e.applied_config_version as number | null) !== cfgVer
       const lic = licByEdge.get(e.id as string) ?? null
       const licExpired = !!lic?.expires_at && new Date(lic.expires_at + 'T23:59:59+09:00').getTime() < now
+      // 拠点側の実際の権利（health.license・LICENSE_SPEC 付録A.9）。台帳より現地が正。
+      const hl = !healthStale && h && typeof h.license === 'object' && h.license ? h.license as Record<string, unknown> : null
+      const siteState = hl && typeof hl.state === 'string' ? hl.state : null
+      const siteOverLimit = hl?.over_limit === true
+      // 台帳に有効があるのに拠点が未ライセンス＝未適用（署名不正・巻き戻し拒否・MAC 不一致の疑い）。
+      const licNotApplied = !!lic && siteState === 'unlicensed'
+      const licSiteBad = siteState === 'expired' || siteState === 'machine_mismatch' || siteOverLimit || licNotApplied
 
       const attention =
-        seenStale || (!healthStale && err > 0) || cfgPending || verPending || licExpired ||
+        seenStale || (!healthStale && err > 0) || cfgPending || verPending || licExpired || licSiteBad ||
         (!healthStale && ((h?.cameras_offline as number | undefined) ?? 0) > 0)
 
       rows.push({
@@ -97,6 +104,7 @@ export default async function FleetPage() {
         running: running || null, desiredVer, verPending,
         cfgState: cfgVer === 0 ? 'none' : cfgPending ? 'pending' : 'applied',
         licenseOrg: lic?.org ?? null, licenseExpires: lic?.expires_at ?? null, licenseExpired: licExpired,
+        licenseSite: siteOverLimit ? 'over_limit' : licNotApplied ? 'not_applied' : siteState,
         attention,
       })
     }

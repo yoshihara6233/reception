@@ -50,6 +50,8 @@ interface EdgePayload {
     // A1 設定遠隔投入（nvms のみ）: 望ましい設定と版
     desired_config: Record<string, unknown> | null
     config_version: number
+    // nvmsd が死活報告に載せた「捨てたキーと理由」（health.config.rejected・付録A.1）
+    config_rejected: { key: string; reason: string }[]
     // 秘密そのものは返さない。設定済みか否かだけ渡す。
     has_password: boolean
     vod_has_password: boolean
@@ -66,6 +68,7 @@ interface RawRecorder {
   vod_channel: number | null; password_enc: string | null; vod_password_enc: string | null
   bcp_capture_mode: 'grid' | 'per_camera' | null; bcp_folder_paths: string[] | null
   desired_config: Record<string, unknown> | null; config_version: number
+  health: Record<string, unknown> | null
   recorder_cameras: EdgePayload['recorders'][number]['recorder_cameras']
 }
 
@@ -88,7 +91,7 @@ export default async function EdgeEditPage(
       recorders (
         id, vendor, model, host, rtsp_port, onvif_port, username, notes,
         live_host, vod_host, vod_username, vod_channel, password_enc, vod_password_enc,
-        bcp_capture_mode, bcp_folder_paths, desired_config, config_version,
+        bcp_capture_mode, bcp_folder_paths, desired_config, config_version, health,
         recorder_cameras ( id, channel, name, grid_pos, enabled, frigate_camera, hls_url, live_rtsp, folder_path )
       )
     `)
@@ -107,6 +110,7 @@ export default async function EdgeEditPage(
       vod_channel: r.vod_channel, recorder_cameras: r.recorder_cameras,
       bcp_capture_mode: r.bcp_capture_mode, bcp_folder_paths: r.bcp_folder_paths,
       desired_config: r.desired_config, config_version: r.config_version,
+      config_rejected: configRejected(r.health),
       has_password: !!r.password_enc,
       vod_has_password: !!r.vod_password_enc,
     })),
@@ -135,4 +139,16 @@ export default async function EdgeEditPage(
       </div>
     </AdminShell>
   )
+}
+
+/** health.config.rejected（nvmsd が捨てたキーと理由）だけを取り出す。形が崩れていれば空。 */
+function configRejected(health: Record<string, unknown> | null): { key: string; reason: string }[] {
+  const cfg = health?.config as { rejected?: unknown } | undefined
+  if (!cfg || !Array.isArray(cfg.rejected)) return []
+  return cfg.rejected.slice(0, 20).flatMap((x) => {
+    const o = x as { key?: unknown; reason?: unknown }
+    return typeof o?.key === 'string'
+      ? [{ key: o.key.slice(0, 64), reason: typeof o.reason === 'string' ? o.reason.slice(0, 300) : '' }]
+      : []
+  })
 }
