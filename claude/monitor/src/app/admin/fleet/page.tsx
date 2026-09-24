@@ -48,7 +48,7 @@ export default async function FleetPage() {
 
     const recByEdge = new Map<string, { health: Record<string, unknown> | null; health_at: string | null; config_version: number }>()
     const camByEdge = new Map<string, number>()
-    const licByEdge = new Map<string, { org: string | null; expires_at: string | null; status: string }>()
+    const licByEdge = new Map<string, { org: string | null; expires_at: string | null; status: string; version: number }>()
     if (edgeIds.length > 0) {
       const { data: recs } = await svc.from('recorders')
         .select('id, edge_id, health, health_at, config_version').eq('vendor', 'nvms').in('edge_id', edgeIds)
@@ -60,8 +60,8 @@ export default async function FleetPage() {
         for (const c of cams ?? []) { const e = recEdge.get(c.recorder_id as string); if (e) camByEdge.set(e, (camByEdge.get(e) ?? 0) + 1) }
       }
       const { data: lics } = await svc.from('licenses')
-        .select('edge_id, org_name, expires_at, status').eq('status', 'active').in('edge_id', edgeIds)
-      for (const l of lics ?? []) licByEdge.set(l.edge_id as string, { org: (l.org_name as string | null) ?? null, expires_at: (l.expires_at as string | null) ?? null, status: l.status as string })
+        .select('edge_id, org_name, expires_at, status, license_version').eq('status', 'active').in('edge_id', edgeIds)
+      for (const l of lics ?? []) licByEdge.set(l.edge_id as string, { org: (l.org_name as string | null) ?? null, expires_at: (l.expires_at as string | null) ?? null, status: l.status as string, version: (l.license_version as number) ?? 0 })
     }
 
     for (const e of edges ?? []) {
@@ -81,8 +81,15 @@ export default async function FleetPage() {
       const hl = !healthStale && h && typeof h.license === 'object' && h.license ? h.license as Record<string, unknown> : null
       const siteState = hl && typeof hl.state === 'string' ? hl.state : null
       const siteOverLimit = hl?.over_limit === true
-      // 台帳に有効があるのに拠点が未ライセンス＝未適用（署名不正・巻き戻し拒否・MAC 不一致の疑い）。
-      const licNotApplied = !!lic && siteState === 'unlicensed'
+      // 未適用 = 台帳の最新が拠点に効いていない（署名不正・巻き戻し拒否・MAC 不一致）。
+      // nvmsd は検証に落ちても前のライセンスを外さず valid のままなので、state だけでは拾えない
+      // （LICENSE_SPEC 付録D）。拠点が報告する適用済みの配送版 applied_version と台帳の
+      // license_version を比べる（付録E）。applied_version 未対応の版では unlicensed だけで判定。
+      const appliedLicVer = typeof hl?.applied_version === 'number' ? hl.applied_version : null
+      const licNotApplied = !!lic && (
+        (appliedLicVer != null && appliedLicVer !== lic.version) || siteState === 'unlicensed')
+      const lr = hl?.last_rejected as { reason?: unknown } | undefined
+      const licRejectReason = licNotApplied && typeof lr?.reason === 'string' ? lr.reason.slice(0, 200) : null
       const licSiteBad = siteState === 'expired' || siteState === 'machine_mismatch' || siteOverLimit || licNotApplied
 
       const attention =
@@ -105,6 +112,7 @@ export default async function FleetPage() {
         cfgState: cfgVer === 0 ? 'none' : cfgPending ? 'pending' : 'applied',
         licenseOrg: lic?.org ?? null, licenseExpires: lic?.expires_at ?? null, licenseExpired: licExpired,
         licenseSite: siteOverLimit ? 'over_limit' : licNotApplied ? 'not_applied' : siteState,
+        licenseRejectReason: licRejectReason,
         attention,
       })
     }

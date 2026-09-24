@@ -10,6 +10,8 @@
  *
  * 復旧（node_up / recording_resumed / disk_ok・severity info）も受ける（G・VMS 提案・
  * 付録A.4 を採用）。復旧は対になる未処理の障害イベントを closed にし、「復旧」として通知する。
+ * ディスク故障の兆候 disk_failing（SMART）／回復 disk_healthy も受ける（付録D の提案を採用）。
+ * disk_ok（容量の回復）は G・VMS に対応イベントが無く送られない（SMART 回復と混ぜない）。
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -24,7 +26,10 @@ const DEDUP_WINDOW_SEC = 120
 
 const Body = z.object({
   recorderId: z.string().uuid().optional(),
-  event_type: z.enum(['node_down', 'recording_stopped', 'disk_low', 'node_up', 'recording_resumed', 'disk_ok']),
+  event_type: z.enum([
+    'node_down', 'recording_stopped', 'disk_low', 'disk_failing',
+    'node_up', 'recording_resumed', 'disk_ok', 'disk_healthy',
+  ]),
   severity:   z.enum(['critical', 'warning', 'info']).default('critical'),
   node:       z.number().int().optional(),
   at:         z.string().optional(),
@@ -33,13 +38,14 @@ const Body = z.object({
 })
 
 const LABEL: Record<string, string> = {
-  node_down: 'ノード離脱', recording_stopped: '録画停止', disk_low: '容量逼迫',
-  node_up: 'ノード復帰', recording_resumed: '録画再開', disk_ok: '容量回復',
+  node_down: 'ノード離脱', recording_stopped: '録画停止', disk_low: '容量逼迫', disk_failing: 'ディスク故障の兆候',
+  node_up: 'ノード復帰', recording_resumed: '録画再開', disk_ok: '容量回復', disk_healthy: 'ディスク健康回復',
 }
 
 /** 復旧 → 対になる障害。 */
 const RECOVERS: Record<string, string> = {
   node_up: 'node_down', recording_resumed: 'recording_stopped', disk_ok: 'disk_low',
+  disk_healthy: 'disk_failing',
 }
 
 export async function POST(req: NextRequest) {
