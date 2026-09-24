@@ -32,6 +32,8 @@ export function getAdminNav(t: Msg, opts?: { isSuper?: boolean; baggage?: boolea
     { href: '/admin/reports/usage', label: '利用状況レポート', icon: '📊', exact: true },
     { href: '/admin/stores',     label: t.adminNav.stores,    icon: '⛬' },
     { href: '/admin/users',      label: t.adminNav.users,     icon: '⚇' },
+    // 多拠点 統合ダッシュボード（B1・稼働/健全/設定反映/版/ライセンスを横断）。
+    { href: '/admin/fleet', label: '拠点稼働', icon: '📡' },
     // 拠点導入（エンロールコード発行＋立ち上げ状況）。パートナー(tenant_admin)が使う。
     { href: '/admin/provisioning', label: '拠点導入', icon: '⏻' },
     // ライセンス管理（G・VMS 署名ライセンスの発行/差し替え/失効）。パートナーが使う。
