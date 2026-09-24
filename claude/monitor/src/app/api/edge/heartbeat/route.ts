@@ -22,6 +22,8 @@ const Body = z.object({
   // ライセンス束縛の対象（LICENSE_SPEC §4.2）。nvmsd が申告し、管理者が
   // これを見て G・VMS にライセンス発行を依頼する。任意（対応版だけ送る）。
   mac: z.string().max(64).optional(),
+  // 適用できた設定版（CONFIG_PUSH_SPEC §3.2）。desired と一致で「反映済み」。
+  applied_config_version: z.number().int().min(0).optional(),
 })
 
 export async function POST(req: NextRequest) {
@@ -30,7 +32,7 @@ export async function POST(req: NextRequest) {
 
   const parsed = Body.safeParse(await req.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
-  const { status, agent_version, mac } = parsed.data
+  const { status, agent_version, mac, applied_config_version } = parsed.data
 
   const payload: Record<string, unknown> = {
     status,
@@ -38,6 +40,7 @@ export async function POST(req: NextRequest) {
   }
   if (agent_version) payload.agent_version = agent_version
   if (mac) payload.reported_mac = mac
+  if (applied_config_version !== undefined) payload.applied_config_version = applied_config_version
 
   const { error } = await createSupabaseService()
     .from('edge_devices')

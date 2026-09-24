@@ -36,6 +36,9 @@ interface Recorder {
   // Phase 2b（nvms のみ）: BCP 収集方式と対象フォルダ
   bcp_capture_mode: 'grid' | 'per_camera' | null
   bcp_folder_paths: string[] | null
+  // A1 設定遠隔投入（nvms のみ）
+  desired_config: Record<string, unknown> | null
+  config_version: number
   recorder_cameras: Camera[]
 }
 interface EdgePayload {
@@ -55,6 +58,7 @@ interface EdgePayload {
   update_window_end: string | null
   update_force: boolean
   ota_mode: 'onsite' | 'auto'
+  applied_config_version: number | null
   stores: { name: string; area_code: string | null }
   recorders: Recorder[]
 }
@@ -160,6 +164,12 @@ export function EdgeDetail({ edge, bundles = [] }: { edge: EdgePayload; bundles?
       {edge.agent_version?.startsWith('nvmsd/') && (
         <DiagnosticsPanel edgeId={edge.id} bundles={bundles} />
       )}
+
+      {/* 設定の遠隔投入（A1）— nvmsd アップリンクのみ・nvms レコーダが対象 */}
+      {edge.agent_version?.startsWith('nvmsd/') && (() => {
+        const rec = edge.recorders.find((r) => r.vendor === 'nvms')
+        return rec ? <ConfigPushPanel recorder={rec} appliedVersion={edge.applied_config_version} /> : null
+      })()}
 
       {/* Recorders */}
       <RecorderList edgeId={edge.id} recorders={edge.recorders} />
@@ -576,6 +586,93 @@ function DiagnosticsPanel({ edgeId, bundles }: { edgeId: string; bundles: DiagBu
           </tbody>
         </table>
       )}
+    </section>
+  )
+}
+
+/**
+ * 設定の遠隔投入（CONFIG_PUSH_SPEC・A1）。nvms レコーダの desired_config を編集し、
+ * 保存で config_version を +1。nvmsd が版の変化を見て適用し、applied_config_version を
+ * heartbeat で報告する。desired と applied の一致で「反映済み」。
+ */
+function ConfigPushPanel({ recorder, appliedVersion }: { recorder: Recorder; appliedVersion: number | null }) {
+  const router = useRouter()
+  const cfg = (recorder.desired_config ?? {}) as Record<string, unknown>
+  const [vals, setVals] = useState<Record<string, string>>({
+    retention_days: cfg.retention_days != null ? String(cfg.retention_days) : '',
+    live_hevc_passthrough: cfg.live_hevc_passthrough === true ? 'on' : cfg.live_hevc_passthrough === false ? 'off' : '',
+    motion_sensitivity: cfg.motion_sensitivity != null ? String(cfg.motion_sensitivity) : '',
+    snapshot_offsets: Array.isArray(cfg.snapshot_offsets) ? (cfg.snapshot_offsets as number[]).join(',') : '',
+  })
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+
+  const version = recorder.config_version ?? 0
+  const state = version === 0 ? { label: '未設定', cls: 'bg-slate-100 text-slate-600' }
+    : appliedVersion === version ? { label: '反映済み', cls: 'bg-emerald-100 text-emerald-700' }
+    : { label: '反映待ち', cls: 'bg-amber-100 text-amber-700' }
+
+  function set(k: string, v: string) { setVals((s) => ({ ...s, [k]: v })) }
+
+  async function save() {
+    setBusy(true); setMsg(null); setErr(null)
+    // 空欄のキーは送らない（＝そのキーは設定しない）。
+    const body: Record<string, unknown> = {}
+    if (vals.retention_days.trim()) body.retention_days = Number(vals.retention_days)
+    if (vals.live_hevc_passthrough) body.live_hevc_passthrough = vals.live_hevc_passthrough === 'on'
+    if (vals.motion_sensitivity.trim()) body.motion_sensitivity = Number(vals.motion_sensitivity)
+    if (vals.snapshot_offsets.trim()) {
+      const arr = vals.snapshot_offsets.split(',').map((s) => Number(s.trim())).filter((n) => Number.isFinite(n))
+      if (arr.length) body.snapshot_offsets = arr
+    }
+    try {
+      const res = await fetch(`/api/admin/recorders/${recorder.id}/config`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j.error === 'invalid_config' ? '値の形式が不正です（範囲を確認してください）' : (j.error ?? `保存失敗: ${res.status}`))
+      setMsg(`保存しました（版 ${j.config_version}・次回ポーリングで適用）`)
+      router.refresh()
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)) } finally { setBusy(false) }
+  }
+
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white p-5 text-sm">
+      <div className="mb-1 flex items-center justify-between">
+        <h2 className="font-bold text-slate-900">設定の遠隔投入</h2>
+        <span className={'rounded px-2 py-0.5 text-[11px] font-semibold ' + state.cls}>{state.label}{version > 0 ? `（版 ${version}）` : ''}</span>
+      </div>
+      <p className="mb-3 text-[11px] text-slate-500">
+        許可された設定だけをクラウドから配ります。空欄のキーは配信しません（現地の既定のまま）。
+        保存すると版が上がり、nvmsd が次回ポーリングで適用します。
+      </p>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <label className="block text-xs"><span className="mb-1 block font-medium text-slate-600">録画の保持日数（1〜3650）</span>
+          <input value={vals.retention_days} onChange={(e) => set('retention_days', e.target.value.replace(/[^0-9]/g, ''))}
+                 className="w-full rounded border border-slate-300 px-2 py-1 font-mono text-xs" placeholder="例: 30" /></label>
+        <label className="block text-xs"><span className="mb-1 block font-medium text-slate-600">H.265 そのまま配信</span>
+          <select value={vals.live_hevc_passthrough} onChange={(e) => set('live_hevc_passthrough', e.target.value)}
+                  className="w-full rounded border border-slate-300 px-2 py-1 text-xs">
+            <option value="">— 配信しない（現地既定）—</option>
+            <option value="on">オン（そのまま配信）</option>
+            <option value="off">オフ（サーバ変換）</option>
+          </select></label>
+        <label className="block text-xs"><span className="mb-1 block font-medium text-slate-600">動体検知しきい値（0.00〜1.00）</span>
+          <input value={vals.motion_sensitivity} onChange={(e) => set('motion_sensitivity', e.target.value.replace(/[^0-9.]/g, ''))}
+                 className="w-full rounded border border-slate-300 px-2 py-1 font-mono text-xs" placeholder="例: 0.30" /></label>
+        <label className="block text-xs"><span className="mb-1 block font-medium text-slate-600">BCP スナップ オフセット（分・カンマ区切り）</span>
+          <input value={vals.snapshot_offsets} onChange={(e) => set('snapshot_offsets', e.target.value.replace(/[^0-9,\- ]/g, ''))}
+                 className="w-full rounded border border-slate-300 px-2 py-1 font-mono text-xs" placeholder="例: -5,5,10,30" /></label>
+      </div>
+      <div className="mt-3 flex items-center justify-end gap-3">
+        {err && <span className="mr-auto text-xs text-red-700">{err}</span>}
+        {msg && !err && <span className="mr-auto text-xs text-emerald-700">{msg}</span>}
+        <button onClick={save} disabled={busy}
+                className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white disabled:opacity-50">
+          {busy ? '保存中…' : '設定を配信'}
+        </button>
+      </div>
     </section>
   )
 }
