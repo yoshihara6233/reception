@@ -14,6 +14,8 @@ import { createSupabaseService } from '@/lib/supabase/server'
 import {
   NVMSD_RELEASES_BUCKET,
   NVMSD_VERSION_RE,
+  PKG_ARCHES,
+  PKG_FORMATS,
   nvmsdReleasePath,
 } from '@/lib/admin/nvmsd-releases'
 
@@ -28,7 +30,7 @@ export async function GET() {
   const svc = createSupabaseService()
   const { data, error } = await svc
     .from('nvmsd_releases')
-    .select('id, version, sha256, bytes, notes, created_at')
+    .select('id, version, pkg_format, pkg_arch, sha256, bytes, notes, created_at')
     .order('created_at', { ascending: false })
     .limit(100)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -46,6 +48,9 @@ const PostBody = z.object({
     z.string().min(16).max(4096).regex(/^[\x21-\x7E]+$/),
   ),
   notes: z.string().max(1000).optional(),
+  // 1 つの版に形式・arch ごとの配布物（キー = 版・形式・arch）。署名はそれぞれ別。
+  pkg_format: z.enum(PKG_FORMATS).default('deb'),
+  pkg_arch: z.enum(PKG_ARCHES).default('amd64'),
 })
 
 export async function POST(req: NextRequest) {
@@ -54,10 +59,10 @@ export async function POST(req: NextRequest) {
 
   const parsed = PostBody.safeParse(await req.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
-  const { version, notes, sig } = parsed.data
+  const { version, notes, sig, pkg_format, pkg_arch } = parsed.data
 
   const svc = createSupabaseService()
-  const path = nvmsdReleasePath(version)
+  const path = nvmsdReleasePath(version, pkg_format, pkg_arch)
 
   const { data: blob, error: dlErr } = await svc.storage
     .from(NVMSD_RELEASES_BUCKET)
@@ -71,6 +76,8 @@ export async function POST(req: NextRequest) {
 
   const { error: insErr } = await svc.from('nvmsd_releases').insert({
     version,
+    pkg_format,
+    pkg_arch,
     storage_path: path,
     sig,
     sha256,
@@ -84,5 +91,5 @@ export async function POST(req: NextRequest) {
       { status: dup ? 409 : 500 },
     )
   }
-  return NextResponse.json({ ok: true, version, sha256, bytes: buf.length })
+  return NextResponse.json({ ok: true, version, pkg_format, pkg_arch, sha256, bytes: buf.length })
 }

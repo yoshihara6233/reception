@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Trash2, Settings, Search, Plug, X } from 'lucide-react'
+import { edgePkg } from '@/lib/admin/nvmsd-releases'
 
 interface Camera {
   id?: string                 // undefined until saved
@@ -59,6 +60,8 @@ interface EdgePayload {
   update_window_end: string | null
   update_force: boolean
   ota_mode: 'onsite' | 'auto'
+  pkg_format: string | null
+  pkg_arch: string | null
   applied_config_version: number | null
   stores: { name: string; area_code: string | null }
   recorders: Recorder[]
@@ -308,7 +311,8 @@ function OtaPanel({ edge }: { edge: EdgePayload }) {
 function NvmsdOtaPanel({ edge }: { edge: EdgePayload }) {
   const router = useRouter()
   const running = (edge.agent_version ?? '').replace(/^nvmsd\//, '')
-  const [releases, setReleases] = useState<{ version: string; created_at: string }[] | null>(null)
+  const [releases, setReleases] = useState<{ version: string; pkg_format: string; pkg_arch: string; created_at: string }[] | null>(null)
+  const pkg = edgePkg(edge)
   const [desired, setDesired] = useState(edge.desired_agent_version ?? '')
   const [winStart, setWinStart] = useState(edge.update_window_start?.slice(0, 5) ?? '')
   const [winEnd, setWinEnd] = useState(edge.update_window_end?.slice(0, 5) ?? '')
@@ -333,6 +337,11 @@ function NvmsdOtaPanel({ edge }: { edge: EdgePayload }) {
   // 古い版を拒む。版文字列は順序比較できないので、台帳の登録日時で
   // 「選ぼうとしている版が稼働版より古い可能性」を検知して警告する
   // （稼働版が台帳に無い初期は判定不能＝警告なし。静的な注意書きが下にある）。
+  // 台帳は (版・形式・arch) の行。目標版の選択肢は版で重複を除き、この拠点の形式の配布物が
+  // あるかを別に判定する（無い版を目標にすると拠点は 204 で何も届かない）。
+  const versions = [...new Map((releases ?? []).map((r) => [r.version, r])).values()]
+  const hasPkg = (v: string) => !!releases?.some((r) => r.version === v && r.pkg_format === pkg.format && r.pkg_arch === pkg.arch)
+  const selectedMissing = !!desired && releases !== null && releases.some((r) => r.version === desired) && !hasPkg(desired)
   const runningRel = releases?.find((r) => r.version === running)
   const selectedRel = releases?.find((r) => r.version === desired)
   const downgradeLikely = !!runningRel && !!selectedRel && desired !== running &&
@@ -377,6 +386,12 @@ function NvmsdOtaPanel({ edge }: { edge: EdgePayload }) {
       <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
         <Row k="稼働版" v={<span className="font-mono">{running || '—'}</span>} />
         <Row k="目標版" v={<span className="font-mono">{edge.desired_agent_version ?? '—'}</span>} />
+        <Row k="形式" v={
+          <span className="font-mono">
+            {pkg.format} / {pkg.arch}
+            {!edge.pkg_format && <span className="ml-1 font-sans text-[10px] text-slate-400">（名乗りなし＝既定）</span>}
+          </span>
+        } />
       </dl>
 
       {/* 配信モード（OTA_SPEC 付録A・2026-09-18）: 更新で録画が約5秒欠けるため、
@@ -428,10 +443,18 @@ function NvmsdOtaPanel({ edge }: { edge: EdgePayload }) {
             {edge.desired_agent_version && !releases?.some((r) => r.version === edge.desired_agent_version) && (
               <option value={edge.desired_agent_version}>{edge.desired_agent_version}（台帳未登録）</option>
             )}
-            {(releases ?? []).map((r) => (
-              <option key={r.version} value={r.version}>{r.version}</option>
+            {versions.map((r) => (
+              <option key={r.version} value={r.version}>
+                {r.version}{hasPkg(r.version) ? '' : `（${pkg.format} / ${pkg.arch} 未登録）`}
+              </option>
             ))}
           </select>
+          {selectedMissing && (
+            <p className="mt-1 rounded border border-red-200 bg-red-50 px-2 py-1 text-[10px] text-red-700">
+              この版には、この拠点の形式（<b>{pkg.format} / {pkg.arch}</b>）の配布物が未登録です。
+              目標にしても拠点へは届きません。先に <a href="/admin/nvmsd-releases" className="underline">nvmsd リリース</a> で登録してください。
+            </p>
+          )}
           {releases !== null && releases.length === 0 && (
             <p className="mt-1 text-[10px] text-amber-700">
               リリースが未登録です。先に <a href="/admin/nvmsd-releases" className="underline">nvmsd リリース</a> で登録してください。

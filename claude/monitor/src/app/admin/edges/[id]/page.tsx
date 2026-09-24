@@ -28,6 +28,9 @@ interface EdgePayload {
   update_window_end: string | null
   update_force: boolean
   ota_mode: 'onsite' | 'auto'
+  // OTA 配り分け: nvmsd の名乗り（null = 名乗りなし → deb / amd64）
+  pkg_format: string | null
+  pkg_arch: string | null
   // A1 設定遠隔投入: nvmsd が適用できた設定版（reorder の config_version と一致で反映済み）
   applied_config_version: number | null
   stores: { name: string; area_code: string | null }
@@ -86,7 +89,7 @@ export default async function EdgeEditPage(
       nvr_clock_offset_sec, nvr_clock_checked_at,
       cloudflared_version, desired_agent_version, desired_cloudflared_version,
       ota_status, ota_updated_at, ota_last_error,
-      update_window_start, update_window_end, update_force, ota_mode, applied_config_version,
+      update_window_start, update_window_end, update_force, ota_mode, applied_config_version, pkg_format, pkg_arch,
       stores ( name, area_code ),
       recorders (
         id, vendor, model, host, rtsp_port, onvif_port, username, notes,
