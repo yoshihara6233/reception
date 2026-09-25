@@ -83,7 +83,15 @@ export default async function VodPage(
               ch{String(c.channel).padStart(2, '0')} {c.name}
             </span>
           </div>
-          <div className="text-slate-500">録画再生 (VOD)</div>
+          <div className="flex items-center gap-3 text-slate-500">
+            {/* G・VMS の HLS 録画再生は操作の並びに「ライブに戻る」がある。それ以外の再生はここから戻る */}
+            {!remoteHls && (
+              <Link href={`/stores/${storeId}/cam/${cameraId}/live`} className="text-blue-600 hover:underline">
+                ライブに戻る
+              </Link>
+            )}
+            <span>録画再生 (VOD)</span>
+          </div>
         </div>
         <div className="flex-1 overflow-hidden">
           {blocked ? (
@@ -92,6 +100,7 @@ export default async function VodPage(
             </div>
           ) : remoteHls ? (
             <RemoteHlsVodPlayer
+              storeId={storeId}
               cameraId={cameraId}
               initialFrom={from ?? null}
               initialTo={from && to ? to : null}
