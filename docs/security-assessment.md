@@ -44,7 +44,7 @@ GA前ロードマップの「脆弱性診断（外部）」を、当面 **内部
 | 項目 | 状態 | 対応 |
 |---|---|---|
 | `/api/edge/bootstrap` が device_token 保持者に service_role 鍵を返す | **B2 完了・B3/B4 は段階投入中**（§4.1 / §4.2） | RLS はエッジが触る全表＋Storage に整備済み。あとはエッジ側を `EDGE_SCOPED_DB=true` に切替（B3）→ service_role 返却の撤廃（B4） |
-| 過去チャットに漏れた service_role 鍵 / ログインPW `Intereco2026` | 要確認 | 鍵・PWのローテ完了を運用で確認（コード/gitには無し） |
+| 過去チャットに漏れた service_role 鍵 / ログインPW | 要確認 | 鍵・PWのローテ完了を運用で確認（コード/gitには無し） |
 | 依存の moderate/low CVE | 監視 | Dependabot/`bun audit` で追跡 |
 
 ## 4.1 エッジ専用スコープ鍵化 方式比較（計画）
