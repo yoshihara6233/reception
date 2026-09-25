@@ -12,9 +12,12 @@
  *   GET /v1/<key>?exp=&sig=   … ブラウザが取得（monitor 発行の GET 署名・302 先）
  *   <key> は monitor と共通: edges/<edgeId>/grid.jpg / edges/<edgeId>/cam/<cameraId>/snapshot.jpg
  *
- *   PUT /v1/video/<sessionId>/<name>?exp=&sig=  … G・VMS の遠隔視聴（HLS）の区切り・初期化区切り・
- *     プレイリスト（name = slot0〜slot15 / init / playlist）。**PUT だけ**を受ける — 視聴者へは
- *     monitor のサーバが R2 から読んで中継するので、ここで読み出す必要が無い。
+ *   PUT|GET|HEAD|DELETE /v1/video/<sessionId>/<name>?exp=&sig=  … G・VMS の遠隔視聴（HLS）の
+ *     区切り・初期化区切り・プレイリスト（name = slot0〜slot15 / init / playlist）。
+ *     PUT は拠点、GET/HEAD/DELETE は monitor のサーバ（届いたかの確認・視聴者への中継・片付け）。
+ *     署名はどれも monitor だけが作れる。視聴者のブラウザへはこの URL を渡さない（中継する）。
+ *     monitor が R2 を S3 API で読むと、キーの権限や設定に左右される（2026-09-25 本番で
+ *     読めずに映らなかった）ので、書く・読む・消すをこの Worker にそろえる。
  *     S3 の署名付き URL（*.r2.cloudflarestorage.com）は遮断回線で届かない（2026-09-25 .200 で
  *     TLS handshake failure を実測）ため、静止画と同じくこの Worker を通す。
  *
@@ -53,10 +56,8 @@ export default {
       if (!isVideo && !KEY_RE.test(key)) return deny('bad key')
 
       const method = request.method.toUpperCase()
-      if (isVideo && method !== 'PUT') return deny('method not allowed', 405)
-      if (method !== 'PUT' && method !== 'GET' && method !== 'HEAD') {
-        return deny('method not allowed', 405)
-      }
+      const allowed = isVideo ? ['PUT', 'GET', 'HEAD', 'DELETE'] : ['PUT', 'GET', 'HEAD']
+      if (!allowed.includes(method)) return deny('method not allowed', 405)
       // HEAD は GET 署名で許可する（存在確認用）。
       const signedMethod = method === 'HEAD' ? 'GET' : method
 
@@ -81,6 +82,23 @@ export default {
           httpMetadata: { contentType: type, cacheControl: 'no-store' },
         })
         return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } })
+      }
+
+      if (isVideo && method === 'DELETE') {
+        await env.IMAGES.delete(key) // 無いキーでも成功する
+        return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } })
+      }
+
+      if (isVideo) {
+        // GET / HEAD。形式は置いたときのものを返す
+        const obj = method === 'HEAD' ? await env.IMAGES.head(key) : await env.IMAGES.get(key)
+        if (!obj) return new Response('not found', { status: 404, headers: { 'Cache-Control': 'no-store' } })
+        const headers = new Headers({
+          'Content-Type': obj.httpMetadata?.contentType || 'application/octet-stream',
+          'Cache-Control': 'no-store',
+          'Content-Length': String(obj.size),
+        })
+        return new Response(method === 'HEAD' ? null : obj.body, { status: 200, headers })
       }
 
       if (method === 'PUT') {
