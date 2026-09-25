@@ -28,6 +28,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useSessionCountdown } from '@/lib/useSessionCountdown'
+import { acceptStartedSession, endOnPageHide, endViewingSession } from '@/lib/viewing-session'
 import { RemainingBadge, SessionCapOverlay } from '@/components/SessionCap'
 
 const POLL_INTERVAL_MS  = 1_000
@@ -99,18 +100,14 @@ export default function VodPlayer({
     const sid = sessionIdRef.current
     if (!sid) return
     sessionIdRef.current = null
-    void fetch('/api/sessions', {
-      method:    'POST',
-      headers:   { 'Content-Type': 'application/json' },
-      body:      JSON.stringify({ action: 'end', id: sid }),
-      keepalive: true,
-    }).catch(() => {})
+    endViewingSession(sid)
   }
 
   // 1. Create clip + start audit session on mount.
   useEffect(() => {
     let cancelled = false
     const ac = new AbortController()
+    const offHide = endOnPageHide(endSession)
 
     ;(async () => {
       try {
@@ -124,21 +121,20 @@ export default function VodPlayer({
               action: 'start', mode: 'vod', storeId, cameraId,
               vodFrom: fromIso, vodTo: toIso,
             }),
-            signal:  ac.signal,
+            // 開始の要求は中断しない。サーバでセッションができた後に中断すると id が
+            // 分からず終了を送れない（同時視聴の枠を 6 時間使い続ける）
           })
-          if (cancelled) return
           if (sres.status === 429) {
+            if (cancelled) return
             setStatus('failed')
             setError('同時視聴の上限に達しました。他の視聴を終了してからお試しください。')
             return
           }
-          if (sres.ok) {
-            const sj = await sres.json().catch(() => null) as { id?: string; maxSessionMin?: number | null } | null
-            if (!cancelled && sj?.id) {
-              sessionIdRef.current = sj.id
-              setMaxSessionMin(sj.maxSessionMin ?? null)
-              setStartedAtMs(Date.now())
-            }
+          const sj = await acceptStartedSession(sres, () => cancelled)
+          if (sj) {
+            sessionIdRef.current = sj.id
+            setMaxSessionMin(sj.maxSessionMin ?? null)
+            setStartedAtMs(Date.now())
           }
         } catch { /* 上限チェック一時失敗は無視して続行 */ }
         if (cancelled) return
@@ -170,6 +166,7 @@ export default function VodPlayer({
 
     return () => {
       cancelled = true
+      offHide()
       ac.abort()
       // Close the audit session even if the upload is still in flight on the
       // edge — the user is leaving the page. The edge finishes the upload
