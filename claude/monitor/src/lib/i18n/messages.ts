@@ -14,7 +14,6 @@ export const LANGS = Object.keys(LANG_META) as Lang[]
 // ─── Message shape ────────────────────────────────────────────────────────────
 
 export interface Msg {
-  appName: string
   nav: {
     monitor:  string
     map:      string
@@ -447,7 +446,6 @@ export interface Msg {
 // ─── Japanese ────────────────────────────────────────────────────────────────
 
 const ja: Msg = {
-  appName: 'Monitor',
   nav: {
     monitor:  'MONITOR',
     map:      '地図',
@@ -857,7 +855,6 @@ const ja: Msg = {
 // ─── English ─────────────────────────────────────────────────────────────────
 
 const en: Msg = {
-  appName: 'Monitor',
   nav: {
     monitor:  'MONITOR',
     map:      'Map',
@@ -1267,7 +1264,6 @@ const en: Msg = {
 // ─── Simplified Chinese ───────────────────────────────────────────────────────
 
 const zh: Msg = {
-  appName: '监控',
   nav: {
     monitor:  '监控',
     map:      '地图',
@@ -1677,7 +1673,6 @@ const zh: Msg = {
 // ─── Korean ───────────────────────────────────────────────────────────────────
 
 const ko: Msg = {
-  appName: '모니터',
   nav: {
     monitor:  '모니터링',
     map:      '지도',

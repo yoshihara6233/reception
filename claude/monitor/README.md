@@ -1,6 +1,6 @@
 # monitor
 
-i-PRO / Uniview レコーダ統合監視 — 本部ウェブアプリ（Next.js 16）
+G・VMS-Cloud（旧 Intereco Monitor）— i-PRO / Uniview などの店舗レコーダを本部で一元監視するウェブアプリ（Next.js 16）
 
 ## 構成
 

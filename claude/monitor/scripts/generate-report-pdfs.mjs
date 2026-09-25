@@ -53,7 +53,7 @@ const fmtDateTime = (iso) =>
 
 // 共通ヘッダ/フッタ
 function header(doc, title, subtitle) {
-  doc.fontSize(8).fillColor('#64748b').text('Recorder Monitor', 42, 38)
+  doc.fontSize(8).fillColor('#64748b').text('G・VMS-Cloud', 42, 38)
   doc.fontSize(20).fillColor('#0f172a').text(title, 42, 56)
   if (subtitle) doc.fontSize(11).fillColor('#475569').text(subtitle, 42, 86)
   doc.moveTo(42, 110).lineTo(553, 110).strokeColor('#cbd5e1').lineWidth(0.8).stroke()
@@ -62,7 +62,7 @@ function header(doc, title, subtitle) {
 function footer(doc) {
   const y = doc.page.height - 32
   doc.fontSize(8).fillColor('#94a3b8').text(
-    `生成: ${fmtDateTime(new Date().toISOString())}  /  Recorder Monitor`,
+    `生成: ${fmtDateTime(new Date().toISOString())}  /  G・VMS-Cloud`,
     42, y, { width: 511, align: 'center' },
   )
 }

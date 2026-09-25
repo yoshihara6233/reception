@@ -900,7 +900,7 @@ function buildAlertEmailHtml(params: {
   </p>
   <hr style="margin:24px 0;border:none;border-top:1px solid #eee">
   <p style="font-size:12px;color:#999">
-    このメールはIntarecoモニタリングシステムから自動送信されています。<br>
+    このメールは G・VMS-Cloud から自動送信されています。<br>
     心当たりのない場合は、このメールを無視してください。
   </p>
 </body>

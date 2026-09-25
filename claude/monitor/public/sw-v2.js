@@ -1,4 +1,4 @@
-// Intereco Monitor — Service Worker (v2)
+// G・VMS-Cloud — Service Worker (v2)
 //
 // Strategy:
 //   - Static assets (JS/CSS/fonts/icons): Cache-First (stale-while-revalidate)
@@ -114,11 +114,11 @@ self.addEventListener('push', (event) => {
   try {
     data = event.data.json()
   } catch {
-    data = { title: 'Intereco Monitor', body: event.data.text() }
+    data = { title: 'G・VMS-Cloud', body: event.data.text() }
   }
 
   event.waitUntil(
-    self.registration.showNotification(data.title ?? 'Intereco Monitor', {
+    self.registration.showNotification(data.title ?? 'G・VMS-Cloud', {
       body: data.body ?? '',
       icon: '/icons/icon-192.png',
       badge: '/icons/icon-96.png',

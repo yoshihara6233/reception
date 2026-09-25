@@ -18,6 +18,7 @@ import {
   StyleSheet,
   renderToBuffer,
 } from '@react-pdf/renderer'
+import { PRODUCT_NAME } from '@/lib/brand'
 import { jmaIntensityLabel } from '@/lib/bcp/intensity'
 
 // ---------------------------------------------------------------------------
@@ -395,7 +396,7 @@ export function BcpReport({ event, store, clips, generatedAt }: BcpReportProps) 
   }
 
   return (
-    <Document title={pageTitle} author="Intereco BCP System">
+    <Document title={pageTitle} author={`${PRODUCT_NAME} BCP`}>
       <Page size="A4" style={styles.page}>
 
         {/* Test banner */}
@@ -413,7 +414,7 @@ export function BcpReport({ event, store, clips, generatedAt }: BcpReportProps) 
             BCP{event.isTest ? ' [TEST]' : ''} インシデントレポート
           </Text>
           <Text style={styles.headerSubtitle}>
-            Intereco BCP Incident Report  |  Generated: {formatJst(generatedAt)}
+            {PRODUCT_NAME} BCP Incident Report  |  Generated: {formatJst(generatedAt)}
           </Text>
         </View>
 
@@ -551,7 +552,7 @@ export function BcpReport({ event, store, clips, generatedAt }: BcpReportProps) 
 
         {/* Footer */}
         <View style={styles.footer} fixed>
-          <Text style={styles.footerText}>Intereco BCP System</Text>
+          <Text style={styles.footerText}>{PRODUCT_NAME} BCP</Text>
           <Text style={styles.footerText}>
             Generated: {formatJst(generatedAt)}
           </Text>

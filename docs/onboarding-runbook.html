@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Intereco オンボーディング・ランブック — テナント開通 & Beelink 構築</title>
+<title>G・VMS-Cloud オンボーディング・ランブック — テナント開通 & Beelink 構築</title>
 <style>
   :root{
     --paper:#F7F5F1; --paper2:#FFFFFF; --paper3:#E4DED3;
@@ -100,7 +100,7 @@
 <div class="wrap">
 
 <header class="cover">
-  <div class="kicker">INTERECO MONITOR — ONBOARDING RUNBOOK</div>
+  <div class="kicker">G・VMS-CLOUD — ONBOARDING RUNBOOK</div>
   <h1>テナント開通 &amp; Beelink 構築 手順書</h1>
   <div class="sub">新規メンバー向け — PoC / 新規店舗を「ゼロから手荷物検査が動く」まで通す実務ランブック</div>
   <div class="meta">
@@ -127,7 +127,7 @@
 </div>
 
 <h2 id="s0"><span class="no">0</span>はじめに — 前提と用語</h2>
-<p>Intereco Monitor は Next.js（Vercel）＋ Supabase（東京）＋ 現地エッジ（Beelink）で動く、既存NVRを活かした録画モニタリング基盤です。手荷物検査はその1モジュールです。<strong>録画・物体検知はNVRに任せ、エッジは「RTSP取得→合成/ライブ/VOD/検査クリップ→クラウド配信」だけ</strong>を担う軽量構成（②relay）が本命です。</p>
+<p>G・VMS-Cloud（旧 Intereco Monitor）は Next.js（Vercel）＋ Supabase（東京）＋ 現地エッジ（Beelink）で動く、既存NVRを活かした録画モニタリング基盤です。手荷物検査はその1モジュールです。<strong>録画・物体検知はNVRに任せ、エッジは「RTSP取得→合成/ライブ/VOD/検査クリップ→クラウド配信」だけ</strong>を担う軽量構成（②relay）が本命です。</p>
 
 <table>
   <tr><th>用語</th><th>意味</th></tr>
@@ -513,7 +513,7 @@ sudo journalctl -u intereco-edge -n 100 -o cat    # 直近ログ
 </div>
 
 <footer>
-  <p>Intereco Monitor — オンボーディング・ランブック / 更新 2026-07-23 / 対象構成 ② relay（Beelink）<br>
+  <p>G・VMS-Cloud — オンボーディング・ランブック / 更新 2026-07-23 / 対象構成 ② relay（Beelink）<br>
   関連: <code class="mono">docs/edge-configs-and-relay-hardware.md</code>・<code class="mono">docs/spec-edge-registration-wizard.md</code>・<code class="mono">docs/edge-ota-design.md</code>・<code class="mono">docs/monitor-system-handbook.html</code>・<code class="mono">docs/ga-plan-20260720.html</code>／実機詳細 <code class="mono">claude/edge-agent/README.md</code></p>
 </footer>
 

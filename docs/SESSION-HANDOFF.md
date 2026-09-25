@@ -3,7 +3,7 @@
 最終更新: 2026-06-13 / このファイルを次回セッション冒頭にコンテキストへ投入すれば状況を即把握できる。
 
 ## 0. 一行サマリー
-Intereco Recorder Monitor を**本番公開済み**（`https://intereco-monitor.vercel.app`）。実機PoC1台で
+G・VMS-Cloud（旧 Intereco Recorder Monitor・2026-09-25 改名）を**本番公開済み**（`https://intereco-monitor.vercel.app`）。実機PoC1台で
 ローカル/リモート両対応・認証付き・再起動耐性ありで稼働。今は**開発計画フェーズ**で、量産・スケール・
 ベンダ統合の WBS と意思決定を固めた段階。
 
