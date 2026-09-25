@@ -2,7 +2,8 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { SlidersHorizontal } from 'lucide-react'
 import { useLang } from '@/lib/i18n/context'
 import { LangSwitcher } from './LangSwitcher'
 import { ThemeToggle } from './ThemeToggle'
@@ -88,13 +89,15 @@ export function AppHeader({
   const settingsActive = pathname === '/admin' || pathname.startsWith('/admin/')
 
   return (
-    <header className="flex items-center justify-between border-b border-slate-800 bg-slate-900 px-3 py-2 text-slate-100 md:px-4">
+    // 狭幅でも横にはみ出さないよう、縮むのは左群（テナントバッジを省略表示）だけにし、
+    // 中央タブと右群は縮めない。lg 未満ではテーマ/言語を「表示設定」メニューへ畳む。
+    <header className="flex items-center justify-between gap-2 border-b border-slate-800 bg-slate-900 px-3 py-2 text-slate-100 md:px-4">
       {/* Left: hamburger (mobile) + logo */}
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 items-center gap-2">
         {onMenuClick && (
           <button
             onClick={onMenuClick}
-            className="flex h-8 w-8 items-center justify-center rounded text-slate-300 hover:bg-slate-800 md:hidden"
+            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded text-slate-300 hover:bg-slate-800 md:hidden"
             aria-label="メニューを開く"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -109,7 +112,7 @@ export function AppHeader({
         <Link
           href="/stores"
           aria-label={t.nav.monitor}
-          className="flex items-center gap-2 rounded px-1 py-0.5 text-sm font-bold transition-colors hover:bg-white/10"
+          className="flex flex-shrink-0 items-center gap-2 whitespace-nowrap rounded px-1 py-0.5 text-sm font-bold transition-colors hover:bg-white/10"
         >
           <MonitorMark className="h-[22px] w-[22px] flex-shrink-0 text-white" accent="#6A90C8" />
           <div className="flex flex-col leading-tight">
@@ -132,7 +135,7 @@ export function AppHeader({
           </span>
         ) : isSuper ? (
           <span
-            className="ml-1 rounded border border-slate-600 px-2 py-0.5 text-[11px] font-medium text-slate-400"
+            className="ml-1 truncate rounded border border-slate-600 px-2 py-0.5 text-[11px] font-medium text-slate-400"
             title="操作中テナント未選択"
           >
             テナント未選択
@@ -141,7 +144,7 @@ export function AppHeader({
       </div>
 
       {/* Center: tab nav — desktop only */}
-      <nav aria-label="モジュール" className="hidden gap-1 text-xs md:flex">
+      <nav aria-label="モジュール" className="hidden flex-shrink-0 gap-1 text-xs md:flex">
         {TABS.map((tab) => {
           const base   = tab.base ?? tab.href
           const active = pathname === base || pathname.startsWith(base + '/')
@@ -154,7 +157,7 @@ export function AppHeader({
             <Link
               key={tab.href}
               href={tab.href}
-              className={'rounded px-3 py-1 ' + cls}
+              className={'whitespace-nowrap rounded px-3 py-1 ' + cls}
             >
               {tab.label}
               {alarmOpen && <span className="ml-1 tabular-nums">({openAlarms})</span>}
@@ -164,9 +167,12 @@ export function AppHeader({
       </nav>
 
       {/* Right: theme toggle + language switcher + settings icon + user + logout */}
-      <div className="flex items-center gap-2">
-        <ThemeToggle />
-        <LangSwitcher />
+      <div className="flex flex-shrink-0 items-center gap-2">
+        <div className="hidden items-center gap-2 lg:flex">
+          <ThemeToggle />
+          <LangSwitcher />
+        </div>
+        <DisplayPrefsMenu />
         {/* F24: settings (旧 マスタ) は中央タブから右側のアイコンへ移動。
             PWA(スタンドアロン)では非表示。 */}
         {!standalone && (
@@ -197,5 +203,58 @@ export function AppHeader({
         <LogoutButton />
       </div>
     </header>
+  )
+}
+
+// lg 未満ではテーマ/言語をヘッダーに並べると右群が画面外へ押し出される（375px/768px で
+// ログアウトまで見えなくなっていた）。ドロワーは店舗一覧専用で置き場が無いため、ここに畳む。
+function DisplayPrefsMenu() {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function onDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  return (
+    <div ref={ref} className="relative lg:hidden">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-label="表示設定"
+        title="表示設定"
+        aria-haspopup="true"
+        aria-expanded={open}
+        className={
+          'flex h-8 w-8 items-center justify-center rounded-lg transition-colors ' +
+          (open ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-white/10 hover:text-white')
+        }
+      >
+        <SlidersHorizontal size={18} strokeWidth={1.5} />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-[200] mt-1.5 w-48 space-y-1 rounded-md border border-slate-700 bg-slate-900 p-2 shadow-2xl">
+          <div className="flex items-center justify-between gap-3 px-1">
+            <span className="text-[11px] text-slate-400">テーマ</span>
+            <ThemeToggle />
+          </div>
+          <div className="flex items-center justify-between gap-3 px-1">
+            <span className="text-[11px] text-slate-400">言語</span>
+            <LangSwitcher />
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
