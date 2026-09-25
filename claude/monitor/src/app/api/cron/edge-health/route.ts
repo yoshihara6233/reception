@@ -26,6 +26,7 @@ import { claimStaleCheckAlert, staleMessage, DAILY_CHECK } from '@/lib/ops/check
 import { nextTunnelState, probeStatusOk, TUNNEL_ALERT_AFTER_SEC } from '@/lib/ops/tunnel-health'
 import { recordMetric } from '@/lib/metrics'
 import { MONITOR_STALE_SECONDS } from '@intereco/shared'
+import { PRODUCT_NAME } from '@/lib/brand'
 import { appBaseUrl } from '@/lib/app-url'
 
 interface EdgeRow {
@@ -210,7 +211,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     if (recipients.length) {
       await sendEmail(
         recipients,
-        `[Intereco] ${msg}`,
+        `[${PRODUCT_NAME}] ${msg}`,
         `<p>${msg}</p>`
         + '<p>日次点検が動いていないと、<b>本番スキーマ・環境変数・Vault・cron の異常が'
         + '誰にも届きません</b>。Vercel の Cron Jobs で <code>/api/cron/partition-health</code> '
@@ -219,7 +220,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         SECURITY_FROM_ADDRESS,
       )
     }
-    await sendOpsWebhook(`[Intereco] ${msg}`)
+    await sendOpsWebhook(`[${PRODUCT_NAME}] ${msg}`)
   }
 
   // metric_events 保持90日プルーン（毎時1回だけ実行＝2分cronでも無駄打ち回避）。

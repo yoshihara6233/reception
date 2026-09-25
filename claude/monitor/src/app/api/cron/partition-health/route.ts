@@ -52,6 +52,7 @@ import {
   type EvidenceFacts,
 } from '@/lib/ops/evidence-gaps'
 import { evaluateNotifyChannel, probeResendKey } from '@/lib/ops/notify-channel'
+import { PRODUCT_NAME } from '@/lib/brand'
 import { appBaseUrl } from '@/lib/app-url'
 
 export const dynamic = 'force-dynamic'
@@ -143,13 +144,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       if (recipients.length) {
         await sendEmail(
           recipients,
-          `[Intereco] ${v.summary}`,
+          `[${PRODUCT_NAME}] ${v.summary}`,
           alertHtml({ ...v, problems }),
           undefined,
           SECURITY_FROM_ADDRESS,
         )
       }
-      await sendOpsWebhook(`[Intereco] ${v.summary}\n${problems.join('\n')}`)
+      await sendOpsWebhook(`[${PRODUCT_NAME}] ${v.summary}\n${problems.join('\n')}`)
     }
 
     return NextResponse.json({

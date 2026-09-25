@@ -1,6 +1,6 @@
 # DR（災害復旧）Runbook / 構築手順 / オペレータマニュアル
 
-対象: Intereco Recorder Monitor（本部 Next.js on Vercel ＋ 現地エッジ ＋ Supabase）。
+対象: G・VMS-Cloud（旧 Intereco Recorder Monitor／本部 Next.js on Vercel ＋ 現地エッジ ＋ Supabase）。
 目的: 各構成要素の喪失シナリオに対する **復旧手順（RTO/RPO 目標付き）** と **訓練記録** を1本化し、**99% SLA** を運用で支える。
 
 - 本番 Supabase: **`vywvpcjbicrtcyvzmrwh`（region `ap-northeast-1` 東京）**

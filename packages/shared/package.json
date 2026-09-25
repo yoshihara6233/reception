@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Shared types and utilities for Intereco Recorder Monitor (monitor + edge-agent)",
+  "description": "Shared types and utilities for G・VMS-Cloud (monitor + edge-agent)",
   "main": "src/index.ts",
   "types": "src/index.ts",
   "exports": {

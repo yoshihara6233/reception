@@ -1,6 +1,6 @@
 # Intereco 開発・テスト計画 / WBS
 
-作成: 2026-06-13 / 対象: Intereco Recorder Monitor（本部監視 + 現地エッジ + リモート視聴）
+作成: 2026-06-13 / 対象: G・VMS-Cloud（旧 Intereco Recorder Monitor／本部監視 + 現地エッジ + リモート視聴）
 
 ## 0. 前提・方針
 

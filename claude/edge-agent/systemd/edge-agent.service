@@ -1,5 +1,5 @@
 [Unit]
-Description=Recorder Monitoring Edge Agent
+Description=G・VMS-Cloud Edge Agent
 After=network-online.target
 Wants=network-online.target
 

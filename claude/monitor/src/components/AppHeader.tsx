@@ -10,6 +10,7 @@ import { ThemeToggle } from './ThemeToggle'
 import { LogoutButton } from './LogoutButton'
 import { ServerClock } from './ServerClock'
 import { MonitorMark } from './MonitorMark'
+import { PRODUCT_NAME } from '@/lib/brand'
 
 // F25: userName / avatar はフッターの StatusBar に移動したので、ここでは表示しない。
 // プロップは互換性のためそのまま受領（残置）するが、UI には出さない。
@@ -116,10 +117,8 @@ export function AppHeader({
         >
           <MonitorMark className="h-[22px] w-[22px] flex-shrink-0 text-white" accent="#6A90C8" />
           <div className="flex flex-col leading-tight">
-            <span>
-              <span className="hidden sm:inline">Recorder {t.appName}</span>
-              <span className="sm:hidden">{t.appName}</span>
-            </span>
+            {/* スマホ幅では「G・VMS- / Cloud」と折れるため出さない（マークと時刻のみ） */}
+            <span className="hidden whitespace-nowrap sm:inline">{PRODUCT_NAME}</span>
             {/* F66: ロゴ直下にサーバ時刻を常時表示 */}
             <ServerClock />
           </div>

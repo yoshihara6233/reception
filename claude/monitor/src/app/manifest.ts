@@ -1,10 +1,11 @@
 import type { MetadataRoute } from 'next'
+import { PRODUCT_NAME } from '@/lib/brand'
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'Intereco Monitor',
-    short_name: 'Monitor',
-    description: 'レコーダ統合監視システム — 本部一元監視プラットフォーム',
+    name: PRODUCT_NAME,
+    short_name: PRODUCT_NAME,
+    description: '店舗のレコーダを本部で一元監視するクラウド監視システム',
     start_url: '/stores',
     display: 'standalone',
     orientation: 'any',
