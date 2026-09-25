@@ -11,6 +11,22 @@ vi.mock('@/lib/storage/video-r2', () => ({
   }),
 }))
 
+const lk = vi.hoisted(() => ({
+  enabled: true,
+  fail: false,
+  created: [] as string[],
+  deleted: [] as string[],
+}))
+vi.mock('@/lib/livekit', () => ({ livekitEnabled: () => lk.enabled }))
+vi.mock('@/lib/livekit-server', () => ({
+  createGvmsIngress: async (sid: string) => {
+    if (lk.fail) throw new Error('quota')
+    lk.created.push(sid)
+    return { ingressId: `IN_${sid}`, room: `gvms_${sid}`, whipUrl: `https://lk.example/w/STREAMKEY-${sid}` }
+  },
+  deleteGvmsIngress: async (id: string) => { lk.deleted.push(id); return true },
+}))
+
 import { applyStartResult, nextVideoCommand } from './dispatch'
 
 type Row = Record<string, unknown>
@@ -57,7 +73,10 @@ function session(p: Row): Row {
 }
 
 let tables: Record<string, Row[]>
-beforeEach(() => { tables = { video_sessions: [], edge_command_runs: [] } })
+beforeEach(() => {
+  tables = { video_sessions: [], edge_command_runs: [] }
+  Object.assign(lk, { enabled: true, fail: false, created: [], deleted: [] })
+})
 
 describe('nextVideoCommand', () => {
   it('HLS ライブの開始（§5.2.1）: 置き場 8・viewer 付き。状態は dispatched に進む', async () => {
@@ -118,10 +137,40 @@ describe('nextVideoCommand', () => {
     expect(tables.video_sessions[0].state).toBe('requested')
   })
 
-  it('SFU はまだ受け口が無いので、失敗として閉じる（渡さない）', async () => {
+  it('SFU: 受け口を作ってから start_sfu を渡す。部屋は視聴ごと・送り先 URL は DB と記録に残さない', async () => {
+    tables.video_sessions.push(session({ kind: 'sfu' }))
+    const cmd = await nextVideoCommand(fakeDb(tables), EDGE, NOW)
+    expect(cmd).toMatchObject({
+      action: 'start_sfu', session_id: 's1', camera_id: 'c1', stream: 'sub', room: 'gvms_s1',
+      whip_url: 'https://lk.example/w/STREAMKEY-s1', viewer: { id: 'u1', name: '山田 (本社)' },
+    })
+    expect(cmd).not.toHaveProperty('whip_bearer') // 自己認証 URL なので Bearer は使わない
+    expect(tables.video_sessions[0]).toMatchObject({ state: 'dispatched', ingress_id: 'IN_s1', room: 'gvms_s1' })
+    expect(JSON.stringify(tables)).not.toContain('STREAMKEY')
+    expect(tables.edge_command_runs).toEqual([expect.objectContaining({ action: 'start_sfu' })])
+  })
+
+  it('SFU: LiveKit が無効・受け口を作れないときは失敗として閉じる（渡さない）', async () => {
+    lk.enabled = false
     tables.video_sessions.push(session({ kind: 'sfu' }))
     expect(await nextVideoCommand(fakeDb(tables), EDGE, NOW)).toBeNull()
     expect(tables.video_sessions[0]).toMatchObject({ state: 'error', error: 'internal' })
+
+    lk.enabled = true
+    lk.fail = true
+    tables.video_sessions.push(session({ id: 's2', kind: 'sfu' }))
+    expect(await nextVideoCommand(fakeDb(tables), EDGE, NOW)).toBeNull()
+    expect(tables.video_sessions[1]).toMatchObject({ state: 'error', error: 'internal' })
+  })
+
+  it('SFU: 止めるときに受け口も片付ける（§5.4.1）', async () => {
+    tables.video_sessions.push(session({
+      kind: 'sfu', state: 'started', ingress_id: 'IN_s1', room: 'gvms_s1', stop_requested_at: ago(500),
+    }))
+    const cmd = await nextVideoCommand(fakeDb(tables), EDGE, NOW)
+    expect(cmd).toMatchObject({ action: 'stop_video', session_id: 's1' })
+    expect(lk.deleted).toEqual(['IN_s1'])
+    expect(tables.video_sessions[0]).toMatchObject({ state: 'stopped', purged_at: NOW.toISOString() })
   })
 })
 

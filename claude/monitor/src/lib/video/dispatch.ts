@@ -10,6 +10,8 @@
 import { randomUUID } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { presignVideoUpload, videoR2Configured, type VideoUpload } from '@/lib/storage/video-r2'
+import { livekitEnabled } from '@/lib/livekit'
+import { createGvmsIngress, deleteGvmsIngress } from '@/lib/livekit-server'
 import { ACTIVE_STATES, pickVideoAction, type DispatchRow } from '@/lib/video/session-logic'
 
 export interface VideoViewer { id: string; name: string }
@@ -24,6 +26,11 @@ export type VideoCommand =
       action: 'start_hls_vod'; request_id: string; session_id: string; camera_id: string
       from: string; to: string; viewer: VideoViewer; upload: VideoUpload
     }
+  | {
+      // §5.4。whip_url はストリームキー入りの自己認証 URL — ログ・DB に出さない
+      action: 'start_sfu'; request_id: string; session_id: string; camera_id: string
+      stream: 'sub' | 'main'; room: string; whip_url: string; viewer: VideoViewer
+    }
   | { action: 'refresh_video'; request_id: string; session_id: string }
   | { action: 'stop_video'; request_id: string; session_id: string }
 
@@ -34,11 +41,12 @@ export interface SessionRow extends DispatchRow {
   vod_to: string | null
   user_id: string
   viewer_name: string
+  ingress_id?: string | null
 }
 
 const COLS =
   'id, kind, state, camera_id, stream, vod_from, vod_to, user_id, viewer_name, ' +
-  'viewer_seen_at, stop_requested_at, refresh_sent_at, dispatched_at'
+  'viewer_seen_at, stop_requested_at, refresh_sent_at, dispatched_at, ingress_id'
 
 /** 1 回のポーリングで試す上限（drop・払い出しの失敗で指示にならない行を飛ばす分）。 */
 const MAX_TRIES = 6
@@ -77,6 +85,9 @@ export async function nextVideoCommand(svc: SupabaseClient, edgeId: string, now 
       if (!claimed || claimed.length === 0) continue
       const cmd: VideoCommand = { action: 'stop_video', request_id: randomUUID(), session_id: row.id }
       await logRun(svc, edgeId, cmd)
+      // SFU の受け口は止めた時点で片付ける（§5.4.1）。拠点の DELETE と前後しても害は無い。
+      // 失敗しても cron が拾い直す
+      if (row.kind === 'sfu' && row.ingress_id) await purgeIngress(svc, row.id, row.ingress_id, nowIso)
       return cmd
     }
 
@@ -88,8 +99,9 @@ export async function nextVideoCommand(svc: SupabaseClient, edgeId: string, now 
     }
 
     // start
-    const cmd = await buildStart(row)
-    if (!cmd) {
+    const built = await buildStart(row, edgeId)
+    const cmd = built?.cmd ?? null
+    if (!built || !cmd) {
       await svc.from('video_sessions')
         .update({ state: 'error', error: 'internal', ended_at: nowIso })
         .eq('id', row.id).eq('state', 'requested')
@@ -97,20 +109,53 @@ export async function nextVideoCommand(svc: SupabaseClient, edgeId: string, now 
       continue
     }
     const { data: claimed } = await svc.from('video_sessions')
-      .update({ state: 'dispatched', start_request_id: cmd.request_id, dispatched_at: nowIso })
+      .update({ state: 'dispatched', start_request_id: cmd.request_id, dispatched_at: nowIso, ...built.patch })
       .eq('id', row.id).eq('state', 'requested')
       .select('id')
     settle({ state: 'dispatched', dispatched_at: nowIso })
-    if (!claimed || claimed.length === 0) continue
+    if (!claimed || claimed.length === 0) {
+      // 別のポーリングが先に渡した。こちらで作った受け口は使われないので消す
+      if (built.patch.ingress_id) await deleteGvmsIngress(built.patch.ingress_id)
+      continue
+    }
     await logRun(svc, edgeId, cmd)
     return cmd
   }
   return null
 }
 
-async function buildStart(row: SessionRow): Promise<VideoCommand | null> {
+interface BuiltStart {
+  cmd: VideoCommand
+  /** 開始を渡すときに行へ書く列（SFU の受け口の ID と部屋） */
+  patch: { ingress_id?: string; room?: string }
+}
+
+async function buildStart(row: SessionRow, edgeId: string): Promise<BuiltStart | null> {
   const viewer: VideoViewer = { id: row.user_id, name: row.viewer_name }
   const request_id = randomUUID()
+  if (row.kind === 'sfu') {
+    // 受け口を作ってから指示を出す（§5.4.1）。作れなければ失敗として閉じる
+    if (!livekitEnabled()) return null
+    let ing
+    try {
+      ing = await createGvmsIngress(row.id, edgeId)
+    } catch (e) {
+      console.error('[video/dispatch] SFU の受け口を作れません:', (e as Error).message)
+      return null
+    }
+    return {
+      cmd: {
+        action: 'start_sfu', request_id, session_id: row.id, camera_id: row.camera_id,
+        stream: row.stream, room: ing.room, whip_url: ing.whipUrl, viewer,
+      },
+      patch: { ingress_id: ing.ingressId, room: ing.room },
+    }
+  }
+  const cmd = await buildHlsStart(row, viewer, request_id)
+  return cmd ? { cmd, patch: {} } : null
+}
+
+async function buildHlsStart(row: SessionRow, viewer: VideoViewer, request_id: string): Promise<VideoCommand | null> {
   if (row.kind === 'hls_live' || row.kind === 'hls_vod') {
     if (!videoR2Configured()) return null
     let upload: VideoUpload
@@ -131,8 +176,14 @@ async function buildStart(row: SessionRow): Promise<VideoCommand | null> {
       from: new Date(row.vod_from).toISOString(), to: new Date(row.vod_to).toISOString(), viewer, upload,
     }
   }
-  // SFU（§5.4）はまだ受け口が無い。作れないセッションは失敗として閉じる
   return null
+}
+
+/** SFU の受け口を消し、片付け済みの印を付ける。消せなければ印を付けない（cron が拾い直す）。 */
+export async function purgeIngress(svc: SupabaseClient, id: string, ingressId: string, nowIso: string): Promise<boolean> {
+  if (!(await deleteGvmsIngress(ingressId))) return false
+  await svc.from('video_sessions').update({ purged_at: nowIso }).eq('id', id)
+  return true
 }
 
 /** 監視用の受領記録（従来の指示と同じ表）。失敗しても指示は渡す。 */
