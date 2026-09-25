@@ -49,14 +49,16 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center bg-slate-900 p-6">
+    <main className="relative flex min-h-screen items-center justify-center bg-slate-900 p-6 pt-16 md:pt-6">
+      {/* 縦に長くなる狭幅では上の余白 (pt-16) で、テーマ切替がカードに重ならないようにする */}
       <div className="absolute right-4 top-4"><ThemeToggle /></div>
 
-      <div className="flex w-full max-w-3xl flex-col items-stretch gap-6 md:flex-row md:items-stretch">
+      {/* 縦並び (md 未満) では 2 枚を同じ幅に揃え、横並びでは 2 枚の合計幅で中央に置く */}
+      <div className="flex w-full max-w-sm flex-col items-stretch gap-6 md:w-auto md:max-w-none md:flex-row">
         {/* Login form */}
         <form
           onSubmit={onSubmit}
-          className="w-full max-w-sm space-y-4 rounded-md border border-slate-200 bg-white p-8"
+          className="w-full space-y-4 rounded-md border border-slate-200 bg-white p-8 md:w-96"
         >
           <div className="flex items-center gap-2">
             <MonitorMark className="h-8 w-8 flex-shrink-0 text-slate-900" accent="#2C4A7E" />
@@ -90,7 +92,7 @@ export default function LoginPage() {
         </form>
 
         {/* QR code panel for mobile access */}
-        <aside className="flex w-full max-w-[16rem] flex-col items-center justify-center gap-3 rounded-md border border-slate-200 bg-white p-6 md:max-w-[18rem]">
+        <aside className="flex w-full flex-col items-center justify-center gap-3 rounded-md border border-slate-200 bg-white p-6 md:w-72">
           <h2 className="flex items-center gap-1.5 text-sm font-bold text-slate-900"><Smartphone size={15} strokeWidth={1.5} aria-hidden />スマホでアクセス</h2>
           <p className="text-[11px] text-slate-500 text-center">
             このページを QR コードで読み取って、お手元のスマートフォンからアクセスできます。

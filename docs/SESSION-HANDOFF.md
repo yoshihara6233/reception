@@ -62,7 +62,7 @@ BCP / 警備 / infra / レポート / 管理。実機 Beelink（systemd `interec
 - BCP「発災時刻ちょうどの1枚」要件（Univiewは過去スナップ非対応→replay抽出fetcher追加の要否）。
 
 ## 6. セキュリティ宿題（要対応）
-- **service_role secret 鍵** と **ログインパスワード `Intereco2026`** が前セッションのチャットに残存。
+- **service_role secret 鍵** と **ログインパスワード** が前セッションのチャットに残存。
   → 鍵は再ローテ推奨（Supabase API Keys で再生成→Vercel `SUPABASE_SERVICE_ROLE_KEY` と**エッジ.env両方更新**）。
 - gstack 更新あり（1.52.1.0→1.58.0.0、任意）。
 
