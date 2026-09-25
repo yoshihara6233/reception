@@ -18,6 +18,7 @@ import { useRouter } from 'next/navigation'
 import Hls from 'hls.js'
 import { useSessionCountdown } from '@/lib/useSessionCountdown'
 import { RemainingBadge, SessionCapOverlay } from '@/components/SessionCap'
+import { acceptStartedSession, endOnPageHide, endViewingSession } from '@/lib/viewing-session'
 
 export interface MultiVodCam {
   cameraId:      string
@@ -156,28 +157,23 @@ function SyncGrid({
     const sid = sessionId.current
     if (!sid) return
     sessionId.current = null
-    void fetch('/api/sessions', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'end', id: sid }), keepalive: true,
-    }).catch(() => {})
+    endViewingSession(sid)
   }
   useEffect(() => {
     let cancelled = false
+    const offHide = endOnPageHide(endSession)
     void (async () => {
       try {
         const res = await fetch('/api/sessions', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'start', mode: 'vod', storeId, cameraId: cams[0]?.cameraId, vodFrom: fromIso }),
         })
-        if (cancelled) return
-        if (res.status === 429) { setLimitReached(true); return }
-        if (res.ok) {
-          const j = await res.json().catch(() => null) as { id?: string; maxSessionMin?: number | null } | null
-          if (!cancelled && j?.id) { sessionId.current = j.id; setMaxSessionMin(j.maxSessionMin ?? null); setStartedAtMs(Date.now()) }
-        }
+        if (res.status === 429) { if (!cancelled) setLimitReached(true); return }
+        const j = await acceptStartedSession(res, () => cancelled)
+        if (j) { sessionId.current = j.id; setMaxSessionMin(j.maxSessionMin ?? null); setStartedAtMs(Date.now()) }
       } catch { /* 可用性優先 */ }
     })()
-    return () => { cancelled = true; endSession() }
+    return () => { cancelled = true; offHide(); endSession() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storeId])
 

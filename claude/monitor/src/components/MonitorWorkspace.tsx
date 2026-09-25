@@ -21,6 +21,7 @@ import {
 import { cancelPendingStop, scheduleStop } from '@/lib/edge-stop-registry'
 import { buildGridGroups, GRID_PAGE_SIZE } from '@/lib/grid-groups'
 import { SaveJpegButton } from '@/components/SaveJpegButton'
+import { acceptStartedSession, endOnPageHide, endViewingSession } from '@/lib/viewing-session'
 
 /** ファイル名に使えない文字をアンダースコアに（日本語は保持）。 */
 function safeName(s: string): string {
@@ -245,13 +246,22 @@ export function MonitorWorkspace({
 
     // F23: open a live_sessions row for the audit log
     let cancelled = false
+    const endRow = () => {
+      const id = sessionId.current
+      if (!id) return
+      sessionId.current = null
+      endViewingSession(id)
+    }
+    // タブを閉じた・再読み込みでも行を閉じる（React の後始末は走らない）
+    const offHide = endOnPageHide(endRow)
     void fetch('/api/sessions', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ action: 'start', mode: 'grid', storeId }),
     })
-      .then(async (r) => r.ok ? r.json() as Promise<{ id: string }> : null)
-      .then((j) => { if (!cancelled && j?.id) sessionId.current = j.id })
+      // 応答の前に画面を離れていたら、できた行はここで閉じる
+      .then((r) => acceptStartedSession(r, () => cancelled))
+      .then((j) => { if (j) sessionId.current = j.id })
       .catch(() => { /* fire-and-forget — audit log is best-effort */ })
 
     // Capture the edgeId in closure so the cleanup uses the right key
@@ -271,17 +281,8 @@ export function MonitorWorkspace({
       )
       stopTimer.current = handle
       // F23: close the session row
-      const id = sessionId.current
-      if (id) {
-        sessionId.current = null
-        void fetch('/api/sessions', {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ action: 'end', id }),
-          // Use keepalive so the request survives page unload.
-          keepalive: true,
-        }).catch(() => { /* ignore */ })
-      }
+      offHide()
+      endRow()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, edgeId])

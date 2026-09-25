@@ -36,6 +36,7 @@ import { useSessionCountdown } from '@/lib/useSessionCountdown'
 import { RemainingBadge, SessionCapOverlay } from '@/components/SessionCap'
 import { TriangleAlert } from 'lucide-react'
 import { describeVideoError } from '@/lib/video/session-logic'
+import { acceptStartedSession, endOnPageHide, endViewingSession } from '@/lib/viewing-session'
 
 // SFU(LiveKit)購読モードは遅延読込（未使用時 livekit-client をバンドルに載せない・SSR不可）。
 const LiveKitMode = dynamic(() => import('./live-livekit-mode'), { ssr: false })
@@ -179,16 +180,13 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
     const sid = sessionId.current
     if (!sid) return
     sessionId.current = null
-    void fetch('/api/sessions', {
-      method:    'POST',
-      headers:   { 'Content-Type': 'application/json' },
-      body:      JSON.stringify({ action: 'end', id: sid }),
-      keepalive: true,
-    }).catch(() => {})
+    endViewingSession(sid)
   }
 
   useEffect(() => {
     let cancelled = false
+    // タブを閉じた・再読み込みでも終了を送る（送り損ねると 6 時間枠を使い続ける）
+    const offHide = endOnPageHide(endSession)
     void (async () => {
       try {
         const res = await fetch('/api/sessions', {
@@ -196,22 +194,21 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
           headers: { 'Content-Type': 'application/json' },
           body:    JSON.stringify({ action: 'start', mode: 'live', storeId, cameraId }),
         })
-        if (cancelled) return
-        if (res.status === 429) { setLimitReached(true); return }
-        if (res.ok) {
-          const j = await res.json().catch(() => null) as { id?: string; maxSessionMin?: number | null } | null
-          if (!cancelled && j?.id) {
-            sessionId.current = j.id
-            setMaxSessionMin(j.maxSessionMin ?? null)
-            setStartedAtMs(Date.now())
-            // セッション開始前に SFU モードへ入っていた場合（保存設定が sfu）はここで拾う。
-            if (modeRef.current === 'sfu') markSfu(j.id)
-          }
+        if (res.status === 429) { if (!cancelled) setLimitReached(true); return }
+        // 応答の前に画面を離れていたら、できたセッションはここで終わらせる
+        const j = await acceptStartedSession(res, () => cancelled)
+        if (j) {
+          sessionId.current = j.id
+          setMaxSessionMin(j.maxSessionMin ?? null)
+          setStartedAtMs(Date.now())
+          // セッション開始前に SFU モードへ入っていた場合（保存設定が sfu）はここで拾う。
+          if (modeRef.current === 'sfu') markSfu(j.id)
         }
       } catch { /* 上限チェックの一時失敗では視聴を止めない(可用性優先) */ }
     })()
     return () => {
       cancelled = true
+      offHide()
       endSession()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
