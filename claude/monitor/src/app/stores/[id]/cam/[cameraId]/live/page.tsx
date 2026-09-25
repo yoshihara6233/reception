@@ -6,6 +6,7 @@ import { signLiveUrl } from '@/lib/live-sign'
 import { livekitEnabled } from '@/lib/livekit'
 import { hasCapability } from '@/lib/edge/capabilities'
 import { videoR2Configured } from '@/lib/storage/video-r2'
+import { canFetchVod, isVodVendor, VOD_RANGE_MAX_MIN_BY_VENDOR, type RecorderVendor } from '@/lib/types/db'
 import LivePlayer from './live-player'
 
 export default async function LivePage(
@@ -18,7 +19,7 @@ export default async function LivePage(
     .from('recorder_cameras')
     .select(`
       id, name, channel, frigate_camera, hls_url,
-      recorders ( id, edge_id, vendor, live_host, stores: edge_devices ( store_id, go2rtc_host, agent_version, capabilities ) )
+      recorders ( id, edge_id, vendor, live_host, vod_host, stores: edge_devices ( store_id, go2rtc_host, agent_version, capabilities ) )
     `)
     .eq('id', cameraId)
     .single()
@@ -33,6 +34,7 @@ export default async function LivePage(
       edge_id:    string
       vendor:     string
       live_host:  string | null
+      vod_host:   string | null
       stores:     { go2rtc_host: string | null; agent_version: string | null; capabilities: string[] | null } | null
     }
   }
@@ -96,6 +98,16 @@ export default async function LivePage(
   // 拠点だけ**に出す（0.1.67 以前の nvmsd は session_id の無い start_sfu では動かない）。
   const isNvms   = vendor === 'nvms'
   const sfuOk    = livekitEnabled() && !liveViaNvr && (!isNvms || hasCapability(c.recorders.stores, 'sfu'))
+  // 録画再生と同じ操作をライブの画面にも並べる（2026-09-26 利用者の要望: 分割画面へ戻って
+  // カメラを選び直さずに見返したい）。出し分けは録画再生の画面（vod/page.tsx）と同じ判定で、
+  // G・VMS の拠点の HLS 録画再生と Frigate の HLS は開始時刻だけで開ける。それ以外は範囲の
+  // 切り出しなので、分割画面の録画ボタンの既定と同じ 5 分（ベンダの上限まで）を付ける。
+  const vodOpenEnded =
+    (isNvms && hasCapability(c.recorders.stores, 'hls_vod') && videoR2Configured())
+    || (vendor === 'frigate' && !!c.frigate_camera && !!liveHost)
+  const playback = canFetchVod(vendor, c.recorders.vod_host) && isVodVendor(vendor as RecorderVendor)
+    ? { rangeMin: vodOpenEnded ? null : Math.min(5, VOD_RANGE_MAX_MIN_BY_VENDOR[vendor as keyof typeof VOD_RANGE_MAX_MIN_BY_VENDOR]) }
+    : null
 
   return (
     <AppShell selectedStoreId={storeId}>
@@ -125,6 +137,7 @@ export default async function LivePage(
             sfuEnabled={sfuOk}
             remoteSfu={isNvms}
             remoteHlsEnabled={remoteHls}
+            playback={playback}
             unavailableNote={liveViaNvr
               ? 'レコーダ経由の構成のため高画質ライブは非対応 — 軽量 (JPEG) でご覧ください'
               : null}

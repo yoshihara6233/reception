@@ -37,6 +37,7 @@ import { RemainingBadge, SessionCapOverlay } from '@/components/SessionCap'
 import { TriangleAlert } from 'lucide-react'
 import { describeVideoError } from '@/lib/video/session-logic'
 import { acceptStartedSession, endOnPageHide, endViewingSession } from '@/lib/viewing-session'
+import LivePlaybackBar from './live-playback-bar'
 
 // SFU(LiveKit)購読モードは遅延読込（未使用時 livekit-client をバンドルに載せない・SSR不可）。
 const LiveKitMode = dynamic(() => import('./live-livekit-mode'), { ssr: false })
@@ -118,6 +119,9 @@ interface Props {
   remoteHlsEnabled?: boolean
   // G・VMS の拠点なら true。SFU を視聴 1 回ごとの受け口（§5.4）で開く（従来の LiveKitMode でなく）
   remoteSfu?: boolean
+  // 録画再生できるカメラなら、録画再生と同じ操作をライブの画面に並べる（null なら出さない）。
+  // rangeMin は録画再生で切り出す長さ（分）で、開始時刻だけで開けるカメラは null。
+  playback?: { rangeMin: number | null } | null
 }
 
 // 利用可能なモードから、保存済み設定を尊重しつつ有効なモードを選ぶ。
@@ -132,7 +136,7 @@ function resolveMode(prefer: Mode, hasSfu: boolean, hasHq: boolean, hasIframe: b
   return hasHq ? 'hq' : hasIframe ? 'iframe' : hasRemote ? 'remote' : 'jpeg'
 }
 
-export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, liveIsImageStream, liveSigned, hqUrl, sfuEnabled, unavailableNote, remoteHlsEnabled, remoteSfu }: Props) {
+export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, liveIsImageStream, liveSigned, hqUrl, sfuEnabled, unavailableNote, remoteHlsEnabled, remoteSfu, playback }: Props) {
   // Default mode: go2rtc高画質 > Frigate iframe > 遠隔 HLS > jpeg. User pref overrides.
   // SFU は既定にしない（利用者が明示選択したときだけ・egress有界化）。G・VMS の拠点も
   // 既定は HLS（GVMS_CLOUD_SPEC §5「初めは HLS」・2026-09-25 利用者決定）。
@@ -245,6 +249,7 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
         onSwitch={switchMode}
         remainingSec={expired ? null : remainingSec}
       />
+      {playback && <LivePlaybackBar storeId={storeId} cameraId={cameraId} rangeMin={playback.rangeMin} />}
       {/* min-h-0: flex 子の既定 min-height:auto を外す。無いと中の <img h-full object-contain>
           が「画面の残り高さ」でなく画像の内在サイズ（w-full に合わせた高さ）まで枠を押し広げ、
           横長画面で映像の下端が画面外にはみ出す（640×360 の静止画ライブで実発生）。 */}

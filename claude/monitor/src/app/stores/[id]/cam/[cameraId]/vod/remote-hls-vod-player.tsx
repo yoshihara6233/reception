@@ -9,25 +9,20 @@
  *    セッションを開き直す。
  *  - シーク（30 秒・5 分の移動、時刻の指定）も新しいセッションを開き直す。倍速は無い。
  *  - 範囲の終わりで拠点は ended を報告する。手元の再生は最後の区切りまで続く。
+ *
+ * 操作の並びはライブの画面と共通（PlaybackBar）。今より先へ進めたときと「ライブに戻る」は
+ * 同じカメラのライブへ移る（2026-09-26 利用者の要望）。
  */
 import { useCallback, useMemo, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { RotateCw } from 'lucide-react'
+import { PlaybackBar } from '@/components/video/PlaybackBar'
 import { RemoteHlsVideo } from '@/components/video/RemoteHlsVideo'
 import { useRemoteVideoSession } from '@/components/video/useRemoteVideoSession'
 import { describeVideoError } from '@/lib/video/session-logic'
+import { fromJstInput, isLiveEdge, liveHref, toJstInput } from '@/lib/video/playback-nav'
 
 const RESUME_REOPEN_MS = 10_000
-const JST_OFFSET_MS = 9 * 60 * 60 * 1000
-
-/** ISO → datetime-local の値（JST・秒まで）。 */
-function toJstInput(iso: string): string {
-  return new Date(new Date(iso).getTime() + JST_OFFSET_MS).toISOString().slice(0, 19)
-}
-/** datetime-local の値（JST）→ ISO。読めなければ null。 */
-function fromJstInput(v: string): string | null {
-  const d = new Date(`${v.length === 16 ? `${v}:00` : v}+09:00`)
-  return Number.isNaN(d.getTime()) ? null : d.toISOString()
-}
 function fmtJst(d: Date): string {
   const p = new Intl.DateTimeFormat('ja-JP', {
     year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
@@ -37,13 +32,16 @@ function fmtJst(d: Date): string {
 }
 
 interface Props {
+  storeId: string
   cameraId: string
   /** 無ければ 15 分前から（時刻は画面で指定し直せる） */
   initialFrom: string | null
   initialTo: string | null
 }
 
-export default function RemoteHlsVodPlayer({ cameraId, initialFrom, initialTo }: Props) {
+export default function RemoteHlsVodPlayer({ storeId, cameraId, initialFrom, initialTo }: Props) {
+  const router = useRouter()
+  const toLive = () => router.push(liveHref(storeId, cameraId))
   const [range, setRange] = useState<{ from: string; to: string | undefined }>(() => ({
     from: initialFrom ?? new Date(Date.now() - 15 * 60_000).toISOString(),
     to: initialFrom ? initialTo ?? undefined : undefined,
@@ -60,13 +58,15 @@ export default function RemoteHlsVodPlayer({ cameraId, initialFrom, initialTo }:
 
   /** 指定の時刻から開き直す（to は指定し直しのたびに既定の 60 分に戻す）。 */
   const openAt = useCallback((iso: string) => {
+    // 今（か今より先）は録画ではまだ送れない → ライブへ
+    if (isLiveEdge(iso)) { router.push(liveHref(storeId, cameraId)); return }
     setPlayFailed(false)
     setPlaying(null)
     playingRef.current = null
     setInput(toJstInput(iso))
     setRange({ from: iso, to: undefined })
     setAttempt((n) => n + 1)
-  }, [])
+  }, [router, storeId, cameraId])
 
   const jump = (deltaSec: number) => {
     const base = playingRef.current ?? new Date(range.from)
@@ -87,41 +87,31 @@ export default function RemoteHlsVodPlayer({ cameraId, initialFrom, initialTo }:
 
   return (
     <div className="relative flex h-full flex-col bg-black">
-      <div className="flex flex-wrap items-center gap-2 border-b border-white/10 bg-ge-dark-bg px-3 py-1.5 text-[12px] text-slate-300">
-        <label className="flex items-center gap-1.5">
-          <span>再生の開始</span>
-          <input
-            type="datetime-local"
-            step={1}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            className="rounded border border-white/15 bg-transparent px-1.5 py-0.5 font-ge-mono text-[12px] tabular-nums text-slate-100 [color-scheme:dark]"
-          />
-        </label>
-        <button
-          type="button"
-          onClick={() => { const iso = fromJstInput(input); if (iso) openAt(iso) }}
-          className="rounded border border-ge-dark-accent px-2 py-0.5 text-slate-100 hover:bg-white/5"
-        >
-          この時刻から再生
-        </button>
-        <span className="mx-1 h-4 w-px bg-white/10" aria-hidden />
-        {([[-300, '5 分戻る'], [-30, '30 秒戻る'], [30, '30 秒進む'], [300, '5 分進む']] as const).map(([d, label]) => (
-          <button
-            key={d}
-            type="button"
-            onClick={() => jump(d)}
-            className="rounded border border-white/10 px-2 py-0.5 hover:bg-white/5"
-          >
-            {label}
-          </button>
-        ))}
-        <span className="ml-auto text-[11px] text-slate-400">
-          録画の時刻{' '}
-          <span className="font-ge-mono tabular-nums text-slate-200">{playing ? fmtJst(playing) : '—'}</span>
-          {phase === 'ended' && <span className="ml-2">範囲の終わりまで受け取りました</span>}
-        </span>
-      </div>
+      <PlaybackBar
+        input={input}
+        onInput={setInput}
+        onPlayFromInput={() => { const iso = fromJstInput(input); if (iso) openAt(iso) }}
+        onJump={jump}
+        extra={
+          <>
+            <span className="mx-1 h-4 w-px bg-white/10" aria-hidden />
+            <button
+              type="button"
+              onClick={toLive}
+              className="rounded border border-white/10 px-2 py-0.5 hover:bg-white/5"
+            >
+              ライブに戻る
+            </button>
+          </>
+        }
+        right={
+          <>
+            録画の時刻{' '}
+            <span className="font-ge-mono tabular-nums text-slate-200">{playing ? fmtJst(playing) : '—'}</span>
+            {phase === 'ended' && <span className="ml-2">範囲の終わりまで受け取りました</span>}
+          </>
+        }
+      />
 
       <div className="relative min-h-0 flex-1">
         {src && !playFailed && (
