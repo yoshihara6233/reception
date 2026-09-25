@@ -11,6 +11,8 @@
  * ours (same domain as the Cloudflare tunnel). See investigate 2026-06-27.
  */
 
+import { PRODUCT_NAME } from '@/lib/brand'
+
 const RESEND_API_URL = 'https://api.resend.com/emails'
 const FROM_ADDRESS   = 'bcp@genesis-edge.com'
 
@@ -100,14 +102,14 @@ export const SECURITY_FROM_ADDRESS = 'Intereco Monitor <no-reply@genesis-edge.co
  * email proves identity.
  */
 export function passwordResetEmail(resetUrl: string): { subject: string; html: string } {
-  const subject = '[Intereco Monitor] パスワード再設定のご案内'
+  const subject = `[${PRODUCT_NAME}] パスワード再設定のご案内`
   const html = `
 <!DOCTYPE html>
 <html lang="ja">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="font-family:sans-serif;color:#333;max-width:600px;margin:0 auto;padding:20px">
   <h2 style="color:#1e293b">🔑 パスワード再設定</h2>
-  <p>Intereco Monitor のパスワード再設定がリクエストされました。<br>
+  <p>${PRODUCT_NAME} のパスワード再設定がリクエストされました。<br>
   下のボタンから新しいパスワードを設定してください。</p>
 
   <p style="margin:24px 0">
@@ -124,7 +126,7 @@ export function passwordResetEmail(resetUrl: string): { subject: string; html: s
 
   <hr style="margin:24px 0;border:none;border-top:1px solid #eee">
   <p style="font-size:12px;color:#999">
-    このメールはIntarecoモニタリングシステムから自動送信されています。<br>
+    このメールは ${PRODUCT_NAME} から自動送信されています。<br>
     パスワード再設定に心当たりがない場合は、このメールを破棄してください。<br>
     お客様のパスワードは変更されません。
   </p>
@@ -193,7 +195,7 @@ export function bcpAlertStartedEmail(
 
   <hr style="margin:24px 0;border:none;border-top:1px solid #eee">
   <p style="font-size:12px;color:#999">
-    このメールはIntarecoモニタリングシステムから自動送信されています。<br>
+    このメールは ${PRODUCT_NAME} から自動送信されています。<br>
     心当たりのない場合は、このメールを無視してください。
   </p>
 </body>
@@ -265,7 +267,7 @@ export function bcpCompletedEmail(
 
   <hr style="margin:24px 0;border:none;border-top:1px solid #eee">
   <p style="font-size:12px;color:#999">
-    このメールはIntarecoモニタリングシステムから自動送信されています。<br>
+    このメールは ${PRODUCT_NAME} から自動送信されています。<br>
     心当たりのない場合は、このメールを無視してください。
   </p>
 </body>
@@ -323,11 +325,11 @@ export function bcpFailedEmail(
     </tr>
   </table>
 
-  <p>録画クリップが取得できなかった可能性があります。Intarecoモニター管理画面からイベントの詳細をご確認ください。</p>
+  <p>録画クリップが取得できなかった可能性があります。${PRODUCT_NAME} の管理画面からイベントの詳細をご確認ください。</p>
 
   <hr style="margin:24px 0;border:none;border-top:1px solid #eee">
   <p style="font-size:12px;color:#999">
-    このメールはIntarecoモニタリングシステムから自動送信されています。<br>
+    このメールは ${PRODUCT_NAME} から自動送信されています。<br>
     心当たりのない場合は、このメールを無視してください。
   </p>
 </body>
@@ -351,7 +353,7 @@ export interface EdgeHealthParams {
 
 /** エッジが last_seen_at 無応答（停止/回線断/クラッシュ）になった時の通知。 */
 export function edgeOfflineAlertEmail(p: EdgeHealthParams): { subject: string; html: string } {
-  const subject = `[Intereco 死活監視] エッジ無応答 - ${p.storeName} / ${p.edgeName}`
+  const subject = `[${PRODUCT_NAME} 死活監視] エッジ無応答 - ${p.storeName} / ${p.edgeName}`
   const html = `
 <!DOCTYPE html>
 <html lang="ja"><head><meta charset="UTF-8"></head>
@@ -366,14 +368,14 @@ export function edgeOfflineAlertEmail(p: EdgeHealthParams): { subject: string; h
   <p>確認事項: エッジ電源/ネットワーク、cloudflared トンネル、edge-agent サービス。</p>
   <p><a href="${escapeHtml(p.monitorUrl)}" style="display:inline-block;background:#0f172a;color:#fff;padding:10px 20px;border-radius:4px;text-decoration:none;font-weight:bold">監視画面を開く</a></p>
   <hr style="margin:24px 0;border:none;border-top:1px solid #eee">
-  <p style="font-size:12px;color:#999">Intereco モニタリングシステム 自動送信（死活監視）。</p>
+  <p style="font-size:12px;color:#999">${PRODUCT_NAME} 自動送信（死活監視）。</p>
 </body></html>`.trim()
   return { subject, html }
 }
 
 /** 無応答だったエッジが復旧した時の通知。 */
 export function edgeRecoveredEmail(p: EdgeHealthParams): { subject: string; html: string } {
-  const subject = `[Intereco 死活監視] 復旧 - ${p.storeName} / ${p.edgeName}`
+  const subject = `[${PRODUCT_NAME} 死活監視] 復旧 - ${p.storeName} / ${p.edgeName}`
   const html = `
 <!DOCTYPE html>
 <html lang="ja"><head><meta charset="UTF-8"></head>
@@ -385,7 +387,7 @@ export function edgeRecoveredEmail(p: EdgeHealthParams): { subject: string; html
     <tr><td style="padding:8px;background:#f5f5f5;font-weight:bold;border:1px solid #ddd">エッジ</td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(p.edgeName)}</td></tr>
   </table>
   <hr style="margin:24px 0;border:none;border-top:1px solid #eee">
-  <p style="font-size:12px;color:#999">Intereco モニタリングシステム 自動送信（死活監視）。</p>
+  <p style="font-size:12px;color:#999">${PRODUCT_NAME} 自動送信（死活監視）。</p>
 </body></html>`.trim()
   return { subject, html }
 }
@@ -402,7 +404,7 @@ export interface TunnelHealthParams {
  * 落ちている）時の通知。エッジ無応答通知とは別建て（原因切り分けが異なるため）。
  */
 export function tunnelDownAlertEmail(p: TunnelHealthParams): { subject: string; html: string } {
-  const subject = `[Intereco 死活監視] トンネル断 - ${p.storeName} / ${p.edgeName}`
+  const subject = `[${PRODUCT_NAME} 死活監視] トンネル断 - ${p.storeName} / ${p.edgeName}`
   const html = `
 <!DOCTYPE html>
 <html lang="ja"><head><meta charset="UTF-8"></head>
@@ -416,14 +418,14 @@ export function tunnelDownAlertEmail(p: TunnelHealthParams): { subject: string; 
   <p>確認事項: エッジ上の cloudflared サービス（<code>systemctl status cloudflared</code>）、Cloudflare ダッシュボードのトンネル状態、go2rtc の稼働。</p>
   <p><a href="${escapeHtml(p.monitorUrl)}" style="display:inline-block;background:#0f172a;color:#fff;padding:10px 20px;border-radius:4px;text-decoration:none;font-weight:bold">監視画面を開く</a></p>
   <hr style="margin:24px 0;border:none;border-top:1px solid #eee">
-  <p style="font-size:12px;color:#999">Intereco モニタリングシステム 自動送信（死活監視）。</p>
+  <p style="font-size:12px;color:#999">${PRODUCT_NAME} 自動送信（死活監視）。</p>
 </body></html>`.trim()
   return { subject, html }
 }
 
 /** 断だったトンネルが復旧した時の通知。 */
 export function tunnelRecoveredEmail(p: TunnelHealthParams): { subject: string; html: string } {
-  const subject = `[Intereco 死活監視] トンネル復旧 - ${p.storeName} / ${p.edgeName}`
+  const subject = `[${PRODUCT_NAME} 死活監視] トンネル復旧 - ${p.storeName} / ${p.edgeName}`
   const html = `
 <!DOCTYPE html>
 <html lang="ja"><head><meta charset="UTF-8"></head>
@@ -435,7 +437,7 @@ export function tunnelRecoveredEmail(p: TunnelHealthParams): { subject: string; 
     <tr><td style="padding:8px;background:#f5f5f5;font-weight:bold;border:1px solid #ddd">エッジ</td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(p.edgeName)}</td></tr>
   </table>
   <hr style="margin:24px 0;border:none;border-top:1px solid #eee">
-  <p style="font-size:12px;color:#999">Intereco モニタリングシステム 自動送信（死活監視）。</p>
+  <p style="font-size:12px;color:#999">${PRODUCT_NAME} 自動送信（死活監視）。</p>
 </body></html>`.trim()
   return { subject, html }
 }

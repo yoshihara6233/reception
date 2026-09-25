@@ -7,6 +7,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import { createSupabaseBrowser } from '@/lib/supabase/browser'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { MonitorMark } from '@/components/MonitorMark'
+import { PRODUCT_NAME } from '@/lib/brand'
 import { Smartphone, TriangleAlert } from 'lucide-react'
 
 export default function LoginPage() {
@@ -59,7 +60,7 @@ export default function LoginPage() {
         >
           <div className="flex items-center gap-2">
             <MonitorMark className="h-8 w-8 flex-shrink-0 text-slate-900" accent="#2C4A7E" />
-            <span className="text-lg font-bold text-slate-900">Recorder Monitor</span>
+            <span className="text-lg font-bold text-slate-900">{PRODUCT_NAME}</span>
           </div>
           <p className="text-xs text-slate-500">本部監視オペレータ向けログイン</p>
 

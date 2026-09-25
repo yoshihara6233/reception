@@ -1,5 +1,5 @@
 /**
- * Recorder Monitor ブランドマーク（モニター＋ステータスドット＋折れ角）。
+ * G・VMS-Cloud ブランドマーク（モニター＋ステータスドット＋折れ角）。
  * アウトラインは currentColor（暗ヘッダーでは白）、アクセントは青。
  * ホーム画面アイコン(public/icons/monitor-icon.svg)と同じ意匠の UI 版。
  */

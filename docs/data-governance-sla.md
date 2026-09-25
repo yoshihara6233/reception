@@ -1,6 +1,6 @@
 # データガバナンス方針 / SLA 定義書
 
-対象: Intereco Recorder Monitor（本部 Next.js on Vercel ＋ 現地エッジ ＋ Supabase）。
+対象: G・VMS-Cloud（旧 Intereco Recorder Monitor／本部 Next.js on Vercel ＋ 現地エッジ ＋ Supabase）。
 位置づけ: **顧客合意に用いる方針文書**。データの保持・アクセス制御・記録（監査）と、サービス水準（SLA）を定義する。
 
 - 版: v1.0（2026-07-07・方針合意ドラフト）

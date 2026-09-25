@@ -1,4 +1,4 @@
-// Intereco Monitor — kill-switch SW (v0 legacy)
+// G・VMS-Cloud — kill-switch SW (v0 legacy)
 //
 // The previous version of this file had a syntactically broken header
 // (a block comment that was prematurely closed by an embedded asterisk-

@@ -15,6 +15,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Buffer } from 'node:buffer'
+import { PRODUCT_NAME } from '@/lib/brand'
 
 const FONT_PATH = join(process.cwd(), 'fonts', 'NotoSansJP-Regular.otf')
 const MAX_THUMBS = 120 // コンタクトシートの上限（PDF肥大とメモリの保険）
@@ -178,7 +179,7 @@ export function buildPatrolReportPdf(input: PatrolReportInput): Promise<Buffer> 
     doc.registerFont('jp', readFileSync(FONT_PATH)).font('jp')
 
     // ── header
-    doc.fontSize(8).fillColor('#64748b').text('Recorder Monitor', 42, 38)
+    doc.fontSize(8).fillColor('#64748b').text(PRODUCT_NAME, 42, 38)
     doc.fontSize(20).fillColor('#0f172a').text('巡回レポート', 42, 56)
     doc.fontSize(11).fillColor('#475569').text(`${storeName} / ${fmtDate(periodFrom)}`, 42, 86)
     doc.moveTo(42, 110).lineTo(553, 110).strokeColor('#cbd5e1').lineWidth(0.8).stroke()
@@ -276,7 +277,7 @@ export function buildPatrolReportPdf(input: PatrolReportInput): Promise<Buffer> 
 
     // ── footer（最終ページ）
     doc.fontSize(8).fillColor('#94a3b8').text(
-      `生成: ${fmtDateTime(generatedAt)}  /  Recorder Monitor`,
+      `生成: ${fmtDateTime(generatedAt)}  /  ${PRODUCT_NAME}`,
       42, doc.page.height - 32, { width: 511, align: 'center' },
     )
 

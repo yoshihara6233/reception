@@ -6,7 +6,7 @@
 #    intereco-edge-rollback.service（current→known-good へ戻して立て直す）を発火。
 #  - 層1（起動はするが不健全）は agent 自身の verifyOnBoot が処理する。
 [Unit]
-Description=Intereco Recorder Monitoring Edge Agent (OTA)
+Description=G・VMS-Cloud Edge Agent (OTA)
 After=network-online.target
 Wants=network-online.target
 # DOA/クラッシュループ時の自動ロールバック（層2）。

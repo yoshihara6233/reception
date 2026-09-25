@@ -26,17 +26,18 @@ import { PwaInstallPrompt } from '@/components/PwaInstallPrompt'
 import { OfflineIndicator } from '@/components/OfflineIndicator'
 import { LangProvider } from '@/lib/i18n/context'
 import { getLang } from '@/lib/i18n/server'
+import { PRODUCT_NAME } from '@/lib/brand'
 
 export const metadata: Metadata = {
   title: {
-    template: '%s | Intereco Monitor',
-    default:  'Intereco Monitor',
+    template: `%s | ${PRODUCT_NAME}`,
+    default:  PRODUCT_NAME,
   },
-  description: 'i-PRO / ONVIF レコーダ統合監視システム',
-  applicationName: 'Intereco Monitor',
+  description: '店舗のレコーダを本部で一元監視するクラウド監視システム',
+  applicationName: PRODUCT_NAME,
   appleWebApp: {
     capable: true,
-    title: 'Intereco Monitor',
+    title: PRODUCT_NAME,
     statusBarStyle: 'black-translucent',
   },
   formatDetection: { telephone: false },
