@@ -35,6 +35,27 @@ Key routing rules:
 
 注: アプリは現状 Tailwind トークン実装。`--ge-*` への完全移行は段階的（未完）だが、**新規 UI・改修は本基本に合わせる**こと。`#2C4A7E` 藍と `#F7F5F1` 紙は既に整合済み。
 
+## 連携プロジェクト G・VMS（必読）
+
+このリポジトリのクラウド製品は **G・VMS-Cloud**（旧 Intereco Monitor / Recorder Monitor）。現場の VMS **G・VMS** と組んで
+「G・VMS（クラウド機能付き）」として売る。**両方とも自社製品。** 片方の受け口を変えるときは、もう片方への影響を必ず確かめる。
+
+| | G・VMS-Cloud（このリポジトリ） | G・VMS |
+|---|---|---|
+| 役割 | 多拠点の監視・通知・BCP・遠隔視聴（クラウド） | 現場の録画・ライブ・AI（オンプレ・nvmsd） |
+| 手元の場所 | `/Users/junji.y/claude/Intereco/monitor-recover` | `/Users/junji.y/claude/NVMS` |
+| GitHub | yoshihara6233/reception（本番 `monitor-prod`・**PR 必須**） | yoshihara6233/NVMS（`main`） |
+| 構成 | Next.js + Supabase（`claude/monitor`）・エッジ（`claude/edge-agent`）・Vercel | Go + FFmpeg / React / PostgreSQL |
+| 本番 | `https://intereco-monitor.vercel.app`（ドメインは当面そのまま） | 各現場の機械 |
+
+**共通の仕様書（つなぎ方の正本）: G・VMS 側の `docs/GVMS_CLOUD_SPEC.md`**（接続仕様 v1）
+- 手元: `/Users/junji.y/claude/NVMS/docs/GVMS_CLOUD_SPEC.md` ／ GitHub: yoshihara6233/NVMS の `docs/GVMS_CLOUD_SPEC.md`
+- 版と機能の名乗り §2 / 識別と設定（`NVMS_UPLINK_URL`・`NVMS_UPLINK_TOKEN`）§3 / 受け口の一覧と認証（すべて Bearer トークン）§4
+- 遠隔視聴 §5（HLS ライブ・HLS 録画再生・**SFU のシグナリング（WHIP）§5.4**）/ セキュリティ §6 / 受け入れ基準 §7 / 作業分担 §8
+- 以前の仕様書 7 本（UPLINK・CLIPS・OTA・診断・設定投入・ライセンス・エンロール）は付録 A〜H として凍結。**新しい契約は GVMS_CLOUD_SPEC.md に足す**（このリポジトリに写しを作らない。直したいときは G・VMS 側で変える）
+- G・VMS 側の動きの参考: 模擬クラウド `cmd/cloudsim`（HLS の払い出し・配信・WHIP の受け手）と `internal/uplink`（現場側の実装・fakecloud）
+- ログインの一本化（OIDC）は G・VMS の D-2-17 で扱う（まだ仕様に無い）
+
 ## Intereco プロジェクト状況（2026-06-13 更新）
 
 **本番公開済み**: `https://intereco-monitor.vercel.app`（Vercel project `intereco-monitor`・本番ブランチ `monitor-prod`・reception と独立）。
