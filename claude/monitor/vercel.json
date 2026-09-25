@@ -43,6 +43,10 @@
     {
       "path": "/api/cron/partition-health",
       "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/video-sessions",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

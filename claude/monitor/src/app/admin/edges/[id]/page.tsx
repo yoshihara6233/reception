@@ -33,6 +33,10 @@ interface EdgePayload {
   pkg_arch: string | null
   // A1 設定遠隔投入: nvmsd が適用できた設定版（reorder の config_version と一致で反映済み）
   applied_config_version: number | null
+  spec_version: number | null
+  capabilities: string[] | null
+  video_sessions_now: number | null
+  video_kbps: number | null
   stores: { name: string; area_code: string | null }
   recorders: {
     id: string
@@ -90,6 +94,7 @@ export default async function EdgeEditPage(
       cloudflared_version, desired_agent_version, desired_cloudflared_version,
       ota_status, ota_updated_at, ota_last_error,
       update_window_start, update_window_end, update_force, ota_mode, applied_config_version, pkg_format, pkg_arch,
+      spec_version, capabilities, video_sessions_now, video_kbps,
       stores ( name, area_code ),
       recorders (
         id, vendor, model, host, rtsp_port, onvif_port, username, notes,

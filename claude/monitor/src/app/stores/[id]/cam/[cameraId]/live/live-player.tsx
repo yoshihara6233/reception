@@ -27,16 +27,20 @@
  * commands are irrelevant when the browser streams direct from the NVR).
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import dynamic from 'next/dynamic'
 import Hls from 'hls.js'
 import { cancelPendingStop, scheduleStop } from '@/lib/edge-stop-registry'
 import { SaveJpegButton } from '@/components/SaveJpegButton'
 import { useSessionCountdown } from '@/lib/useSessionCountdown'
 import { RemainingBadge, SessionCapOverlay } from '@/components/SessionCap'
+import { TriangleAlert } from 'lucide-react'
+import { describeVideoError } from '@/lib/video/session-logic'
 
 // SFU(LiveKit)購読モードは遅延読込（未使用時 livekit-client をバンドルに載せない・SSR不可）。
 const LiveKitMode = dynamic(() => import('./live-livekit-mode'), { ssr: false })
+// G・VMS の拠点の遠隔ライブ（HLS）。拠点が hls_live を名乗るときだけ使う。
+const RemoteHlsLiveMode = dynamic(() => import('./live-remote-hls-mode'), { ssr: false })
 
 // Floor between snapshot frames. Polling is onLoad-driven (the next fetch
 // starts only after the current frame settles), so this is just a small gap
@@ -54,8 +58,9 @@ const SLOW_FRAME_MS = 1200   // 1フレーム取得がこれ超で「回線細�
 const FAST_FRAME_MS = 600    // これ未満が続けば回復→1段戻す
 
 // 'sfu' = LiveKit(SFU)購読・H.264サブ秒 / 'hq' = go2rtc 高画質(H.265→H.264変換・Tunnel) /
-// 'iframe' = Frigate直/MJPEG / 'jpeg' = 軽量スナップ
-type Mode = 'sfu' | 'hq' | 'iframe' | 'jpeg'
+// 'iframe' = Frigate直/MJPEG / 'remote' = G・VMS の拠点から送る HLS（GVMS_CLOUD_SPEC §5.2）/
+// 'jpeg' = 軽量スナップ
+type Mode = 'sfu' | 'hq' | 'iframe' | 'remote' | 'jpeg'
 
 // F80.1: key bumped to v2. The v1 auto-fallback persisted 'jpeg' on a
 // transient iframe timeout (see onError below), which permanently stuck
@@ -70,7 +75,7 @@ function loadMode(cameraId: string, defaultMode: Mode): Mode {
   if (typeof window === 'undefined') return defaultMode
   try {
     const v = window.localStorage.getItem(modePrefKey(cameraId))
-    return v === 'sfu' || v === 'hq' || v === 'iframe' || v === 'jpeg' ? v : defaultMode
+    return v === 'sfu' || v === 'hq' || v === 'iframe' || v === 'remote' || v === 'jpeg' ? v : defaultMode
   } catch {
     return defaultMode
   }
@@ -106,34 +111,40 @@ interface Props {
   // 高画質系が構成上そもそも使えない時の理由（例: i-PRO NVR 経由）。
   // ボタンを黙って消すだけだと「壊れている」と読まれるため、1行で理由を出す。
   unavailableNote?: string | null
+  // G・VMS の拠点が hls_live を名乗り、置き場（R2）も使えるとき true。「動画 (HLS)」を出す。
+  remoteHlsEnabled?: boolean
 }
 
 // 利用可能なモードから、保存済み設定を尊重しつつ有効なモードを選ぶ。
 // SFU は「明示選択のみ」（egress抑制のため既定にはしない）。
-function resolveMode(prefer: Mode, hasSfu: boolean, hasHq: boolean, hasIframe: boolean): Mode {
+function resolveMode(prefer: Mode, hasSfu: boolean, hasHq: boolean, hasIframe: boolean, hasRemote: boolean): Mode {
   if (prefer === 'sfu' && hasSfu) return 'sfu'
   if (prefer === 'hq' && hasHq) return 'hq'
   if (prefer === 'iframe' && hasIframe) return 'iframe'
+  if (prefer === 'remote' && hasRemote) return 'remote'
   if (prefer === 'jpeg') return 'jpeg'
-  // 設定が今のカメラで使えない → 高画質(go2rtc > Frigate) > 軽量。SFUは自動選択しない。
-  return hasHq ? 'hq' : hasIframe ? 'iframe' : 'jpeg'
+  // 設定が今のカメラで使えない → 高画質(go2rtc > Frigate) > 遠隔 HLS > 軽量。SFUは自動選択しない。
+  return hasHq ? 'hq' : hasIframe ? 'iframe' : hasRemote ? 'remote' : 'jpeg'
 }
 
-export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, liveIsImageStream, liveSigned, hqUrl, sfuEnabled, unavailableNote }: Props) {
-  // Default mode: go2rtc高画質 > Frigate iframe > jpeg. User pref overrides.
-  // SFU は既定にしない（利用者が明示選択したときだけ・egress有界化）。
-  const defaultMode: Mode = hqUrl ? 'hq' : liveIframeUrl ? 'iframe' : 'jpeg'
+export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, liveIsImageStream, liveSigned, hqUrl, sfuEnabled, unavailableNote, remoteHlsEnabled }: Props) {
+  // Default mode: go2rtc高画質 > Frigate iframe > 遠隔 HLS > jpeg. User pref overrides.
+  // SFU は既定にしない（利用者が明示選択したときだけ・egress有界化）。G・VMS の拠点も
+  // 既定は HLS（GVMS_CLOUD_SPEC §5「初めは HLS」・2026-09-25 利用者決定）。
+  const defaultMode: Mode = hqUrl ? 'hq' : liveIframeUrl ? 'iframe' : remoteHlsEnabled ? 'remote' : 'jpeg'
   const [mode, setMode]   = useState<Mode>(defaultMode)
   // Auto-fallback banner when iframe fails to load.
   const [iframeFailed, setIframeFailed] = useState(false)
   // S3.2: SFU 接続不能→現行経路への自動退避バナー（F80.1 と同じくセッション限り・永続化しない）。
   const [sfuFailed, setSfuFailed] = useState(false)
+  // 遠隔 HLS を拠点が断った（busy 等）→ 静止画ライブへ退避した理由。セッション限り・永続化しない。
+  const [remoteFallback, setRemoteFallback] = useState<string | null>(null)
 
   // Hydrate pref from localStorage on mount (avoids SSR mismatch).
   useEffect(() => {
     const prefer = loadMode(cameraId, defaultMode)
-    setMode(resolveMode(prefer, !!sfuEnabled, !!hqUrl, !!liveIframeUrl))
-  }, [cameraId, defaultMode, liveIframeUrl, hqUrl, sfuEnabled])
+    setMode(resolveMode(prefer, !!sfuEnabled, !!hqUrl, !!liveIframeUrl, !!remoteHlsEnabled))
+  }, [cameraId, defaultMode, liveIframeUrl, hqUrl, sfuEnabled, remoteHlsEnabled])
 
   // ライブ視聴セッション(audit + 同時上限 F-10 + 時間上限 R1)を全モード共通で1本管理する。
   // モード切替(hq/iframe/jpeg)を跨いで1セッション。429=同時上限で視聴をブロック。
@@ -213,6 +224,7 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
   function switchMode(next: Mode): void {
     setIframeFailed(false)
     setSfuFailed(false)
+    setRemoteFallback(null)
     setMode(next)
     saveMode(cameraId, next)
   }
@@ -224,8 +236,10 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
         sfuSupported={!!sfuEnabled}
         hqSupported={!!hqUrl}
         iframeSupported={!!liveIframeUrl}
+        remoteSupported={!!remoteHlsEnabled}
         iframeFailed={iframeFailed}
         sfuFailed={sfuFailed}
+        remoteFallback={remoteFallback}
         unavailableNote={unavailableNote ?? null}
         onSwitch={switchMode}
         remainingSec={expired ? null : remainingSec}
@@ -247,6 +261,17 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
             onFallback={() => {
               setSfuFailed(true)
               setMode(hqUrl ? 'hq' : liveIframeUrl ? 'iframe' : 'jpeg')
+            }}
+          />
+        ) : mode === 'remote' && remoteHlsEnabled ? (
+          <RemoteHlsLiveMode
+            cameraId={cameraId}
+            storeId={storeId}
+            // §5.1: 拠点が断った（busy / bandwidth / codec_unsupported）ら静止画ライブで見せる。
+            // F80.1 と同じくセッション限り — saveMode しない（一時的な上限で選好を消さない）。
+            onFallback={(code) => {
+              setRemoteFallback(code)
+              setMode('jpeg')
             }}
           />
         ) : mode === 'hq' && hqUrl ? (
@@ -303,16 +328,45 @@ function LiveLimitOverlay() {
 }
 
 // ─── Mode toolbar ───────────────────────────────────────────────────────────
+// Genesis Edge のダーク UI（管制）に合わせる: 背景 ge-dark-bg・選択は左 2px の藍。
+// 絵文字は使わず、ボタンはラベルで区別する。
+
+function ModeButton({ active, onClick, title, children }: {
+  active: boolean
+  onClick: () => void
+  title: string
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      title={title}
+      className={
+        'rounded border px-2 py-0.5 text-[12px] ' +
+        (active
+          ? 'border-white/20 bg-white/10 text-white shadow-[inset_2px_0_0_var(--color-ge-dark-accent)]'
+          : 'border-white/10 text-slate-300 hover:bg-white/5')
+      }
+    >
+      {children}
+    </button>
+  )
+}
 
 function ModeToolbar({
-  mode, sfuSupported, hqSupported, iframeSupported, iframeFailed, sfuFailed, unavailableNote, onSwitch, remainingSec,
+  mode, sfuSupported, hqSupported, iframeSupported, remoteSupported, iframeFailed, sfuFailed, remoteFallback,
+  unavailableNote, onSwitch, remainingSec,
 }: {
   mode:            Mode
   sfuSupported:    boolean
   hqSupported:     boolean
   iframeSupported: boolean
+  remoteSupported: boolean
   iframeFailed:    boolean
   sfuFailed:       boolean
+  remoteFallback:  string | null
   unavailableNote: string | null
   onSwitch:        (m: Mode) => void
   remainingSec:    number | null
@@ -321,81 +375,50 @@ function ModeToolbar({
     mode === 'sfu'    ? '高画質ライブ (SFU / LiveKit・H.264サブ秒)'
     : mode === 'hq'     ? '高画質ライブ (HLS・go2rtc H.264変換)'
     : mode === 'iframe' ? '高画質ライブ (NVR直接)'
+    : mode === 'remote' ? '遠隔ライブ (HLS・拠点から送信・遅延 3〜6 秒)'
     : '軽量モード (JPEG・1秒スナップ)'
+  const warning =
+    iframeFailed ? '高画質モードに接続できないため、軽量モードへ切り替えました'
+    : sfuFailed ? 'SFU に接続できないため、通常の経路へ切り替えました'
+    : remoteFallback ? `${describeVideoError(remoteFallback)}。静止画ライブへ切り替えました`
+    : null
   return (
-    <div className="flex items-center justify-between gap-2 border-b border-slate-800 bg-slate-900 px-3 py-1.5 text-[11px]">
+    <div className="flex items-center justify-between gap-2 border-b border-white/10 bg-ge-dark-bg px-3 py-1.5">
       <div className="flex items-center gap-1.5">
         {sfuSupported && (
-          <button
-            type="button"
-            onClick={() => onSwitch('sfu')}
-            className={
-              'rounded px-2 py-0.5 ' +
-              (mode === 'sfu'
-                ? 'bg-blue-600 text-white'
-                : 'bg-slate-700 text-slate-200 hover:bg-slate-600')
-            }
-            title="SFU (LiveKit・遠隔でも H.264 サブ秒・ベータ)"
-          >
-            🛰 SFU
-          </button>
+          <ModeButton active={mode === 'sfu'} onClick={() => onSwitch('sfu')} title="SFU (LiveKit・遠隔でも H.264 サブ秒・ベータ)">
+            SFU
+          </ModeButton>
+        )}
+        {remoteSupported && (
+          <ModeButton active={mode === 'remote'} onClick={() => onSwitch('remote')} title="拠点から動画を送ってもらう (HLS・遅延 3〜6 秒)">
+            動画 (HLS)
+          </ModeButton>
         )}
         {hqSupported && (
-          <button
-            type="button"
-            onClick={() => onSwitch('hq')}
-            className={
-              'rounded px-2 py-0.5 ' +
-              (mode === 'hq'
-                ? 'bg-blue-600 text-white'
-                : 'bg-slate-700 text-slate-200 hover:bg-slate-600')
-            }
-            title="高画質 (HLS・go2rtcでH.265→H.264変換, ~1-3s 遅延)"
-          >
-            🎬 高画質 (HLS)
-          </button>
+          <ModeButton active={mode === 'hq'} onClick={() => onSwitch('hq')} title="高画質 (HLS・go2rtcでH.265→H.264変換, ~1-3s 遅延)">
+            高画質 (HLS)
+          </ModeButton>
         )}
         {iframeSupported && (
-          <button
-            type="button"
-            onClick={() => onSwitch('iframe')}
-            className={
-              'rounded px-2 py-0.5 ' +
-              (mode === 'iframe'
-                ? 'bg-blue-600 text-white'
-                : 'bg-slate-700 text-slate-200 hover:bg-slate-600')
-            }
-            title="高画質 (Frigate, 25fps, ~1-2s 遅延)"
-          >
-            🎥 高画質{hqSupported ? '(Frigate)' : ''}
-          </button>
+          <ModeButton active={mode === 'iframe'} onClick={() => onSwitch('iframe')} title="高画質 (Frigate, 25fps, ~1-2s 遅延)">
+            高画質{hqSupported ? ' (Frigate)' : ''}
+          </ModeButton>
         )}
-        <button
-          type="button"
-          onClick={() => onSwitch('jpeg')}
-          className={
-            'rounded px-2 py-0.5 ' +
-            (mode === 'jpeg'
-              ? 'bg-blue-600 text-white'
-              : 'bg-slate-700 text-slate-200 hover:bg-slate-600')
-          }
-          title="軽量モード (JPEG 1fps・低帯域) — BCP / 回線混雑時推奨"
-        >
-          📡 軽量 (JPEG)
-        </button>
+        <ModeButton active={mode === 'jpeg'} onClick={() => onSwitch('jpeg')} title="軽量モード (JPEG 1fps・低帯域) — BCP / 回線混雑時推奨">
+          軽量 (JPEG)
+        </ModeButton>
       </div>
-      <div className="flex items-center gap-2 text-[10px] text-slate-400">
+      <div className="flex items-center gap-2 text-[11px] text-slate-400">
         <RemainingBadge remainingSec={remainingSec} />
-        <span>
-          {label}
-          {iframeFailed && (
-            <span className="ml-2 text-amber-400">⚠ 高画質モード接続失敗 — 軽量モードへ自動切替</span>
-          )}
-          {sfuFailed && (
-            <span className="ml-2 text-amber-400">⚠ SFU 接続不可 — 通常経路へ自動切替</span>
-          )}
-          {unavailableNote && <span className="ml-2 text-slate-500">{unavailableNote}</span>}
-        </span>
+        <span>{label}</span>
+        {warning && (
+          <span className="inline-flex items-center gap-1 text-ge-warning">
+            <TriangleAlert className="h-4 w-4" strokeWidth={1.5} aria-hidden />
+            {warning}
+          </span>
+        )}
+        {unavailableNote && <span className="text-slate-500">{unavailableNote}</span>}
       </div>
     </div>
   )

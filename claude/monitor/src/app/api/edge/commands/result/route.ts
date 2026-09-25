@@ -13,6 +13,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { authenticateEdge } from '@/lib/edge/device-auth'
+import { applyStartResult } from '@/lib/video/dispatch'
+import { normalizeVideoError } from '@/lib/video/session-logic'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,6 +57,11 @@ export async function POST(req: NextRequest) {
     .eq('request_id', request_id)
     .eq('edge_id', edge.id)
     .eq('status', 'pending')
+
+  // 遠隔視聴の開始（GVMS_CLOUD_SPEC §5.1）。ok は「起動できたか」で、映像が届いたかは
+  // 別（プレイリストの到着で見る）。失敗の値は §5.1 の語彙に丸めて画面の戻り先を決める。
+  // 開始の指示でなければ 0 行一致で素通り。
+  await applyStartResult(svc, edge.id, request_id, ok, ok ? null : normalizeVideoError(errMsg))
 
   return new NextResponse(null, { status: 204 })
 }

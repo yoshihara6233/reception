@@ -5,6 +5,9 @@ import { AppShell } from '@/components/AppShell'
 import { isVodVendor, type RecorderVendor } from '@/lib/types/db'
 import VodPlayer from './vod-player'
 import FrigateHlsPlayer from './frigate-hls-player'
+import RemoteHlsVodPlayer from './remote-hls-vod-player'
+import { hasCapability } from '@/lib/edge/capabilities'
+import { videoR2Configured } from '@/lib/storage/video-r2'
 
 /**
  * VOD (録画再生) route. Reached from the toolbar 録画 button (per-camera,
@@ -32,7 +35,7 @@ export default async function VodPage(
     .from('recorder_cameras')
     .select(`
       id, name, channel, frigate_camera,
-      recorders ( id, edge_id, vendor, live_host )
+      recorders ( id, edge_id, vendor, live_host, stores: edge_devices ( agent_version, capabilities ) )
     `)
     .eq('id', cameraId)
     .single()
@@ -42,7 +45,10 @@ export default async function VodPage(
     name: string
     channel: number
     frigate_camera: string | null
-    recorders: { edge_id: string; vendor: RecorderVendor; live_host: string | null }
+    recorders: {
+      edge_id: string; vendor: RecorderVendor; live_host: string | null
+      stores: { agent_version: string | null; capabilities: string[] | null } | null
+    }
   }
   const edgeId = c.recorders.edge_id
   const vendor = c.recorders.vendor
@@ -51,13 +57,16 @@ export default async function VodPage(
   // Frigate は録画をネイティブHLSで配信できる（clip.mp4 再エンコード経路より軽く、
   // 5分以上もシーク可）。frigate_camera と live_host が揃っていれば HLS 再生に分岐する。
   const frigateHls = vendor === 'frigate' && !!c.frigate_camera && !!c.recorders.live_host
+  // G・VMS の拠点は録画を HLS で送れる（GVMS_CLOUD_SPEC §5.3）。**hls_vod を名乗っている
+  // ときだけ**使い、名乗らない拠点は従来のクリップ再生のまま（§2）。
+  const remoteHls = vendor === 'nvms' && hasCapability(c.recorders.stores, 'hls_vod') && videoR2Configured()
 
   // Deep-link safety: gate unsupported vendors and missing range even though
   // the toolbar already prevents reaching here for those cases.
   const blocked =
     !isVodVendor(vendor)
       ? '録画再生はこのカメラのレコーダーでは対応していません（i-PRO は ONVIF Profile-G が必要）。'
-      : (!frigateHls && (!from || !to))
+      : (!frigateHls && !remoteHls && (!from || !to))
         ? '再生範囲が指定されていません。'
         : null
 
@@ -81,6 +90,12 @@ export default async function VodPage(
             <div className="flex h-full items-center justify-center p-6 text-center text-sm text-slate-400">
               {blocked}
             </div>
+          ) : remoteHls ? (
+            <RemoteHlsVodPlayer
+              cameraId={cameraId}
+              initialFrom={from ?? null}
+              initialTo={from && to ? to : null}
+            />
           ) : frigateHls ? (
             <FrigateHlsPlayer
               cameraId={cameraId}

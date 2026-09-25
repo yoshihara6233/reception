@@ -4,6 +4,8 @@ import { createSupabaseServer } from '@/lib/supabase/server'
 import { AppShell } from '@/components/AppShell'
 import { signLiveUrl } from '@/lib/live-sign'
 import { livekitEnabled } from '@/lib/livekit'
+import { hasCapability } from '@/lib/edge/capabilities'
+import { videoR2Configured } from '@/lib/storage/video-r2'
 import LivePlayer from './live-player'
 
 export default async function LivePage(
@@ -16,7 +18,7 @@ export default async function LivePage(
     .from('recorder_cameras')
     .select(`
       id, name, channel, frigate_camera, hls_url,
-      recorders ( id, edge_id, vendor, live_host, stores: edge_devices ( store_id, go2rtc_host ) )
+      recorders ( id, edge_id, vendor, live_host, stores: edge_devices ( store_id, go2rtc_host, agent_version, capabilities ) )
     `)
     .eq('id', cameraId)
     .single()
@@ -31,7 +33,7 @@ export default async function LivePage(
       edge_id:    string
       vendor:     string
       live_host:  string | null
-      stores:     { go2rtc_host: string | null } | null
+      stores:     { go2rtc_host: string | null; agent_version: string | null; capabilities: string[] | null } | null
     }
   }
   const edgeId   = c.recorders.edge_id
@@ -86,6 +88,12 @@ export default async function LivePage(
     ? `/api/live-proxy/${cameraId}/api/stream.m3u8?src=${encodeURIComponent(`cam_${cameraId}`)}&mp4`
     : null
   const room   = `live-${cameraId}`
+  // G・VMS の拠点（nvmsd）の遠隔ライブ（GVMS_CLOUD_SPEC §5.2）。**拠点が hls_live を
+  // 名乗っているときだけ**出す（§2: 名乗りに無い操作は画面に出さない）。
+  const remoteHls = hasCapability(c.recorders.stores, 'hls_live') && videoR2Configured()
+  // 従来の SFU（go2rtc を WHIP で送る）はエッジ端末向けで、nvmsd には session_id の無い
+  // start_sfu は届いても動かない。G・VMS の SFU（§5.4）は別の作業で足す。
+  const isNvms   = vendor === 'nvms'
 
   return (
     <AppShell selectedStoreId={storeId}>
@@ -112,7 +120,8 @@ export default async function LivePage(
             liveIsImageStream={isRemoteHost}
             liveSigned={liveSigned}
             hqUrl={hqUrl}
-            sfuEnabled={livekitEnabled() && !liveViaNvr}
+            sfuEnabled={livekitEnabled() && !liveViaNvr && !isNvms}
+            remoteHlsEnabled={remoteHls}
             unavailableNote={liveViaNvr
               ? 'レコーダ経由の構成のため高画質ライブは非対応 — 軽量 (JPEG) でご覧ください'
               : null}

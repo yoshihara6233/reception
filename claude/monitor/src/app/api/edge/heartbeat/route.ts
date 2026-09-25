@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { authenticateEdge } from '@/lib/edge/device-auth'
+import { sanitizeCapabilities, sanitizeSpecVersion } from '@/lib/edge/capabilities'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,6 +28,18 @@ const Body = z.object({
   // OTA の配り分け（形式・CPU 種別）。nvmsd が更新の適用役と同じ判定で名乗る。
   pkg_format: z.enum(['deb', 'rpm']).optional(),
   pkg_arch: z.enum(['amd64', 'arm64']).optional(),
+  // 版と使える機能の名乗り（GVMS_CLOUD_SPEC §2）。**ここでは型を縛らない** —
+  // 形の崩れた名乗りで heartbeat ごと 400 にすると拠点が「停止」に見える。
+  // 中身は sanitize* で読めた分だけ使う。
+  spec_version: z.unknown().optional(),
+  capabilities: z.unknown().optional(),
+  // 遠隔視聴の状況（§5.5）。送っていなければ省かれる。
+  video: z.unknown().optional(),
+})
+
+const VideoStats = z.object({
+  sessions: z.number().int().min(0).max(10_000),
+  kbps: z.number().int().min(0).max(10_000_000),
 })
 
 export async function POST(req: NextRequest) {
@@ -36,6 +49,7 @@ export async function POST(req: NextRequest) {
   const parsed = Body.safeParse(await req.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
   const { status, agent_version, mac, applied_config_version, pkg_format, pkg_arch } = parsed.data
+  const video = VideoStats.safeParse(parsed.data.video)
 
   const payload: Record<string, unknown> = {
     status,
@@ -46,11 +60,24 @@ export async function POST(req: NextRequest) {
   if (applied_config_version !== undefined) payload.applied_config_version = applied_config_version
   if (pkg_format) payload.pkg_format = pkg_format
   if (pkg_arch) payload.pkg_arch = pkg_arch
+  // 名乗りは毎回そのまま写す。省かれたら null（＝名乗り無し）に戻す — 0.1.67 以前へ
+  // 戻した拠点に、古い名乗りのまま動画のボタンを出し続けないため。
+  const announce: Record<string, unknown> = {
+    spec_version: sanitizeSpecVersion(parsed.data.spec_version),
+    capabilities: sanitizeCapabilities(parsed.data.capabilities),
+    video_sessions_now: video.success ? video.data.sessions : 0,
+    video_kbps: video.success ? video.data.kbps : 0,
+    video_reported_at: payload.last_seen_at,
+  }
 
-  const { error } = await createSupabaseService()
-    .from('edge_devices')
-    .update(payload)
-    .eq('id', edge.id)
+  const svc = createSupabaseService()
+  let { error } = await svc.from('edge_devices').update({ ...payload, ...announce }).eq('id', edge.id)
+  // **名乗りの列が無い（migration の前にデプロイされた）ときも死活は落とさない。**
+  // 本番の migration は手で当てるので、順番を間違えると全拠点が「停止」に見える。
+  // 列が無いと PostgREST は PGRST204 を返す — そのときだけ従来の列で書き直す。
+  if (error?.code === 'PGRST204') {
+    ;({ error } = await svc.from('edge_devices').update(payload).eq('id', edge.id))
+  }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   return new NextResponse(null, { status: 204 })

@@ -27,6 +27,7 @@ type Guard =
   | 'baggage-store'   // 手荷物検査の店舗スコープ。requireBaggageAccess()
   | 'kiosk'           // iPad キオスクの署名 cookie
   | 'edge-view'       // エッジ映像の可視性。requireEdgeViewAccess()
+  | 'video-session'   // 遠隔視聴のセッションの本人確認。requireVideoSessionAccess()
   | 'cron'            // CRON_SECRET / x-vercel-cron
   | 'device-token'    // エッジ端末トークン
   | 'webhook-secret'  // 共有 secret（未設定はフェイルクローズであること）
@@ -42,6 +43,7 @@ const RULES: [Guard, RegExp][] = [
   ['baggage-store',  /requireBaggageAccess\s*\(/],
   ['kiosk',          /requireKioskStore|requireKioskSession|readKioskSession|KIOSK_COOKIE/],
   ['edge-view',      /requireEdgeViewAccess/],
+  ['video-session',  /requireVideoSessionAccess/],
   ['cron',           /CRON_SECRET|x-vercel-cron/],
   ['device-token',   /authenticateEdge|device_token|x-device-token/],
   ['webhook-secret', /WEBHOOK_SECRET/],
@@ -143,6 +145,8 @@ const EXPECTED: Record<string, Guard> = {
   '/api/edge/agent-update': 'device-token',
   '/api/edge/diagnostics/upload-url': 'device-token',
   '/api/edge/recorders': 'device-token',
+  '/api/edge/video/status': 'device-token',
+  '/api/edge/video/upload-urls': 'device-token',
   '/api/baggage/employees/[id]/face': 'admin',
   '/api/baggage/employees/[id]/photo': 'admin',
   '/api/baggage/employees/[id]': 'admin',
@@ -177,6 +181,7 @@ const EXPECTED: Record<string, Guard> = {
   '/api/cron/security-patrol': 'cron',
   '/api/cron/security-report': 'cron',
   '/api/cron/sfu-reaper': 'cron',
+  '/api/cron/video-sessions': 'cron',
   '/api/cron/usage-rollup': 'cron',
   '/api/edge/bootstrap': 'device-token',
   '/api/edge/config': 'device-token',
@@ -202,6 +207,9 @@ const EXPECTED: Record<string, Guard> = {
   '/api/vod/[clipId]': 'session-only',
   '/api/vod/[clipId]/status': 'session-only',
   '/api/vod': 'session-only',
+  '/api/video/sessions': 'session-only',
+  '/api/video/sessions/[id]': 'video-session',
+  '/api/video/sessions/[id]/hls/[...path]': 'video-session',
   '/api/webhooks/onvif/[storeId]': 'webhook-secret',
 }
 
@@ -260,7 +268,10 @@ describe('API ルートの認可ガード棚卸し', () => {
     // 26 = Phase 2b の /api/bcp/grid-shot/[id]（合成タイムラインの画像プロキシ）。
     // /api/bcp/clip/[id] と同型 — 利用者スコープで bcp_grid_shots を読み（RLS =
     // 親イベントの店舗可視性が認可）、通ったときだけ署名 URL へ 302。
+    // 27 = 遠隔視聴の開始 POST /api/video/sessions（GVMS_CLOUD_SPEC §5.1）。
+    // RLS 配下でカメラの可視性を引いてから service で行を作る順番を
+    // rls-gate-before-service.test.ts で固定している。
     const n = Object.values(actual).filter((g) => g === 'session-only').length
-    expect(n).toBeLessThanOrEqual(26)
+    expect(n).toBeLessThanOrEqual(27)
   })
 })
