@@ -40,17 +40,18 @@ export function edgeImagesWorkerConfigured(): boolean {
 }
 
 /** Worker と一致させる正規化文字列。 */
-function canonical(method: 'PUT' | 'GET', key: string, exp: number): string {
+function canonical(method: 'PUT' | 'GET' | 'DELETE', key: string, exp: number): string {
   return `${method}\n${key}\n${exp}`
 }
 
 /**
  * Worker 経由の署名URLを組み立てる。env 未設定なら null。
- * @param method PUT=エッジのアップロード / GET=ブラウザの取得
+ * @param method PUT=エッジのアップロード / GET=ブラウザの取得（HEAD も GET の署名）/
+ *               DELETE=遠隔視聴の置き場の片付け（video/ のキーだけ Worker が受ける）
  * @param key    edges/<edgeId>/grid.jpg 等（Supabase 側と同じ相対パス）
  */
 export function signEdgeImageUrl(
-  method: 'PUT' | 'GET',
+  method: 'PUT' | 'GET' | 'DELETE',
   key: string,
   ttlSec?: number,
 ): string | null {
