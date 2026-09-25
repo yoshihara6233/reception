@@ -27,9 +27,11 @@ export function edgeImagesR2Configured(): boolean {
 function bucket(): string {
   return process.env.R2_EDGE_BUCKET ?? 'edge-images'
 }
+/** 遠隔視聴（video-r2.ts）も同じバケットの `video/` 配下を使う。 */
+export const edgeImagesBucket = bucket
 
 let client: S3Client | null = null
-function r2(): S3Client {
+export function r2(): S3Client {
   if (!client) {
     client = new S3Client({
       region: 'auto',

@@ -95,3 +95,25 @@ describe('/api/sessions', () => {
     expect(h.serviceCalls).toBe(0)
   })
 })
+
+describe('/api/video/sessions（遠隔視聴の開始）', () => {
+  const OTHER_TENANT_CAMERA = '33333333-3333-4333-8333-333333333333'
+  const startBody = (cameraId: string) => new Request('http://localhost/api/video/sessions', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ camera_id: cameraId, kind: 'hls_live' }),
+  })
+
+  it('RLS で見えないカメラでの開始は 404（存在を教えない）', async () => {
+    const { POST } = await import('@/app/api/video/sessions/route')
+    const res = await POST(startBody(OTHER_TENANT_CAMERA))
+    expect(res.status).toBe(404)
+    expect((await res.json()).error).toBe('camera_not_found')
+  })
+
+  it('見えないカメラでは service role を組み立てない（他拠点へ指示を出せない）', async () => {
+    const { POST } = await import('@/app/api/video/sessions/route')
+    await POST(startBody(OTHER_TENANT_CAMERA))
+    expect(h.serviceCalls).toBe(0)
+  })
+})

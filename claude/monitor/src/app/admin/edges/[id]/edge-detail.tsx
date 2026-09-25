@@ -63,6 +63,11 @@ interface EdgePayload {
   pkg_format: string | null
   pkg_arch: string | null
   applied_config_version: number | null
+  // 版と使える機能の名乗り・遠隔視聴の状況（GVMS_CLOUD_SPEC §2・§5.5）
+  spec_version: number | null
+  capabilities: string[] | null
+  video_sessions_now: number | null
+  video_kbps: number | null
   stores: { name: string; area_code: string | null }
   recorders: Recorder[]
 }
@@ -116,6 +121,20 @@ export function EdgeDetail({ edge, bundles = [] }: { edge: EdgePayload; bundles?
           <Row k="店舗"        v={`${edge.stores.area_code ? `[${edge.stores.area_code}] ` : ''}${edge.stores.name}`} />
           <Row k="状態"        v={edge.status} />
           <Row k="バージョン"  v={edge.agent_version ?? '—'} />
+          {edge.agent_version?.startsWith('nvmsd/') && (
+            <>
+              <Row k="使える機能" v={
+                edge.capabilities
+                  ? <span className="font-ge-mono">{`v${edge.spec_version ?? '?'} · ${edge.capabilities.join(', ') || '—'}`}</span>
+                  : <span className="text-slate-500">名乗り無し（0.1.67 以前の既定）</span>
+              } />
+              <Row k="遠隔視聴" v={
+                <span className="font-ge-mono tabular-nums">
+                  {`${(edge.video_sessions_now ?? 0).toLocaleString('ja-JP')} 本 · ${(edge.video_kbps ?? 0).toLocaleString('ja-JP')} kbps`}
+                </span>
+              } />
+            </>
+          )}
           <Row k="最終接続"    v={edge.last_seen_at ? new Date(edge.last_seen_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : '—'} />
           {/* NVR 時計ズレ（エッジ実測・30分毎）。±10 秒超は証跡の時刻精度に影響するため警告色。 */}
           <Row k="NVR 時刻差" v={
