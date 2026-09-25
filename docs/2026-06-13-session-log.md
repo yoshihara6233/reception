@@ -24,7 +24,7 @@ Intereco Recorder Monitor を本番公開し、実機PoC（Beelink + Frigate）�
 
 ## 3. ログイン復旧
 
-- `yoshihara8238@gmail.com` は存在（パスワード失念）。Admin API でパスワードを `Intereco2026` に直接設定。
+- `yoshihara8238@gmail.com` は存在（パスワード失念）。Admin API でパスワードを直接設定（値は伏せる。2026-07-07 に変更済み）。
 - `admin_users` 行（role=super_admin、auth_user_id 紐付け）を確認。ログイン成功。
 
 ## 4. service_role キーのローテーション
