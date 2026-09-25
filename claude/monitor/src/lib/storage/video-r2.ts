@@ -1,13 +1,17 @@
 /**
  * 遠隔視聴（HLS）の置き場 — Cloudflare R2（GVMS_CLOUD_SPEC §5.2・§5.3）。
  *
- * 拠点（nvmsd）は区切りとプレイリストを**署名付き PUT で R2 へ直接**置き、クラウドは
+ * 拠点（nvmsd）は区切りとプレイリストを**署名付き PUT で R2 へ**置き、クラウドは
  * 視聴者へ中継する。置き場はセッションごとに `video/<session_id>/` 配下の固定の名前:
  *   slot0 … slot7（ライブ）/ slot0 … slot15（録画再生）・init・playlist
  *
  * 決めたこと:
  *  - **PUT の署名に Content-Type を含めない。** 区切りは ts（video/mp2t）と
  *    m4s（video/mp4）の両方があり、同じ置き場に入る。縛ると片方が 403 になる。
+ *  - **送り先は自社ドメインの Worker（intereco-edge-images）を優先する。** R2 の S3 API の
+ *    ホスト名（*.r2.cloudflarestorage.com）は、eo光など SNI で遮断する回線から届かない
+ *    （静止画ライブと同じ問題。2026-09-25 に .200 で TLS handshake failure を実測）。
+ *    Worker が未設定のときだけ S3 の署名付き URL にする。
  *  - **視聴者へは署名付き GET を渡さず、ルートが中継する。** 署名付き URL を
  *    API 応答（302 の Location を含む）に出さない（§6）。
  *  - バケットは静止画ライブと同じ（R2_EDGE_BUCKET）。専用にしたい場合は
@@ -17,6 +21,7 @@
 import { DeleteObjectsCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { edgeImagesBucket, edgeImagesR2Configured, r2 } from '@/lib/storage/edge-images-r2'
+import { edgeImagesWorkerConfigured, signEdgeImageUrl } from '@/lib/storage/edge-images-sign'
 import { slotCount, type VideoKind } from '@/lib/video/session-logic'
 
 /** 署名の期限。拠点は期限の 5 分前に /api/edge/video/upload-urls で取り直す（§5.2.3）。 */
@@ -45,6 +50,10 @@ export interface VideoUpload {
 }
 
 function presignPut(key: string): Promise<string> {
+  if (edgeImagesWorkerConfigured()) {
+    const u = signEdgeImageUrl('PUT', key, VIDEO_UPLOAD_TTL_SEC)
+    if (u) return Promise.resolve(u)
+  }
   return getSignedUrl(r2(), new PutObjectCommand({ Bucket: bucket(), Key: key }), {
     expiresIn: VIDEO_UPLOAD_TTL_SEC,
   })

@@ -12,6 +12,12 @@
  *   GET /v1/<key>?exp=&sig=   … ブラウザが取得（monitor 発行の GET 署名・302 先）
  *   <key> は monitor と共通: edges/<edgeId>/grid.jpg / edges/<edgeId>/cam/<cameraId>/snapshot.jpg
  *
+ *   PUT /v1/video/<sessionId>/<name>?exp=&sig=  … G・VMS の遠隔視聴（HLS）の区切り・初期化区切り・
+ *     プレイリスト（name = slot0〜slot15 / init / playlist）。**PUT だけ**を受ける — 視聴者へは
+ *     monitor のサーバが R2 から読んで中継するので、ここで読み出す必要が無い。
+ *     S3 の署名付き URL（*.r2.cloudflarestorage.com）は遮断回線で届かない（2026-09-25 .200 で
+ *     TLS handshake failure を実測）ため、静止画と同じくこの Worker を通す。
+ *
  * 認証: monitor（lib/storage/edge-images-sign.ts）と**同じ鍵**の短TTL HMAC。
  *   正規化文字列は厳密一致で `${method}\n${key}\n${exp}`。
  *   method を含めるので **PUT 署名で GET はできない**（逆も同様）。
@@ -26,6 +32,12 @@
 const PREFIX = '/v1/'
 /** キーの形を限定する（任意パスへの書込・読出を防ぐ）。 */
 const KEY_RE = /^edges\/[0-9a-fA-F-]{36}\/(grid\.jpg|cam\/[0-9a-fA-F-]{36}\/snapshot\.jpg)$/
+/** 遠隔視聴（HLS）の置き場。monitor の lib/storage/video-r2.ts の videoKey と同じ形。 */
+const VIDEO_KEY_RE = /^video\/[0-9a-fA-F-]{36}\/(slot(?:[0-9]|1[0-5])|init|playlist)$/
+/** 区切りは TS / fMP4、プレイリストは m3u8。これ以外の形式では保存しない */
+const VIDEO_TYPES = new Set(['video/mp2t', 'video/mp4', 'application/vnd.apple.mpegurl'])
+/** 区切り 1 本の上限（4 秒の録画再生の区切りでも数 MB。それを大きく超えるものは受けない） */
+const VIDEO_MAX_BYTES = 32 * 1024 * 1024
 
 export default {
   async fetch(request, env) {
@@ -37,9 +49,11 @@ export default {
       if (!url.pathname.startsWith(PREFIX)) return deny('not found', 404)
 
       const key = decodeURIComponent(url.pathname.slice(PREFIX.length))
-      if (!KEY_RE.test(key)) return deny('bad key')
+      const isVideo = VIDEO_KEY_RE.test(key)
+      if (!isVideo && !KEY_RE.test(key)) return deny('bad key')
 
       const method = request.method.toUpperCase()
+      if (isVideo && method !== 'PUT') return deny('method not allowed', 405)
       if (method !== 'PUT' && method !== 'GET' && method !== 'HEAD') {
         return deny('method not allowed', 405)
       }
@@ -56,6 +70,18 @@ export default {
         `${signedMethod}\n${key}\n${exp}`,
       )
       if (!safeEqual(expected, sig.toLowerCase())) return deny('bad signature')
+
+      if (method === 'PUT' && isVideo) {
+        if (!request.body) return deny('empty body', 400)
+        const type = (request.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase()
+        if (!VIDEO_TYPES.has(type)) return deny('bad content type', 415)
+        const len = Number(request.headers.get('Content-Length') || '0')
+        if (len > VIDEO_MAX_BYTES) return deny('too large', 413)
+        await env.IMAGES.put(key, request.body, {
+          httpMetadata: { contentType: type, cacheControl: 'no-store' },
+        })
+        return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } })
+      }
 
       if (method === 'PUT') {
         if (!request.body) return deny('empty body', 400)
