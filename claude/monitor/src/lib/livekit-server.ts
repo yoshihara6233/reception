@@ -45,7 +45,11 @@ export async function createSfuIngress(room: string, identity: string): Promise<
   try {
     const all = await ic.listIngress()
     const mine = all.find((i) => i.roomName === room && i.url && i.streamKey)
-    const stale = all.filter((i) => i.roomName !== room && i.state?.status === INGRESS_INACTIVE)
+    // 掃除するのは従来のエッジ向け（cam_ の部屋）だけ。G・VMS の受け口（gvms_ の部屋）は
+    // 拠点がつながるまで十数秒 INACTIVE のままなので、ここで消すと送り出しが始まらない。
+    // G・VMS の受け口は video_sessions の片付け（cron/video-sessions）が消す
+    const stale = all.filter((i) =>
+      i.roomName !== room && i.roomName?.startsWith('cam_') && i.state?.status === INGRESS_INACTIVE)
     await Promise.all(stale.map((i) => ic.deleteIngress(i.ingressId)))
     if (mine) return `${mine.url}/${mine.streamKey}`
   } catch { /* best-effort GC / 再利用不可 → 新規作成へ */ }
@@ -107,4 +111,69 @@ export async function dispatchStopSfu(service: SupabaseClient, edgeId: string): 
     .update({ pending_command: cmd, pending_command_at: new Date().toISOString() })
     .eq('id', edgeId)
     .is('pending_command', null)
+}
+
+// ---- G・VMS の SFU 遠隔ライブ（GVMS_CLOUD_SPEC §5.4）----
+//
+// 従来のエッジ向けと違い、**視聴 1 回（video_sessions の 1 行）に受け口 1 つ**を作る。
+// 部屋も gvms_<session_id> に分ける — cam_ の部屋は sfu-reaper が視聴者 0 人で stop_sfu を
+// 入れにいくため（nvmsd は stop_sfu を知らない指示として読み飛ばす）。
+// 送り先の URL はストリームキー入りの自己認証 URL なので、whip_bearer は使わない。
+// **URL は秘密**: DB・ログ・API 応答に出さない。DB には ingress_id だけを置く。
+
+/** G・VMS の視聴 1 回の部屋名。 */
+export function gvmsRoomForSession(sessionId: string): string {
+  return `gvms_${sessionId}`
+}
+
+function ingressClient(): IngressClient {
+  return new IngressClient(livekitHttpsUrl(), process.env.LIVEKIT_API_KEY!, process.env.LIVEKIT_API_SECRET!)
+}
+
+export interface GvmsIngress { ingressId: string; room: string; whipUrl: string }
+
+/**
+ * G・VMS の視聴 1 回ぶんの WHIP 受け口を作る。拠点は H.264 で送ってくる（H.265 は拠点が
+ * 変換する・§5.4.2）ので、受け口では変換しない（enableTranscoding=false が WHIP の既定）。
+ */
+export async function createGvmsIngress(sessionId: string, edgeId: string): Promise<GvmsIngress> {
+  const room = gvmsRoomForSession(sessionId)
+  const params = {
+    name: `gvms-${sessionId}`, roomName: room,
+    participantIdentity: `gvms-edge-${edgeId}`, participantName: 'G・VMS',
+    enableTranscoding: false,
+  }
+  const ic = ingressClient()
+  let created
+  try {
+    created = await ic.createIngress(IngressInput.WHIP_INPUT, params)
+  } catch (e) {
+    if ((e as { status?: number }).status !== 429) throw e
+    await new Promise((r) => setTimeout(r, RETRY_BACKOFF_MS))
+    created = await ic.createIngress(IngressInput.WHIP_INPUT, params)
+  }
+  if (!created.ingressId || !created.url || !created.streamKey) throw new Error('ingress_create_failed')
+  return { ingressId: created.ingressId, room, whipUrl: `${created.url}/${created.streamKey}` }
+}
+
+/** 受け口を消す。もう無い（消し済み・期限切れ）ものは消えたとみなして true。 */
+export async function deleteGvmsIngress(ingressId: string): Promise<boolean> {
+  try {
+    await ingressClient().deleteIngress(ingressId)
+    return true
+  } catch (e) {
+    const status = (e as { status?: number }).status
+    return status === 404
+  }
+}
+
+/** 部屋に映像を送っている参加者（拠点）が居るか。部屋が無い・API に届かないときは false。 */
+export async function roomHasPublisher(room: string): Promise<boolean> {
+  try {
+    const rsc = new RoomServiceClient(livekitHttpsUrl(), process.env.LIVEKIT_API_KEY!, process.env.LIVEKIT_API_SECRET!)
+    const participants = await rsc.listParticipants(room)
+    return participants.some((p) => (p.tracks ?? []).length > 0)
+  } catch {
+    return false
+  }
 }

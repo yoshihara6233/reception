@@ -7,6 +7,9 @@
  * ② 片付け: 終わって 2 分たったセッションの置き場（R2）を消す。仕様は「遅くとも 10 分後」。
  *    2 分待つのは、録画再生の終わり（ended）のあとも手元の再生が最後の区切りを
  *    読みに来るため。5 分ごとの実行なので最長でも 7 分で消える。
+ * ③ SFU の受け口: 終わった SFU のセッションに残っている LiveKit の受け口（Ingress）を消す。
+ *    ふつうは止めた時点で消している（lib/video/dispatch.ts）。ここは拠点の報告で終わった・
+ *    誤りで終わった・消すのに失敗した分の拾い直し。受け口は同時数に上限があるので残さない。
  *
  * 認証: 他の cron と同じ CRON_SECRET（Bearer / x-cron-secret）。
  */
@@ -14,6 +17,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { deleteVideoObjects, videoR2Configured } from '@/lib/storage/video-r2'
 import { ACTIVE_STATES, TERMINAL_STATES, type VideoKind } from '@/lib/video/session-logic'
+import { livekitEnabled } from '@/lib/livekit'
+import { purgeIngress } from '@/lib/video/dispatch'
 
 export const dynamic = 'force-dynamic'
 
@@ -66,5 +71,27 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
   }
 
-  return NextResponse.json({ ok: true, abandoned: abandoned?.length ?? 0, purged, purge_failed: purgeFailed })
+  let ingressPurged = 0
+  let ingressFailed = 0
+  if (livekitEnabled()) {
+    const { data: sfuDone, error: sErr } = await svc
+      .from('video_sessions')
+      .select('id, ingress_id')
+      .eq('kind', 'sfu')
+      .in('state', TERMINAL_STATES as string[])
+      .not('ingress_id', 'is', null)
+      .is('purged_at', null)
+      .order('ended_at', { ascending: true })
+      .limit(PURGE_BATCH)
+    if (sErr) return NextResponse.json({ error: 'ingress_list_failed' }, { status: 500 })
+    for (const s of (sfuDone ?? []) as { id: string; ingress_id: string }[]) {
+      if (await purgeIngress(svc, s.id, s.ingress_id, nowIso)) ingressPurged++
+      else ingressFailed++ // 次の実行で取り直す
+    }
+  }
+
+  return NextResponse.json({
+    ok: true, abandoned: abandoned?.length ?? 0, purged, purge_failed: purgeFailed,
+    ingress_purged: ingressPurged, ingress_failed: ingressFailed,
+  })
 }

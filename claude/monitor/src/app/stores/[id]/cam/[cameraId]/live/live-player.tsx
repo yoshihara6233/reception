@@ -41,6 +41,8 @@ import { describeVideoError } from '@/lib/video/session-logic'
 const LiveKitMode = dynamic(() => import('./live-livekit-mode'), { ssr: false })
 // G・VMS の拠点の遠隔ライブ（HLS）。拠点が hls_live を名乗るときだけ使う。
 const RemoteHlsLiveMode = dynamic(() => import('./live-remote-hls-mode'), { ssr: false })
+// G・VMS の拠点の遠隔ライブ（SFU・§5.4）。拠点が sfu を名乗るときだけ使う。
+const RemoteSfuLiveMode = dynamic(() => import('./live-remote-sfu-mode'), { ssr: false })
 
 // Floor between snapshot frames. Polling is onLoad-driven (the next fetch
 // starts only after the current frame settles), so this is just a small gap
@@ -113,6 +115,8 @@ interface Props {
   unavailableNote?: string | null
   // G・VMS の拠点が hls_live を名乗り、置き場（R2）も使えるとき true。「動画 (HLS)」を出す。
   remoteHlsEnabled?: boolean
+  // G・VMS の拠点なら true。SFU を視聴 1 回ごとの受け口（§5.4）で開く（従来の LiveKitMode でなく）
+  remoteSfu?: boolean
 }
 
 // 利用可能なモードから、保存済み設定を尊重しつつ有効なモードを選ぶ。
@@ -127,7 +131,7 @@ function resolveMode(prefer: Mode, hasSfu: boolean, hasHq: boolean, hasIframe: b
   return hasHq ? 'hq' : hasIframe ? 'iframe' : hasRemote ? 'remote' : 'jpeg'
 }
 
-export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, liveIsImageStream, liveSigned, hqUrl, sfuEnabled, unavailableNote, remoteHlsEnabled }: Props) {
+export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, liveIsImageStream, liveSigned, hqUrl, sfuEnabled, unavailableNote, remoteHlsEnabled, remoteSfu }: Props) {
   // Default mode: go2rtc高画質 > Frigate iframe > 遠隔 HLS > jpeg. User pref overrides.
   // SFU は既定にしない（利用者が明示選択したときだけ・egress有界化）。G・VMS の拠点も
   // 既定は HLS（GVMS_CLOUD_SPEC §5「初めは HLS」・2026-09-25 利用者決定）。
@@ -252,6 +256,19 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
           <LiveLimitOverlay />
         ) : expired ? (
           <SessionCapOverlay maxSessionMin={maxSessionMin} />
+        ) : mode === 'sfu' && sfuEnabled && remoteSfu ? (
+          <RemoteSfuLiveMode
+            cameraId={cameraId}
+            storeId={storeId}
+            // 拠点が断ったら: codec_unsupported は HLS を案内（§5.4.2）、busy / bandwidth は
+            // 拠点の枠が空いていないので HLS も同じく断られる → 静止画ライブ（§5.1）。
+            // セッション限り（saveMode しない）
+            onFallback={(code) => {
+              setSfuFailed(true)
+              setRemoteFallback(code)
+              setMode(code === 'codec_unsupported' && remoteHlsEnabled ? 'remote' : 'jpeg')
+            }}
+          />
         ) : mode === 'sfu' && sfuEnabled ? (
           <LiveKitMode
             cameraId={cameraId}

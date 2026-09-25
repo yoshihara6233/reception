@@ -91,9 +91,11 @@ export default async function LivePage(
   // G・VMS の拠点（nvmsd）の遠隔ライブ（GVMS_CLOUD_SPEC §5.2）。**拠点が hls_live を
   // 名乗っているときだけ**出す（§2: 名乗りに無い操作は画面に出さない）。
   const remoteHls = hasCapability(c.recorders.stores, 'hls_live') && videoR2Configured()
-  // 従来の SFU（go2rtc を WHIP で送る）はエッジ端末向けで、nvmsd には session_id の無い
-  // start_sfu は届いても動かない。G・VMS の SFU（§5.4）は別の作業で足す。
+  // SFU は拠点の種類で中身が違う。従来のエッジ端末は go2rtc を WHIP で送る（cam_ の部屋を
+  // 使い回す）。G・VMS の拠点は視聴 1 回ごとに受け口を作る §5.4 の方式で、**sfu を名乗る
+  // 拠点だけ**に出す（0.1.67 以前の nvmsd は session_id の無い start_sfu では動かない）。
   const isNvms   = vendor === 'nvms'
+  const sfuOk    = livekitEnabled() && !liveViaNvr && (!isNvms || hasCapability(c.recorders.stores, 'sfu'))
 
   return (
     <AppShell selectedStoreId={storeId}>
@@ -120,7 +122,8 @@ export default async function LivePage(
             liveIsImageStream={isRemoteHost}
             liveSigned={liveSigned}
             hqUrl={hqUrl}
-            sfuEnabled={livekitEnabled() && !liveViaNvr && !isNvms}
+            sfuEnabled={sfuOk}
+            remoteSfu={isNvms}
             remoteHlsEnabled={remoteHls}
             unavailableNote={liveViaNvr
               ? 'レコーダ経由の構成のため高画質ライブは非対応 — 軽量 (JPEG) でご覧ください'
