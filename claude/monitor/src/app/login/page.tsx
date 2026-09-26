@@ -8,6 +8,7 @@ import { createSupabaseBrowser } from '@/lib/supabase/browser'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { MonitorMark } from '@/components/MonitorMark'
 import { PRODUCT_NAME } from '@/lib/brand'
+import { safeNext } from '@/lib/auth/safe-next'
 import { Smartphone, TriangleAlert } from 'lucide-react'
 
 export default function LoginPage() {
@@ -45,7 +46,7 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     setBusy(false)
     if (error) return setError(error.message)
-    router.push('/stores')
+    router.push(safeNext(new URL(window.location.href).searchParams.get('next')))
   }
 
   return (

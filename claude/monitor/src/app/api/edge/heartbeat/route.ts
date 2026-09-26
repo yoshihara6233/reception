@@ -14,6 +14,7 @@ import { z } from 'zod'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { authenticateEdge } from '@/lib/edge/device-auth'
 import { sanitizeCapabilities, sanitizeSpecVersion } from '@/lib/edge/capabilities'
+import { syncGvmsOidcClient } from '@/lib/edge/gvms-oidc'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,6 +36,8 @@ const Body = z.object({
   capabilities: z.unknown().optional(),
   // 遠隔視聴の状況（§5.5）。送っていなければ省かれる。
   video: z.unknown().optional(),
+  // ログインの一本化の戻り先（§9）。`oidc` を名乗る拠点だけが送る。型は縛らず sanitize で読む
+  oidc_redirect_uris: z.unknown().optional(),
 })
 
 const VideoStats = z.object({
@@ -79,6 +82,17 @@ export async function POST(req: NextRequest) {
     ;({ error } = await svc.from('edge_devices').update(payload).eq('id', edge.id))
   }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // ログインの一本化（§9）。拠点ごとの OAuth クライアントを名乗りと申告に合わせる。
+  // **失敗しても死活は落とさない**（OAuth 2.1 Server が無効なプロジェクトなど）
+  // 名乗りを外した拠点のクライアントの片付けもここで行う（申告が無ければ空として扱う）
+  const caps = announce.capabilities as string[] | null
+  try {
+    const r = await syncGvmsOidcClient(svc, edge.id, caps, parsed.data.oidc_redirect_uris)
+    if (r === 'error') console.warn('gvms oidc client sync failed', { edge: edge.id })
+  } catch (e) {
+    console.warn('gvms oidc client sync threw', { edge: edge.id, error: e instanceof Error ? e.message : String(e) })
+  }
 
   return new NextResponse(null, { status: 204 })
 }

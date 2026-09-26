@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { authenticateEdge } from '@/lib/edge/device-auth'
 import { allowedConfig } from '@/lib/edge/edge-config'
+import { oidcConfigFor } from '@/lib/edge/gvms-oidc'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,7 +33,10 @@ export async function GET(req: NextRequest) {
     .order('created_at', { ascending: true })
     .limit(1)
     .maybeSingle()
-  if (!rec || !rec.config_version || rec.config_version === 0 || !rec.desired_config) {
+  // ログインの一本化（§9）の oidc は、管理画面の設定（desired_config）とは別の表から足す
+  // （管理画面の保存で消えないように）。クライアントが変わると heartbeat が版を上げる
+  const oidc = await oidcConfigFor(svc, edge.id)
+  if (!rec || !rec.config_version || rec.config_version === 0 || (!rec.desired_config && !oidc)) {
     return new NextResponse(null, { status: 204 })
   }
 
@@ -47,7 +51,8 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json(
-    { config_version: rec.config_version, recorderId: rec.id, config: allowedConfig(rec.desired_config) },
+    { config_version: rec.config_version, recorderId: rec.id,
+      config: { ...allowedConfig(rec.desired_config), ...(oidc ? { oidc } : {}) } },
     { headers: { 'Cache-Control': 'no-store' } },
   )
 }
