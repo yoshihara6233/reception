@@ -68,4 +68,14 @@ describe('POST /api/edge/heartbeat — 版と機能の名乗り（GVMS_CLOUD_SPE
     expect(h.updates[1]).not.toHaveProperty('capabilities')
     expect(h.updates[1]).toMatchObject({ status: 'idle', agent_version: 'nvmsd/0.1.68' })
   })
+
+  it('★ログインの一本化 (§9) のクライアントの同期に失敗しても死活は落とさない', async () => {
+    // この試験の偽のクライアントには gvms_oidc_clients の読み取りが無い (= 同期が例外になる)
+    const res = await post({
+      status: 'idle', capabilities: ['grid', 'oidc'],
+      oidc_redirect_uris: ['https://192.168.0.200:8443/api/v1/auth/oidc/callback'],
+    })
+    expect(res.status).toBe(204)
+    expect(h.updates[0]).toMatchObject({ status: 'idle', capabilities: ['grid', 'oidc'] })
+  })
 })
