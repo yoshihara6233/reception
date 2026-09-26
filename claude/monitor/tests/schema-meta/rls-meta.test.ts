@@ -65,6 +65,8 @@ const NO_POLICY_OK = new Map<string, string>([
    'エッジ端末の登録トークン。bootstrap API だけが service role で扱う。'],
   ['jalert_scanned_entries',
    '気象電文の走査済みマーク。jalert-poller（service role）だけが読み書きする作業用。'],
+  ['gvms_oidc_clients',
+   'G・VMS の拠点ごとの OIDC クライアントの控え。心拍（service role）が作り替え、同意画面とトークンのフック（SECURITY DEFINER）だけが読む。利用者に直接引かせない。'],
 ])
 
 /**
