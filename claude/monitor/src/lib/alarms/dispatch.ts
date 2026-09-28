@@ -11,6 +11,16 @@ import { randomUUID } from 'node:crypto'
 import type { EdgeCommand } from '@/lib/edge/commands'
 import { ALARM_TIMELINE_OFFSETS_SEC, alarmFramesIngestUrl } from './timeline'
 
+/**
+ * 前後スナップ（capture_alarm_timeline）を撮らない発報の出どころ。
+ *
+ * `nvms` は G・VMS の拠点が POST /api/edge/events で上げる重大イベント（サーバの停止・復帰、
+ * カメラの切断など）で、**カメラの発報ではない**（camera_id は null）。G・VMS は
+ * capture_alarm_timeline に対応していないので読み飛ばし、指示だけが「送信済み」になって
+ * 証跡の点検（evidence_gaps）が欠落として数えていた（2026-09-26 に .200 の再起動で 6 件）。
+ */
+export const NO_TIMELINE_SOURCES = ['nvms'] as const
+
 /** capture_alarm_timeline コマンドを生成（request_id は毎回新規）。 */
 export function buildTimelineCommand(alarmId: string, occurredAt: string): EdgeCommand {
   return {

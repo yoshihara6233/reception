@@ -94,7 +94,8 @@ export async function sendEmail(
 // ---------------------------------------------------------------------------
 
 /** Sender for account/security mail (verified Resend domain). */
-export const SECURITY_FROM_ADDRESS = 'Intereco Monitor <no-reply@genesis-edge.com>'
+// 表示名は製品名から取る (2026-09-28 まで旧名 Intereco Monitor のまま残っていた)
+export const SECURITY_FROM_ADDRESS = `${PRODUCT_NAME} <no-reply@genesis-edge.com>`
 
 /**
  * Password reset email. The reset link carries a one-time recovery token that

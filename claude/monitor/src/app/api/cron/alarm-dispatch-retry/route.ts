@@ -14,7 +14,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseService } from '@/lib/supabase/server'
-import { dispatchAlarmTimeline } from '@/lib/alarms/dispatch'
+import { NO_TIMELINE_SOURCES, dispatchAlarmTimeline } from '@/lib/alarms/dispatch'
 
 export const runtime = 'nodejs'
 
@@ -35,6 +35,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     .from('alarm_events')
     .select('id, store_id, occurred_at')
     .is('timeline_dispatched_at', null)
+    // G・VMS の重大イベントはカメラの発報ではないので前後スナップを撮らない（dispatch.ts）
+    .not('source', 'in', `(${NO_TIMELINE_SOURCES.join(',')})`)
     .gte('occurred_at', since)
     .order('occurred_at', { ascending: true })
     .limit(BATCH_LIMIT)
