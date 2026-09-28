@@ -54,6 +54,21 @@ async function bumpConfigVersion(svc: SupabaseClient, edgeId: string) {
     .eq('id', rec.id)
 }
 
+/**
+ * 登録に失敗した理由をログに残す。以前は結果の 'error' だけで理由を捨てており、本番で毎回失敗していても
+ * 原因が分からなかった (2026-09-29)。載せるのは Auth の応答のメッセージ・コード・申告された戻り先だけ
+ * (戻り先は拠点が heartbeat で出す公開の住所。秘密は含まない)。
+ */
+function logAuthError(op: string, edgeId: string, uris: string[], err: unknown) {
+  const e = (err ?? {}) as { message?: unknown; code?: unknown; status?: unknown }
+  console.warn('gvms oidc client error', {
+    op, edge: edgeId, uris,
+    message: typeof e.message === 'string' ? e.message.slice(0, 300) : String(err).slice(0, 300),
+    code: typeof e.code === 'string' ? e.code : undefined,
+    status: typeof e.status === 'number' ? e.status : undefined,
+  })
+}
+
 export type OidcSyncResult = 'unchanged' | 'created' | 'updated' | 'deleted' | 'skipped' | 'error'
 
 /**
@@ -89,18 +104,19 @@ export async function syncGvmsOidcClient(
         response_types: ['code'],
         scope: 'openid email profile',
       })
-      if (error || !data) return 'error'
+      if (error || !data) { logAuthError('create', edgeId, uris, error); return 'error' }
       await svc.from('gvms_oidc_clients').insert({ edge_id: edgeId, client_id: data.client_id, redirect_uris: uris })
       await bumpConfigVersion(svc, edgeId)
       return 'created'
     }
     if (sameList([...(cur.redirect_uris ?? [])].sort(), uris)) return 'unchanged'
     const { error } = await svc.auth.admin.oauth.updateClient(cur.client_id, { redirect_uris: uris })
-    if (error) return 'error'
+    if (error) { logAuthError('update', edgeId, uris, error); return 'error' }
     await svc.from('gvms_oidc_clients')
       .update({ redirect_uris: uris, updated_at: new Date().toISOString() }).eq('edge_id', edgeId)
     return 'updated'  // client_id は変わらないので配り直しは要らない
-  } catch {
+  } catch (e) {
+    logAuthError('throw', edgeId, uris, e)
     return 'error'
   }
 }
