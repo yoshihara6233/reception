@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28" fill="none">
+  <title>G・VMS-Cloud</title>
+  <!--
+    タブのアイコン = 雲と上向きの矢印 (Lucide の cloud-upload)。2026-09-28 に利用者の指示で替えた。
+    会社サイトの標 (現場 = cctv・クラウド = cloud-upload) と、G・VMS 側のタブ (cctv) にそろえる。
+    ホーム画面・PWA のアイコン (icon-*.png・apple-touch-icon.png) はそのまま。
+
+    タブの地色は明暗どちらもあり得るので、紙色の下地を敷いて墨の線で描く (G・VMS 側と同じ作り)。
+    16 px で線が細りすぎないよう線は 1.75。色は正式トークンの実値 (紙 #F7F5F1 / 墨 #0F0F10)。
+    註: XML のコメントに連続ハイフンは書けない (書くとファビコンが解釈エラーになる)。
+  -->
+  <rect width="28" height="28" rx="6" fill="#F7F5F1"/>
+  <g transform="translate(2 2)" stroke="#0F0F10" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 13v8"/>
+    <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/>
+    <path d="m8 17 4-4 4 4"/>
+  </g>
+</svg>
