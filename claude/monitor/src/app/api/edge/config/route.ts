@@ -15,6 +15,7 @@ import { createSupabaseService } from '@/lib/supabase/server'
 import { authenticateEdge } from '@/lib/edge/device-auth'
 import { allowedConfig } from '@/lib/edge/edge-config'
 import { oidcConfigFor } from '@/lib/edge/gvms-oidc'
+import { tlsConfigFor } from '@/lib/edge/site-tls'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,7 +37,9 @@ export async function GET(req: NextRequest) {
   // ログインの一本化（§9）の oidc は、管理画面の設定（desired_config）とは別の表から足す
   // （管理画面の保存で消えないように）。クライアントが変わると heartbeat が版を上げる
   const oidc = await oidcConfigFor(svc, edge.id)
-  if (!rec || !rec.config_version || rec.config_version === 0 || (!rec.desired_config && !oidc)) {
+  // 拠点の https の名前（§10）も同じく別の列から足す（管理画面の保存で消えないように）
+  const tls = await tlsConfigFor(svc, edge.id)
+  if (!rec || !rec.config_version || rec.config_version === 0 || (!rec.desired_config && !oidc && !tls)) {
     return new NextResponse(null, { status: 204 })
   }
 
@@ -52,7 +55,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json(
     { config_version: rec.config_version, recorderId: rec.id,
-      config: { ...allowedConfig(rec.desired_config), ...(oidc ? { oidc } : {}) } },
+      config: { ...allowedConfig(rec.desired_config), ...(oidc ? { oidc } : {}), ...(tls ? { tls } : {}) } },
     { headers: { 'Cache-Control': 'no-store' } },
   )
 }

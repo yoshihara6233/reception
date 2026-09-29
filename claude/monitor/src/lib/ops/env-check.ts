@@ -32,6 +32,10 @@ export function checkCriticalEnv(): EnvCheckItem[] {
     { key: 'LIVEKIT_URL',                   required: false, set: has('LIVEKIT_URL'),                   purpose: 'SFUベータ: LiveKit プロジェクトURL（wss://…）。LIVEKIT_ENABLED=true 時に必須' },
     { key: 'LIVEKIT_API_KEY',               required: false, set: has('LIVEKIT_API_KEY'),               purpose: 'SFUベータ: LiveKit APIキー。token/ingress 発行に必須' },
     { key: 'LIVEKIT_API_SECRET',            required: false, set: has('LIVEKIT_API_SECRET'),            purpose: 'SFUベータ: LiveKit APIシークレット。token/ingress 発行に必須' },
+    // 拠点の https（GVMS_CLOUD_SPEC §10・D-2-20）。拠点の名前の A レコードと証明書の検証用 TXT を書く
+    { key: 'CLOUDFLARE_API_TOKEN',          required: false, set: has('CLOUDFLARE_API_TOKEN'),          purpose: '拠点の https: genesis-edge.com のゾーンの DNS 編集だけを許した API トークン。未設定だと拠点の名前を決められず、証明書の自動取得が 503' },
+    { key: 'CLOUDFLARE_ZONE_ID',            required: false, set: has('CLOUDFLARE_ZONE_ID'),            purpose: '拠点の https: genesis-edge.com のゾーン ID' },
+    { key: 'GVMS_SITE_DOMAIN',              required: false, set: has('GVMS_SITE_DOMAIN'),              purpose: '拠点の名前を付けるドメイン（未設定は sites.genesis-edge.com）' },
     { key: 'GVMS_SFU_ENABLED',              required: false, set: has('GVMS_SFU_ENABLED'),              purpose: 'G・VMS の拠点の SFU（§5.4）。2026-09-29 から保留で既定 OFF。true で再開（LIVEKIT_* も必要）' },
     // R2（エグレス無料）。未設定でも静かに Supabase へフォールバックするため、
     // 「気づかないまま課金エグレスが積む」事故になりやすい（2026-08-03: Free 5GB に対し
