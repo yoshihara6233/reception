@@ -183,7 +183,7 @@ describe('ensureEdgeAuthPassword', () => {
     })
   })
 
-  it('店舗が引けなくても tenant_id は null で続行する', async () => {
+  it('拠点が引けなくても tenant_id は null で続行する', async () => {
     h.storeRow = null
     const pw = await ensure({ id: E1, store_id: S1 })
     expect(pw).toBeTruthy()

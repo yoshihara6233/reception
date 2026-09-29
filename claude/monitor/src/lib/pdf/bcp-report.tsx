@@ -423,7 +423,7 @@ export function BcpReport({ event, store, clips, generatedAt }: BcpReportProps) 
           <Text style={styles.sectionTitle}>イベント情報 / Event Information</Text>
           <View style={styles.table}>
             <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>店舗名 / Store</Text>
+              <Text style={styles.infoLabel}>拠点名 / Store</Text>
               <Text style={styles.infoValue}>{store.name}</Text>
             </View>
             {store.address ? (

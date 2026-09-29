@@ -53,7 +53,7 @@ export async function LifecycleSummary() {
           機材ライフサイクル
         </h3>
         <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-          まだ NVR 機種・導入日が登録されている店舗がありません。
+          まだ NVR 機種・導入日が登録されている拠点がありません。
         </p>
       </div>
     )
@@ -72,7 +72,7 @@ export async function LifecycleSummary() {
     <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
       <div className="mb-3 flex items-baseline justify-between">
         <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-          機材ライフサイクル <span className="ml-1 text-xs font-normal text-slate-500">({total.toLocaleString()} 店舗)</span>
+          機材ライフサイクル <span className="ml-1 text-xs font-normal text-slate-500">({total.toLocaleString()} 拠点)</span>
         </h3>
         {critical > 0 && (
           <span className="rounded bg-red-100 px-2 py-0.5 text-[11px] font-bold text-red-700 dark:bg-red-900/30 dark:text-red-300">

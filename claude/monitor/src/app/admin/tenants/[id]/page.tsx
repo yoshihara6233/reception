@@ -51,10 +51,10 @@ export default async function EditTenantPage({ params }: { params: Promise<{ id:
       <div className="max-w-2xl space-y-4 px-5 py-5">
         <div className="flex items-center gap-6 rounded-lg border border-slate-200 bg-white px-5 py-3 text-sm">
           <div>
-            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">店舗数</div>
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">拠点数</div>
             <div className="text-lg font-bold tabular-nums">{storeCount.toLocaleString()} 件</div>
           </div>
-          <Link href="/admin/stores/new" className="text-blue-600 hover:underline">＋ 店舗を追加</Link>
+          <Link href="/admin/stores/new" className="text-blue-600 hover:underline">＋ 拠点を追加</Link>
         </div>
 
         <TenantForm

@@ -121,7 +121,7 @@ export function EdgeDetail({ edge, bundles = [] }: { edge: EdgePayload; bundles?
           </button>
         </div>
         <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
-          <Row k="店舗"        v={`${edge.stores.area_code ? `[${edge.stores.area_code}] ` : ''}${edge.stores.name}`} />
+          <Row k="拠点"        v={`${edge.stores.area_code ? `[${edge.stores.area_code}] ` : ''}${edge.stores.name}`} />
           <Row k="状態"        v={edge.status} />
           <Row k="バージョン"  v={edge.agent_version ?? '—'} />
           {edge.agent_version?.startsWith('nvmsd/') && (
@@ -259,7 +259,7 @@ function OtaPanel({ edge }: { edge: EdgePayload }) {
     const v = edge.agent_version
     if (!v) return
     if (edge.ota_status !== 'healthy') { setMsg('healthy な端末からのみ全台 promote できます'); return }
-    if (!confirm(`現行版 ${v} を全店舗のエッジへ展開します。\nこのカナリアで healthy を確認済みですか？`)) return
+    if (!confirm(`現行版 ${v} を全拠点のエッジへ展開します。\nこのカナリアで healthy を確認済みですか？`)) return
     setBusy(true); setMsg(null)
     const res = await fetch('/api/admin/edges/ota/promote', {
       method: 'POST',
@@ -269,7 +269,7 @@ function OtaPanel({ edge }: { edge: EdgePayload }) {
     setBusy(false)
     const j = await res.json().catch(() => ({}))
     if (!res.ok) { setMsg(j.error ?? `promote 失敗: ${res.status}`); return }
-    setMsg(`全店舗へ promote しました（${j.updated ?? 0} 台に ${v} を設定）`); router.refresh()
+    setMsg(`全拠点へ promote しました（${j.updated ?? 0} 台に ${v} を設定）`); router.refresh()
   }
 
   return (
@@ -308,7 +308,7 @@ function OtaPanel({ edge }: { edge: EdgePayload }) {
         <button onClick={promoteAll} disabled={busy || edge.ota_status !== 'healthy'}
                 title={edge.ota_status === 'healthy' ? '' : 'healthy な端末からのみ可'}
                 className="rounded border border-slate-300 bg-white px-3 py-1 text-xs disabled:opacity-50">
-          現行版を全店舗へ promote
+          現行版を全拠点へ promote
         </button>
         <button onClick={clearDesired} disabled={busy}
                 className="rounded border border-slate-300 bg-white px-3 py-1 text-xs disabled:opacity-50">
@@ -320,7 +320,7 @@ function OtaPanel({ edge }: { edge: EdgePayload }) {
         </button>
       </div>
       <p className="mt-2 text-[10px] text-slate-400">
-        per-device＝カナリア。1台で <b>正常</b> を確認してから「全店舗へ promote」で段階展開します。
+        per-device＝カナリア。1台で <b>正常</b> を確認してから「全拠点へ promote」で段階展開します。
         エッジは <code>/api/edge/bootstrap</code> を約5分間隔で pull し、目標版に追従して自己更新・健全性検証・自動ロールバックします。
       </p>
     </section>

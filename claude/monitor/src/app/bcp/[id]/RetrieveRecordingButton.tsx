@@ -57,7 +57,7 @@ export function RetrieveRecordingButton({ eventId, alreadyHasClips, offsets }: {
       </div>
       <p className="text-[11px] leading-relaxed text-slate-500">
         発令時刻を基準に、スナップ地点設定の <b>{offsets.length} 点</b>（{offsets.map(offsetLabel).join('・')}）を現地レコーダから取得します。
-        地点は <b>BCP発動条件（/admin/bcp）</b>で店舗ごとに変更できます（最大8点: 5分前〜30分後）。
+        地点は <b>BCP発動条件（/admin/bcp）</b>で拠点ごとに変更できます（最大8点: 5分前〜30分後）。
         通常は<b>発令時に自動取得</b>されます。自動取得に失敗した場合や、もう一度取り直したい場合に、このボタンで手動取得できます。
         取得完了後、PDFは自動生成されます。
       </p>

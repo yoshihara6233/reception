@@ -91,7 +91,7 @@ export async function bulkUpsertBcpSettings(
   const { data: { user } } = await supa.auth.getUser()
   if (!user) return { ok: false, error: 'unauthorized' }
 
-  if (inputs.length === 0) return { ok: false, error: '対象の店舗がありません' }
+  if (inputs.length === 0) return { ok: false, error: '対象の拠点がありません' }
 
   const rows: BcpSettingRow[] = []
   for (const input of inputs) {

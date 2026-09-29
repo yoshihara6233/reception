@@ -93,13 +93,13 @@ describe('特別警報の発表', () => {
     expect([...scan.prefs.keys()]).toEqual(['43'])
   })
 
-  it('その県の店舗が一致する', () => {
+  it('その県の拠点が一致する', () => {
     // stores.area_code は JIS 市区町村コード。地震と同じ照合がそのまま効く。
     expect(storeAreaIntensity('43100', scan.prefs).matched).toBe(true)
     expect(storeAreaIntensity('4310300', scan.prefs).matched).toBe(true)
   })
 
-  it('他県の店舗は一致しない（全店フォールバックを使っていない）', () => {
+  it('他県の拠点は一致しない（全店フォールバックを使っていない）', () => {
     for (const store of ['13101', '27100', '01100', '42201']) {
       expect(storeAreaIntensity(store, scan.prefs).matched, store).toBe(false)
     }

@@ -63,7 +63,7 @@ export function ReportsTable({ rows }: { rows: ReportRowVM[] }) {
         <table className="min-w-full divide-y divide-slate-200 text-xs dark:divide-gedline">
           <thead className="bg-slate-50 dark:bg-gedbg3">
             <tr className="text-left align-top text-[10px] uppercase tracking-wide text-slate-500 dark:text-gedink3">
-              <th className="px-3 py-1.5">店舗{filterInput('storeName')}</th>
+              <th className="px-3 py-1.5">拠点{filterInput('storeName')}</th>
               <th className="px-3 py-1.5">種別{filterInput('kind')}</th>
               <th className="px-3 py-1.5">対象日{filterInput('dateLabel')}</th>
               <th className="px-3 py-1.5">生成時刻{filterInput('generatedLabel')}</th>

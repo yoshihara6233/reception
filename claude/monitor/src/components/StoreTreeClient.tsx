@@ -146,7 +146,7 @@ export function TreeClient({
             }
           >
             <Siren size={13} strokeWidth={1.5} aria-hidden />
-            <span className="flex-1 text-left">直近アラート対象店舗</span>
+            <span className="flex-1 text-left">直近アラート対象拠点</span>
             <span
               className={
                 'rounded-full px-1.5 py-px text-[10px] font-bold ' +
@@ -165,10 +165,10 @@ export function TreeClient({
               aria-label="地震で絞り込み"
               className="mt-1.5 w-full rounded border border-red-200 bg-white px-2 py-1 text-[11px] text-slate-700 outline-none focus:border-red-400"
             >
-              <option value="all">すべての地震（{alertSet.size} 店舗）</option>
+              <option value="all">すべての地震（{alertSet.size} 拠点）</option>
               {alertGroups.map((g) => (
                 <option key={g.key} value={g.key}>
-                  {g.label}（{g.storeIds.length} 店舗）
+                  {g.label}（{g.storeIds.length} 拠点）
                 </option>
               ))}
             </select>
@@ -180,7 +180,7 @@ export function TreeClient({
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="店舗名で絞り込み…"
+          placeholder="拠点名で絞り込み…"
           className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-xs outline-none focus:border-blue-400"
         />
       </div>

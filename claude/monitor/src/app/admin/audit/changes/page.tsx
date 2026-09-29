@@ -106,7 +106,7 @@ export default async function AuditChangesPage({
       <div className="space-y-4 px-5 py-4">
         <div className="flex items-center justify-between">
           <div className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs text-slate-600">
-            設定変更 {count ?? 0} 件（レコーダ / カメラ / エッジ / 店舗 / ユーザ / 設定）
+            設定変更 {count ?? 0} 件（レコーダ / カメラ / エッジ / 拠点 / ユーザ / 設定）
           </div>
           <Link href="/admin/audit" className="rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100">
             ← 視聴ログ
@@ -125,7 +125,7 @@ export default async function AuditChangesPage({
                   <th className="px-3 py-2 text-left">日時</th>
                   <th className="px-3 py-2 text-left">操作者</th>
                   <th className="px-3 py-2 text-left">操作</th>
-                  <th className="px-3 py-2 text-left">店舗</th>
+                  <th className="px-3 py-2 text-left">拠点</th>
                   <th className="px-3 py-2 text-left">対象</th>
                   <th className="px-3 py-2 text-left">変更内容</th>
                 </tr>

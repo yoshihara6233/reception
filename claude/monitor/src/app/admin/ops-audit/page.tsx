@@ -216,7 +216,7 @@ export default async function OpsAuditPage({
                     <th className="px-3 py-2 text-left">日時</th>
                     <th className="px-3 py-2 text-left">操作者</th>
                     <th className="px-3 py-2 text-left">操作</th>
-                    <th className="px-3 py-2 text-left">テナント／店舗</th>
+                    <th className="px-3 py-2 text-left">テナント／拠点</th>
                     <th className="px-3 py-2 text-left">変更内容</th>
                   </tr>
                 </thead>

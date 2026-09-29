@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
     svc.from('stores').select('name').eq('id', edge.store_id).maybeSingle(),
     svc.from('edge_devices').select('name').eq('id', edge.id).maybeSingle(),
   ])
-  const storeName = st?.name ?? '(店舗未設定)'
+  const storeName = st?.name ?? '(拠点未設定)'
   const edgeName = ed?.name ?? edge.id
 
   // 即通知（運用アラート経路・best-effort。失敗しても受領は返す）。

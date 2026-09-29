@@ -43,10 +43,10 @@ export default async function StoreEdit(
   return (
     <AdminShell pathname="/admin/stores" section="admin">
       <PageHeader
-        title={`店舗編集: ${(store as { name: string }).name}`}
+        title={`拠点編集: ${(store as { name: string }).name}`}
         crumb={[
           { href: '/admin',         label: 'マスタ' },
-          { href: '/admin/stores',  label: '店舗' },
+          { href: '/admin/stores',  label: '拠点' },
           { href: `/admin/stores/${id}`, label: (store as { name: string }).name },
         ]}
       />

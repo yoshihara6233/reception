@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: PRODUCT_NAME,
     short_name: PRODUCT_NAME,
-    description: '店舗のレコーダを本部で一元監視するクラウド監視システム',
+    description: '拠点のレコーダを本部で一元監視するクラウド監視システム',
     start_url: '/stores',
     display: 'standalone',
     orientation: 'any',
@@ -24,7 +24,7 @@ export default function manifest(): MetadataRoute.Manifest {
     ],
     shortcuts: [
       {
-        name: '地図で店舗確認',
+        name: '地図で拠点確認',
         short_name: '地図',
         url: '/map',
         icons: [{ src: '/icons/icon-96.png', sizes: '96x96' }],

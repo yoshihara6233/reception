@@ -82,14 +82,14 @@ describe('/api/sessions', () => {
     body: JSON.stringify({ action: 'start', mode: 'live', storeId }),
   })
 
-  it('RLS で見えない店舗での開始は 403', async () => {
+  it('RLS で見えない拠点での開始は 403', async () => {
     const { POST } = await import('@/app/api/sessions/route')
     const res = await POST(startBody(OTHER_TENANT_STORE) as never)
     expect(res.status).toBe(403)
     expect((await res.json()).error).toBe('forbidden')
   })
 
-  it('見えない店舗では service role を組み立てない（同時視聴枠の集計に到達しない）', async () => {
+  it('見えない拠点では service role を組み立てない（同時視聴枠の集計に到達しない）', async () => {
     const { POST } = await import('@/app/api/sessions/route')
     await POST(startBody(OTHER_TENANT_STORE) as never)
     expect(h.serviceCalls).toBe(0)

@@ -78,7 +78,7 @@ export function StoreDrawer({
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-200 bg-white px-3 py-3">
-          <span className="text-sm font-bold text-slate-800">店舗を選択</span>
+          <span className="text-sm font-bold text-slate-800">拠点を選択</span>
           <button
             onClick={onClose}
             className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"

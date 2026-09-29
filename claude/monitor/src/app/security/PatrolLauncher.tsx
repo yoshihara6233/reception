@@ -59,7 +59,7 @@ export function PatrolLauncher({ groups }: { groups: LauncherGroup[] }) {
           <input type="checkbox" checked={allStores.length > 0 && sel.size === allStores.length} onChange={toggleAll} />
           全選択
         </label>
-        <span className="text-xs text-slate-500 dark:text-gedink3">選択 {sel.size} / 全 {allStores.length} 店舗</span>
+        <span className="text-xs text-slate-500 dark:text-gedink3">選択 {sel.size} / 全 {allStores.length} 拠点</span>
         <button
           onClick={run}
           disabled={pending || sel.size === 0}
@@ -92,7 +92,7 @@ export function PatrolLauncher({ groups }: { groups: LauncherGroup[] }) {
 
       {/* 県グループ */}
       {groups.length === 0 ? (
-        <p className="text-xs text-slate-500 dark:text-gedink3">店舗がありません。</p>
+        <p className="text-xs text-slate-500 dark:text-gedink3">拠点がありません。</p>
       ) : (
         groups.map((g) => {
           const allSel = g.stores.every((s) => sel.has(s.id))
@@ -108,7 +108,7 @@ export function PatrolLauncher({ groups }: { groups: LauncherGroup[] }) {
                 />
                 <MapPin size={14} strokeWidth={1.75} aria-hidden className="text-slate-400 dark:text-gedink3" />
                 <span className="text-[13px] font-semibold text-slate-800 dark:text-gedink">{g.label}</span>
-                <span className="text-[11px] text-slate-400 dark:text-gedink3">{g.stores.length} 店舗</span>
+                <span className="text-[11px] text-slate-400 dark:text-gedink3">{g.stores.length} 拠点</span>
               </label>
               <div className="grid grid-cols-1 gap-x-4 gap-y-1 p-3 sm:grid-cols-2 lg:grid-cols-3">
                 {g.stores.map((s) => (

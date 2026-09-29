@@ -40,7 +40,7 @@ export function StoreOptionsFieldset({
   return (
     <fieldset className="rounded border border-slate-200 p-3">
       <legend className="px-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-        利用オプション（この店舗）
+        利用オプション（この拠点）
       </legend>
       <p className="mb-2 text-[11px] text-slate-500">
         テナントが契約している機能を ON にできます。上限を超えても登録は可能で、超過時は
@@ -58,7 +58,7 @@ export function StoreOptionsFieldset({
           if (!a.contracted) { note = 'テナント未契約'; tone = 'text-amber-600' }
           else if (a.limit == null) { note = '上限なし' }
           else {
-            note = `${used.toLocaleString()} / 上限 ${a.limit.toLocaleString()} 店舗` + (over ? '（上限超過・警告）' : '')
+            note = `${used.toLocaleString()} / 上限 ${a.limit.toLocaleString()} 拠点` + (over ? '（上限超過・警告）' : '')
             tone = over ? 'text-amber-600 font-bold' : 'text-slate-500'
           }
           return (

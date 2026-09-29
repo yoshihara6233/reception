@@ -66,11 +66,11 @@ export default async function SecuritySettingsPage() {
       />
       <div className="space-y-3 px-5 py-4">
         <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-xs leading-relaxed text-blue-800/90 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200/80">
-          店舗ごとに<b>1日最大4回の巡回時刻</b>を指定します（全曜日実施）。有効の店舗は指定時刻に自動巡回します。
+          拠点ごとに<b>1日最大4回の巡回時刻</b>を指定します（全曜日実施）。有効の拠点は指定時刻に自動巡回します。
           絞り込み・複数選択して<b>一括設定</b>も可能です。巡回結果は<b>巡回レポート</b>で確認できます。
         </div>
         {rows.length === 0 ? (
-          <p className="text-xs text-slate-500 dark:text-gedink3">店舗がありません。</p>
+          <p className="text-xs text-slate-500 dark:text-gedink3">拠点がありません。</p>
         ) : (
           <SecuritySettingsTable initialRows={rows} />
         )}

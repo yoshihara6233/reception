@@ -214,7 +214,7 @@ export function EdgeNewForm({ storeCandidates }: { storeCandidates: StoreOption[
       </div>
 
       <label className="block">
-        <span className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">配置する店舗</span>
+        <span className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">配置する拠点</span>
         <select required value={storeId} onChange={(e) => setStoreId(e.target.value)}
                 className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm">
           <option value="">— 選択してください —</option>
@@ -222,7 +222,7 @@ export function EdgeNewForm({ storeCandidates }: { storeCandidates: StoreOption[
             <option key={s.id} value={s.id}>{s.area_code ? `[${s.area_code}] ` : ''}{s.name}</option>
           ))}
         </select>
-        <span className="mt-1 block text-[11px] text-slate-500">エッジ未登録の店舗のみ表示（候補 {storeCandidates.length} 件）</span>
+        <span className="mt-1 block text-[11px] text-slate-500">エッジ未登録の拠点のみ表示（候補 {storeCandidates.length} 件）</span>
       </label>
 
       {!isUplink && (

@@ -58,7 +58,7 @@ export function buildMonthlyReportPdf(input: MonthlyPdfInput): Promise<Buffer> {
     doc.moveDown(0.3).fontSize(10).fillColor('#333')
     const c = input.contract, r = input.reg
     const lim = (v: number | null) => (v == null ? '∞' : n(v))
-    doc.text(`店舗数 ${n(r.stores)} / ${lim(c.max_stores)}　　巡回ON ${n(r.patrol)} / ${lim(c.max_patrol)}　　発報ON ${n(r.alarm)} / ${lim(c.max_alarm)}　　検査ON ${n(r.baggage)} / ${lim(c.max_baggage)}`)
+    doc.text(`拠点数 ${n(r.stores)} / ${lim(c.max_stores)}　　巡回ON ${n(r.patrol)} / ${lim(c.max_patrol)}　　発報ON ${n(r.alarm)} / ${lim(c.max_alarm)}　　検査ON ${n(r.baggage)} / ${lim(c.max_baggage)}`)
     doc.moveDown(0.8).fillColor('#000')
   }
 
@@ -73,10 +73,10 @@ export function buildMonthlyReportPdf(input: MonthlyPdfInput): Promise<Buffer> {
   doc.moveDown(0.8).fillColor('#000')
 
   // ── 店舗別テーブル ──
-  doc.fontSize(12).text('店舗別')
+  doc.fontSize(12).text('拠点別')
   doc.moveDown(0.3)
   const cols = [
-    { key: 'name',    label: '店舗',       w: 0.28, align: 'left'  as const },
+    { key: 'name',    label: '拠点',       w: 0.28, align: 'left'  as const },
     { key: 'patrol',  label: '巡回',       w: 0.10, align: 'right' as const },
     { key: 'alarm',   label: '発報',       w: 0.10, align: 'right' as const },
     { key: 'insp',    label: '検査',       w: 0.10, align: 'right' as const },

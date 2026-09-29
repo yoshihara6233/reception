@@ -51,8 +51,8 @@ export function ShellBody({
           <button
             type="button"
             onClick={toggle}
-            aria-label={open ? '店舗情報を隠す' : '店舗情報を表示'}
-            title={open ? '店舗情報を隠す' : '店舗情報を表示'}
+            aria-label={open ? '拠点情報を隠す' : '拠点情報を表示'}
+            title={open ? '拠点情報を隠す' : '拠点情報を表示'}
             className="absolute right-0 top-1/2 z-20 hidden -translate-y-1/2 rounded-l border border-r-0 border-slate-300 bg-white/90 px-1 py-4 text-xs text-slate-500 shadow hover:bg-white md:block"
           >
             {open ? '▶' : '◀'}

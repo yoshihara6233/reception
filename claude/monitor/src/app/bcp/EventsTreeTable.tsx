@@ -175,7 +175,7 @@ function fmtStoreCount(lang: string, n: number): string {
     case 'en': return `${n} ${n === 1 ? 'store' : 'stores'}`
     case 'zh': return `${n} 门店`
     case 'ko': return `${n} 매장`
-    default:   return `${n} 店舗`
+    default:   return `${n} 拠点`
   }
 }
 
@@ -202,7 +202,7 @@ export function EventsTreeTable({
   // can't suffer from "is not a function" because no function ref is dereffed.
   const tBcp: Msg['bcpDashboard'] = {
     ...(tBcpRaw as Msg['bcpDashboard']),
-    colStoreCount:    dStr(tBcpRaw.colStoreCount,    '対象店舗'),
+    colStoreCount:    dStr(tBcpRaw.colStoreCount,    '対象拠点'),
     statusPartial:    dStr(tBcpRaw.statusPartial,    '一部完了'),
     expandAria:       dStr(tBcpRaw.expandAria,       '展開'),
     collapseAria:     dStr(tBcpRaw.collapseAria,     '折りたたみ'),

@@ -183,8 +183,8 @@ export default async function InfraNodesPage() {
 
         {/* 説明 */}
         <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
-          <strong>中央集約モード</strong>では、複数の中央エージェントノードが Active-Active 構成で全店舗を分担します。
-          ノードがダウン (status=down or リース失効) すると、他ノードが自動的に担当店舗を引き継ぎます。
+          <strong>中央集約モード</strong>では、複数の中央エージェントノードが Active-Active 構成で全拠点を分担します。
+          ノードがダウン (status=down or リース失効) すると、他ノードが自動的に担当拠点を引き継ぎます。
         </div>
       </div>
     </AdminShell>

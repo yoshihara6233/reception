@@ -38,7 +38,7 @@ const prefBlock = (code: string, int: string | null) =>
   `<Pref><Code>${code}</Code>${int ? `<MaxInt>${int}</MaxInt>` : ''}</Pref>`
 
 describe('都道府県の導出', () => {
-  it('★3 桁コードからは県を導出しない（38 店舗誤発報の再現防止）', () => {
+  it('★3 桁コードからは県を導出しない（38 拠点誤発報の再現防止）', () => {
     // <Area> に何が入っていても県は出ない。ここが破れると、
     // 210 → "21"(岐阜県) のように**揺れていない県が一致する**。
     fc.assert(fc.property(fc.array(threeDigit(), { minLength: 1, maxLength: 20 }), (codes) => {
@@ -88,7 +88,7 @@ describe('都道府県の導出', () => {
 })
 
 describe('震度は県ごとに保つ', () => {
-  it('★全国最大値を全店舗に配らない', () => {
+  it('★全国最大値を全拠点に配らない', () => {
     // もう一方の誤発報原因。全国最大を配ると、震度1の県の店舗が
     // 「震度4」として発動条件を通ってしまう。
     fc.assert(fc.property(
@@ -126,7 +126,7 @@ describe('震度は県ごとに保つ', () => {
       }), RUNS)
   })
 
-  it('店舗の県が発表に無ければ不一致（震度も返さない）', () => {
+  it('拠点の県が発表に無ければ不一致（震度も返さない）', () => {
     fc.assert(fc.property(jisPref(), jisPref(), intensity(), (a, b, int) => {
       fc.pre(a !== b)
       expect(storeAreaIntensity(`${a}000`, parseAffectedPrefs(prefBlock(b, int))).matched).toBe(false)

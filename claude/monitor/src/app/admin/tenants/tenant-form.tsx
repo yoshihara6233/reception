@@ -131,17 +131,17 @@ export function TenantForm({ mode, id, initial, usage }: {
         <p className="mt-1 text-[11px] text-slate-500">URL 等で使う識別子。未入力可。重複不可。</p>
       </Field>
 
-      <Field label="店舗数の上限（空欄＝無制限）">
+      <Field label="拠点数の上限（空欄＝無制限）">
         <div className="flex items-center gap-2">
           <LimitInput value={form.max_stores} onChange={(v) => setForm({ ...form, max_stores: v })} />
           {mode === 'edit' && usage && (
             <span className={`text-[11px] ${form.max_stores != null && usage.stores > form.max_stores ? 'font-bold text-amber-600' : 'text-slate-500'}`}>
-              現在 {usage.stores.toLocaleString()} 店舗
+              現在 {usage.stores.toLocaleString()} 拠点
               {form.max_stores != null && usage.stores > form.max_stores && '（上限超過・警告）'}
             </span>
           )}
         </div>
-        <p className="mt-1 text-[11px] text-slate-500">上限を超えても店舗は作成できます（超過時は警告を表示）。</p>
+        <p className="mt-1 text-[11px] text-slate-500">上限を超えても拠点は作成できます（超過時は警告を表示）。</p>
       </Field>
 
       <Field label="月次レポート作成日（毎月・1〜28）">
@@ -165,7 +165,7 @@ export function TenantForm({ mode, id, initial, usage }: {
         </legend>
         <p className="mb-2 text-[11px] text-slate-500">
           Monitor + BCP は基本パック（常時有効）。チェックで契約有効化（対応メニュー可視）。
-          「ON上限」は、その機能を<b>店舗別にON</b>にできる店舗数の上限（空欄＝無制限）。上限を超えても登録は可能で、超過時は<b className="text-amber-600">警告</b>表示。
+          「ON上限」は、その機能を<b>拠点別にON</b>にできる拠点数の上限（空欄＝無制限）。上限を超えても登録は可能で、超過時は<b className="text-amber-600">警告</b>表示。
         </p>
         <div className="space-y-2.5">
           <OptionRow
@@ -265,7 +265,7 @@ function OptionRow({
       </span>
       {usage != null && (
         <span className={`text-[11px] tabular-nums ${over ? 'font-bold text-amber-600' : 'text-slate-500'}`}>
-          現在ON {usage.toLocaleString()}{max != null ? ` / ${max.toLocaleString()}` : ''} 店舗
+          現在ON {usage.toLocaleString()}{max != null ? ` / ${max.toLocaleString()}` : ''} 拠点
           {over && '（上限超過・警告）'}
         </span>
       )}

@@ -31,7 +31,7 @@ export default async function MapPage(
       <main className="flex h-full flex-col overflow-hidden">
         <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-2 text-xs">
           <div className="text-slate-600">地図表示</div>
-          <div className="text-slate-500">{stores?.length ?? 0} 店舗</div>
+          <div className="text-slate-500">{stores?.length ?? 0} 拠点</div>
         </div>
         <div className="flex-1">
           {/* F26: client wrapper with alert-zoom toggle */}

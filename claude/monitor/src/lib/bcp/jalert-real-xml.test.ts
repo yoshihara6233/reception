@@ -131,7 +131,7 @@ describe('細分区域・震央地名コードを都道府県として使わな�
     expect(parseAffectedPrefs(load(file)).has(bogusPref)).toBe(false)
   })
 
-  it('震源に関する情報は震央地名しか無いので都道府県ゼロ＝店舗は一致しない', () => {
+  it('震源に関する情報は震央地名しか無いので都道府県ゼロ＝拠点は一致しない', () => {
     // ここで空を返さないと、震源に関する情報だけで全国の店舗が発動しうる。
     const prefs = parseAffectedPrefs(load('20260808193526_0_VXSE52_270000.xml'))
     expect(prefs.size).toBe(0)
@@ -148,19 +148,19 @@ describe('細分区域・震央地名コードを都道府県として使わな�
   })
 })
 
-describe('店舗の発動判定（県ごとの震度を使う）', () => {
+describe('拠点の発動判定（県ごとの震度を使う）', () => {
   // 熊本=震度4 / 長崎=震度3 の実電文。全国最大値(4)を全店舗に当てると
   // しきい値4の長崎の店舗まで発動する（38店舗誤発動の原因の片方）。
   const prefs = parseAffectedPrefs(load('20260808230355_0_VXSE51_010000.xml'))
   const settings = { quake_min_intensity: '4', special_warning_enabled: true }
 
-  it('熊本市の店舗は震度4で発動する', () => {
+  it('熊本市の拠点は震度4で発動する', () => {
     const hit = storeAreaIntensity('43100', prefs)
     expect(hit).toEqual({ matched: true, intensity: '4' })
     expect(shouldTrigger('earthquake', hit.intensity, settings)).toBe(true)
   })
 
-  it('長崎市の店舗は震度3なのでしきい値4では発動しない', () => {
+  it('長崎市の拠点は震度3なのでしきい値4では発動しない', () => {
     const hit = storeAreaIntensity('42201', prefs)
     expect(hit).toEqual({ matched: true, intensity: '3' })
     expect(shouldTrigger('earthquake', hit.intensity, settings)).toBe(false)
@@ -168,13 +168,13 @@ describe('店舗の発動判定（県ごとの震度を使う）', () => {
     expect(shouldTrigger('earthquake', hit.intensity, { ...settings, quake_min_intensity: '3' })).toBe(true)
   })
 
-  it('揺れていない県の店舗は一致しない', () => {
+  it('揺れていない県の拠点は一致しない', () => {
     for (const store of ['13101', '27100', '01100']) {
       expect(storeAreaIntensity(store, prefs).matched).toBe(false)
     }
   })
 
-  it('市区町村コード7桁の店舗でも先頭2桁で一致する', () => {
+  it('市区町村コード7桁の拠点でも先頭2桁で一致する', () => {
     // stores.area_code は JIS 市区町村コード。5桁(43100)でも7桁でも先頭2桁で引く。
     expect(storeAreaIntensity('4310300', prefs).matched).toBe(true)
   })

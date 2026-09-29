@@ -20,11 +20,11 @@ interface FormState {
 
 const ERR_LABELS: Record<string, string> = {
   tenant_required:      'テナントを選択してください',
-  insufficient_role:    '店舗作成の権限がありません',
+  insufficient_role:    '拠点作成の権限がありません',
   invalid_body:         '入力内容を確認してください',
-  store_limit_exceeded: '店舗数が上限に達しています（テナント設定で上限を確認してください）',
+  store_limit_exceeded: '拠点数が上限に達しています（テナント設定で上限を確認してください）',
   option_not_contracted: 'このテナントで契約していないオプションは ON にできません',
-  option_limit_exceeded: 'オプションを ON にできる店舗数が上限に達しています',
+  option_limit_exceeded: 'オプションを ON にできる拠点数が上限に達しています',
 }
 
 export function StoreNewForm({
@@ -98,7 +98,7 @@ export function StoreNewForm({
 
   return (
     <form onSubmit={save} className="space-y-4 rounded-lg border border-slate-200 bg-white p-5 text-sm">
-      <Field label="店舗名 *">
+      <Field label="拠点名 *">
         <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
                className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm" placeholder="例: ◯◯店" />
       </Field>
@@ -148,20 +148,20 @@ export function StoreNewForm({
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={form.is_active}
                onChange={(e) => setForm({ ...form, is_active: e.target.checked })} />
-        この店舗を有効にする
+        この拠点を有効にする
       </label>
 
       {warn && (
         <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          <p className="font-bold">店舗を作成しました（警告あり）</p>
+          <p className="font-bold">拠点を作成しました（警告あり）</p>
           <ul className="mt-1 list-disc pl-4">
             {warn.msgs.map((m, i) => <li key={i}>{m}</li>)}
           </ul>
           <div className="mt-2 flex gap-3">
             <button type="button" onClick={() => { router.push(`/admin/stores/${warn.id}`); router.refresh() }}
-                    className="rounded bg-amber-600 px-3 py-1 font-medium text-white">この店舗の設定へ</button>
+                    className="rounded bg-amber-600 px-3 py-1 font-medium text-white">この拠点の設定へ</button>
             <button type="button" onClick={() => { router.push('/admin/stores'); router.refresh() }}
-                    className="rounded border border-amber-400 px-3 py-1">店舗一覧へ</button>
+                    className="rounded border border-amber-400 px-3 py-1">拠点一覧へ</button>
           </div>
         </div>
       )}

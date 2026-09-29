@@ -95,7 +95,7 @@ describe('resolveAdminContext', () => {
     })
   })
 
-  it('tenant_admin は自テナント固定・店舗制限なし', async () => {
+  it('tenant_admin は自テナント固定・拠点制限なし', async () => {
     h.me = { role: 'tenant_admin', tenant_id: T_A, store_ids: [] }
     expect(await resolveAdminContext()).toEqual({
       role: 'tenant_admin', isSuper: false, tenantId: T_A, tenantName: 'テナントA', acting: false, storeIds: null,
@@ -110,7 +110,7 @@ describe('resolveAdminContext', () => {
     expect(ctx.acting).toBe(false)
   })
 
-  it.each(STORE_SCOPED)('%s は担当店舗の配列を持つ（storeIds !== null）', async (role) => {
+  it.each(STORE_SCOPED)('%s は担当拠点の配列を持つ（storeIds !== null）', async (role) => {
     h.me = { role, tenant_id: T_A, store_ids: [S_A1] }
     const ctx = await resolveAdminContext()
     expect(ctx.storeIds).toEqual([S_A1])
@@ -118,7 +118,7 @@ describe('resolveAdminContext', () => {
     expect(ctx.isSuper).toBe(false)
   })
 
-  it('店舗限定ロールで store_ids が NULL でも空配列になる（null と混同しない）', async () => {
+  it('拠点限定ロールで store_ids が NULL でも空配列になる（null と混同しない）', async () => {
     // storeIds===null は「店舗制限なし＝テナント全体」を意味する。ここを null に
     // すると担当店舗ゼロのユーザーがテナント全体を見てしまう。
     h.me = { role: 'store_manager', tenant_id: T_A, store_ids: null }
@@ -135,7 +135,7 @@ describe('resolveAdminContext', () => {
     expect(ctx.storeIds).toBeNull()
   })
 
-  it('store_manager の tenant_id が NULL でも担当店舗は保持する', async () => {
+  it('store_manager の tenant_id が NULL でも担当拠点は保持する', async () => {
     h.me = { role: 'store_manager', tenant_id: null, store_ids: [S_A1] }
     const ctx = await resolveAdminContext()
     expect(ctx.tenantId).toBeNull()
@@ -167,7 +167,7 @@ describe('resolveAdminContext', () => {
     expect(ctx.acting).toBe(false)
   })
 
-  it('super_admin には店舗制限を掛けない（store_ids が入っていても null）', async () => {
+  it('super_admin には拠点制限を掛けない（store_ids が入っていても null）', async () => {
     h.me = { role: 'super_admin', tenant_id: null, store_ids: [S_A1] }
     expect((await resolveAdminContext()).storeIds).toBeNull()
   })
@@ -185,7 +185,7 @@ describe('resolveMonitorScope', () => {
     expect(scope.storeIds).toEqual([])
   })
 
-  it('super_admin が操作中テナントを選ぶとそのテナントの店舗だけになる', async () => {
+  it('super_admin が操作中テナントを選ぶとそのテナントの拠点だけになる', async () => {
     h.me = { role: 'super_admin', tenant_id: null, store_ids: [] }
     h.cookie = T_A
     const scope = await resolveMonitorScope(supa)
@@ -194,14 +194,14 @@ describe('resolveMonitorScope', () => {
     expect(scope.storeIds).toEqual([S_A1, S_A2])
   })
 
-  it('tenant_admin は自テナントの全店舗', async () => {
+  it('tenant_admin は自テナントの全拠点', async () => {
     h.me = { role: 'tenant_admin', tenant_id: T_B, store_ids: [] }
     const scope = await resolveMonitorScope(supa)
     expect(scope.storeIds).toEqual(['store-b1'])
     expect(scope.needsTenant).toBe(false)
   })
 
-  it.each(STORE_SCOPED)('%s は担当店舗のみで、stores を引きに行かない', async (role) => {
+  it.each(STORE_SCOPED)('%s は担当拠点のみで、stores を引きに行かない', async (role) => {
     h.me = { role, tenant_id: T_A, store_ids: [S_A1] }
     const scope = await resolveMonitorScope(supa)
     expect(scope.storeIds).toEqual([S_A1])
@@ -210,7 +210,7 @@ describe('resolveMonitorScope', () => {
     expect(h.storeQueries).toBe(0)
   })
 
-  it('担当店舗ゼロの店舗限定ロールは「何も見えない」であって「ゲート表示」ではない', async () => {
+  it('担当拠点ゼロの拠点限定ロールは「何も見えない」であって「ゲート表示」ではない', async () => {
     // storeIds=[] は falsy ではない。ここを長さで判定すると空配列がテナント全体へ
     // フォールバックする（越権）。needsTenant も立てない（設定漏れは別問題）。
     h.me = { role: 'viewer', tenant_id: T_A, store_ids: [] }

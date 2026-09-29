@@ -60,7 +60,7 @@ export default async function TenantsAdmin() {
                 <th className="px-3 py-2 text-left">プラン</th>
                 <th className="px-3 py-2 text-left">ステータス</th>
                 <th className="px-3 py-2 text-left">スラッグ</th>
-                <th className="px-3 py-2 text-left">店舗数 / 上限</th>
+                <th className="px-3 py-2 text-left">拠点数 / 上限</th>
                 <th className="px-3 py-2"></th>
               </tr>
             </thead>

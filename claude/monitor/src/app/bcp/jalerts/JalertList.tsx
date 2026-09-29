@@ -120,7 +120,7 @@ export default function JalertList({ rows }: { rows: JalertRow[] }) {
                 <th className="px-3 py-2 font-bold">種別</th>
                 <th className="px-3 py-2 font-bold">最大震度</th>
                 <th className="px-3 py-2 font-bold">発令内容</th>
-                <th className="px-3 py-2 font-bold">該当店舗</th>
+                <th className="px-3 py-2 font-bold">該当拠点</th>
                 <th className="px-3 py-2 font-bold">詳細</th>
               </tr>
             </thead>
@@ -156,7 +156,7 @@ export default function JalertList({ rows }: { rows: JalertRow[] }) {
                     <td className="px-3 py-2">
                       {r.matched_store_count > 0 ? (
                         <Link href="/bcp" className="font-semibold text-blue-600 hover:underline">
-                          {r.matched_store_count} 店舗で録画 →
+                          {r.matched_store_count} 拠点で録画 →
                         </Link>
                       ) : (
                         <span className="text-slate-400">対象外</span>
