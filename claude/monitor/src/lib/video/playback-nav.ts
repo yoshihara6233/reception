@@ -56,3 +56,18 @@ export function vodHref(
   }
   return `/stores/${storeId}/cam/${cameraId}/vod?${q}`
 }
+
+/**
+ * 録画再生を切れたところから開き直すときの範囲（自動の再接続・手の再試行）。
+ * 最後に映していた録画の時刻から始め、範囲の終わり（to）はそれより後なら保つ。
+ * まだ一度も映していなければ、いまの範囲のまま。
+ */
+export function resumeRange(
+  range: { from: string; to: string | undefined },
+  lastPlaying: Date | null,
+): { from: string; to: string | undefined } {
+  if (!lastPlaying || Number.isNaN(lastPlaying.getTime())) return { from: range.from, to: range.to }
+  const from = lastPlaying.toISOString()
+  const keepTo = range.to != null && new Date(range.to).getTime() > lastPlaying.getTime()
+  return { from, to: keepTo ? range.to : undefined }
+}

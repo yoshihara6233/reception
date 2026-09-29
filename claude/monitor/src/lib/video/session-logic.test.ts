@@ -92,6 +92,10 @@ describe('失敗の扱い（§5.1）', () => {
   it('説明文は値そのものを含まない', () => {
     expect(describeVideoError('codec_unsupported')).not.toContain('codec')
   })
+
+  it('手元の回線が切れてクラウドへ届かないときは、その旨を出す', () => {
+    expect(describeVideoError('network')).toBe('クラウドへつながりません。回線をご確認ください')
+  })
 })
 
 describe('normalizeVodRange（§5.3.1）', () => {
