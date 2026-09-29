@@ -32,6 +32,7 @@ export function checkCriticalEnv(): EnvCheckItem[] {
     { key: 'LIVEKIT_URL',                   required: false, set: has('LIVEKIT_URL'),                   purpose: 'SFUベータ: LiveKit プロジェクトURL（wss://…）。LIVEKIT_ENABLED=true 時に必須' },
     { key: 'LIVEKIT_API_KEY',               required: false, set: has('LIVEKIT_API_KEY'),               purpose: 'SFUベータ: LiveKit APIキー。token/ingress 発行に必須' },
     { key: 'LIVEKIT_API_SECRET',            required: false, set: has('LIVEKIT_API_SECRET'),            purpose: 'SFUベータ: LiveKit APIシークレット。token/ingress 発行に必須' },
+    { key: 'GVMS_SFU_ENABLED',              required: false, set: has('GVMS_SFU_ENABLED'),              purpose: 'G・VMS の拠点の SFU（§5.4）。2026-09-29 から保留で既定 OFF。true で再開（LIVEKIT_* も必要）' },
     // R2（エグレス無料）。未設定でも静かに Supabase へフォールバックするため、
     // 「気づかないまま課金エグレスが積む」事故になりやすい（2026-08-03: Free 5GB に対し
     // 11.4GB 超過。原因はライブ画像を毎フレーム Supabase から配信していたこと）。

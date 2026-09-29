@@ -25,6 +25,16 @@ export function livekitEnabled(): boolean {
 }
 
 /**
+ * G・VMS の拠点への SFU（GVMS_CLOUD_SPEC §5.4）を出すか。
+ * 2026-09-29 に保留（LiveKit は自前のサーバを検討するまで使わない。遠隔視聴は JPEG・HLS で
+ * 提供する）。GVMS_SFU_ENABLED='true' を置いたときだけ出す（既定 OFF）。従来のエッジ端末の
+ * SFU ベータ（livekitEnabled）とは別に切れるよう、フラグを分けている。
+ */
+export function gvmsSfuEnabled(): boolean {
+  return process.env.GVMS_SFU_ENABLED === 'true' && livekitEnabled()
+}
+
+/**
  * カメラID → LiveKit room 名。go2rtc のストリーム名と同規則（`cam_<cameraId>`）。
  * room はサーバでのみ導出し、クライアントの任意指定を受け付けない。
  */
