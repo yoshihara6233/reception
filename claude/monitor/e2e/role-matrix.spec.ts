@@ -77,7 +77,8 @@ test.describe('テナントA 管理者（tenant_admin）', () => {
     await page.goto('/admin/reports/usage')
     const menu = sectionMenu(page)
     // ①設定は使えること（メニューごと消えているのではない、を同時に確かめる）
-    await expect(menu.getByRole('link', { name: /拠点|Sites/ })).toBeVisible()
+    // 「拠点稼働」「拠点導入」にも当たるので、名前ではなく href で 1 件に絞る
+    await expect(menu.locator('a[href="/admin/stores"]')).toBeVisible()
     await expect(menu.getByText('運営管理')).toHaveCount(0)
     await expect(menu.getByRole('link', { name: /システム管理者/ })).toHaveCount(0)
     await expect(menu.getByRole('link', { name: /死活監視/ })).toHaveCount(0)
