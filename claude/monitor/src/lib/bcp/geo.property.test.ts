@@ -116,7 +116,7 @@ describe('haversineKm の不変条件', () => {
       }), RUNS)
   })
 
-  it('★半径を広げれば対象店舗は減らない（画面の説明どおりに効く）', () => {
+  it('★半径を広げれば対象拠点は減らない（画面の説明どおりに効く）', () => {
     // 「半径 N km 以内の店舗が対象」の単調性。両ルートともこの前提で
     // `distanceKm <= radiusKm` と書いている。
     fc.assert(fc.property(
@@ -130,7 +130,7 @@ describe('haversineKm の不変条件', () => {
             .map(([la, ln]) => `${la},${ln}`))
         const small = within(r)
         const large = within(r + add)
-        for (const s of small) expect(large.has(s), '半径を広げたのに対象から外れた店舗があります').toBe(true)
+        for (const s of small) expect(large.has(s), '半径を広げたのに対象から外れた拠点があります').toBe(true)
       }), { numRuns: 2_000 })
   })
 })

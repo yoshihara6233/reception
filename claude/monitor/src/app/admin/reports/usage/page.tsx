@@ -201,17 +201,17 @@ export default async function UsageReportPage({
           <section>
             <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">登録数（／契約数）</h2>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <RegCard label="店舗数" used={reg.stores} limit={contract.max_stores} />
-              <RegCard label="巡回 ON店舗" used={reg.patrol} limit={contract.max_patrol} />
-              <RegCard label="発報 ON店舗" used={reg.alarm} limit={contract.max_alarm} />
-              <RegCard label="検査 ON店舗" used={reg.baggage} limit={contract.max_baggage} />
+              <RegCard label="拠点数" used={reg.stores} limit={contract.max_stores} />
+              <RegCard label="巡回 ON拠点" used={reg.patrol} limit={contract.max_patrol} />
+              <RegCard label="発報 ON拠点" used={reg.alarm} limit={contract.max_alarm} />
+              <RegCard label="検査 ON拠点" used={reg.baggage} limit={contract.max_baggage} />
             </div>
           </section>
         )}
 
         {/* テナント全体の利用量 */}
         <section>
-          <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">利用量（{monthLabel}・{scopeStores ? '担当店舗' : 'テナント全体'}）</h2>
+          <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">利用量（{monthLabel}・{scopeStores ? '担当拠点' : 'テナント全体'}）</h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             <StatCard label="巡回数" value={T.patrol} />
             <StatCard label="発報数" value={T.alarm} />
@@ -223,7 +223,7 @@ export default async function UsageReportPage({
 
         {/* 店舗別 + CSV */}
         <section>
-          <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">店舗別</h2>
+          <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">拠点別</h2>
           <UsageStoreTable rows={stores} monthLabel={monthLabel} />
         </section>
 

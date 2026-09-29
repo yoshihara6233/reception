@@ -97,7 +97,7 @@ export function BcpSettingsTable({ initialRows }: { initialRows: BcpStoreSetting
 
   function applyBulk(patch: BulkPatch) {
     const targets = rows.filter((r) => selected.has(r.storeId))
-    if (targets.length === 0) { setErr('店舗を選択してください'); return }
+    if (targets.length === 0) { setErr('拠点を選択してください'); return }
     if (Object.keys(patch).length === 0) { setErr('適用する項目を選んでください'); return }
     setErr(''); setMsg('')
     const merged = targets.map((r) => ({ ...r, ...patch }))
@@ -122,7 +122,7 @@ export function BcpSettingsTable({ initialRows }: { initialRows: BcpStoreSetting
       <div className="flex flex-wrap items-center gap-2">
         <input
           value={q} onChange={(e) => setQ(e.target.value)}
-          placeholder="店舗名で検索" className={`${ctrl} w-48`}
+          placeholder="拠点名で検索" className={`${ctrl} w-48`}
         />
         <select value={area} onChange={(e) => setArea(e.target.value)} className={ctrl}>
           <option value="">全エリア</option>
@@ -166,7 +166,7 @@ export function BcpSettingsTable({ initialRows }: { initialRows: BcpStoreSetting
               <th className="w-8 px-3 py-2">
                 <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} aria-label="全選択" />
               </th>
-              <th className="px-3 py-2">店舗</th>
+              <th className="px-3 py-2">拠点</th>
               <th className="px-3 py-2">エリア</th>
               <th className="px-3 py-2">自動作成</th>
               <th className="px-3 py-2">地震</th>
@@ -191,7 +191,7 @@ export function BcpSettingsTable({ initialRows }: { initialRows: BcpStoreSetting
               />
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={9} className="px-3 py-6 text-center text-slate-400">該当する店舗がありません。</td></tr>
+              <tr><td colSpan={9} className="px-3 py-6 text-center text-slate-400">該当する拠点がありません。</td></tr>
             )}
           </tbody>
         </table>
@@ -285,7 +285,7 @@ function BulkPanel({ pending, onApply }: { pending: boolean; onApply: (patch: Bu
   const rowCls = 'flex flex-wrap items-center gap-2'
   return (
     <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 text-xs dark:border-gedline dark:bg-gedbg2">
-      <p className="text-[11px] text-slate-500 dark:text-gedink3">適用したい項目だけチェックを入れ、値を設定して「選択店舗に適用」を押してください。</p>
+      <p className="text-[11px] text-slate-500 dark:text-gedink3">適用したい項目だけチェックを入れ、値を設定して「選択拠点に適用」を押してください。</p>
 
       <div className={rowCls}>
         <label className="flex w-40 items-center gap-1.5"><input type="checkbox" checked={useEnabled} onChange={(e) => setUseEnabled(e.target.checked)} />BCPレポート自動作成</label>
@@ -327,7 +327,7 @@ function BulkPanel({ pending, onApply }: { pending: boolean; onApply: (patch: Bu
 
       <button onClick={apply} disabled={pending}
         className="rounded bg-blue-600 px-4 py-1.5 font-medium text-white hover:bg-blue-700 disabled:opacity-50">
-        {pending ? '適用中…' : '選択店舗に適用'}
+        {pending ? '適用中…' : '選択拠点に適用'}
       </button>
     </div>
   )

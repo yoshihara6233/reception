@@ -33,7 +33,7 @@ export const metadata: Metadata = {
     template: `%s | ${PRODUCT_NAME}`,
     default:  PRODUCT_NAME,
   },
-  description: '店舗のレコーダを本部で一元監視するクラウド監視システム',
+  description: '拠点のレコーダを本部で一元監視するクラウド監視システム',
   applicationName: PRODUCT_NAME,
   appleWebApp: {
     capable: true,

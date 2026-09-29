@@ -329,7 +329,7 @@ export default async function BcpEventDetailPage({
           </div>
           <dl className="grid grid-cols-2 gap-x-4 gap-y-0 divide-y divide-slate-100 px-4 text-xs md:grid-cols-5 md:divide-y-0 md:divide-x">
             <div className="py-3">
-              <dt className="mb-0.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">店舗名</dt>
+              <dt className="mb-0.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">拠点名</dt>
               <dd className="font-medium text-slate-800">{event.stores?.name ?? '—'}</dd>
             </div>
             <div className="py-3 md:px-4">

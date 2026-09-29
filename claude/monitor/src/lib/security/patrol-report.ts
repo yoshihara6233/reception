@@ -199,7 +199,7 @@ export function buildPatrolReportPdf(input: PatrolReportInput): Promise<Buffer> 
     }
 
     heading('概要')
-    kv('店舗名', storeName)
+    kv('拠点名', storeName)
     kv('対象期間', `${fmtDate(periodFrom)} 〜 ${fmtDate(periodTo)}`)
     kv('生成時刻', fmtDateTime(generatedAt))
     kv('送信先メール', sentTo.join(', ') || '—')

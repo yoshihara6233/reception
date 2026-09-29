@@ -67,7 +67,7 @@ export default async function MultiVodPage({
         <div className="flex-1 overflow-hidden">
           {candidates.length === 0 ? (
             <div className="flex h-full items-center justify-center p-6 text-center text-sm text-slate-400">
-              同期再生に対応する Frigate 録画カメラがこの店舗にありません。
+              同期再生に対応する Frigate 録画カメラがこの拠点にありません。
             </div>
           ) : (
             <MultiVodPlayer

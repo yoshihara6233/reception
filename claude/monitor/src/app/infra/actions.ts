@@ -67,7 +67,7 @@ export async function bulkUpsertMonitorSettings(
   const supa = await createSupabaseServer()
   const { data: { user } } = await supa.auth.getUser()
   if (!user) return { ok: false, error: 'unauthorized' }
-  if (inputs.length === 0) return { ok: false, error: '対象店舗がありません' }
+  if (inputs.length === 0) return { ok: false, error: '対象拠点がありません' }
 
   for (const i of inputs) {
     const verr = validateMonitorSettings(i)

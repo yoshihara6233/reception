@@ -22,15 +22,15 @@ export default async function NewStorePage() {
     return (
       <AdminShell pathname="/admin/stores" section="admin">
         <PageHeader
-          title="店舗 新規作成"
+          title="拠点 新規作成"
           crumb={[
             { href: '/admin',        label: 'マスタ' },
-            { href: '/admin/stores', label: '店舗' },
+            { href: '/admin/stores', label: '拠点' },
             { href: '/admin/stores/new', label: '新規作成' },
           ]}
         />
         <div className="max-w-2xl space-y-3 px-5 py-5 text-sm text-slate-600">
-          <p>操作中テナントが未選択のため、店舗を作成できません。</p>
+          <p>操作中テナントが未選択のため、拠点を作成できません。</p>
           <p>
             <Link href="/admin/tenants" className="text-blue-600 underline">
               運営管理 → テナント
@@ -45,10 +45,10 @@ export default async function NewStorePage() {
   return (
     <AdminShell pathname="/admin/stores" section="admin">
       <PageHeader
-        title="店舗 新規作成"
+        title="拠点 新規作成"
         crumb={[
           { href: '/admin',         label: 'マスタ' },
-          { href: '/admin/stores',  label: '店舗' },
+          { href: '/admin/stores',  label: '拠点' },
           { href: '/admin/stores/new', label: '新規作成' },
         ]}
       />

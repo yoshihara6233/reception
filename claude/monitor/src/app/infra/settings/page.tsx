@@ -59,7 +59,7 @@ export default async function InfraSettingsPage() {
       <PageHeader title={ts.title} crumb={[{ href: '/infra', label: t.breadcrumb.infra }, { href: '/infra/settings', label: ts.title }]} />
       <div className="space-y-3 px-5 py-4">
         <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-xs leading-relaxed text-blue-800/90 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200/80">
-          店舗ごとに<b>エッジ無応答の判定閾値・チェック間隔・発報/解決のデバウンス・通知先・メンテ窓</b>を設定します。
+          拠点ごとに<b>エッジ無応答の判定閾値・チェック間隔・発報/解決のデバウンス・通知先・メンテ窓</b>を設定します。
           絞り込み・複数選択して<b>一括設定</b>も可能です。障害の発生状況は<b>ダッシュボード</b>と<b>稼働率レポート</b>で確認できます。
         </div>
         <MonitorSettingsTable initialRows={rows} />

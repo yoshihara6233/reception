@@ -10,7 +10,7 @@ export function TenantGate() {
       <div className="max-w-md space-y-3 rounded-lg border border-slate-200 bg-white p-6 text-center text-sm text-slate-600">
         <p className="text-base font-bold text-slate-900">テナントを選択してください</p>
         <p>
-          操作中テナントが未選択です。各テナントの店舗・巡回・発報・検査・死活監視は、
+          操作中テナントが未選択です。各テナントの拠点・巡回・発報・検査・死活監視は、
           そのテナントを選択してから閲覧・編集できます。
         </p>
         <p>

@@ -31,29 +31,29 @@ function svc(storeToTenant: Record<string, string>, opts: { error?: boolean } = 
 const MAP = { 'a1': 'tenant-a', 'a2': 'tenant-a', 'b1': 'tenant-b' }
 
 describe('storeIdsBelongToTenant', () => {
-  it('空配列は常に許可（担当店舗なしは正常な状態）', async () => {
+  it('空配列は常に許可（担当拠点なしは正常な状態）', async () => {
     const { client, calls } = svc(MAP)
     expect(await storeIdsBelongToTenant(client, [], 'tenant-a')).toBe(true)
     expect(await storeIdsBelongToTenant(client, [], null)).toBe(true)
     expect(calls).toHaveLength(0) // 問い合わせすら不要
   })
 
-  it('自テナントの店舗だけなら許可', async () => {
+  it('自テナントの拠点だけなら許可', async () => {
     const { client } = svc(MAP)
     expect(await storeIdsBelongToTenant(client, ['a1', 'a2'], 'tenant-a')).toBe(true)
   })
 
-  it('他テナントの店舗が 1 つでも混じれば拒否', async () => {
+  it('他テナントの拠点が 1 つでも混じれば拒否', async () => {
     const { client } = svc(MAP)
     expect(await storeIdsBelongToTenant(client, ['a1', 'b1'], 'tenant-a')).toBe(false)
   })
 
-  it('存在しない店舗IDは拒否（実在しないIDを黙って通さない）', async () => {
+  it('存在しない拠点IDは拒否（実在しないIDを黙って通さない）', async () => {
     const { client } = svc(MAP)
     expect(await storeIdsBelongToTenant(client, ['a1', 'ghost'], 'tenant-a')).toBe(false)
   })
 
-  it('tenantId=null で店舗を持たせようとしたら拒否（super_admin は店舗スコープを持てない）', async () => {
+  it('tenantId=null で拠点を持たせようとしたら拒否（super_admin は拠点スコープを持てない）', async () => {
     const { client, calls } = svc(MAP)
     expect(await storeIdsBelongToTenant(client, ['a1'], null)).toBe(false)
     expect(calls).toHaveLength(0)
@@ -67,7 +67,7 @@ describe('storeIdsBelongToTenant', () => {
     expect(calls[0].ids).toEqual(['a1', 'a2'])
   })
 
-  it('重複させて他テナント店舗を紛れ込ませても拒否', async () => {
+  it('重複させて他テナント拠点を紛れ込ませても拒否', async () => {
     const { client } = svc(MAP)
     expect(await storeIdsBelongToTenant(client, ['a1', 'a1', 'b1'], 'tenant-a')).toBe(false)
   })

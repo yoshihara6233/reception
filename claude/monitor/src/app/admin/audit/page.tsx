@@ -144,7 +144,7 @@ export default async function AuditPage() {
       <div className="px-5 py-4 space-y-3">
         <div className="flex items-center justify-between gap-2">
           <p className="text-[11px] text-slate-500 dark:text-gedink3">
-            ライブ/16分割/VOD の閲覧と、証跡静止画（発報・巡回・BCP）の閲覧を1つに記録。種別・店舗・操作者・カメラで絞込・CSV書出し可。
+            ライブ/16分割/VOD の閲覧と、証跡静止画（発報・巡回・BCP）の閲覧を1つに記録。種別・拠点・操作者・カメラで絞込・CSV書出し可。
           </p>
           <Link href="/admin/audit/changes" className="shrink-0 rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 dark:border-gedline dark:bg-gedbg2 dark:text-gedink">
             設定変更ログ →

@@ -35,7 +35,7 @@ export async function StatusBar() {
     <footer className="flex h-[22px] items-center gap-3 border-t border-slate-700 bg-slate-800 px-3 text-[11px] text-slate-300">
       <span>● 接続中</span>
       <span className="text-slate-500">|</span>
-      <span>{online ?? 0} / {total ?? 0} 店舗オンライン</span>
+      <span>{online ?? 0} / {total ?? 0} 拠点オンライン</span>
       <span className="text-slate-500">|</span>
       <span>本日のモニタ時間: {dailyMin} 分 / 120 分</span>
 

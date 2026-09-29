@@ -29,7 +29,7 @@ interface Props {
 const ROLE_LABELS: Record<Role, string> = {
   super_admin:     '全体管理者 (super_admin)',
   tenant_admin:    'テナント管理者 (tenant_admin)',
-  store_manager:   '店舗管理者 (store_manager)',
+  store_manager:   '拠点管理者 (store_manager)',
   baggage_manager: '手荷物検査店長 (baggage_manager)',
   viewer:          '閲覧者 (viewer)',
 }
@@ -181,10 +181,10 @@ export function UserForm({ mode, id, initial, tenants, stores, canCreateSuperAdm
       </div>
 
       {showStorePicker && (
-        <Field label={`担当店舗 (${form.store_ids.length} 件選択中)`}>
+        <Field label={`担当拠点 (${form.store_ids.length} 件選択中)`}>
           <div className="max-h-48 overflow-y-auto rounded border border-slate-200 p-2">
             {filteredStores.length === 0 ? (
-              <p className="text-xs text-slate-400">テナントを選択すると店舗が表示されます</p>
+              <p className="text-xs text-slate-400">テナントを選択すると拠点が表示されます</p>
             ) : (
               <ul className="space-y-1">
                 {filteredStores.map((s) => (

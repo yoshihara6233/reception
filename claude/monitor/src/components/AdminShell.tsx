@@ -114,7 +114,7 @@ export interface NavItem {
 // （②運営管理 は getAdminNav(t, {isSuper:true}) 経由でのみ出す）。
 export const ADMIN_NAV: NavItem[] = [
   { href: '/admin/reports/usage', label: '利用状況レポート', icon: '📊', exact: true },
-  { href: '/admin/stores',     label: '店舗',           icon: '⛬' },
+  { href: '/admin/stores',     label: '拠点',           icon: '⛬' },
   { href: '/admin/users',      label: 'ユーザ',         icon: '⚇' },
   { href: '/admin/baggage',    label: '手荷物検査設定', icon: '🧳' },
   { href: '/admin/bcp',        label: 'BCP発動条件',     icon: '🚨' },

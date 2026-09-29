@@ -8,7 +8,7 @@ import { confirmRatePct, type UsageMetrics } from '@/lib/reports/usage'
 
 export interface StoreRow extends UsageMetrics { store_id: string; store_name: string }
 
-const HEADERS = ['店舗', '巡回', '発報', '検査', '退出検査', '店長確認', '映像確認率', '顔認証(試行)', '一致', 'アンマッチ', 'ライブ/録画', '証跡確認']
+const HEADERS = ['拠点', '巡回', '発報', '検査', '退出検査', '店長確認', '映像確認率', '顔認証(試行)', '一致', 'アンマッチ', 'ライブ/録画', '証跡確認']
 
 function toCsv(rows: StoreRow[]): string {
   const esc = (v: string | number) => {
@@ -55,7 +55,7 @@ export function UsageStoreTable({ rows, monthLabel }: { rows: StoreRow[]; monthL
         <table className="w-full text-xs">
           <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500">
             <tr>
-              <th className="px-3 py-2 text-left">店舗</th>
+              <th className="px-3 py-2 text-left">拠点</th>
               <th className="px-3 py-2 text-right">巡回</th>
               <th className="px-3 py-2 text-right">発報</th>
               <th className="px-3 py-2 text-right">検査</th>

@@ -138,7 +138,7 @@ export default async function AdminNvrModelsPage(
         {/* 説明 */}
         <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
           <strong>使い方:</strong> ベンダー公式の EOL/EOS 情報が更新されたとき、対応する機種行の「編集」から日付を更新してください。
-          各店舗の <code className="rounded bg-blue-100 px-1 dark:bg-blue-900/40">nvr_eos_date</code> はトリガで自動同期されます。
+          各拠点の <code className="rounded bg-blue-100 px-1 dark:bg-blue-900/40">nvr_eos_date</code> はトリガで自動同期されます。
         </div>
       </div>
     </AdminShell>

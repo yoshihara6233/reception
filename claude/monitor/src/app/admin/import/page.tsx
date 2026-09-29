@@ -26,7 +26,7 @@ export default async function ImportPage() {
       <div className="grid max-w-5xl grid-cols-2 gap-5 px-5 py-5">
         <ImportForm
           kind="stores"
-          title="店舗 (stores)"
+          title="拠点 (stores)"
           endpoint="/api/admin/import/stores"
           help={
             <ul className="list-disc pl-4">

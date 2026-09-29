@@ -102,7 +102,7 @@ export function AlarmTimeline({ events }: { events: AlarmEventVM[] }) {
       {/* フィルタ */}
       <div className="flex flex-wrap items-center gap-2">
         <select value={store} onChange={(e) => setStore(e.target.value)} className={ctrl}>
-          <option value="">全店舗</option>
+          <option value="">全拠点</option>
           {storeNames.map((n) => <option key={n} value={n}>{n}</option>)}
         </select>
         <select value={status} onChange={(e) => setStatus(e.target.value as 'all' | 'new' | 'ack' | 'closed')} className={ctrl}>
@@ -127,7 +127,7 @@ export function AlarmTimeline({ events }: { events: AlarmEventVM[] }) {
               <tr>
                 <th className="px-3 py-2 text-left">種別</th>
                 <th className="px-3 py-2 text-left">発報時刻</th>
-                <th className="px-3 py-2 text-left">店舗</th>
+                <th className="px-3 py-2 text-left">拠点</th>
                 <th className="px-3 py-2 text-left">状態</th>
                 <th className="px-3 py-2 text-left">通知</th>
                 <th className="px-3 py-2"></th>

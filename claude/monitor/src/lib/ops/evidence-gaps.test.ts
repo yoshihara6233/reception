@@ -68,7 +68,7 @@ describe('evaluateEvidenceGaps', () => {
       expect(v.severity).toBe('warn')
     })
 
-    it('店舗名と発生時刻を JST で出す', () => {
+    it('拠点名と発生時刻を JST で出す', () => {
       const v = evaluateEvidenceGaps({
         ...OK, alarms: { recent: 1, older: 0, worst: [alarm('渋谷店')] },
       })

@@ -46,7 +46,7 @@ describe('セキュリティヘッダー', () => {
     expect(h.get('Content-Security-Policy')).toContain("frame-ancestors 'self'")
   })
 
-  it('外部へパスを含む Referer を送らない（店舗ID・カメラIDが URL に出る）', async () => {
+  it('外部へパスを含む Referer を送らない（拠点ID・カメラIDが URL に出る）', async () => {
     expect((await headerMap()).get('Referrer-Policy')).toBe('strict-origin-when-cross-origin')
   })
 

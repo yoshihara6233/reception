@@ -58,12 +58,12 @@ beforeEach(() => {
 })
 
 describe('コレクション名ビルダー', () => {
-  test('従業員コレクションは店舗単位で分離', () => {
+  test('従業員コレクションは拠点単位で分離', () => {
     expect(employeeCollectionId('store-1')).toBe('baggage-emp-store-1')
     // UUID 中のハイフンは許容・その他はハイフンへ
     expect(employeeCollectionId('abc.def')).toBe('baggage-emp-abc-def')
   })
-  test('来訪者コレクションは店舗×日で分離', () => {
+  test('来訪者コレクションは拠点×日で分離', () => {
     expect(visitorDailyCollectionId('store-1', '20260719')).toBe('baggage-store-1-20260719')
   })
 })

@@ -34,7 +34,7 @@ export function StoreTree({
   return (
     <aside className="flex flex-1 min-h-0 flex-col overflow-hidden border-r border-slate-200 bg-slate-50">
       <div className="flex items-center justify-between border-b border-slate-200 bg-white px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-        <span>店舗ツリー</span>
+        <span>拠点ツリー</span>
         <span className="font-mono text-slate-900">{totalStores}</span>
       </div>
       <TreeClient groups={groups} selectedId={selectedId} alertStoreIds={alertStoreIds} alertGroups={alertGroups} />

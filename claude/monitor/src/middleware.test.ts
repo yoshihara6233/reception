@@ -141,7 +141,7 @@ describe('静的アセット', () => {
     expect(getUserMock).not.toHaveBeenCalled()
   })
 
-  it('店舗別キオスク manifest（/kiosk 配下 .webmanifest）→ 素通し', async () => {
+  it('拠点別キオスク manifest（/kiosk 配下 .webmanifest）→ 素通し', async () => {
     asRole('baggage_manager')
     const res = await middleware(req('/kiosk/baggage/store-1/manifest.webmanifest'))
     expect(res.status).toBe(200)

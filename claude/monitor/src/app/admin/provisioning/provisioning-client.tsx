@@ -80,7 +80,7 @@ export function ProvisioningClient({ stores, rows, canIssue = true }: { stores: 
       <section className="rounded-lg border border-slate-200 bg-white p-5 text-sm">
         <h2 className="mb-1 font-bold text-slate-900">エンロールコードを発行</h2>
         <p className="mb-3 text-xs text-slate-500">
-          対象店舗を選んで発行すると、現地入力用の <b>QR と短縮コード</b>が 1 度だけ表示されます。
+          対象拠点を選んで発行すると、現地入力用の <b>QR と短縮コード</b>が 1 度だけ表示されます。
           コードは 24 時間・1 回限り。現地ではクラウド URL とこのコードだけで立ち上がります。
         </p>
         {!canIssue && (
@@ -90,7 +90,7 @@ export function ProvisioningClient({ stores, rows, canIssue = true }: { stores: 
         )}
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <label className="block text-xs">
-            <span className="mb-1 block font-medium text-slate-600">店舗</span>
+            <span className="mb-1 block font-medium text-slate-600">拠点</span>
             <select value={storeId} onChange={(e) => setStoreId(e.target.value)}
                     className="w-full rounded border border-slate-300 px-2 py-1 text-xs">
               <option value="">— 選択 —</option>
@@ -146,7 +146,7 @@ export function ProvisioningClient({ stores, rows, canIssue = true }: { stores: 
       <section className="rounded-lg border border-slate-200 bg-white text-sm">
         <div className="flex items-baseline gap-2 border-b border-slate-100 px-5 py-3">
           <h2 className="font-bold text-slate-900">立ち上げ状況</h2>
-          <span className="text-[11px] text-slate-400">直近のエンロール（自分に見える店舗のみ）</span>
+          <span className="text-[11px] text-slate-400">直近のエンロール（自分に見える拠点のみ）</span>
         </div>
         {rows.length === 0 ? (
           <p className="px-5 py-6 text-center text-xs text-slate-400">まだありません。上でコードを発行してください。</p>

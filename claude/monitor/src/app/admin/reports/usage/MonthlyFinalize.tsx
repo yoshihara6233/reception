@@ -20,7 +20,7 @@ export function MonthlyFinalize({ ym, monthLabel }: { ym: string; monthLabel: st
     setBusy(false)
     const j = await res.json().catch(() => ({}))
     if (res.ok) {
-      setMsg({ ok: true, text: `${monthLabel}を確定しました（${j.storeCount ?? 0} 店舗）` })
+      setMsg({ ok: true, text: `${monthLabel}を確定しました（${j.storeCount ?? 0} 拠点）` })
       router.refresh()
     } else {
       setMsg({ ok: false, text: j.error === 'tenant_required' ? 'テナントを選択してください' : `確定に失敗: ${j.error ?? res.status}` })

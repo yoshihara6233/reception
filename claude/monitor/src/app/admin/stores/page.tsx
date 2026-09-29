@@ -68,7 +68,7 @@ export default async function StoresAdmin({
         actions={
           <>
             {/* 新規作成はテナント確定時のみ（super_admin は操作中テナント選択が前提） */}
-            {ctx.tenantId && <LinkBtn href="/admin/stores/new">＋ 新規店舗</LinkBtn>}
+            {ctx.tenantId && <LinkBtn href="/admin/stores/new">＋ 新規拠点</LinkBtn>}
             <LinkBtn href="/admin/import">{ts.csvImportBtn}</LinkBtn>
           </>
         }

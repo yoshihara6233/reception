@@ -222,7 +222,7 @@ export function ReleasesClient({ releases, edges }: { releases: Release[]; edges
           <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500">
             <tr>
               <th className="px-4 py-2 text-left">エッジ</th>
-              <th className="px-4 py-2 text-left">店舗</th>
+              <th className="px-4 py-2 text-left">拠点</th>
               <th className="px-4 py-2 text-left">形式 / CPU</th>
               <th className="px-4 py-2 text-left">稼働版</th>
               <th className="px-4 py-2 text-left">目標版</th>

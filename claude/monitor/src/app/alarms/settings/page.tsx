@@ -67,11 +67,11 @@ export default async function AlarmSettingsPage() {
       />
       <div className="space-y-3 px-5 py-4">
         <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-xs leading-relaxed text-blue-800/90 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200/80">
-          店舗ごとに発報の<b>通知先</b>・<b>静音時間</b>・<b>Webhook</b> を設定します。<b>有効</b>の店舗のみ通知します
+          拠点ごとに発報の<b>通知先</b>・<b>静音時間</b>・<b>Webhook</b> を設定します。<b>有効</b>の拠点のみ通知します
           （発報自体は常に記録）。緊急対処・駆けつけは提供せず、<b>記録・通知の導線</b>のみです。
         </div>
         {rows.length === 0 ? (
-          <p className="text-xs text-slate-500 dark:text-gedink3">店舗がありません。</p>
+          <p className="text-xs text-slate-500 dark:text-gedink3">拠点がありません。</p>
         ) : (
           <AlarmSettingsTable initialRows={rows} />
         )}

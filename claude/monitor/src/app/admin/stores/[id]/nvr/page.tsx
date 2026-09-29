@@ -130,7 +130,7 @@ export default async function AdminStoreNvrPage(
         title={`NVR 設定: ${store.name}`}
         crumb={[
           { href: '/admin',                       label: '設定' },
-          { href: '/admin/stores',                label: '店舗' },
+          { href: '/admin/stores',                label: '拠点' },
           { href: `/admin/stores/${id}`,          label: store.name },
           { href: `/admin/stores/${id}/nvr`,      label: 'NVR' },
         ]}

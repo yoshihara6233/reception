@@ -159,8 +159,8 @@ export function TestForm() {
       // All activations failed (RLS / DB error)
       if (!json.eventIds || json.eventIds.length === 0) {
         const reason = json.failed
-          ? `全 ${json.failed} 件の店舗でイベント作成に失敗しました。RLS ポリシーまたはデータベースエラーの可能性があります。`
-          : '対象店舗が見つかりませんでした。'
+          ? `全 ${json.failed} 件の拠点でイベント作成に失敗しました。RLS ポリシーまたはデータベースエラーの可能性があります。`
+          : '対象拠点が見つかりませんでした。'
         throw new Error(reason)
       }
 
@@ -191,7 +191,7 @@ export function TestForm() {
       {/* Warning */}
       <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-800">
         <span className="font-bold">注意：</span>
-        このテストは範囲内の全店舗のエッジデバイスに BCP コマンドを送信します。
+        このテストは範囲内の全拠点のエッジデバイスに BCP コマンドを送信します。
         イベントは <span className="font-bold">「テスト」</span> バッジ付きで記録されます。
       </div>
 
@@ -312,7 +312,7 @@ export function TestForm() {
           disabled={!hasCoords || previewing}
           className="rounded border border-slate-300 bg-slate-50 px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {previewing ? '検索中…' : <span className="inline-flex items-center gap-1.5"><Search size={13} strokeWidth={1.5} aria-hidden /> 対象店舗を確認</span>}
+          {previewing ? '検索中…' : <span className="inline-flex items-center gap-1.5"><Search size={13} strokeWidth={1.5} aria-hidden /> 対象拠点を確認</span>}
         </button>
 
         {previewError && <p className="text-xs text-red-600">{previewError}</p>}
@@ -326,11 +326,11 @@ export function TestForm() {
               : 'border-emerald-200 bg-emerald-50')
           }>
             {previewStores.length === 0 ? (
-              <p>半径 {radiusKm}km 以内に座標が登録された店舗はありません。</p>
+              <p>半径 {radiusKm}km 以内に座標が登録された拠点はありません。</p>
             ) : (
               <>
                 <p className="mb-2 font-semibold text-emerald-800">
-                  {previewStores.length}店舗が対象（半径 {radiusKm}km）
+                  {previewStores.length}拠点が対象（半径 {radiusKm}km）
                 </p>
                 <ul className="space-y-0.5 max-h-40 overflow-y-auto">
                   {previewStores.map((s) => (
@@ -400,7 +400,7 @@ export function TestForm() {
             <div>
               半径: <span className="font-bold">{radiusKm}km</span>
               {previewStores !== null && (
-                <span className="ml-2 text-red-600">（{previewStores.length}店舗対象）</span>
+                <span className="ml-2 text-red-600">（{previewStores.length}拠点対象）</span>
               )}
             </div>
             <div>種別: <span className="inline-flex items-center gap-1 font-bold">{selectedAlert?.Icon && <selectedAlert.Icon size={13} strokeWidth={1.5} aria-hidden />} {selectedAlert?.label}</span></div>

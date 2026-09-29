@@ -89,7 +89,7 @@ describe('storeAreaIntensity（エリア照合）', () => {
   const prefs53 = parseAffectedPrefs(VXSE53_KUMAMOTO)
   const prefs51 = parseAffectedPrefs(VXSE51_KUMAMOTO)
 
-  it('JIS コードの熊本市店舗は震源・震度情報/震度速報の両方に一致する（2026-07-31 回帰の本丸）', () => {
+  it('JIS コードの熊本市拠点は震源・震度情報/震度速報の両方に一致する（2026-07-31 回帰の本丸）', () => {
     expect(storeAreaIntensity('43100', prefs53).matched).toBe(true) // 熊本市
     expect(storeAreaIntensity('43103', prefs53).matched).toBe(true) // 熊本市西区
     expect(storeAreaIntensity('43100', prefs51).matched).toBe(true) // 震度速報でも都道府県一致
@@ -100,7 +100,7 @@ describe('storeAreaIntensity（エリア照合）', () => {
     expect(storeAreaIntensity('JP-43', prefs53).matched).toBe(false)
   })
 
-  it('他県の店舗は一致しない', () => {
+  it('他県の拠点は一致しない', () => {
     expect(storeAreaIntensity('27100', prefs53).matched).toBe(false) // 大阪市
     expect(storeAreaIntensity('01100', prefs51).matched).toBe(false) // 札幌市
   })
@@ -110,7 +110,7 @@ describe('storeAreaIntensity（エリア照合）', () => {
     expect(storeAreaIntensity('43100', new Map()).matched).toBe(false)
   })
 
-  it('一致した店舗にはその県の観測震度が返る', () => {
+  it('一致した拠点にはその県の観測震度が返る', () => {
     expect(storeAreaIntensity('43100', prefs53).intensity).toBe('3')
   })
 })
@@ -136,7 +136,7 @@ const VXSE53_IWATE = `<Report><Body><Earthquake><Hypocenter><Area>
 <Pref><Name>福島県</Name><Code>07</Code><MaxInt>1</MaxInt><Area><Name>福島県浜通り</Name><Code>251</Code><MaxInt>1</MaxInt><City><Name>浪江町</Name><Code>0754700</Code><MaxInt>1</MaxInt></City></Area></Pref>
 </Observation></Intensity></Body></Report>`
 
-describe('2026-08-09 岩手県沖 震度4（38店舗誤発動の回帰）', () => {
+describe('2026-08-09 岩手県沖 震度4（38拠点誤発動の回帰）', () => {
   const prefs = parseAffectedPrefs(VXSE53_IWATE)
 
   it('揺れた 7 県だけを抽出し、県ごとの震度を持つ', () => {
@@ -160,7 +160,7 @@ describe('2026-08-09 岩手県沖 震度4（38店舗誤発動の回帰）', () =
     expect(storeAreaIntensity(code, prefs).matched).toBe(false)
   })
 
-  it('震度は全国最大値ではなく、その店舗の県の値で判定する', () => {
+  it('震度は全国最大値ではなく、その拠点の県の値で判定する', () => {
     const settings = { quake_min_intensity: '4', special_warning_enabled: true }
     const iwate     = storeAreaIntensity('03201', prefs) // 岩手県 → 震度4
     const fukushima = storeAreaIntensity('07201', prefs) // 福島県 → 震度1
@@ -302,13 +302,13 @@ describe('同一県に複数の震度が来たとき', () => {
 })
 
 describe('storeAreaIntensity の境界', () => {
-  it('範囲外の県コードを持つ店舗は一致しない', () => {
+  it('範囲外の県コードを持つ拠点は一致しない', () => {
     const prefs = new Map([['00', '6+'], ['48', '6+']])
     expect(storeAreaIntensity('00100', prefs).matched).toBe(false)
     expect(storeAreaIntensity('48100', prefs).matched).toBe(false)
   })
 
-  it('01 と 47 の店舗は一致する', () => {
+  it('01 と 47 の拠点は一致する', () => {
     expect(storeAreaIntensity('01100', new Map([['01', '4']])))
       .toEqual({ matched: true, intensity: '4' })
     expect(storeAreaIntensity('47201', new Map([['47', '4']])))

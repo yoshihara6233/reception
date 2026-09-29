@@ -21,9 +21,9 @@ interface Initial {
 }
 
 const ERR_LABELS: Record<string, string> = {
-  store_limit_exceeded:  '店舗数が上限に達しています',
+  store_limit_exceeded:  '拠点数が上限に達しています',
   option_not_contracted: 'このテナントで契約していないオプションは ON にできません',
-  option_limit_exceeded: 'オプションを ON にできる店舗数が上限に達しています',
+  option_limit_exceeded: 'オプションを ON にできる拠点数が上限に達しています',
 }
 
 export function StoreEditForm({
@@ -81,7 +81,7 @@ export function StoreEditForm({
 
   return (
     <form onSubmit={save} className="space-y-4 rounded-lg border border-slate-200 bg-white p-5 text-sm">
-      <Field label="店舗名">
+      <Field label="拠点名">
         <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
                className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm" />
       </Field>
@@ -126,7 +126,7 @@ export function StoreEditForm({
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={form.is_active}
                onChange={(e) => setForm({ ...form, is_active: e.target.checked })} />
-        この店舗を有効にする
+        この拠点を有効にする
       </label>
 
       {err  && <p className="rounded bg-red-50 px-3 py-2 text-xs text-red-700">{err}</p>}

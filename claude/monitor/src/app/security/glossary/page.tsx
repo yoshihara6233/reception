@@ -38,7 +38,7 @@ const GROUPS: Group[] = [
       {
         term: '横断キュー',
         read: 'cross-store queue',
-        desc: '/security トップに表示される全店舗の未確認 finding を 1 リストにまとめたもの。1 人の警備員が 100 店舗を同時に捌けるようにする UI 設計上の鍵。',
+        desc: '/security トップに表示される全拠点の未確認 finding を 1 リストにまとめたもの。1 人の警備員が 100 拠点を同時に捌けるようにする UI 設計上の鍵。',
       },
     ],
   },

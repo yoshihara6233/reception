@@ -172,7 +172,7 @@ export function bcpAlertStartedEmail(
 
   <table style="width:100%;border-collapse:collapse;margin:16px 0">
     <tr>
-      <td style="padding:8px;background:#f5f5f5;font-weight:bold;width:140px;border:1px solid #ddd">店舗名</td>
+      <td style="padding:8px;background:#f5f5f5;font-weight:bold;width:140px;border:1px solid #ddd">拠点名</td>
       <td style="padding:8px;border:1px solid #ddd">${escapeHtml(storeName)}</td>
     </tr>
     <tr>
@@ -185,7 +185,7 @@ export function bcpAlertStartedEmail(
     </tr>
   </table>
 
-  <p>店舗の防犯カメラによる録画を開始しました。録画完了後、改めてご連絡いたします。</p>
+  <p>拠点の防犯カメラによる録画を開始しました。録画完了後、改めてご連絡いたします。</p>
 
   <p>
     <a href="${eventUrl}"
@@ -240,7 +240,7 @@ export function bcpCompletedEmail(
 
   <table style="width:100%;border-collapse:collapse;margin:16px 0">
     <tr>
-      <td style="padding:8px;background:#f5f5f5;font-weight:bold;width:140px;border:1px solid #ddd">店舗名</td>
+      <td style="padding:8px;background:#f5f5f5;font-weight:bold;width:140px;border:1px solid #ddd">拠点名</td>
       <td style="padding:8px;border:1px solid #ddd">${escapeHtml(storeName)}</td>
     </tr>
     <tr>
@@ -313,7 +313,7 @@ export function bcpFailedEmail(
 
   <table style="width:100%;border-collapse:collapse;margin:16px 0">
     <tr>
-      <td style="padding:8px;background:#f5f5f5;font-weight:bold;width:140px;border:1px solid #ddd">店舗名</td>
+      <td style="padding:8px;background:#f5f5f5;font-weight:bold;width:140px;border:1px solid #ddd">拠点名</td>
       <td style="padding:8px;border:1px solid #ddd">${escapeHtml(storeName)}</td>
     </tr>
     <tr>
@@ -362,7 +362,7 @@ export function edgeOfflineAlertEmail(p: EdgeHealthParams): { subject: string; h
   <h2 style="color:#c0392b">🔴 エッジ無応答</h2>
   <p>エッジからの heartbeat が <b>${p.staleMin}分以上</b>途絶えています。<b>遠隔監視が停止</b>している可能性があります（録画はレコーダ本体で継続します）。</p>
   <table style="width:100%;border-collapse:collapse;margin:16px 0">
-    <tr><td style="padding:8px;background:#f5f5f5;font-weight:bold;width:140px;border:1px solid #ddd">店舗</td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(p.storeName)}</td></tr>
+    <tr><td style="padding:8px;background:#f5f5f5;font-weight:bold;width:140px;border:1px solid #ddd">拠点</td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(p.storeName)}</td></tr>
     <tr><td style="padding:8px;background:#f5f5f5;font-weight:bold;border:1px solid #ddd">エッジ</td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(p.edgeName)}</td></tr>
     <tr><td style="padding:8px;background:#f5f5f5;font-weight:bold;border:1px solid #ddd">最終応答</td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(p.lastSeenAt)}</td></tr>
   </table>
@@ -384,7 +384,7 @@ export function edgeRecoveredEmail(p: EdgeHealthParams): { subject: string; html
   <h2 style="color:#16a34a">🟢 エッジ復旧</h2>
   <p>無応答だったエッジが heartbeat を再開しました。</p>
   <table style="width:100%;border-collapse:collapse;margin:16px 0">
-    <tr><td style="padding:8px;background:#f5f5f5;font-weight:bold;width:140px;border:1px solid #ddd">店舗</td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(p.storeName)}</td></tr>
+    <tr><td style="padding:8px;background:#f5f5f5;font-weight:bold;width:140px;border:1px solid #ddd">拠点</td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(p.storeName)}</td></tr>
     <tr><td style="padding:8px;background:#f5f5f5;font-weight:bold;border:1px solid #ddd">エッジ</td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(p.edgeName)}</td></tr>
   </table>
   <hr style="margin:24px 0;border:none;border-top:1px solid #eee">
@@ -413,7 +413,7 @@ export function tunnelDownAlertEmail(p: TunnelHealthParams): { subject: string; 
   <h2 style="color:#c0392b">🔴 トンネル断（遠隔ライブ経路）</h2>
   <p>エッジ本体は応答していますが、cloudflared トンネル（go2rtc への遠隔経路）に <b>${p.downMin}分以上</b>到達できません。遠隔の高画質ライブ/HLSが視聴できない状態です。</p>
   <table style="width:100%;border-collapse:collapse;margin:16px 0">
-    <tr><td style="padding:8px;background:#f5f5f5;font-weight:bold;width:140px;border:1px solid #ddd">店舗</td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(p.storeName)}</td></tr>
+    <tr><td style="padding:8px;background:#f5f5f5;font-weight:bold;width:140px;border:1px solid #ddd">拠点</td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(p.storeName)}</td></tr>
     <tr><td style="padding:8px;background:#f5f5f5;font-weight:bold;border:1px solid #ddd">エッジ</td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(p.edgeName)}</td></tr>
   </table>
   <p>確認事項: エッジ上の cloudflared サービス（<code>systemctl status cloudflared</code>）、Cloudflare ダッシュボードのトンネル状態、go2rtc の稼働。</p>
@@ -434,7 +434,7 @@ export function tunnelRecoveredEmail(p: TunnelHealthParams): { subject: string; 
   <h2 style="color:#16a34a">🟢 トンネル復旧</h2>
   <p>断になっていた cloudflared トンネルへの到達が回復しました。遠隔ライブ経路は正常です。</p>
   <table style="width:100%;border-collapse:collapse;margin:16px 0">
-    <tr><td style="padding:8px;background:#f5f5f5;font-weight:bold;width:140px;border:1px solid #ddd">店舗</td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(p.storeName)}</td></tr>
+    <tr><td style="padding:8px;background:#f5f5f5;font-weight:bold;width:140px;border:1px solid #ddd">拠点</td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(p.storeName)}</td></tr>
     <tr><td style="padding:8px;background:#f5f5f5;font-weight:bold;border:1px solid #ddd">エッジ</td><td style="padding:8px;border:1px solid #ddd">${escapeHtml(p.edgeName)}</td></tr>
   </table>
   <hr style="margin:24px 0;border:none;border-top:1px solid #eee">

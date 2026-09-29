@@ -112,7 +112,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       if (recipients.length) {
         const mail = edgeOfflineAlertEmail({
           edgeName: e.name ?? e.id.slice(0, 8),
-          storeName: e.stores?.name ?? '(不明な店舗)',
+          storeName: e.stores?.name ?? '(不明な拠点)',
           lastSeenAt: jst(e.last_seen_at),
           staleMin,
           monitorUrl,
@@ -121,7 +121,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       }
       // 第2経路（是正5）: メール未設定/見落とし対策の運用 Webhook（設定時のみ）。
       await sendOpsWebhook(
-        `🔴 エッジ無応答: ${e.stores?.name ?? '(不明な店舗)'} / ${e.name ?? e.id.slice(0, 8)}`
+        `🔴 エッジ無応答: ${e.stores?.name ?? '(不明な拠点)'} / ${e.name ?? e.id.slice(0, 8)}`
         + `（最終応答 ${jst(e.last_seen_at)}・${staleMin}分超）\n${monitorUrl}/admin/edges`,
       )
     } else if (!isStale && e.alerted_at) {
@@ -132,7 +132,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       if (recipients.length) {
         const mail = edgeRecoveredEmail({
           edgeName: e.name ?? e.id.slice(0, 8),
-          storeName: e.stores?.name ?? '(不明な店舗)',
+          storeName: e.stores?.name ?? '(不明な拠点)',
           lastSeenAt: jst(e.last_seen_at),
           staleMin,
           monitorUrl,
@@ -140,7 +140,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         await sendEmail(recipients, mail.subject, mail.html, undefined, SECURITY_FROM_ADDRESS)
       }
       await sendOpsWebhook(
-        `🟢 エッジ復旧: ${e.stores?.name ?? '(不明な店舗)'} / ${e.name ?? e.id.slice(0, 8)}（最終応答 ${jst(e.last_seen_at)}）`,
+        `🟢 エッジ復旧: ${e.stores?.name ?? '(不明な拠点)'} / ${e.name ?? e.id.slice(0, 8)}（最終応答 ${jst(e.last_seen_at)}）`,
       )
     }
   }
@@ -169,7 +169,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
 
     const edgeName = e.name ?? e.id.slice(0, 8)
-    const storeName = e.stores?.name ?? '(不明な店舗)'
+    const storeName = e.stores?.name ?? '(不明な拠点)'
     const downMin = Math.max(1, Math.round(
       (Date.now() - new Date(e.tunnel_down_since ?? Date.now()).getTime()) / 60_000))
 

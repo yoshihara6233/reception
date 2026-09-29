@@ -125,7 +125,7 @@ export default async function AlarmDetailPage({ params }: { params: Promise<{ id
           </div>
           <dl className="grid grid-cols-2 gap-x-4 gap-y-0 divide-y divide-slate-100 px-4 text-xs md:grid-cols-4 md:divide-y-0 md:divide-x dark:divide-gedline">
             <div className="py-3">
-              <dt className="mb-0.5 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-gedink3">店舗名</dt>
+              <dt className="mb-0.5 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-gedink3">拠点名</dt>
               <dd className="font-medium text-slate-800 dark:text-gedink">{storeName}</dd>
             </div>
             <div className="py-3 md:px-4">
@@ -162,7 +162,7 @@ export default async function AlarmDetailPage({ params }: { params: Promise<{ id
 
           {cameras.length === 0 ? (
             <div className="px-4 py-8 text-center text-xs text-slate-400 dark:text-gedink3">
-              この店舗にカメラが登録されていません。
+              この拠点にカメラが登録されていません。
             </div>
           ) : (
             <div className="divide-y divide-slate-100 dark:divide-gedline">

@@ -151,7 +151,7 @@ describe('isDue の不変条件', () => {
   const jst = () => fc.record({ dow: fc.integer({ min: 0, max: 6 }), minutes: curMin() })
   const NOW = new Date('2026-08-10T05:00:00+09:00')
 
-  it('★無効・店舗未設定なら、他が何であっても走らない', () => {
+  it('★無効・拠点未設定なら、他が何であっても走らない', () => {
     fc.assert(fc.property(jst(), fc.integer({ min: 1, max: 60 }), (t, w) => {
       expect(isDue(settings({ enabled: false }), t, NOW, w)).toBe(false)
       expect(isDue(settings({ store_id: null }), t, NOW, w)).toBe(false)

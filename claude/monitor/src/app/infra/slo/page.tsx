@@ -312,7 +312,7 @@ export default async function SloDashboard() {
             <li>• <code>edge_commands_total{`{command,result,vendor}`}</code> — コマンド処理数</li>
             <li>• <code>edge_command_duration_seconds</code> — レイテンシ Histogram (p50 / p95 / p99)</li>
             <li>• <code>edge_heartbeat_total{`{result,vendor}`}</code> — 死活回数</li>
-            <li>• <code>edge_tenants_assigned</code> — 担当店舗数</li>
+            <li>• <code>edge_tenants_assigned</code> — 担当拠点数</li>
             <li>• <code>edge_circuit_breaker_open_total</code> — サーキットブレーカー OPEN 数</li>
           </ul>
           <p className="mt-3 text-blue-800 dark:text-blue-200/80">

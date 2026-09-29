@@ -25,7 +25,7 @@ export function ActingTenantBar({ tenantName }: { tenantName: string | null }) {
     return (
       <div className="flex items-center gap-3 border-b border-amber-200 bg-amber-50 px-5 py-2 text-xs text-amber-800">
         <span className="font-bold">操作中テナント: 未選択</span>
-        <span>店舗・ユーザ等を作成するには操作するテナントを選択してください。</span>
+        <span>拠点・ユーザ等を作成するには操作するテナントを選択してください。</span>
         <Link href="/admin/tenants" className="font-medium text-blue-700 underline">テナント一覧から選択</Link>
       </div>
     )

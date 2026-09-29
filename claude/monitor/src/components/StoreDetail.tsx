@@ -48,7 +48,7 @@ export async function StoreDetail({ storeId }: { storeId: string }) {
     .single()
 
   if (!store) {
-    return <div className="p-4 text-xs text-slate-500">店舗が見つかりません</div>
+    return <div className="p-4 text-xs text-slate-500">拠点が見つかりません</div>
   }
 
   const s    = store as never as {
@@ -70,9 +70,9 @@ export async function StoreDetail({ storeId }: { storeId: string }) {
 
   return (
     <aside className="flex-1 min-h-0 overflow-y-auto border-l border-slate-200 bg-white text-xs">
-      <Section title="店舗情報">
-        <Kv label="店舗名" value={s.name} />
-        <Kv label="店舗 ID" value={storeId.slice(0, 8)} />
+      <Section title="拠点情報">
+        <Kv label="拠点名" value={s.name} />
+        <Kv label="拠点 ID" value={storeId.slice(0, 8)} />
         <Kv label="住所" value={s.address ?? '—'} />
         <Kv label="エリア" value={s.area_code ?? '—'} />
         <Kv label="状態">

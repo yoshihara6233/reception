@@ -33,7 +33,7 @@ export async function createTestAlarm(storeId: string): Promise<{ ok: boolean; i
 
   // 認可ゲート: 店舗をセッション RLS 越しに読めれば権限あり。
   const { data: store } = await supa.from('stores').select('id').eq('id', storeId).maybeSingle()
-  if (!store) return { ok: false, error: '店舗が見つからないか、権限がありません' }
+  if (!store) return { ok: false, error: '拠点が見つからないか、権限がありません' }
 
   const service = createSupabaseService()
   const { data: ev, error } = await service
@@ -92,7 +92,7 @@ export async function bulkUpsertAlarmSettings(
   const supa = await createSupabaseServer()
   const { data: { user } } = await supa.auth.getUser()
   if (!user) return { ok: false, error: 'unauthorized' }
-  if (!inputs.length) return { ok: false, error: '対象店舗がありません' }
+  if (!inputs.length) return { ok: false, error: '対象拠点がありません' }
 
   for (const input of inputs) {
     const qf = (input.quietFrom ?? '').trim()

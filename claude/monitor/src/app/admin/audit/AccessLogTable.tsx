@@ -49,7 +49,7 @@ function fmtDuration(sec: number | null) {
 
 function toCsv(rows: AccessRowVM[]): string {
   const esc = (v: string) => `"${(v ?? '').replace(/"/g, '""')}"`
-  const header = ['アクセス日時', '種別', '店舗', '操作者', '対象カメラ', '継続']
+  const header = ['アクセス日時', '種別', '拠点', '操作者', '対象カメラ', '継続']
   const lines = rows.map((r) => [
     fmtJst(r.accessedAt), TYPE_LABEL[r.accessType], r.storeName, r.actorEmail, r.cameraName, fmtDuration(r.durationSec),
   ].map(esc).join(','))
@@ -97,7 +97,7 @@ export function AccessLogTable({ rows }: { rows: AccessRowVM[] }) {
           {types.map((k) => <option key={k} value={k}>{TYPE_LABEL[k]}</option>)}
         </select>
         <select value={fStore} onChange={(e) => setFStore(e.target.value)} className={ctrl}>
-          <option value="">店舗（全て）</option>
+          <option value="">拠点（全て）</option>
           {stores.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
         <select value={fActor} onChange={(e) => setFActor(e.target.value)} className={ctrl}>
@@ -118,7 +118,7 @@ export function AccessLogTable({ rows }: { rows: AccessRowVM[] }) {
             <tr>
               <th className="px-3 py-2 text-left">アクセス日時</th>
               <th className="px-3 py-2 text-left">種別</th>
-              <th className="px-3 py-2 text-left">店舗</th>
+              <th className="px-3 py-2 text-left">拠点</th>
               <th className="px-3 py-2 text-left">操作者</th>
               <th className="px-3 py-2 text-left">対象カメラ</th>
               <th className="px-3 py-2 text-right">継続</th>
