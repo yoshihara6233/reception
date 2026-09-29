@@ -37,22 +37,11 @@ interface TestResult {
   capabilities?: Record<string, unknown>
 }
 
+// 選べるのは i-PRO WJ-NU (WJ-NU101K) だけ (2026-09-29 利用者の判断: VMS を自前 (G・VMS) にしたため、
+// Hikvision・Hanwha・Synology・Axis・Dahua・Frigate・ONVIF 汎用・WJ-NX・WJ-GXE500 は画面から外す)。
+// アダプタのコード (packages/shared/nvr-adapter) は残し、要望があれば選択肢を戻す。
 const VENDOR_OPTIONS: { value: NvrVendor; label: string }[] = [
-  // i-PRO 系 (Phase 0/1 + Phase 5)
-  { value: 'i-pro-nx',              label: 'i-PRO WJ-NX シリーズ' },
-  { value: 'i-pro-nu',              label: 'i-PRO WJ-NU シリーズ' },
-  { value: 'i-pro-gxe500',          label: 'i-PRO WJ-GXE500 (アナログ→IP)' },
-  // Phase 5 で追加されたベンダー
-  { value: 'hikvision',             label: 'Hikvision (ISAPI)' },
-  { value: 'hanwha-wisenet',        label: 'Hanwha Wisenet (SUNAPI)' },
-  // Phase 6 で追加されたベンダー
-  { value: 'synology-surveillance', label: 'Synology Surveillance Station' },
-  { value: 'onvif-generic',         label: 'ONVIF 汎用 (fallback)' },
-  // Phase 7 で追加されたベンダー
-  { value: 'axis-vapix',            label: 'Axis VAPIX (Q3/P3/M3/M70 シリーズ)' },
-  { value: 'dahua',                 label: 'Dahua DH-NVR / IPC' },
-  // 各店 Mini PC モード互換
-  { value: 'frigate',               label: 'Frigate (各店 Mini PC モード)' },
+  { value: 'i-pro-nu',              label: 'i-PRO WJ-NU シリーズ (WJ-NU101K)' },
 ]
 
 export function NvrConnectionForm({
