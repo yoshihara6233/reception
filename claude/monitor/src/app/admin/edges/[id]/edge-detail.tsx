@@ -922,7 +922,7 @@ function vendorLabel(v: NewRecorder['vendor']) {
   if (v === 'frigate')        return 'Frigate (OSS-VMS)'
   if (v === 'onvif-generic')  return 'ONVIFカメラ直'
   if (v === 'i-pro-nvr')      return 'i-PRO NVR(レコーダ経由)'
-  if (v === 'nvms')           return 'NVMS(自社オンプレVMS)'
+  if (v === 'nvms')           return 'G・VMS (自社オンプレ VMS)'
   // 想定外の値は素の値を出す。以前ここは 'Uniview' を返すフォールバックで、
   // uniview を消した後は**未知のベンダが全部 Uniview と表示される**形だった。
   return v
@@ -936,10 +936,11 @@ function NewRecorderForm({
   onCancel: () => void
 }) {
   const [r, setR] = useState<NewRecorder>({
-    // 既定は本番で最も使われている ONVIF カメラ直。以前は uniview が既定で、
-    // 登録画面を開くと最初から実装の無いベンダが選ばれていた。
-    vendor: 'onvif-generic', model: '', host: '', rtsp_port: 554, onvif_port: 80,
-    username: 'admin', password: '', notes: '',
+    // 既定は G・VMS (nvms)。選べるのは G・VMS と i-PRO NVR (WJ-NU101K) だけ
+    // (2026-09-29 利用者の判断: VMS を自前にしたため、Frigate・ONVIF カメラ直・i-PRO カメラ直は
+    // 画面から外す。アダプタのコードは残し、要望があれば選択肢を戻す)。
+    vendor: 'nvms', model: '', host: '', notes: '',
+    rtsp_port: 554, onvif_port: null, username: 'api', password: '', // = VENDOR_DEFAULTS.nvms
   })
 
   function changeVendor(v: NewRecorder['vendor']) {
@@ -956,17 +957,16 @@ function NewRecorderForm({
         <Field label="ベンダ">
           <select value={r.vendor} onChange={(e) => changeVendor(e.target.value as NewRecorder['vendor'])}
                   className="w-full rounded border border-slate-300 px-2 py-1">
-            <option value="onvif-generic">ONVIFカメラ直</option>
-            <option value="ipro">i-PRO</option>
-            <option value="i-pro-nvr">i-PRO NVR(レコーダ経由)</option>
-            <option value="frigate">Frigate (OSS-VMS)</option>
-            <option value="nvms">NVMS(自社オンプレVMS)</option>
+            {/* 選べるのは G・VMS と i-PRO NVR (WJ-NU101K) だけ。既存のほかのベンダの行は
+                vendorLabel で表示だけする (2026-09-29) */}
+            <option value="nvms">G・VMS (自社オンプレ VMS)</option>
+            <option value="i-pro-nvr">i-PRO NVR (WJ-NU101K・レコーダ経由)</option>
           </select>
         </Field>
         <Field label="機種 / メモ">
           <input value={r.model} onChange={(e) => setR({ ...r, model: e.target.value })}
                  className="w-full rounded border border-slate-300 px-2 py-1"
-                 placeholder={isFrigate ? 'Frigate 等' : 'WJ-NX410 等'} />
+                 placeholder={r.vendor === 'nvms' ? 'G・VMS 0.1.x 等' : 'WJ-NU101K'} />
         </Field>
         <Field label="ホスト (IP)">
           <input required value={r.host} onChange={(e) => setR({ ...r, host: e.target.value })}
