@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { livekitEnabled, roomForCamera } from './livekit'
+import { gvmsSfuEnabled, livekitEnabled, roomForCamera } from './livekit'
 
-const KEYS = ['LIVEKIT_ENABLED', 'LIVEKIT_URL', 'LIVEKIT_API_KEY', 'LIVEKIT_API_SECRET'] as const
+const KEYS = ['GVMS_SFU_ENABLED', 'LIVEKIT_ENABLED', 'LIVEKIT_URL', 'LIVEKIT_API_KEY', 'LIVEKIT_API_SECRET'] as const
 afterEach(() => { for (const k of KEYS) delete process.env[k] })
 
 function setCreds() {
@@ -34,5 +34,23 @@ describe('livekitEnabled', () => {
     process.env.LIVEKIT_ENABLED = '1'
     setCreds()
     expect(livekitEnabled()).toBe(false)
+  })
+})
+
+describe('gvmsSfuEnabled', () => {
+  it('LiveKit が有効でも GVMS_SFU_ENABLED が無ければ false（2026-09-29 から保留）', () => {
+    process.env.LIVEKIT_ENABLED = 'true'
+    setCreds()
+    expect(gvmsSfuEnabled()).toBe(false)
+  })
+  it('GVMS_SFU_ENABLED だけでは false（LiveKit の設定も要る）', () => {
+    process.env.GVMS_SFU_ENABLED = 'true'
+    expect(gvmsSfuEnabled()).toBe(false)
+  })
+  it('両方そろえば true', () => {
+    process.env.GVMS_SFU_ENABLED = 'true'
+    process.env.LIVEKIT_ENABLED = 'true'
+    setCreds()
+    expect(gvmsSfuEnabled()).toBe(true)
   })
 })

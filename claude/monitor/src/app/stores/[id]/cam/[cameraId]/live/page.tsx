@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { AppShell } from '@/components/AppShell'
 import { signLiveUrl } from '@/lib/live-sign'
-import { livekitEnabled } from '@/lib/livekit'
+import { gvmsSfuEnabled, livekitEnabled } from '@/lib/livekit'
 import { hasCapability } from '@/lib/edge/capabilities'
 import { videoR2Configured } from '@/lib/storage/video-r2'
 import { canFetchVod, isVodVendor, VOD_RANGE_MAX_MIN_BY_VENDOR, type RecorderVendor } from '@/lib/types/db'
@@ -96,8 +96,9 @@ export default async function LivePage(
   // SFU は拠点の種類で中身が違う。従来のエッジ端末は go2rtc を WHIP で送る（cam_ の部屋を
   // 使い回す）。G・VMS の拠点は視聴 1 回ごとに受け口を作る §5.4 の方式で、**sfu を名乗る
   // 拠点だけ**に出す（0.1.67 以前の nvmsd は session_id の無い start_sfu では動かない）。
+  // G・VMS の拠点の SFU は 2026-09-29 から保留（gvmsSfuEnabled・既定 OFF）。
   const isNvms   = vendor === 'nvms'
-  const sfuOk    = livekitEnabled() && !liveViaNvr && (!isNvms || hasCapability(c.recorders.stores, 'sfu'))
+  const sfuOk    = !liveViaNvr && (isNvms ? gvmsSfuEnabled() && hasCapability(c.recorders.stores, 'sfu') : livekitEnabled())
   // 録画再生と同じ操作をライブの画面にも並べる（2026-09-26 利用者の要望: 分割画面へ戻って
   // カメラを選び直さずに見返したい）。出し分けは録画再生の画面（vod/page.tsx）と同じ判定で、
   // G・VMS の拠点の HLS 録画再生と Frigate の HLS は開始時刻だけで開ける。それ以外は範囲の

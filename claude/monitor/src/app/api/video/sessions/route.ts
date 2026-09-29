@@ -21,7 +21,7 @@ import { z } from 'zod'
 import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { hasCapability } from '@/lib/edge/capabilities'
 import { videoR2Configured } from '@/lib/storage/video-r2'
-import { livekitEnabled } from '@/lib/livekit'
+import { gvmsSfuEnabled } from '@/lib/livekit'
 import { ACTIVE_STATES, normalizeVodRange } from '@/lib/video/session-logic'
 
 export const dynamic = 'force-dynamic'
@@ -70,8 +70,9 @@ export async function POST(req: Request) {
   if (!c?.recorders || !edge) return NextResponse.json({ error: 'camera_not_found' }, { status: 404 })
 
   if (!hasCapability(edge, kind)) return NextResponse.json({ error: 'not_supported' }, { status: 409 })
-  // HLS は置き場（R2）、SFU は LiveKit が要る。無ければ始めても映らないので受けない
-  if (kind === 'sfu' ? !livekitEnabled() : !videoR2Configured()) {
+  // HLS は置き場（R2）、SFU は LiveKit が要る。無ければ始めても映らないので受けない。
+  // SFU は 2026-09-29 から保留（gvmsSfuEnabled・既定 OFF）。画面に出さないだけでなくここでも断る
+  if (kind === 'sfu' ? !gvmsSfuEnabled() : !videoR2Configured()) {
     return NextResponse.json({ error: kind === 'sfu' ? 'sfu_unavailable' : 'storage_unavailable' }, { status: 503 })
   }
 
