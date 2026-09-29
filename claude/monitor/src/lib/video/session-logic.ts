@@ -139,6 +139,7 @@ export function describeVideoError(error: string | null | undefined): string {
     case 'offline': return 'カメラの映像が届いていません'
     case 'timeout': return '拠点から応答がありません'
     case 'stopped': return '拠点からの送信が止まりました'
+    case 'network': return 'クラウドへつながりません。回線をご確認ください'
     default: return '映像を送れませんでした'
   }
 }

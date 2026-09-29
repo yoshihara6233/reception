@@ -15,6 +15,11 @@
  *
  * 失敗は §5.1 の値で返す。busy / bandwidth / codec_unsupported は fallback=true で、
  * 呼び出し側が静止画ライブへ戻す。
+ *
+ * 回線が一時的に切れたときの自動の再接続は呼び出し側（useAutoReconnect）が attempt を進めて行う。
+ * attempt が変わるとここの後始末が前のセッションを DELETE するので、やり直しで視聴は増えない。
+ * 圏外で DELETE が届かなくても、次の POST でクラウドが同じ利用者・同じカメラの古いセッションを
+ * 止める（api/video/sessions の POST）。
  */
 import { useEffect, useState } from 'react'
 import { VIEWER_KEEPALIVE_MS, shouldFallbackToJpeg, type VideoState } from '@/lib/video/session-logic'
@@ -29,7 +34,10 @@ export interface RemoteVideoRequest {
 export type RemotePhase = 'starting' | 'playing' | 'ended' | 'failed'
 
 export interface RemoteFailure {
-  /** §5.1 の値、または timeout / stopped / not_supported / storage_unavailable / sfu_unavailable */
+  /**
+   * §5.1 の値、または timeout / stopped / not_supported / storage_unavailable / sfu_unavailable /
+   * network（クラウドへ届かない）/ request_rejected（開始の要求が 4xx で断られた）
+   */
   code: string
   fallback: boolean
 }
@@ -127,15 +135,19 @@ export function useRemoteVideoSession(req: RemoteVideoRequest, attempt: number):
         const j = await r.json().catch(() => null) as { id?: string; error?: string } | null
         if (!r.ok || !j?.id) {
           // 名乗りが消えた・置き場が未設定: 静止画ライブで見られるので戻す
-          const code = j?.error === 'not_supported' || j?.error === 'storage_unavailable' || j?.error === 'sfu_unavailable'
-            ? j.error : 'internal'
-          return fail(code, code !== 'internal')
+          if (j?.error === 'not_supported' || j?.error === 'storage_unavailable' || j?.error === 'sfu_unavailable') {
+            return fail(j.error, true)
+          }
+          // 5xx（クラウドの一時的な失敗・中継の 502/504）は自動の再接続でやり直す。
+          // 4xx（ログイン切れ・カメラが無い・範囲の誤り）はやり直しても変わらない
+          return fail(r.status >= 500 ? 'internal' : 'request_rejected', false)
         }
         if (cancelled) { stopSession(j.id); return }
         sessionId = j.id
         void poll(false)
       } catch {
-        fail('internal', false)
+        // 手元の回線が切れていてクラウドへ届かない（圏外・機内モード）
+        fail('network', false)
       }
     })()
 

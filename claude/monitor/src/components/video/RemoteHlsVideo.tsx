@@ -15,8 +15,11 @@ import Hls from 'hls.js'
 interface Props {
   src: string
   live: boolean
-  /** 回復できない再生の失敗 */
-  onFatal: () => void
+  /**
+   * 回復できない再生の失敗。unsupported = このブラウザでは HLS を再生できない（やり直しても同じ）、
+   * playback = 区切りが取れない等（回線が戻れば開き直しで直る。自動の再接続の対象）
+   */
+  onFatal: (kind: 'unsupported' | 'playback') => void
   /** 最初のフレームが出た（初表示までの時間の計測用） */
   onPlaying?: () => void
   /** 録画再生で、いま映している録画の時刻（#EXT-X-PROGRAM-DATE-TIME 由来） */
@@ -57,13 +60,21 @@ export function RemoteHlsVideo({ src, live, onFatal, onPlaying, onPlayingDate, o
     }
 
     if (!Hls.isSupported()) {
-      // Safari は HLS をそのまま再生できる
+      // Safari は HLS をそのまま再生できる。失敗は <video> の error でしか分からないので拾う
+      // （拾わないと、圏外で止まったまま自動の再接続が始まらない）
       if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        const handleError = () => cb.current.onFatal('playback')
+        video.addEventListener('error', handleError)
         video.src = src
         video.play().catch(() => {})
-        return () => { detach(); video.removeAttribute('src'); video.load() }
+        return () => {
+          detach()
+          video.removeEventListener('error', handleError)
+          video.removeAttribute('src')
+          video.load()
+        }
       }
-      cb.current.onFatal()
+      cb.current.onFatal('unsupported')
       return detach
     }
 
@@ -80,7 +91,7 @@ export function RemoteHlsVideo({ src, live, onFatal, onPlaying, onPlayingDate, o
         hls?.recoverMediaError()
         return
       }
-      cb.current.onFatal()
+      cb.current.onFatal('playback')
     })
     return () => { detach(); hls?.destroy() }
   }, [src, live])

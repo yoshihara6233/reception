@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fromJstInput, isLiveEdge, liveHref, toJstInput, vodHref } from './playback-nav'
+import { fromJstInput, isLiveEdge, liveHref, resumeRange, toJstInput, vodHref } from './playback-nav'
 
 describe('JST の入力欄との変換', () => {
   it('ISO を JST の datetime-local に直し、戻すと同じ時刻になる', () => {
@@ -35,5 +35,29 @@ describe('行き先', () => {
   })
   it('ライブへ戻る先', () => {
     expect(liveHref('s1', 'c1')).toBe('/stores/s1/cam/c1/live')
+  })
+})
+
+describe('切れたところから開き直す範囲', () => {
+  const range = { from: '2026-09-29T00:00:00.000Z', to: '2026-09-29T01:00:00.000Z' }
+
+  it('最後に映していた録画の時刻から始め、終わりは保つ', () => {
+    expect(resumeRange(range, new Date('2026-09-29T00:12:34.000Z')))
+      .toEqual({ from: '2026-09-29T00:12:34.000Z', to: '2026-09-29T01:00:00.000Z' })
+  })
+
+  it('まだ映していなければ、いまの範囲のまま', () => {
+    expect(resumeRange(range, null)).toEqual(range)
+    expect(resumeRange(range, new Date(Number.NaN))).toEqual(range)
+  })
+
+  it('終わりを過ぎていたら終わりは既定（60 分）に任せる', () => {
+    expect(resumeRange(range, new Date('2026-09-29T01:00:00.000Z')))
+      .toEqual({ from: '2026-09-29T01:00:00.000Z', to: undefined })
+  })
+
+  it('終わりの指定が無ければ無いまま', () => {
+    expect(resumeRange({ from: range.from, to: undefined }, new Date('2026-09-29T00:05:00.000Z')))
+      .toEqual({ from: '2026-09-29T00:05:00.000Z', to: undefined })
   })
 })
