@@ -26,6 +26,68 @@ export const VIEWER_STALE_MS = 25_000
 /** 画面が生存を知らせる間隔。 */
 export const VIEWER_KEEPALIVE_MS = 10_000
 
+/**
+ * 見始めの見張りの間隔（画面 → GET /api/video/sessions/<id>）。
+ *
+ * 1 秒ごとだと、プレイリストや部屋の用意ができてから画面が気付くまで平均 0.5 秒・最大 1 秒
+ * 待つ（2026-09-29 の本番の計測で、録画再生の 7 秒のうちクラウドと画面の側が約 3 秒）。
+ * 始めの数秒だけ詰め、長引いたら戻す（映らない拠点へ 250 ms で叩き続けない）。
+ *   - 0〜5 秒: 250 ms
+ *   - 5〜10 秒: 500 ms
+ *   - それ以後: 1 秒
+ */
+export const START_POLL_FAST_MS = 250
+export const START_POLL_FAST_UNTIL_MS = 5_000
+export const START_POLL_MID_MS = 500
+export const START_POLL_MID_UNTIL_MS = 10_000
+export const START_POLL_SLOW_MS = 1_000
+
+export function startPollDelayMs(elapsedMs: number): number {
+  if (!(elapsedMs >= 0)) return START_POLL_FAST_MS
+  if (elapsedMs < START_POLL_FAST_UNTIL_MS) return START_POLL_FAST_MS
+  if (elapsedMs < START_POLL_MID_UNTIL_MS) return START_POLL_MID_MS
+  return START_POLL_SLOW_MS
+}
+
+/**
+ * 画面の生存（viewer_seen_at）を書き直すか。見始めは 250 ms ごとに見張りが来るので、
+ * 毎回は書かない（DB の書き込みと応答の待ちを増やさない）。止める判定は 25 秒
+ * （VIEWER_STALE_MS）なので、数秒ぶん古くても判定は変わらない。
+ */
+export const VIEWER_SEEN_WRITE_EVERY_MS = 3_000
+
+export function shouldTouchViewerSeen(seenIso: string | null | undefined, nowMs: number): boolean {
+  if (!seenIso) return true
+  const seen = new Date(seenIso).getTime()
+  if (Number.isNaN(seen)) return true
+  return nowMs - seen >= VIEWER_SEEN_WRITE_EVERY_MS
+}
+
+/**
+ * SFU の視聴者がつなぐ部屋。**拠点が送り始める前から**返す（2026-09-29）。
+ *
+ * 以前は「拠点が部屋へ映像を送り始めたら」視聴トークンを渡していたため、画面は
+ * 拠点の WHIP の交渉（約 3 秒）が終わってから、見張りの周期を待ち、部屋へつなぎ（ICE・DTLS）、
+ * さらに次のキーフレームを待っていた。拠点はカメラの映像を変換せずに中継するときは
+ * キーフレームを求められない（PLI に答えられない）ので、遅れて入った視聴者は次の
+ * キーフレームまで映らない。先に部屋へ入っておけば、拠点の最初のキーフレームから映る。
+ *
+ * 部屋の名前はセッションから決まる（gvms_<session_id>）ので、開始の指示を渡す前
+ * （requested）でも返せる。止める途中・終わったセッションには返さない。
+ */
+export function sfuViewerRoom(
+  row: { state: VideoState; stop_requested_at: string | null; room: string | null },
+  sessionId: string,
+): string | null {
+  if (!isActive(row.state) || row.stop_requested_at) return null
+  return row.room ?? gvmsRoomForSession(sessionId)
+}
+
+/** G・VMS の視聴 1 回の部屋名（§5.4.1。従来のエッジ向けの cam_ と分ける）。 */
+export function gvmsRoomForSession(sessionId: string): string {
+  return `gvms_${sessionId}`
+}
+
 /** 録画再生 1 セッションの上限（§5.3.1）。 */
 export const VOD_MAX_SPAN_MS = 4 * 60 * 60 * 1000
 /** `to` を省いたときの長さ（§5.3.1）。 */

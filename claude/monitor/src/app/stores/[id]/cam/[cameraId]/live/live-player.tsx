@@ -149,6 +149,16 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
   // 遠隔 HLS を拠点が断った（busy 等）→ 静止画ライブへ退避した理由。セッション限り・永続化しない。
   const [remoteFallback, setRemoteFallback] = useState<string | null>(null)
 
+  // G・VMS の拠点が SFU を名乗るときは、遠隔ライブ（SFU）の部品（livekit-client を含む）を
+  // 画面が落ち着いてから先に読んでおく。SFU を押してから読むと、読み終わるまで視聴セッションの
+  // 開始（POST）も始まらず、iPhone の回線では数百 ms〜1 秒ほど遅れる。
+  // SFU を名乗らない拠点では読まない（従来どおり livekit-client を載せない）。
+  useEffect(() => {
+    if (!sfuEnabled || !remoteSfu) return
+    const t = setTimeout(() => { void import('./live-remote-sfu-mode').catch(() => {}) }, 1_500)
+    return () => clearTimeout(t)
+  }, [sfuEnabled, remoteSfu])
+
   // Hydrate pref from localStorage on mount (avoids SSR mismatch).
   useEffect(() => {
     const prefer = loadMode(cameraId, defaultMode)

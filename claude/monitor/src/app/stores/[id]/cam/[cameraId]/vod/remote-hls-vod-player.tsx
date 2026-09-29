@@ -16,6 +16,9 @@
  *
  * 操作の並びはライブの画面と共通（PlaybackBar）。今より先へ進めたときと「ライブに戻る」は
  * 同じカメラのライブへ移る（2026-09-26 利用者の要望）。
+ *
+ * 初表示までの時間（ttff）を、最初の表示と時刻の指定し直しのたびに送る（transport: hls_vod_remote）。
+ * 自動の再接続では送らない（値が崩れる）。内訳（セッションが開けた・プレイリストが届いた）も添える。
  */
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -60,14 +63,34 @@ export default function RemoteHlsVodPlayer({ storeId, cameraId, initialFrom, ini
   const [playedAttempt, setPlayedAttempt] = useState<number | null>(null)
   const pausedRef = useRef<{ at: number; date: Date | null } | null>(null)
   const playingRef = useRef<Date | null>(null)
+  const [mountedAt] = useState(() => Date.now())
+  /** 初表示までの時間の起点。undefined = 最初の表示（mountedAt から）・null = 測らない */
+  const ttffFrom = useRef<number | null | undefined>(undefined)
 
   const req = useMemo(() => ({ cameraId, kind: 'hls_vod' as const, from: range.from, to: range.to }), [cameraId, range])
-  const { phase, src, failure } = useRemoteVideoSession(req, attempt)
+  const { phase, src, failure, timing } = useRemoteVideoSession(req, attempt)
+
+  const onFirstFrame = () => {
+    setPlayedAttempt(attempt)
+    const from = ttffFrom.current === undefined ? mountedAt : ttffFrom.current
+    ttffFrom.current = null
+    if (from === null) return
+    void fetch('/api/metrics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        kind: 'ttff_ms', storeId, cameraId, value: Date.now() - from,
+        meta: { transport: 'hls_vod_remote', session_ms: timing.sessionMs, ready_ms: timing.readyMs },
+      }),
+      keepalive: true,
+    }).catch(() => {})
+  }
 
   /** 指定の時刻から開き直す（to は指定し直しのたびに既定の 60 分に戻す）。 */
   const openAt = useCallback((iso: string) => {
     // 今（か今より先）は録画ではまだ送れない → ライブへ
     if (isLiveEdge(iso)) { router.push(liveHref(storeId, cameraId)); return }
+    ttffFrom.current = Date.now()
     setPlayFailed(null)
     setPlaying(null)
     playingRef.current = null
@@ -82,6 +105,7 @@ export default function RemoteHlsVodPlayer({ storeId, cameraId, initialFrom, ini
    */
   const resume = useCallback(() => {
     const next = resumeRange(range, playingRef.current)
+    ttffFrom.current = null
     setPlayFailed(null)
     setPlaying(null)
     playingRef.current = null
@@ -142,7 +166,7 @@ export default function RemoteHlsVodPlayer({ storeId, cameraId, initialFrom, ini
             src={src}
             live={false}
             onFatal={(kind) => setPlayFailed(kind === 'unsupported' ? 'play_unsupported' : 'play_failed')}
-            onPlaying={() => setPlayedAttempt(attempt)}
+            onPlaying={onFirstFrame}
             onPlayingDate={(d) => { playingRef.current = d; setPlaying(d) }}
             onPauseChange={onPauseChange}
           />

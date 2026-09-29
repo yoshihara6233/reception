@@ -9,6 +9,7 @@ import { IngressClient, IngressInput, RoomServiceClient } from 'livekit-server-s
 import { randomUUID } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { EdgeCommand } from '@/lib/edge/commands'
+import { gvmsRoomForSession } from '@/lib/video/session-logic'
 
 const INGRESS_INACTIVE = 0            // livekit-server-sdk: 0=INACTIVE
 const RETRY_BACKOFF_MS = 1500
@@ -121,10 +122,8 @@ export async function dispatchStopSfu(service: SupabaseClient, edgeId: string): 
 // 送り先の URL はストリームキー入りの自己認証 URL なので、whip_bearer は使わない。
 // **URL は秘密**: DB・ログ・API 応答に出さない。DB には ingress_id だけを置く。
 
-/** G・VMS の視聴 1 回の部屋名。 */
-export function gvmsRoomForSession(sessionId: string): string {
-  return `gvms_${sessionId}`
-}
+// 部屋名の決まり（gvmsRoomForSession）は純粋な部分（session-logic.ts）に置く。
+// 視聴画面へ開始の指示より先に部屋を教える（/api/video/sessions/[id]）のにも使うため。
 
 function ingressClient(): IngressClient {
   return new IngressClient(livekitHttpsUrl(), process.env.LIVEKIT_API_KEY!, process.env.LIVEKIT_API_SECRET!)
@@ -164,16 +163,5 @@ export async function deleteGvmsIngress(ingressId: string): Promise<boolean> {
   } catch (e) {
     const status = (e as { status?: number }).status
     return status === 404
-  }
-}
-
-/** 部屋に映像を送っている参加者（拠点）が居るか。部屋が無い・API に届かないときは false。 */
-export async function roomHasPublisher(room: string): Promise<boolean> {
-  try {
-    const rsc = new RoomServiceClient(livekitHttpsUrl(), process.env.LIVEKIT_API_KEY!, process.env.LIVEKIT_API_SECRET!)
-    const participants = await rsc.listParticipants(room)
-    return participants.some((p) => (p.tracks ?? []).length > 0)
-  } catch {
-    return false
   }
 }
