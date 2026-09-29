@@ -68,6 +68,9 @@ interface EdgePayload {
   capabilities: string[] | null
   video_sessions_now: number | null
   video_kbps: number | null
+  // 拠点の https の名前と LAN の IP（GVMS_CLOUD_SPEC §10・D-2-20）
+  site_hostname: string | null
+  site_lan_ip: string | null
   stores: { name: string; area_code: string | null }
   recorders: Recorder[]
 }
@@ -193,6 +196,11 @@ export function EdgeDetail({ edge, bundles = [] }: { edge: EdgePayload; bundles?
         const rec = edge.recorders.find((r) => r.vendor === 'nvms')
         return rec ? <ConfigPushPanel recorder={rec} appliedVersion={edge.applied_config_version} /> : null
       })()}
+
+      {/* 拠点の https（§10）— nvmsd アップリンクで tls を名乗る拠点だけ */}
+      {edge.agent_version?.startsWith('nvmsd/') && (
+        <SiteHttpsPanel edge={edge} />
+      )}
 
       {/* Recorders */}
       <RecorderList edgeId={edge.id} recorders={edge.recorders} />
@@ -734,6 +742,92 @@ function ConfigPushPanel({ recorder, appliedVersion }: { recorder: Recorder; app
         <button onClick={save} disabled={busy}
                 className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white disabled:opacity-50">
           {busy ? '保存中…' : '設定を配信'}
+        </button>
+      </div>
+    </section>
+  )
+}
+
+/**
+ * 拠点の https（GVMS_CLOUD_SPEC §10・D-2-20）。ラベルと LAN の IP を決めると、名前
+ * <ラベル>.sites.genesis-edge.com の A レコードを置き、設定の配送で拠点へ渡す。拠点は
+ * NVMS_TLS_ACME=cloud のときだけ tls を名乗り、Let's Encrypt の証明書を自動で取る。
+ */
+function SiteHttpsPanel({ edge }: { edge: EdgePayload }) {
+  const router = useRouter()
+  const announced = (edge.capabilities ?? []).includes('tls')
+  const cur = edge.site_hostname
+  const initialLabel = cur ? cur.split('.')[0] : ''
+  const [label, setLabel] = useState(initialLabel)
+  const [ip, setIp] = useState(edge.site_lan_ip ?? '')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+
+  const errText: Record<string, string> = {
+    invalid_label: 'ラベルは英小文字・数字・ハイフン（先頭と末尾は英数字・63 文字まで）です',
+    invalid_ip: 'LAN の IPv4（10.x / 172.16〜31.x / 192.168.x）を入れてください',
+    hostname_taken: 'その名前は別の拠点が使っています',
+    dns_unavailable: 'クラウドに DNS の設定（CLOUDFLARE_API_TOKEN / ZONE_ID）がありません',
+    dns_error: 'DNS の書き込みに失敗しました（ログを確認）',
+  }
+
+  async function save() {
+    setBusy(true); setMsg(null); setErr(null)
+    try {
+      const res = await fetch(`/api/admin/edges/${edge.id}/site-host`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label, lan_ip: ip }),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(errText[j.error] ?? (j.error ?? `保存失敗: ${res.status}`))
+      setMsg(`名前を ${j.hostname} にしました。拠点が 10 分以内に証明書を取ります`)
+      router.refresh()
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)) } finally { setBusy(false) }
+  }
+  async function clear() {
+    if (!confirm('名前を外します。拠点は証明書の自動取得を止め、手元の証明書は期限まで使います。\n\nよろしいですか？')) return
+    setBusy(true); setMsg(null); setErr(null)
+    try {
+      const res = await fetch(`/api/admin/edges/${edge.id}/site-host`, { method: 'DELETE' })
+      if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(errText[j.error] ?? `失敗: ${res.status}`) }
+      setLabel(''); setIp(''); setMsg('名前を外しました')
+      router.refresh()
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)) } finally { setBusy(false) }
+  }
+
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white p-5 text-sm">
+      <div className="mb-1 flex items-center justify-between">
+        <h2 className="font-bold text-slate-900">拠点の https</h2>
+        <span className={'rounded px-2 py-0.5 text-[11px] font-semibold ' + (announced ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600')}>
+          {announced ? '拠点が自動取得を許可' : '拠点は未対応（NVMS_TLS_ACME=cloud が必要）'}
+        </span>
+      </div>
+      <p className="mb-3 text-[11px] text-slate-500">
+        拠点の画面を警告なしの https で開くための名前です。ラベルと LAN の IP を決めると、
+        <span className="font-mono">&lt;ラベル&gt;.sites.genesis-edge.com</span> を IP へ向け、拠点が Let&apos;s Encrypt の証明書を自動で取ります
+        （クラウドの SSO を使う拠点に必要）。
+      </p>
+      {cur && (
+        <p className="mb-3 text-xs">
+          今の名前: <span className="font-mono">{cur}</span>（{edge.site_lan_ip}）
+          {' '}<a className="text-blue-700 underline" href={`https://${cur}:8443/`} target="_blank" rel="noreferrer">開く</a>
+        </p>
+      )}
+      <div className="grid gap-3 md:grid-cols-2">
+        <label className="block text-xs"><span className="mb-1 block font-medium text-slate-600">ラベル（例: site200）</span>
+          <input value={label} onChange={(e) => setLabel(e.target.value)} className="w-full rounded border border-slate-300 px-2 py-1 font-mono text-xs" placeholder="site200" />
+        </label>
+        <label className="block text-xs"><span className="mb-1 block font-medium text-slate-600">拠点の LAN の IPv4</span>
+          <input value={ip} onChange={(e) => setIp(e.target.value)} className="w-full rounded border border-slate-300 px-2 py-1 font-mono text-xs" placeholder="192.168.0.200" />
+        </label>
+      </div>
+      <div className="mt-3 flex items-center gap-3">
+        {err && <span className="mr-auto text-xs text-red-700">{err}</span>}
+        {msg && !err && <span className="mr-auto text-xs text-emerald-700">{msg}</span>}
+        {cur && <button type="button" onClick={clear} disabled={busy} className="rounded border border-slate-300 px-3 py-1.5 text-xs text-slate-700 disabled:opacity-50">名前を外す</button>}
+        <button type="button" onClick={save} disabled={busy || !label || !ip} className="rounded bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">
+          {busy ? '保存中…' : '名前を決める'}
         </button>
       </div>
     </section>
