@@ -32,7 +32,7 @@ export default function RemoteHlsLiveMode({ cameraId, storeId, onFallback }: Pro
   const [playFailed, setPlayFailed] = useState<string | null>(null)
   /** 映像が出た attempt（開き直すと外れる） */
   const [playedAttempt, setPlayedAttempt] = useState<number | null>(null)
-  const { phase, src, failure } = useRemoteVideoSession({ cameraId, kind: 'hls_live' }, attempt)
+  const { phase, src, failure, timing } = useRemoteVideoSession({ cameraId, kind: 'hls_live' }, attempt)
   const [startedAt] = useState(() => Date.now())
   const ttffSent = useRef(false)
 
@@ -52,7 +52,11 @@ export default function RemoteHlsLiveMode({ cameraId, storeId, onFallback }: Pro
     void fetch('/api/metrics', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ kind: 'ttff_ms', storeId, cameraId, value: Date.now() - startedAt, meta: { transport: 'hls_remote' } }),
+      // 内訳（ms・見張りの始まりから）: session=セッションが開けた / ready=プレイリストが届いた
+      body: JSON.stringify({
+        kind: 'ttff_ms', storeId, cameraId, value: Date.now() - startedAt,
+        meta: { transport: 'hls_remote', session_ms: timing.sessionMs, ready_ms: timing.readyMs },
+      }),
       keepalive: true,
     }).catch(() => {})
   }

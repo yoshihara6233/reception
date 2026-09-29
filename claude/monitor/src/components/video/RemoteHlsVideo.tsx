@@ -8,6 +8,17 @@
  *
  * ライブは hls.js の liveSyncDurationCount を 2 に詰める（仕様 §5.6 の推奨。既定 3 より
  * 遅延が区切り 1 本ぶん縮む。1 にすると区切りの到着の揺らぎで止まりやすい）。
+ *
+ * 録画再生は**窓の頭（指定の時刻）から**再生する（startPosition: 0）。拠点のプレイリストは
+ * 録画が続く間 #EXT-X-ENDLIST が無く、hls.js は生の配信とみなして終わりから区切り 3 本ぶん
+ * 手前（4 秒の区切りで 12 秒・窓が進んでいればさらに先）から始めてしまう。拠点 0.1.75 からは
+ * #EXT-X-START:TIME-OFFSET=0 も書くので同じ位置になるが、それより前の拠点でも頭から映すため
+ * 明示する（§5.3.2）。頭から始めると、プレイリストが届いた時点の区切り 1 本目からすぐ映る。
+ *
+ * iPhone（iOS 17.1 以降）は ManagedMediaSource があるので hls.js で再生する
+ * （hls.js 1.5 以降の既定 preferManagedMediaSource: true。Hls.isSupported() が true になる）。
+ * Safari の素の HLS は再生を始める前に区切りを多めに待つため。ManagedMediaSource が無い
+ * 古い iOS だけ素の HLS へ落とす。
  */
 import { useEffect, useRef } from 'react'
 import Hls from 'hls.js'
@@ -78,7 +89,7 @@ export function RemoteHlsVideo({ src, live, onFatal, onPlaying, onPlayingDate, o
       return detach
     }
 
-    hls = new Hls(live ? { liveSyncDurationCount: 2 } : {})
+    hls = new Hls(live ? { liveSyncDurationCount: 2 } : { startPosition: 0 })
     let mediaRetried = false
     hls.loadSource(src)
     hls.attachMedia(video)

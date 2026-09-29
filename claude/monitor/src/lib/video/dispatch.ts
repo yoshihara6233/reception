@@ -136,6 +136,9 @@ async function buildStart(row: SessionRow, edgeId: string): Promise<BuiltStart |
   if (row.kind === 'sfu') {
     // 受け口を作ってから指示を出す（§5.4.1）。作れなければ失敗として閉じる
     if (!livekitEnabled()) return null
+    // 受け口の作成は拠点が指示を受け取るまでの道のりに乗る（拠点のポーリングの応答を待たせる）。
+    // 見始めの時間の内訳を追えるよう、かかった時間だけを残す（送り先の URL は載せない）
+    const t0 = Date.now()
     let ing
     try {
       ing = await createGvmsIngress(row.id, edgeId)
@@ -143,6 +146,7 @@ async function buildStart(row: SessionRow, edgeId: string): Promise<BuiltStart |
       console.error('[video/dispatch] SFU の受け口を作れません:', (e as Error).message)
       return null
     }
+    console.info(`[video/dispatch] SFU の受け口を作成 session=${row.id} ms=${Date.now() - t0}`)
     return {
       cmd: {
         action: 'start_sfu', request_id, session_id: row.id, camera_id: row.camera_id,

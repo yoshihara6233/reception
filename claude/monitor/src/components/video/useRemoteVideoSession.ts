@@ -4,14 +4,19 @@
  * 遠隔視聴のセッションを開いて、再生できるようになるまでを見張る（GVMS_CLOUD_SPEC §5.1・§5.2.2）。
  *
  *   1. POST /api/video/sessions でセッションを開く
- *   2. GET /api/video/sessions/<id> を 1 秒ごとに見て、プレイリストが届く（ready）のを待つ。
- *      **hls.js は 404 を取り直さない**ので、届く前に再生を始めない
+ *   2. GET /api/video/sessions/<id> を見張って、プレイリストが届く（ready）のを待つ。
+ *      **hls.js は 404 を取り直さない**ので、届く前に再生を始めない。
+ *      見張りの間隔は始めの 5 秒は 250 ms、10 秒までは 500 ms、以後 1 秒（startPollDelayMs）。
+ *      1 秒ごとだと届いてから気付くまで平均 0.5 秒待っていた（2026-09-29 の計測）
  *   3. 再生中も 10 秒ごとに GET する。これが画面の生存の合図で、途切れるとクラウドは
  *      拠点へ stop_video を渡す（閉じたのに送り続けさせない）
  *   4. 画面を閉じたら DELETE（ページを離れるときも keepalive で送る）
  *
- * SFU（§5.4）は、拠点が部屋へ送り始めたら ready になり、購読専用のトークン（livekit）が届く。
- * 映像は LiveKit へつなぐ側（live-remote-sfu-mode.tsx）が受ける。見張りと停止はここで共通。
+ * SFU（§5.4）は、拠点が送り始める**前から** ready になり、購読専用のトークン（livekit）が届く。
+ * 画面は先に部屋へ入って拠点の映像を待つ（拠点の WHIP の交渉と並べる）。映像は LiveKit へ
+ * つなぐ側（live-remote-sfu-mode.tsx）が受ける。見張りと停止はここで共通。
+ * SFU は ready の時点ではまだ映っていないので、開始から START_TIMEOUT_MS までは 1 秒ごとに
+ * 見張りを続ける（拠点が送り出しに失敗した報告 §5.5 をすぐ画面へ出すため）。
  *
  * 失敗は §5.1 の値で返す。busy / bandwidth / codec_unsupported は fallback=true で、
  * 呼び出し側が静止画ライブへ戻す。
@@ -22,7 +27,9 @@
  * 止める（api/video/sessions の POST）。
  */
 import { useEffect, useState } from 'react'
-import { VIEWER_KEEPALIVE_MS, shouldFallbackToJpeg, type VideoState } from '@/lib/video/session-logic'
+import {
+  START_POLL_SLOW_MS, VIEWER_KEEPALIVE_MS, shouldFallbackToJpeg, startPollDelayMs, type VideoState,
+} from '@/lib/video/session-logic'
 
 export interface RemoteVideoRequest {
   cameraId: string
@@ -51,9 +58,8 @@ interface StatusResp {
   livekit?: LiveKitJoin
 }
 
-const START_POLL_MS = 1_000
 /** 開始の指示から映像が届くまで待つ上限。受け入れ基準は 10 秒以内（§7-1・§7-2）。余裕を見て 25 秒。 */
-const START_TIMEOUT_MS = 25_000
+export const START_TIMEOUT_MS = 25_000
 
 function stopSession(id: string): void {
   void fetch(`/api/video/sessions/${id}`, { method: 'DELETE', keepalive: true }).catch(() => {})
@@ -68,9 +74,18 @@ interface SessionView {
   /** SFU のときだけ。最初に届いたものを持ち続ける（取り直すたびにつなぎ直さない） */
   livekit: LiveKitJoin | null
   failure: RemoteFailure | null
+  /**
+   * 見始めの内訳（この開き直しの始まりからの ms）。初表示までの時間の計測（ttff）に添えて、
+   * どこで時間を使ったかを後から追えるようにする。
+   *  - sessionMs: セッションが開けた（POST の応答）
+   *  - readyMs: 再生を始められると分かった（HLS はプレイリストが届いた・SFU は部屋へ入れる）
+   */
+  timing: { sessionMs: number | null; readyMs: number | null }
 }
 
-const STARTING: SessionView = { phase: 'starting', src: null, livekit: null, failure: null }
+const STARTING: SessionView = {
+  phase: 'starting', src: null, livekit: null, failure: null, timing: { sessionMs: null, readyMs: null },
+}
 
 export function useRemoteVideoSession(req: RemoteVideoRequest, attempt: number): SessionView {
   const { cameraId, kind, from, to } = req
@@ -83,6 +98,7 @@ export function useRemoteVideoSession(req: RemoteVideoRequest, attempt: number):
     let cancelled = false
     let timer: ReturnType<typeof setTimeout> | null = null
     let sessionId: string | null = null
+    let sessionMs: number | null = null
     const startedAt = Date.now()
     const update = (patch: Partial<SessionView>) => {
       if (cancelled) return
@@ -107,23 +123,35 @@ export function useRemoteVideoSession(req: RemoteVideoRequest, attempt: number):
       if (!ready) {
         if (s?.ready && kind === 'sfu') {
           if (!s.livekit) return fail('internal', false)
-          update({ livekit: s.livekit, phase: 'playing' })
-          timer = setTimeout(() => void poll(true), VIEWER_KEEPALIVE_MS)
+          update({ livekit: s.livekit, phase: 'playing', timing: { sessionMs, readyMs: Date.now() - startedAt } })
+          timer = setTimeout(() => void poll(true), keepaliveDelay())
           return
         }
         if (s?.ready) {
-          update({ src: `/api/video/sessions/${sessionId}/hls/index.m3u8`, phase: s.state === 'ended' ? 'ended' : 'playing' })
-          timer = setTimeout(() => void poll(true), VIEWER_KEEPALIVE_MS)
+          update({
+            src: `/api/video/sessions/${sessionId}/hls/index.m3u8`,
+            phase: s.state === 'ended' ? 'ended' : 'playing',
+            timing: { sessionMs, readyMs: Date.now() - startedAt },
+          })
+          timer = setTimeout(() => void poll(true), keepaliveDelay())
           return
         }
         if (s?.state === 'ended') return fail('no_recording', false)
-        if (Date.now() - startedAt > START_TIMEOUT_MS) return fail('timeout', false)
-        timer = setTimeout(() => void poll(false), START_POLL_MS)
+        const elapsed = Date.now() - startedAt
+        if (elapsed > START_TIMEOUT_MS) return fail('timeout', false)
+        timer = setTimeout(() => void poll(false), startPollDelayMs(elapsed))
         return
       }
       if (s?.state === 'ended') update({ phase: 'ended' })
-      timer = setTimeout(() => void poll(true), VIEWER_KEEPALIVE_MS)
+      timer = setTimeout(() => void poll(true), keepaliveDelay())
     }
+
+    /**
+     * 再生を始めてからの見張りの間隔。SFU は ready の時点ではまだ映っていない（先に部屋へ
+     * 入っただけ）ので、開始の待ちの上限までは 1 秒ごとに見て、拠点の失敗の報告を早く拾う。
+     */
+    const keepaliveDelay = () =>
+      kind === 'sfu' && Date.now() - startedAt < START_TIMEOUT_MS ? START_POLL_SLOW_MS : VIEWER_KEEPALIVE_MS
 
     void (async () => {
       try {
@@ -144,6 +172,7 @@ export function useRemoteVideoSession(req: RemoteVideoRequest, attempt: number):
         }
         if (cancelled) { stopSession(j.id); return }
         sessionId = j.id
+        sessionMs = Date.now() - startedAt
         void poll(false)
       } catch {
         // 手元の回線が切れていてクラウドへ届かない（圏外・機内モード）

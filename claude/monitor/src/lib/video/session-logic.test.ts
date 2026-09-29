@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
-  REFRESH_EVERY_MS, VIEWER_STALE_MS, describeVideoError, normalizeVideoError, normalizeVodRange,
-  parseHlsPath, pickVideoAction, shouldFallbackToJpeg, type DispatchRow,
+  REFRESH_EVERY_MS, VIEWER_SEEN_WRITE_EVERY_MS, VIEWER_STALE_MS, describeVideoError, gvmsRoomForSession,
+  normalizeVideoError, normalizeVodRange, parseHlsPath, pickVideoAction, sfuViewerRoom,
+  shouldFallbackToJpeg, shouldTouchViewerSeen, startPollDelayMs, type DispatchRow,
 } from './session-logic'
 
 const NOW = Date.parse('2026-10-01T01:00:00Z')
@@ -112,5 +113,62 @@ describe('normalizeVodRange（§5.3.1）', () => {
   it('逆転・不正は null', () => {
     expect(normalizeVodRange('2026-10-01T10:00:00Z', '2026-10-01T09:00:00Z')).toBeNull()
     expect(normalizeVodRange('not-a-date')).toBeNull()
+  })
+})
+
+describe('startPollDelayMs（見始めの見張りの間隔）', () => {
+  it('始めの 5 秒は 250 ms', () => {
+    expect(startPollDelayMs(0)).toBe(250)
+    expect(startPollDelayMs(4_999)).toBe(250)
+  })
+  it('5〜10 秒は 500 ms、以後 1 秒', () => {
+    expect(startPollDelayMs(5_000)).toBe(500)
+    expect(startPollDelayMs(9_999)).toBe(500)
+    expect(startPollDelayMs(10_000)).toBe(1_000)
+    expect(startPollDelayMs(60_000)).toBe(1_000)
+  })
+  it('時計が戻った・値が壊れているときは詰めた間隔（止まらない）', () => {
+    expect(startPollDelayMs(-5)).toBe(250)
+    expect(startPollDelayMs(Number.NaN)).toBe(250)
+  })
+  it('開始の上限（25 秒）までの見張りの回数は 1 秒ごとの 3 倍に収まる', () => {
+    let t = 0
+    let n = 0
+    while (t <= 25_000) { t += startPollDelayMs(t); n++ }
+    // 250 ms × 20 + 500 ms × 10 + 1 s × 15 ≒ 45 回（従来は 25 回）
+    expect(n).toBeLessThanOrEqual(3 * 25)
+  })
+})
+
+describe('shouldTouchViewerSeen（画面の生存の書き直し）', () => {
+  it('書いたことが無ければ書く', () => {
+    expect(shouldTouchViewerSeen(null, NOW)).toBe(true)
+    expect(shouldTouchViewerSeen('broken', NOW)).toBe(true)
+  })
+  it('3 秒以内に書いていれば書かない', () => {
+    expect(shouldTouchViewerSeen(ago(250), NOW)).toBe(false)
+    expect(shouldTouchViewerSeen(ago(VIEWER_SEEN_WRITE_EVERY_MS - 1), NOW)).toBe(false)
+  })
+  it('3 秒たてば書く（止める判定の 25 秒より十分短い）', () => {
+    expect(shouldTouchViewerSeen(ago(VIEWER_SEEN_WRITE_EVERY_MS), NOW)).toBe(true)
+    expect(VIEWER_SEEN_WRITE_EVERY_MS * 5).toBeLessThan(VIEWER_STALE_MS)
+  })
+})
+
+describe('sfuViewerRoom（SFU の視聴者を先に部屋へ入れる）', () => {
+  const SID = '5f0a0000-0000-4000-8000-000000000001'
+  it('開始の指示を渡す前（requested）でもセッションの部屋を返す', () => {
+    expect(sfuViewerRoom({ state: 'requested', stop_requested_at: null, room: null }, SID)).toBe(`gvms_${SID}`)
+    expect(gvmsRoomForSession(SID)).toBe(`gvms_${SID}`)
+  })
+  it('指示を渡したあとは行の部屋を返す', () => {
+    expect(sfuViewerRoom({ state: 'dispatched', stop_requested_at: null, room: 'gvms_x' }, SID)).toBe('gvms_x')
+    expect(sfuViewerRoom({ state: 'started', stop_requested_at: null, room: 'gvms_x' }, SID)).toBe('gvms_x')
+  })
+  it('止める途中・終わったセッションには返さない', () => {
+    expect(sfuViewerRoom({ state: 'started', stop_requested_at: ago(1), room: 'gvms_x' }, SID)).toBeNull()
+    for (const state of ['ended', 'stopped', 'error'] as const) {
+      expect(sfuViewerRoom({ state, stop_requested_at: null, room: 'gvms_x' }, SID)).toBeNull()
+    }
   })
 })

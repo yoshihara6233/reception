@@ -51,11 +51,20 @@ export async function POST(req: Request) {
   if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
   const { camera_id, kind, stream } = parsed.data
 
-  const { data: cam } = await supa
-    .from('recorder_cameras')
-    .select('id, recorders ( edge_id, stores: edge_devices ( store_id, agent_version, capabilities ) )')
-    .eq('id', camera_id)
-    .maybeSingle()
+  // カメラの可視性（RLS）と表示名は互いに依らないので並べて引く（見始めの待ちを 1 往復減らす）。
+  // どちらもセッションクライアント（RLS 配下）で、service role はカメラが見えてから組み立てる
+  const [{ data: cam }, { data: me }] = await Promise.all([
+    supa
+      .from('recorder_cameras')
+      .select('id, recorders ( edge_id, stores: edge_devices ( store_id, agent_version, capabilities ) )')
+      .eq('id', camera_id)
+      .maybeSingle(),
+    supa
+      .from('admin_users')
+      .select('display_name, email')
+      .eq('auth_user_id', user.id)
+      .maybeSingle(),
+  ])
   const c = cam as unknown as CameraRow | null
   const edge = c?.recorders?.stores ?? null
   if (!c?.recorders || !edge) return NextResponse.json({ error: 'camera_not_found' }, { status: 404 })
@@ -73,11 +82,6 @@ export async function POST(req: Request) {
   }
 
   // 現場の視聴記録に残る名前（§5.1 viewer）。表示名が無ければメールの @ より前
-  const { data: me } = await supa
-    .from('admin_users')
-    .select('display_name, email')
-    .eq('auth_user_id', user.id)
-    .maybeSingle()
   const profile = me as { display_name: string | null; email: string | null } | null
   const viewerName = (profile?.display_name?.trim()
     || (profile?.email ?? user.email ?? '').split('@')[0]
