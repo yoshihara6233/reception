@@ -41,7 +41,7 @@ async function expectDenied(page: Page, path: string) {
 test.describe('システム管理者（super_admin）', () => {
   test.use({ storageState: storageStatePath('super') })
 
-  test('操作中テナント未選択では店舗一覧がゲート表示になる', async ({ page }) => {
+  test('操作中テナント未選択では拠点一覧がゲート表示になる', async ({ page }) => {
     await page.goto('/stores')
     await expect(page.getByText(TENANT_GATE)).toBeVisible()
   })
@@ -66,18 +66,18 @@ test.describe('システム管理者（super_admin）', () => {
 test.describe('テナントA 管理者（tenant_admin）', () => {
   test.use({ storageState: storageStatePath('adminA') })
 
-  test('自テナントの店舗だけが見える', async ({ page }) => {
+  test('自テナントの拠点だけが見える', async ({ page }) => {
     await page.goto('/stores')
     await expect(page.getByText(STORE_A1).first()).toBeVisible()
     await expect(page.getByText(STORE_A2).first()).toBeVisible()
-    await expect(page.getByText(STORE_B1), '他テナントの店舗が見えています').toHaveCount(0)
+    await expect(page.getByText(STORE_B1), '他テナントの拠点が見えています').toHaveCount(0)
   })
 
   test('左メニューに②運営管理が出ない', async ({ page }) => {
     await page.goto('/admin/reports/usage')
     const menu = sectionMenu(page)
     // ①設定は使えること（メニューごと消えているのではない、を同時に確かめる）
-    await expect(menu.getByRole('link', { name: /店舗|Stores/ })).toBeVisible()
+    await expect(menu.getByRole('link', { name: /拠点|Sites/ })).toBeVisible()
     await expect(menu.getByText('運営管理')).toHaveCount(0)
     await expect(menu.getByRole('link', { name: /システム管理者/ })).toHaveCount(0)
     await expect(menu.getByRole('link', { name: /死活監視/ })).toHaveCount(0)
@@ -98,7 +98,7 @@ test.describe('テナントA 管理者（tenant_admin）', () => {
 test.describe('テナントB 管理者（tenant_admin）', () => {
   test.use({ storageState: storageStatePath('adminB') })
 
-  test('テナントAの店舗が一切見えない', async ({ page }) => {
+  test('テナントAの拠点が一切見えない', async ({ page }) => {
     await page.goto('/stores')
     await expect(page.getByText(STORE_B1).first()).toBeVisible()
     await expect(page.getByText(STORE_A1)).toHaveCount(0)
@@ -110,10 +110,10 @@ test.describe('テナントB 管理者（tenant_admin）', () => {
 test.describe('A1 店長（store_manager）', () => {
   test.use({ storageState: storageStatePath('storeA1') })
 
-  test('担当店舗だけが見える（同じテナントの別店舗も見えない）', async ({ page }) => {
+  test('担当拠点だけが見える（同じテナントの別拠点も見えない）', async ({ page }) => {
     await page.goto('/stores')
     await expect(page.getByText(STORE_A1).first()).toBeVisible()
-    await expect(page.getByText(STORE_A2), '担当外の店舗が見えています').toHaveCount(0)
+    await expect(page.getByText(STORE_A2), '担当外の拠点が見えています').toHaveCount(0)
     await expect(page.getByText(STORE_B1)).toHaveCount(0)
   })
 
@@ -127,7 +127,7 @@ test.describe('A1 店長（store_manager）', () => {
 test.describe('A1 閲覧者（viewer）', () => {
   test.use({ storageState: storageStatePath('viewerA1') })
 
-  test('担当店舗は見える', async ({ page }) => {
+  test('担当拠点は見える', async ({ page }) => {
     await page.goto('/stores')
     await expect(page.getByText(STORE_A1).first()).toBeVisible()
     await expect(page.getByText(STORE_A2)).toHaveCount(0)
