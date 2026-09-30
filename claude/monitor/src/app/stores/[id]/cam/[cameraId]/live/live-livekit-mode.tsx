@@ -39,7 +39,7 @@ export default function LiveKitMode({ cameraId, edgeId, onFallback }: {
     let mediaTimer: ReturnType<typeof setTimeout> | null = null
 
     // S4 計測: 視聴開始（＝publish要求）から初フレーム描画までの ttff を1回だけ記録する。
-    // transport='sfu' タグで HLS/MJPEG と区別し /infra/slo で p50/p95 を比較する。
+    // transport='sfu' タグで HLS/MJPEG と区別する (比較の画面 /infra/slo は 2026-09-30 に廃止・記録は続ける)。
     // start は「配信待ち」を含む端末→初フレームの実体感遅延。
     const startTs = Date.now()
     let ttffReported = false

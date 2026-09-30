@@ -106,7 +106,6 @@ select public.monitor_results_ensure_partition(date_trunc('month', now() + inter
       （値を migration に書けないため）。手順は
       <code>docs/dr-runbook.md</code> の「バックアップに乗らないもの」を参照。
     </p>
-    <p><a href="${appBaseUrl()}/infra">死活監視を開く</a></p>
   `
 }
 

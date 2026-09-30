@@ -75,7 +75,6 @@ export async function updateNvrModel(formData: FormData): Promise<SaveResult> {
   })
 
   revalidatePath('/admin/nvr-models')
-  revalidatePath('/infra')
   return { ok: true, message: '保存しました' }
 }
 

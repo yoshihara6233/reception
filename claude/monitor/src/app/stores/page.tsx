@@ -25,7 +25,6 @@ export default async function StoresIndex() {
   // F27: "アラート" の定義を拡張する。従来は edge_devices.status だけだったが、
   // 「直近アラート対象」とは下記いずれかに該当する店舗:
   //   - edge_devices.status が offline / error
-  //   - monitor_incidents.status が open / ack（インフラ系インシデント）
   //   - bcp_events.status が active 系（completed / failed 以外）
   //   - patrol_findings.status が anomaly / review（セキュリティ系検出）
   //
@@ -35,7 +34,7 @@ export default async function StoresIndex() {
   //
   // F107: 24 時間で自動的に消えるべきアラートが status だけで判定され、終端化
   // しないイベント (recording のまま放置された BCP テスト等) が永久に地図へ
-  // 残る問題を修正。イベント系 (bcp_events / monitor_incidents / patrol_findings)
+  // 残る問題を修正。イベント系 (bcp_events / patrol_findings)
   // には「発生から 24 時間以内」の時間窓を追加する。edge_devices の offline/error
   // は『現在のライブ状態』なので時間制限しない (2 日前から落ちている拠点は今も
   // 障害中であり、消すべきではない)。
@@ -60,7 +59,7 @@ export default async function StoresIndex() {
     }
   }
 
-  const [storesData, incidentsData, bcpData, findingsData] = await Promise.all([
+  const [storesData, bcpData, findingsData] = await Promise.all([
     safeQuery<StoreDashRow>(
       'stores',
       supa
@@ -78,18 +77,6 @@ export default async function StoresIndex() {
         }>,
     ),
 
-    safeQuery<{ store_id: string | null; opened_at: string | null }>(
-      'monitor_incidents',
-      supa
-        .from('monitor_incidents')
-        .select('store_id, opened_at')
-        .in('status', ['open', 'ack'])
-        .gte('opened_at', alertCutoffIso)   // F107: 24h window
-        .limit(10_000) as unknown as PromiseLike<{
-          data: { store_id: string | null; opened_at: string | null }[] | null
-          error: { message: string } | null
-        }>,
-    ),
 
     // F27.1: bcp_events のクエリは `.not('status', 'in', ...)` が一部の Supabase
     // バージョンで構文エラーを返すため、2 つの .neq に分割する。
@@ -146,11 +133,6 @@ export default async function StoresIndex() {
       alerts.push({ storeId: s.id, storeName: s.name, kind: 'edge_offline',
         occurredAt: dev?.last_seen_at ?? null, href: `/stores/${s.id}` })
     }
-  })
-  // 2) monitor_incidents → /infra/incidents
-  incidentsData.forEach((r) => {
-    if (r.store_id) alerts.push({ storeId: r.store_id, storeName: nameOf(r.store_id),
-      kind: 'incident', occurredAt: r.opened_at ?? null, href: '/infra/incidents' })
   })
   // 3) bcp_events → /bcp
   bcpData.forEach((r) => {

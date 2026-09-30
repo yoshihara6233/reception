@@ -47,7 +47,7 @@ interface EndBody {
 }
 /**
  * S4: SFU 視聴のマーキング。SFU モードに入った時点で livekit_room を記録し、
- * /infra/slo の egress 概算（SFU session-分）の母数にする。room 名はクライアント値を
+ * egress 概算（SFU session-分）の母数にする (表示していた /infra/slo は 2026-09-30 に廃止・記録は続ける)。room 名はクライアント値を
  * 信用せず、行の camera_id から**サーバが導出**する（roomForCamera と同規則）。
  */
 interface MarkSfuBody {
