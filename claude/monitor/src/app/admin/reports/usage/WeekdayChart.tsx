@@ -24,8 +24,10 @@ const SERIES: { key: Key; label: string; color: string; chipOn: string }[] = [
 
 const n = (v: number | string) => (typeof v === 'number' ? v : Number(v ?? 0))
 
-export function WeekdayChart({ rows }: { rows: WeekdayRow[] }) {
-  const [on, setOn] = useState<Record<Key, boolean>>({ patrol: true, alarm: true, inspection: true })
+export function WeekdayChart({ rows, show }: { rows: WeekdayRow[]; show: { patrol: boolean; alarm: boolean; baggage: boolean } }) {
+  // 契約していないオプションの系列は出さない (0 の棒と切り替えボタンが並ぶだけになるため)
+  const avail: Record<Key, boolean> = { patrol: show.patrol, alarm: show.alarm, inspection: show.baggage }
+  const [on, setOn] = useState<Record<Key, boolean>>(avail)
   const toggle = (k: Key) => setOn((s) => ({ ...s, [k]: !s[k] }))
 
   const by = new Map(rows.map((r) => [r.dow, r]))
@@ -45,7 +47,7 @@ export function WeekdayChart({ rows }: { rows: WeekdayRow[] }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4">
       <div className="mb-3 flex flex-wrap gap-2">
-        {SERIES.map((s) => (
+        {SERIES.filter((s) => avail[s.key]).map((s) => (
           <button
             key={s.key}
             type="button"

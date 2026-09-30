@@ -4,6 +4,10 @@
  * usage_daily を集計する読取RPC（usage_summary/weekday/trend）を叩き、契約 vs 登録・
  * テナント全体/店舗別の利用量・曜日別・月次推移を表示する。スコープは resolveAdminContext:
  * super_admin=操作中テナント / tenant_admin=自テナント / store_manager=担当店舗。
+ *
+ * 段と列はテナントが契約しているオプション (巡回・発報・手荷物検査) で出し分ける
+ * (2026-09-30・発注者の判断)。G・VMS だけのテナントには、代わりに G・VMS の段
+ * (登録カメラ台数・同時視聴の上限の目安と設定値・ライブ視聴) を出す。
  */
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
@@ -13,8 +17,10 @@ import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
 import { jstDateStr } from '@/lib/baggage/unmatch'
 import { missingCriticalEnv } from '@/lib/ops/env-check'
+import { resolveTenantFeatures } from '@/lib/tenant/features'
 import {
-  monthBounds, trendBounds, confirmRatePct, prevMonth, type UsageMetrics,
+  monthBounds, trendBounds, confirmRatePct, prevMonth, viewerLimitFor, CAMERAS_PER_VIEWER,
+  type UsageMetrics, type UsageShow,
 } from '@/lib/reports/usage'
 import { UsageStoreTable } from './UsageStoreTable'
 import { MonthlyFinalize } from './MonthlyFinalize'
@@ -63,12 +69,15 @@ export default async function UsageReportPage({
     supa.from('edge_devices').select('*', { count: 'exact', head: true }).neq('status', 'offline'),
     supa.from('edge_devices').select('*', { count: 'exact', head: true }).eq('status', 'offline'),
   ])
+  // エッジサーバ (/admin/edges) は運営だけが開ける。パートナーは拠点稼働へ送る
+  // (押すと「権限がありません」になっていた・2026-09-30)。
+  const edgeHref = (q = '') => (ctx.isSuper ? `/admin/edges${q}` : '/admin/fleet')
   const infraStats = [
-    { label: 'エッジ',     val: edges.count     ?? 0, href: '/admin/edges' },
-    { label: 'レコーダ',   val: recorders.count ?? 0, href: '/admin/edges' },
-    { label: 'カメラ',     val: cameras.count   ?? 0, href: '/admin/edges' },
-    { label: 'オンライン', val: online.count    ?? 0, href: '/admin/edges?status=online' },
-    { label: 'オフライン', val: offline.count   ?? 0, href: '/admin/edges?status=offline', warn: true },
+    { label: 'エッジ',     val: edges.count     ?? 0, href: edgeHref() },
+    { label: 'レコーダ',   val: recorders.count ?? 0, href: edgeHref() },
+    { label: 'カメラ',     val: cameras.count   ?? 0, href: edgeHref() },
+    { label: 'オンライン', val: online.count    ?? 0, href: edgeHref('?status=online') },
+    { label: 'オフライン', val: offline.count   ?? 0, href: edgeHref('?status=offline'), warn: true },
   ]
   const missingEnv = ctx.isSuper ? missingCriticalEnv() : []
 
@@ -111,7 +120,7 @@ export default async function UsageReportPage({
         <div className="space-y-5 px-5 py-4">
           {envWarning}
           <div className="max-w-2xl space-y-2 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600">
-            <p>テナントを選択すると、そのテナントの利用状況（巡回/発報/検査/映像確認率/顔認証・曜日別・月次推移）を表示します。</p>
+            <p>テナントを選択すると、そのテナントの利用状況（G・VMS の登録カメラと同時視聴の上限・ライブ視聴と、契約しているオプションの巡回/発報/検査・曜日別・月次推移）を表示します。</p>
             <p><Link href="/admin/tenants" className="text-blue-600 underline">運営管理 → テナント</Link> から「このテナントを操作」を押してください。</p>
           </div>
           {infraSection}
@@ -121,6 +130,8 @@ export default async function UsageReportPage({
   }
 
   const svc = createSupabaseService()
+  // 契約しているオプション。super_admin は操作中テナントのもの (未確定・取得失敗は全部出す)
+  const show: UsageShow = await resolveTenantFeatures()
   const rpcArgs = { p_tenant: scopeTenant, p_store_ids: scopeStores }
   const [{ data: sumData }, { data: wdData }, { data: trData }] = await Promise.all([
     svc.rpc('usage_summary', { p_from: from, p_to: to, ...rpcArgs }),
@@ -142,7 +153,8 @@ export default async function UsageReportPage({
     patrol: a.patrol + s.patrol_count, alarm: a.alarm + s.alarm_count, inspection: a.inspection + s.inspection_count,
     exit: a.exit + s.baggage_exit_count, confirmed: a.confirmed + s.baggage_confirmed_count,
     matched: a.matched + s.face_auth_matched, unmatched: a.unmatched + s.face_auth_unmatched, attempts: a.attempts + s.face_auth_attempts,
-  }), { patrol: 0, alarm: 0, inspection: 0, exit: 0, confirmed: 0, matched: 0, unmatched: 0, attempts: 0 })
+    live: a.live + s.video_live_count, footage: a.footage + s.footage_access_count,
+  }), { patrol: 0, alarm: 0, inspection: 0, exit: 0, confirmed: 0, matched: 0, unmatched: 0, attempts: 0, live: 0, footage: 0 })
   const confirmRate = confirmRatePct(T.confirmed, T.exit)
 
   // 契約 vs 登録（テナントが確定しているとき）。
@@ -159,6 +171,35 @@ export default async function UsageReportPage({
     }
     const [sc, pc, ac, bc] = await Promise.all([countOn(), countOn('opt_patrol'), countOn('opt_alarm'), countOn('opt_baggage')])
     reg = { stores: sc, patrol: pc, alarm: ac, baggage: bc }
+  }
+
+  // G・VMS の段: 登録カメラ台数と、同時視聴の上限 (目安と設定値)。テナント確定時のみ。
+  // 上限の契約はカメラ 50 台ごとに 1 名で、運営が 運営管理 → 視聴上限 に入れる (自動では決めない)。
+  // 埋め込み結合 (stores!inner 等) は外部キーの張り方で 400 になった前例があるので、段を踏んで数える。
+  let gvms: { cameras: number; target: number; configured: number; configuredIsDefault: boolean } | null = null
+  if (scopeTenant) {
+    const { data: st } = await svc.from('stores').select('id').eq('tenant_id', scopeTenant).limit(10_000)
+    const storeIds = (st ?? []).map((r) => r.id as string)
+    let camCount = 0
+    if (storeIds.length > 0) {
+      const { data: eds } = await svc.from('edge_devices').select('id').in('store_id', storeIds).limit(10_000)
+      const edgeIds = (eds ?? []).map((r) => r.id as string)
+      if (edgeIds.length > 0) {
+        const { data: recs } = await svc.from('recorders').select('id').in('edge_id', edgeIds).limit(10_000)
+        const recIds = (recs ?? []).map((r) => r.id as string)
+        if (recIds.length > 0) {
+          const { count } = await svc.from('recorder_cameras').select('id', { count: 'exact', head: true }).in('recorder_id', recIds)
+          camCount = count ?? 0
+        }
+      }
+    }
+    const { data: lim } = await svc.from('session_limits').select('max_concurrent').eq('tenant_id', scopeTenant).maybeSingle()
+    gvms = {
+      cameras: camCount,
+      target: viewerLimitFor(camCount),
+      configured: (lim?.max_concurrent as number | undefined) ?? 5, // 行が無いときは既定 5 (session_limits の DEFAULT)
+      configuredIsDefault: lim == null,
+    }
   }
 
   // 月次確定レポート（C）一覧（テナント確定時のみ）。
@@ -202,9 +243,32 @@ export default async function UsageReportPage({
             <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">登録数（／契約数）</h2>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <RegCard label="拠点数" used={reg.stores} limit={contract.max_stores} />
-              <RegCard label="巡回 ON拠点" used={reg.patrol} limit={contract.max_patrol} />
-              <RegCard label="発報 ON拠点" used={reg.alarm} limit={contract.max_alarm} />
-              <RegCard label="検査 ON拠点" used={reg.baggage} limit={contract.max_baggage} />
+              {show.patrol && <RegCard label="巡回 ON拠点" used={reg.patrol} limit={contract.max_patrol} />}
+              {show.alarm && <RegCard label="発報 ON拠点" used={reg.alarm} limit={contract.max_alarm} />}
+              {show.baggage && <RegCard label="検査 ON拠点" used={reg.baggage} limit={contract.max_baggage} />}
+            </div>
+          </section>
+        )}
+
+        {/* G・VMS (遠隔視聴) */}
+        {gvms && (
+          <section>
+            <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">G・VMS（遠隔視聴）</h2>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <StatCard label="登録カメラ" value={gvms.cameras} sub="拠点の G・VMS から同期した台数" />
+              <StatCard label="同時視聴の上限（目安）" value={`${gvms.target} 名`} sub={`カメラ ${CAMERAS_PER_VIEWER} 台ごとに 1 名`} />
+              <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">同時視聴の上限（設定値）</div>
+                <div className="text-2xl font-bold tabular-nums">{gvms.configured} 名</div>
+                <div className="text-[11px] text-slate-500">{gvms.configuredIsDefault ? '未設定のため既定値' : '運営管理 → 視聴上限'}</div>
+                {gvms.configured !== gvms.target && (
+                  <div className="mt-1 text-[11px] font-bold text-amber-700">
+                    目安と違います
+                    {ctx.isSuper && <> — <Link href="/admin/limits" className="underline">視聴上限で直す</Link></>}
+                  </div>
+                )}
+              </div>
+              <StatCard label={`ライブ視聴（${monthLabel}）`} value={T.live} sub={`映像アクセス ${T.footage.toLocaleString()} 件`} />
             </div>
           </section>
         )}
@@ -213,30 +277,34 @@ export default async function UsageReportPage({
         <section>
           <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">利用量（{monthLabel}・{scopeStores ? '担当拠点' : 'テナント全体'}）</h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            <StatCard label="巡回数" value={T.patrol} />
-            <StatCard label="発報数" value={T.alarm} />
-            <StatCard label="手荷物検査数" value={T.inspection} />
-            <StatCard label="映像確認率" value={confirmRate == null ? '—' : `${confirmRate}%`} sub={`${T.confirmed.toLocaleString()} / ${T.exit.toLocaleString()} 退出検査`} />
-            <StatCard label="顔認証" value={T.attempts} sub={`一致 ${T.matched.toLocaleString()} / アンマッチ ${T.unmatched.toLocaleString()}`} />
+            {show.patrol && <StatCard label="巡回数" value={T.patrol} />}
+            {show.alarm && <StatCard label="発報数" value={T.alarm} />}
+            {show.baggage && <StatCard label="手荷物検査数" value={T.inspection} />}
+            {show.baggage && <StatCard label="手荷物検査の映像確認率" value={confirmRate == null ? '—' : `${confirmRate}%`} sub={`${T.confirmed.toLocaleString()} / ${T.exit.toLocaleString()} 退出検査`} />}
+            {show.baggage && <StatCard label="顔認証" value={T.attempts} sub={`一致 ${T.matched.toLocaleString()} / アンマッチ ${T.unmatched.toLocaleString()}`} />}
+            <StatCard label="ライブ視聴" value={T.live} />
+            <StatCard label="映像アクセス" value={T.footage} />
           </div>
         </section>
 
         {/* 店舗別 + CSV */}
         <section>
           <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">拠点別</h2>
-          <UsageStoreTable rows={stores} monthLabel={monthLabel} />
+          <UsageStoreTable rows={stores} monthLabel={monthLabel} show={show} />
         </section>
 
-        {/* 曜日別 */}
-        <section>
-          <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">曜日別（{monthLabel}・合計）</h2>
-          <WeekdayChart rows={weekday} />
-        </section>
+        {/* 曜日別 (巡回・発報・検査の件数。どれも契約していなければ出さない) */}
+        {(show.patrol || show.alarm || show.baggage) && (
+          <section>
+            <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">曜日別（{monthLabel}・合計）</h2>
+            <WeekdayChart rows={weekday} show={show} />
+          </section>
+        )}
 
         {/* 月次推移 */}
         <section>
           <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">月次推移（直近{TREND_MONTHS}ヶ月）</h2>
-          <TrendTable rows={trendRows} />
+          <TrendTable rows={trendRows} show={show} />
         </section>
 
         {/* 月次確定レポート（PDF） */}
@@ -291,13 +359,22 @@ function RegCard({ label, used, limit }: { label: string; used: number; limit: n
   )
 }
 
-function TrendTable({ rows }: { rows: { month: string; patrol_count: number; alarm_count: number; inspection_count: number; baggage_confirmed_count: number; baggage_exit_count: number; face_auth_attempts: number }[] }) {
+function TrendTable({ rows, show }: { rows: { month: string; patrol_count: number; alarm_count: number; inspection_count: number; baggage_confirmed_count: number; baggage_exit_count: number; face_auth_attempts: number; video_live_count?: number | string; footage_access_count?: number | string }[]; show: UsageShow }) {
   if (!rows.length) return <p className="text-xs text-slate-400">データがありません。</p>
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
       <table className="w-full text-xs">
         <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-          <tr><th className="px-3 py-2 text-left">月</th><th className="px-3 py-2 text-right">巡回</th><th className="px-3 py-2 text-right">発報</th><th className="px-3 py-2 text-right">検査</th><th className="px-3 py-2 text-right">映像確認率</th><th className="px-3 py-2 text-right">顔認証</th></tr>
+          <tr>
+            <th className="px-3 py-2 text-left">月</th>
+            {show.patrol && <th className="px-3 py-2 text-right">巡回</th>}
+            {show.alarm && <th className="px-3 py-2 text-right">発報</th>}
+            {show.baggage && <th className="px-3 py-2 text-right">検査</th>}
+            {show.baggage && <th className="px-3 py-2 text-right">映像確認率</th>}
+            {show.baggage && <th className="px-3 py-2 text-right">顔認証</th>}
+            <th className="px-3 py-2 text-right">ライブ視聴</th>
+            <th className="px-3 py-2 text-right">映像アクセス</th>
+          </tr>
         </thead>
         <tbody>
           {rows.map((r) => {
@@ -305,11 +382,13 @@ function TrendTable({ rows }: { rows: { month: string; patrol_count: number; ala
             return (
               <tr key={r.month} className="border-t border-slate-100">
                 <td className="px-3 py-1.5 tabular-nums">{r.month.slice(0, 7)}</td>
-                <td className="px-3 py-1.5 text-right tabular-nums">{Number(r.patrol_count).toLocaleString()}</td>
-                <td className="px-3 py-1.5 text-right tabular-nums">{Number(r.alarm_count).toLocaleString()}</td>
-                <td className="px-3 py-1.5 text-right tabular-nums">{Number(r.inspection_count).toLocaleString()}</td>
-                <td className="px-3 py-1.5 text-right tabular-nums">{rate == null ? '—' : `${rate}%`}</td>
-                <td className="px-3 py-1.5 text-right tabular-nums">{Number(r.face_auth_attempts).toLocaleString()}</td>
+                {show.patrol && <td className="px-3 py-1.5 text-right tabular-nums">{Number(r.patrol_count).toLocaleString()}</td>}
+                {show.alarm && <td className="px-3 py-1.5 text-right tabular-nums">{Number(r.alarm_count).toLocaleString()}</td>}
+                {show.baggage && <td className="px-3 py-1.5 text-right tabular-nums">{Number(r.inspection_count).toLocaleString()}</td>}
+                {show.baggage && <td className="px-3 py-1.5 text-right tabular-nums">{rate == null ? '—' : `${rate}%`}</td>}
+                {show.baggage && <td className="px-3 py-1.5 text-right tabular-nums">{Number(r.face_auth_attempts).toLocaleString()}</td>}
+                <td className="px-3 py-1.5 text-right tabular-nums">{Number(r.video_live_count ?? 0).toLocaleString()}</td>
+                <td className="px-3 py-1.5 text-right tabular-nums">{Number(r.footage_access_count ?? 0).toLocaleString()}</td>
               </tr>
             )
           })}

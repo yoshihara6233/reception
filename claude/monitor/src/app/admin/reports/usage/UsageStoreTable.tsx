@@ -4,7 +4,7 @@
  * 店舗別 利用量テーブル ＋ CSV 書出し（R5）。サーバから合計済みの店舗行を受け取る。
  * 映像確認率 = 店長確認済 / 退出検査（分母0は「—」）。
  */
-import { confirmRatePct, type UsageMetrics } from '@/lib/reports/usage'
+import { confirmRatePct, type UsageMetrics, type UsageShow } from '@/lib/reports/usage'
 
 export interface StoreRow extends UsageMetrics { store_id: string; store_name: string }
 
@@ -28,7 +28,7 @@ function toCsv(rows: StoreRow[]): string {
   return lines.join('\n')
 }
 
-export function UsageStoreTable({ rows, monthLabel }: { rows: StoreRow[]; monthLabel: string }) {
+export function UsageStoreTable({ rows, monthLabel, show }: { rows: StoreRow[]; monthLabel: string; show: UsageShow }) {
   function downloadCsv() {
     const blob = new Blob(['﻿' + toCsv(rows)], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
@@ -56,12 +56,15 @@ export function UsageStoreTable({ rows, monthLabel }: { rows: StoreRow[]; monthL
           <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500">
             <tr>
               <th className="px-3 py-2 text-left">拠点</th>
-              <th className="px-3 py-2 text-right">巡回</th>
-              <th className="px-3 py-2 text-right">発報</th>
-              <th className="px-3 py-2 text-right">検査</th>
-              <th className="px-3 py-2 text-right">映像確認率</th>
-              <th className="px-3 py-2 text-right">顔認証(試行)</th>
-              <th className="px-3 py-2 text-right">一致/アンマッチ</th>
+              {/* 列はテナントの契約オプションで出し分ける (CSV は全列のまま) */}
+              {show.patrol && <th className="px-3 py-2 text-right">巡回</th>}
+              {show.alarm && <th className="px-3 py-2 text-right">発報</th>}
+              {show.baggage && <th className="px-3 py-2 text-right">検査</th>}
+              {show.baggage && <th className="px-3 py-2 text-right">映像確認率</th>}
+              {show.baggage && <th className="px-3 py-2 text-right">顔認証(試行)</th>}
+              {show.baggage && <th className="px-3 py-2 text-right">一致/アンマッチ</th>}
+              <th className="px-3 py-2 text-right">ライブ視聴</th>
+              <th className="px-3 py-2 text-right">映像アクセス</th>
             </tr>
           </thead>
           <tbody>
@@ -70,16 +73,22 @@ export function UsageStoreTable({ rows, monthLabel }: { rows: StoreRow[]; monthL
               return (
                 <tr key={r.store_id} className="border-t border-slate-100">
                   <td className="px-3 py-1.5 font-medium text-slate-800">{r.store_name}</td>
-                  <td className="px-3 py-1.5 text-right tabular-nums">{r.patrol_count.toLocaleString()}</td>
-                  <td className="px-3 py-1.5 text-right tabular-nums">{r.alarm_count.toLocaleString()}</td>
-                  <td className="px-3 py-1.5 text-right tabular-nums">{r.inspection_count.toLocaleString()}</td>
-                  <td className="px-3 py-1.5 text-right tabular-nums" title={`${r.baggage_confirmed_count} / ${r.baggage_exit_count}`}>
-                    {rate == null ? '—' : `${rate}%`}
-                  </td>
-                  <td className="px-3 py-1.5 text-right tabular-nums">{r.face_auth_attempts.toLocaleString()}</td>
-                  <td className="px-3 py-1.5 text-right tabular-nums text-slate-500">
-                    {r.face_auth_matched.toLocaleString()} / {r.face_auth_unmatched.toLocaleString()}
-                  </td>
+                  {show.patrol && <td className="px-3 py-1.5 text-right tabular-nums">{r.patrol_count.toLocaleString()}</td>}
+                  {show.alarm && <td className="px-3 py-1.5 text-right tabular-nums">{r.alarm_count.toLocaleString()}</td>}
+                  {show.baggage && <td className="px-3 py-1.5 text-right tabular-nums">{r.inspection_count.toLocaleString()}</td>}
+                  {show.baggage && (
+                    <td className="px-3 py-1.5 text-right tabular-nums" title={`${r.baggage_confirmed_count} / ${r.baggage_exit_count}`}>
+                      {rate == null ? '—' : `${rate}%`}
+                    </td>
+                  )}
+                  {show.baggage && <td className="px-3 py-1.5 text-right tabular-nums">{r.face_auth_attempts.toLocaleString()}</td>}
+                  {show.baggage && (
+                    <td className="px-3 py-1.5 text-right tabular-nums text-slate-500">
+                      {r.face_auth_matched.toLocaleString()} / {r.face_auth_unmatched.toLocaleString()}
+                    </td>
+                  )}
+                  <td className="px-3 py-1.5 text-right tabular-nums">{r.video_live_count.toLocaleString()}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{r.footage_access_count.toLocaleString()}</td>
                 </tr>
               )
             })}
