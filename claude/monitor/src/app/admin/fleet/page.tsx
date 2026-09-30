@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
+import { GvmsTabs } from '@/components/admin/GvmsTabs'
 import { AdminDenied } from '@/components/admin/AdminDenied'
 import { requireAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
@@ -123,7 +124,8 @@ export default async function FleetPage() {
   return (
     <AdminShell pathname="/admin/fleet" section="admin">
       <PageHeader title="拠点稼働"
-        crumb={[{ href: '/admin', label: t.breadcrumb.admin }, { href: '/admin/fleet', label: '拠点稼働' }]} />
+        crumb={[{ href: '/admin', label: t.breadcrumb.admin }, { href: '/admin/fleet', label: '拠点の G・VMS' }, { href: '/admin/fleet', label: '拠点稼働' }]} />
+      <GvmsTabs current="/admin/fleet" />
       <div className="p-5">
         <FleetClient rows={rows} />
       </div>
