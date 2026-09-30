@@ -184,7 +184,7 @@ test.describe('A2 検査店長（baggage_manager）', () => {
   test.describe('それ以外は middleware が /baggage へ差し戻す', () => {
     // ライブ視聴の時間を増やさないための中央強制。1 本でも漏れると
     // 「検査担当なのに全店のカメラが見える」になる。
-    for (const path of ['/stores', '/admin', '/bcp', '/alarms', '/security/reports', '/infra']) {
+    for (const path of ['/stores', '/admin', '/bcp', '/alarms', '/security/reports']) {
       test(`${path} → /baggage`, async ({ page }) => {
         await page.goto(path)
         await expect(page).toHaveURL(/\/baggage$/)

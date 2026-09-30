@@ -2,7 +2,7 @@
  * /security/glossary — 警備機能の用語説明
  *
  * 巡回 / AI 判定 / トリアージなど警備ページ群で使う語の早見表。
- * /infra/glossary や /bcp/glossary と同じスタイルで統一。
+ * /bcp/glossary と同じスタイルで統一。
  */
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
