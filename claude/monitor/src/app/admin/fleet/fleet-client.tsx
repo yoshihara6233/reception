@@ -7,7 +7,7 @@ export interface FleetRow {
   status: string; seenStale: boolean; lastSeenAt: string | null
   camerasTotal: number; camerasOffline: number
   nodesOk: number | null; nodesTotal: number | null
-  errors24h: number; healthStale: boolean; diskDaysLeft: number | null
+  errors24h: number; restarts24h: number; healthStale: boolean; diskDaysLeft: number | null
   running: string | null; desiredVer: string | null; verPending: boolean
   cfgState: 'none' | 'pending' | 'applied'
   licenseOrg: string | null; licenseExpires: string | null; licenseExpired: boolean
@@ -100,11 +100,18 @@ export function FleetClient({ rows }: { rows: FleetRow[] }) {
                         {(r.camerasTotal - r.camerasOffline).toLocaleString()}/{r.camerasTotal.toLocaleString()}
                         {r.camerasOffline > 0 && <span className="text-amber-700"> ⚠{r.camerasOffline}</span>}
                         {r.nodesTotal != null && <div className="text-[10px] text-slate-500">ノード {r.nodesOk ?? '—'}/{r.nodesTotal}</div>}
+                        {/* 容量残 (いまの書き込み量で空きが尽きるまでの日数)。死活監視の NVMS 枠から移した (2026-09-30) */}
+                        {r.diskDaysLeft != null && (
+                          <div className={'text-[10px] ' + (r.diskDaysLeft < 7 ? 'font-bold text-amber-700' : 'text-slate-500')}>容量残 {Math.floor(r.diskDaysLeft)} 日</div>
+                        )}
                       </>
                     )}
                   </td>
                   <td className={'px-3 py-2.5 font-mono tabular-nums ' + (!r.healthStale && r.errors24h > 0 ? 'text-amber-700 font-bold' : 'text-slate-500')}>
                     {r.healthStale ? '—' : r.errors24h}
+                    {!r.healthStale && r.restarts24h > 0 && (
+                      <div className="text-[10px] font-normal text-amber-700" title="映像の取り込みの再起動の回数（直近 24 時間）">再起動 {r.restarts24h} 回</div>
+                    )}
                   </td>
                   <td className="px-3 py-2.5">
                     {r.cfgState === 'none' ? <span className="text-slate-400">未設定</span>
