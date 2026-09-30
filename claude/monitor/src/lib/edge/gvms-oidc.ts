@@ -12,7 +12,23 @@ export const GVMS_CALLBACK_PATH = '/api/v1/auth/oidc/callback'
 export const GVMS_ROLE_CLAIM = 'gvms_role'
 const MAX_URIS = 10
 
-/** 申告された戻り先を検査する。形の崩れたものは捨てる（heartbeat は落とさない）。 */
+/**
+ * http の戻り先で受けてよいホスト。Supabase の OAuth 2.1 Server は、ループバック以外の http の
+ * redirect_uri を受け付けない（登録・更新が validation_failed 400 になる）。
+ */
+function isLoopbackHost(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]'
+}
+
+/**
+ * 申告された戻り先を検査する。形の崩れたものは捨てる（heartbeat は落とさない）。
+ *
+ * **ループバック以外の http は捨てる**（2026-09-30・.200 で判明）。拠点がクラスタのノードの住所
+ * （NVMS_NODE_ADDR=http://…:8080）から作った http の戻り先を混ぜて申告しており、それを含む一覧を
+ * 登録しようとして Supabase に丸ごと断られ続けた。その間、登録は古い一覧のまま止まり、後から
+ * 足された https の名前の戻り先が使えず、SSO が invalid redirect_uri で落ちていた。
+ * 1 件の受けられない値で一覧全体を止めないよう、ここで落とす。
+ */
 export function sanitizeRedirectUris(raw: unknown): string[] {
   if (!Array.isArray(raw)) return []
   const out = new Set<string>()
@@ -22,6 +38,7 @@ export function sanitizeRedirectUris(raw: unknown): string[] {
     try { u = new URL(v) } catch { continue }
     if ((u.protocol !== 'https:' && u.protocol !== 'http:') || u.username || u.password || u.search || u.hash) continue
     if (u.pathname !== GVMS_CALLBACK_PATH) continue
+    if (u.protocol === 'http:' && !isLoopbackHost(u.hostname)) continue
     out.add(`${u.protocol}//${u.host}${GVMS_CALLBACK_PATH}`)
     if (out.size >= MAX_URIS) break
   }
