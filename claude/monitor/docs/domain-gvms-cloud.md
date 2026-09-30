@@ -18,7 +18,7 @@
 | 5 | Supabase の Auth の URL 設定 | 発注者 | Supabase |
 | 6 | Supabase の Edge Function の環境変数 | 発注者 | Supabase |
 | 7 | Vault の `app_url` | 発注者 | Supabase（SQL エディタ） |
-| 8 | R2 の CORS に新 URL を足す | 発注者 | Cloudflare（R2） |
+| 8 | ~~R2 の CORS~~（不要と確認済み） | — | — |
 | 9 | コードの PR をマージ | 発注者 | GitHub |
 | 10 | 動作確認（ログイン・パスワード再設定・遠隔視聴・BCP のメールのリンク） | 開発 | 本番 |
 | 11 | 拠点の G・VMS の接続先を順に移す | 開発・現地 | 各拠点 |
@@ -114,16 +114,16 @@ select name, decrypted_secret from vault.decrypted_secrets where name = 'app_url
 
 2 行目で新しい値になったことを確かめる。**ほかの秘密（service_role_key 等）は表示しない**こと。
 
-## 8. R2 の CORS
+## 8. R2 の CORS（不要と確認済み・2026-09-30）
 
-Cloudflare → R2 → 遠隔視聴に使っているバケット → Settings → CORS Policy の `AllowedOrigins` に
-`https://gvms-cloud.com` を**足す**（旧 URL は残す）。遠隔の動画（HLS）は、ブラウザが R2 を
-直接読むため。CORS の設定が無い・`*` になっているなら変更は要らない（今の値はコードに無いので画面で確かめる）。
+遠隔の動画（HLS）は、視聴者へ署名付き URL を渡さず**クラウドのルートが中継する**（lib/storage/video-r2 の方針・§6）ので、
+ブラウザが R2 を直接読むことはない。静止画も `<img>` の表示とクラウドの中継で、CORS の許可は要らない。
+R2 のバケットの CORS は変えなくてよい。
 
 ## 9. PR のマージ
 
 既定の URL（env が無いときの落ち先）を新 URL へ変え、パスワード再設定のリンクを新ドメインへ向けられるようにする PR。
-**手順 0〜8 が済んでからマージする**（先にマージすると、env の無い経路のメールのリンクがまだ開けない URL を指す）。
+**手順 0〜7 が済んでからマージする**（先にマージすると、env の無い経路のメールのリンクがまだ開けない URL を指す）。
 
 ## 10. 動作確認（新 URL で）
 
