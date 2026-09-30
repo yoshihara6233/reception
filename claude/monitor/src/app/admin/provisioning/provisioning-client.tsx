@@ -34,7 +34,7 @@ function fmtExpiry(iso: string): string {
   return `あと ${Math.max(1, Math.round(ms / 60_000))} 分`
 }
 
-export function ProvisioningClient({ stores, rows, canIssue = true }: { stores: Store[]; rows: ProvRow[]; canIssue?: boolean }) {
+export function ProvisioningClient({ stores, rows, canIssue = true, canOpenEdge = false }: { stores: Store[]; rows: ProvRow[]; canIssue?: boolean; canOpenEdge?: boolean }) {
   const router = useRouter()
   const [storeId, setStoreId] = useState('')
   const [name, setName] = useState('')
@@ -208,7 +208,7 @@ export function ProvisioningClient({ stores, rows, canIssue = true }: { stores: 
                             再発行
                           </button>
                         )}
-                        {r.edgeId && (
+                        {r.edgeId && canOpenEdge && (
                           <a href={`/admin/edges/${r.edgeId}`} className="text-[11px] text-blue-600 hover:underline">
                             エッジ詳細 / 診断
                           </a>
