@@ -35,7 +35,7 @@ function ago(iso: string | null): string {
   return `${Math.round(s / 3600)} 時間前`
 }
 
-export function FleetClient({ rows }: { rows: FleetRow[] }) {
+export function FleetClient({ rows, canOpenEdge = false }: { rows: FleetRow[]; canOpenEdge?: boolean }) {
   const [attentionOnly, setAttentionOnly] = useState(false)
   const attentionCount = rows.filter((r) => r.attention).length
   const camerasTotal = rows.reduce((n, r) => n + r.camerasTotal, 0)
@@ -87,7 +87,9 @@ export function FleetClient({ rows }: { rows: FleetRow[] }) {
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-1.5">
                       <span className="inline-block h-2 w-2 rounded-full" style={{ background: r.seenStale ? '#A3332B' : r.attention ? '#B5761A' : '#2F7A4F' }} />
-                      <a href={`/admin/edges/${r.edgeId}`} className="font-medium text-blue-600 hover:underline">{r.store}</a>
+                      {canOpenEdge
+                        ? <a href={`/admin/edges/${r.edgeId}`} className="font-medium text-blue-600 hover:underline">{r.store}</a>
+                        : <span className="font-medium text-slate-800">{r.store}</span>}
                     </div>
                     <div className="ml-3.5 text-slate-400">{r.name}</div>
                   </td>
