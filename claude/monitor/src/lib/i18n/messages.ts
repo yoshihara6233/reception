@@ -206,9 +206,6 @@ export interface Msg {
     networkOutageBody: string
     statMonitored: string
     statOpen: string
-    statUptime30d: string
-    statActiveChecks: string
-    activeChecksP2: string
     legendStatus: string
     allHealthyTitle: (n: number) => string
     allHealthyBody: string
@@ -626,9 +623,6 @@ const ja: Msg = {
     networkOutageBody: '多数の拠点が同時に無応答です。個別機器の状態は確認できません（未検証表示）。',
     statMonitored: '監視拠点',
     statOpen: '未対応インシデント',
-    statUptime30d: '平均稼働率 30日',
-    statActiveChecks: '能動チェック',
-    activeChecksP2: 'P2で有効化',
     legendStatus: '状態:',
     allHealthyTitle: (n) => `全 ${n} 拠点 正常稼働中`,
     allHealthyBody: '未対応インシデントはありません。各拠点の死活監視は継続中です。',
@@ -1035,9 +1029,6 @@ const en: Msg = {
     networkOutageBody: 'Multiple sites are unresponsive simultaneously. Individual device state cannot be verified (shown as Unknown).',
     statMonitored: 'Monitored sites',
     statOpen: 'Open incidents',
-    statUptime30d: '30-day uptime avg.',
-    statActiveChecks: 'Active checks',
-    activeChecksP2: 'Enabled in P2',
     legendStatus: 'Status:',
     allHealthyTitle: (n) => `All ${n} sites operating normally`,
     allHealthyBody: 'No open incidents. Liveness monitoring is ongoing for all sites.',
@@ -1444,9 +1435,6 @@ const zh: Msg = {
     networkOutageBody: '多个站点同时无响应。无法确认各设备状态（显示为未验证）。',
     statMonitored: '监控站点',
     statOpen: '未处理事件',
-    statUptime30d: '30天平均可用率',
-    statActiveChecks: '主动检查',
-    activeChecksP2: 'P2 启用',
     legendStatus: '状态:',
     allHealthyTitle: (n) => `全部 ${n} 个站点正常运行`,
     allHealthyBody: '无未处理事件。各站点的死活监测持续进行中。',
@@ -1853,9 +1841,6 @@ const ko: Msg = {
     networkOutageBody: '여러 거점이 동시에 무응답입니다. 개별 기기 상태를 확인할 수 없습니다(미검증 표시).',
     statMonitored: '모니터링 거점',
     statOpen: '미대응 인시던트',
-    statUptime30d: '30일 평균 가동률',
-    statActiveChecks: '능동 체크',
-    activeChecksP2: 'P2에서 활성화',
     legendStatus: '상태:',
     allHealthyTitle: (n) => `전체 ${n}개 거점 정상 운영 중`,
     allHealthyBody: '미대응 인시던트가 없습니다. 각 거점의 사활 모니터링이 지속됩니다.',

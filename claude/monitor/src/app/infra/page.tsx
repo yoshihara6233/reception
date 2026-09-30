@@ -6,13 +6,12 @@
  * 能動チェック（P2）未実装のため「未検証」。未対応は monitor_incidents から。
  * テナントスコープは RLS（admin_users.auth_user_id）が自動適用。
  */
+import Link from 'next/link'
 import { TriangleAlert, CircleCheck, Video } from 'lucide-react'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
 import { getT } from '@/lib/i18n/server'
-import { LifecycleSummary } from '@/components/nvr/LifecycleSummary'
-import { NvmsHealthSection } from './NvmsHealthSection'
 import { deriveEdgeStatus } from '@/lib/edge-status'
 import { MONITOR_STALE_SECONDS } from '@intereco/shared'
 
@@ -152,8 +151,9 @@ export default async function InfraDashboard() {
           </div>
         )}
 
-        {/* 統計 */}
-        <div className="grid grid-cols-4 gap-4">
+        {/* 統計。平均稼働率 30 日と能動チェックの枠は外した (2026-09-30・発注者の判断):
+            どちらも未実装で「—」「P2 で有効化」を出し続け、壊れて見えていた。実装したら戻す */}
+        <div className="grid grid-cols-2 gap-4">
           <div className="rounded-lg border border-slate-200 bg-white p-4">
             <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{tInfra.statMonitored}</div>
             <div className="mt-1 text-2xl font-bold tabular-nums text-slate-900">{monitored.length}</div>
@@ -162,22 +162,17 @@ export default async function InfraDashboard() {
             <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{tInfra.statOpen}</div>
             <div className={'mt-1 text-2xl font-bold tabular-nums ' + (totalOpen > 0 ? 'text-red-600 dark:text-[#E87D74]' : 'text-slate-900')}>{totalOpen}</div>
           </div>
-          <div className="rounded-lg border border-slate-200 bg-white p-4">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{tInfra.statUptime30d}</div>
-            <div className="mt-1 text-2xl font-bold tabular-nums text-slate-900">{t.common.dash}</div>
-          </div>
-          <div className="rounded-lg border border-slate-200 bg-white p-4">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{tInfra.statActiveChecks}</div>
-            <div className="mt-1 text-sm font-medium text-slate-500">{tInfra.activeChecksP2}</div>
-          </div>
         </div>
-
-        {/* F48.D: NVR 機材ライフサイクル サマリ */}
-        <LifecycleSummary />
-
-        {/* Phase 1.5 M3: NVMS 死活サマリ（nvms レコーダが無ければ非表示） */}
-        <NvmsHealthSection />
-
+        {/* G・VMS の拠点の状態 (カメラ・ノード・エラー・版・ライセンス) は 拠点稼働 に一本化した
+            (2026-09-30・発注者の判断)。ここに同じ死活の報告を別の形で出すと、どちらが正か迷う。
+            機材ライフサイクル (旧 NVR の機種の寿命) も、レコーダを G・VMS と WJ-NU101K に
+            絞って全件「不明」になったので外した。 */}
+        <p className="flex items-center gap-2 text-xs text-slate-600 dark:text-gedink2">
+          <Video size={14} strokeWidth={1.5} aria-hidden />
+          G・VMS の拠点の状態（カメラ・ノード・エラー・設定の反映・版・ライセンス）は
+          <Link href="/admin/fleet" className="font-semibold text-blue-700 underline dark:text-gedaccent">拠点稼働</Link>
+          で見ます。この画面は障害の対応（インシデント・接続障害・監視設定）のためのものです。
+        </p>
         {/* 凡例 */}
         <div className="flex flex-wrap gap-4 text-[11px] text-slate-600 dark:text-gedink2">
           {tInfra.legendStatus}

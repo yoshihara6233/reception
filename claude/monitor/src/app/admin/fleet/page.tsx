@@ -108,6 +108,8 @@ export default async function FleetPage() {
         nodesOk: (h?.nodes_ok as number | undefined) ?? null,
         nodesTotal: (h?.nodes_total as number | undefined) ?? null,
         errors24h: err, healthStale,
+        // 映像の取り込みの再起動の回数 (死活監視の NVMS 枠から移した・2026-09-30)
+        restarts24h: (h?.restarts_24h as number | undefined) ?? 0,
         diskDaysLeft: (h?.disk_days_left as number | undefined) ?? null,
         running: running || null, desiredVer, verPending,
         cfgState: cfgVer === 0 ? 'none' : cfgPending ? 'pending' : 'applied',
