@@ -32,18 +32,27 @@ export function getAdminNav(t: Msg, opts?: { isSuper?: boolean; baggage?: boolea
     { href: '/admin/reports/usage', label: '利用状況レポート', icon: '📊', exact: true },
     { href: '/admin/stores',     label: t.adminNav.stores,    icon: '⛬' },
     { href: '/admin/users',      label: t.adminNav.users,     icon: '⚇' },
+    { href: '/admin/bcp',        label: 'BCP発動条件',         icon: '🚨' },
+    { href: '/admin/audit',      label: t.adminNav.audit,     icon: '☰' },
+    // 拠点の G・VMS を遠隔から扱う画面は見出しでまとめる (2026-09-30・発注者の指示)。
+    // クラウド自身の設定 (拠点・ユーザ・BCP・ログ) と並列だと、どれが何のための
+    // 画面か分からない。見出しは閉じられないので、まとめない項目は見出しより上に置く。
+    { href: '#gvms', label: '拠点の G・VMS', icon: '', heading: true },
     // 多拠点 統合ダッシュボード（B1・稼働/健全/設定反映/版/ライセンスを横断）。
     { href: '/admin/fleet', label: '拠点稼働', icon: '📡' },
     // 拠点導入（エンロールコード発行＋立ち上げ状況）。パートナー(tenant_admin)が使う。
     { href: '/admin/provisioning', label: '拠点導入', icon: '⏻' },
     // ライセンス管理（G・VMS 署名ライセンスの発行/差し替え/失効）。パートナーが使う。
     { href: '/admin/licenses', label: 'ライセンス', icon: '🔑' },
-    // 手荷物検査の「内容設定」（同意文言・STEP等）はテナント側の持ち物＝①。
+    // 手荷物検査は別の製品群なので、これも見出しで分ける。
+    // 「内容設定」（同意文言・STEP等）はテナント側の持ち物＝①。
     // 「使えるか(ON/OFF=課金)」は②のテナント編集フラグで運営が制御する。
     ...(opts?.baggage !== false
-      ? [{ href: '/admin/baggage', label: '手荷物検査設定', icon: '🧳' }] : []),
-    { href: '/admin/bcp',        label: 'BCP発動条件',         icon: '🚨' },
-    { href: '/admin/audit',      label: t.adminNav.audit,     icon: '☰' },
+      ? [
+          { href: '#baggage', label: '手荷物検査', icon: '', heading: true },
+          { href: '/admin/baggage', label: '手荷物検査設定', icon: '🧳' },
+        ]
+      : []),
   ]
   if (opts?.isSuper) {
     items.push(
