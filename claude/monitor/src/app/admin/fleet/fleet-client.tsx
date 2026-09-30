@@ -100,6 +100,10 @@ export function FleetClient({ rows }: { rows: FleetRow[] }) {
                         {(r.camerasTotal - r.camerasOffline).toLocaleString()}/{r.camerasTotal.toLocaleString()}
                         {r.camerasOffline > 0 && <span className="text-amber-700"> ⚠{r.camerasOffline}</span>}
                         {r.nodesTotal != null && <div className="text-[10px] text-slate-500">ノード {r.nodesOk ?? '—'}/{r.nodesTotal}</div>}
+                        {/* 容量残 (いまの書き込み量で空きが尽きるまでの日数)。死活監視の NVMS 枠から移した (2026-09-30) */}
+                        {r.diskDaysLeft != null && (
+                          <div className={'text-[10px] ' + (r.diskDaysLeft < 7 ? 'font-bold text-amber-700' : 'text-slate-500')}>容量残 {Math.floor(r.diskDaysLeft)} 日</div>
+                        )}
                       </>
                     )}
                   </td>
