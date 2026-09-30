@@ -4,7 +4,7 @@ import { resolveAdminContext, type AdminTenantContext } from './acting'
 import { createSupabaseService } from '@/lib/supabase/server'
 
 /**
- * モニター系ページ（/stores・/bcp・/alarms・/baggage・/security・/infra）の
+ * モニター系ページ（/stores・/bcp・/alarms・/baggage・/security）の
  * テナント分離スコープ。super_admin もテナントを跨いで閲覧させないため、
  * 「操作中テナント（未選択なら null）」に紐づく店舗IDへ各クエリを絞る。
  *

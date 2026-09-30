@@ -23,7 +23,6 @@ export interface Msg {
     reports:  string
     settings: string
     // F22.1: top header tabs that were previously hardcoded JP
-    infra:    string
     bcp:      string
     security: string
     // F24: header right-side icon labels (tooltips + aria-labels)
@@ -158,37 +157,9 @@ export interface Msg {
     intro: string
     crumb: string
   }
-  infraNav: { dashboard: string; incidents: string; checks: string; reports: string; settings: string; glossary: string }
-  navTitle: { admin: string; security: string; bcp: string; infra: string }
+  navTitle: { admin: string; security: string; bcp: string }
   // ── F22: common UI atoms ──
   common: { open: string; notGenerated: string; dash: string }
-  // ── F22: /infra/incidents ──
-  infraIncidents: {
-    title: string
-    sectionOpen:     (n: number) => string
-    sectionAck:      (n: number) => string
-    sectionResolved: (n: number) => string
-    emptyOpen: string; emptyAck: string; emptyResolved: string
-    statusOpen: string; statusAck: string; statusResolved: string
-    severityInfo: string; severityWarn: string; severityDanger: string
-    colTime: string; colStore: string; colTarget: string; colKind: string; colSeverity: string; colStatus: string; colDetail: string
-    tenantLabel: string
-  }
-  // ── F22: /infra/checks ──
-  infraChecks: {
-    title: string
-    statRegistered: string; statEnabled: string; statFailing: string
-    empty: string
-    colStore: string; colTarget: string; colCheckType: string; colInterval: string; colStatus: string; colConsecFail: string; colLastRun: string
-    enabled: string; disabled: string; intervalSuffix: string
-    checkLabel: { heartbeat: string; ping: string; probe_camera: string; storage: string; recording_gap: string; ntp: string; tamper: string; version: string }
-  }
-  // ── F22: /infra/reports ──
-  infraReports: {
-    title: string; empty: string
-    colStore: string; colKind: string; colPeriod: string; colGenerated: string; colPdf: string; colEmails: string
-    kindDaily: string; kindWeekly: string; kindMonthly: string
-  }
   // ── F22: /security/reports ──
   securityReports: {
     title: string
@@ -197,26 +168,7 @@ export interface Msg {
     empty: string
     colStore: string; colPeriod: string; colGenerated: string; colRuns: string; colDone: string; colAnomalies: string; colReviews: string; colPdf: string; colEmails: string
   }
-  breadcrumb: { admin: string; security: string; bcp: string; infra: string; infraIncidents: string; infraChecks: string; infraReports: string; securityReports: string }
-  // ── F22.1: /infra dashboard ──
-  infraDashboard: {
-    title: string
-    healthLabel: { ok: string; warn: string; fail: string; unk: string; maint: string }
-    networkOutageTitle: string
-    networkOutageBody: string
-    statMonitored: string
-    statOpen: string
-    legendStatus: string
-    allHealthyTitle: (n: number) => string
-    allHealthyBody: string
-    colStore: string; colEdge: string; colRecorder: string; colCamera: string; colOpen: string; colLastSeen: string
-    notMonitored: string
-    inMaintenance: string
-    incidentCount: (n: number) => string
-    clockSkew: (sec: string) => string
-    emptyStores: string
-    footerNote: string
-  }
+  breadcrumb: { admin: string; security: string; bcp: string; securityReports: string }
   // ── F22.1: /security triage dashboard ──
   securityTriage: {
     title: string
@@ -267,20 +219,6 @@ export interface Msg {
     colPrompt: string
     colSensitivity: string
     colBaselineUrls: string
-  }
-  // ── F22.1: /infra settings ──
-  infraSettings: {
-    title: string
-    intro: string
-    sectionStores: string
-    colStore: string; colEnabled: string; colEdgeThreshold: string; colMaintUntil: string
-    empty: string
-    minutesUnit: string
-  }
-  // ── F22.1: /infra glossary ──
-  infraGlossary: {
-    title: string
-    intro: string
   }
   // ── F22.1: /bcp dashboard ──
   bcpDashboard: {
@@ -451,7 +389,6 @@ const ja: Msg = {
     logs:     'ログ',
     reports:  'レポート',
     settings: '設定',
-    infra:    '死活監視',
     bcp:      'BCP',
     security: 'PATROL',
     logout:   'ログアウト',
@@ -575,35 +512,8 @@ const ja: Msg = {
     intro: 'BCP（事業継続計画）ページで使用される用語の解説です。',
     crumb: '用語説明',
   },
-  infraNav: { dashboard: 'ダッシュボード', incidents: 'インシデント', checks: 'チェック設定', reports: '稼働率レポート', settings: '監視設定', glossary: '用語説明' },
-  navTitle: { admin: '設定', security: 'PATROL', bcp: 'BCP', infra: '死活監視' },
+  navTitle: { admin: '設定', security: 'PATROL', bcp: 'BCP' },
   common: { open: '開く', notGenerated: '未生成', dash: '—' },
-  infraIncidents: {
-    title: 'インシデント',
-    sectionOpen:     (n) => `未対応 (${n})`,
-    sectionAck:      (n) => `対応中 (${n})`,
-    sectionResolved: (n) => `解決済み (直近 ${n})`,
-    emptyOpen:     '現在、未対応のインシデントはありません。',
-    emptyAck:      '対応中のインシデントはありません。',
-    emptyResolved: '解決済みインシデントはまだありません。',
-    statusOpen: '未対応', statusAck: '対応中', statusResolved: '解決済み',
-    severityInfo: 'info', severityWarn: 'warn', severityDanger: 'danger',
-    colTime: '発生時刻', colStore: '拠点', colTarget: '対象', colKind: '種別', colSeverity: '重大度', colStatus: '状態', colDetail: '詳細',
-    tenantLabel: 'テナント',
-  },
-  infraChecks: {
-    title: 'チェック設定',
-    statRegistered: '登録チェック数', statEnabled: '有効', statFailing: '連続失敗中',
-    empty: 'まだチェックが登録されていません。/infra/settings で対象拠点の監視を有効化するとチェックが自動登録されます。',
-    colStore: '拠点', colTarget: '対象', colCheckType: 'チェック種別', colInterval: '間隔', colStatus: '状態', colConsecFail: '連続失敗', colLastRun: '最終実行',
-    enabled: '有効', disabled: '無効', intervalSuffix: '分',
-    checkLabel: { heartbeat: 'ハートビート', ping: 'Ping', probe_camera: 'カメラ プローブ', storage: 'ストレージ', recording_gap: '録画ギャップ', ntp: 'NTP 同期', tamper: '改ざん検知', version: 'バージョン' },
-  },
-  infraReports: {
-    title: '稼働率レポート', empty: 'まだレポートが生成されていません。日次/週次/月次の集計ジョブが走ると、ここに一覧表示されます。',
-    colStore: '拠点', colKind: '種別', colPeriod: '対象期間', colGenerated: '生成時刻', colPdf: 'PDF', colEmails: '送信先',
-    kindDaily: '日次', kindWeekly: '週次', kindMonthly: '月次',
-  },
   securityReports: {
     title: '巡回レポート',
     statRegistered: '登録レポート', statTotalRuns: '累計巡回回数', statTotalRunsSub: (d) => `(うち完了 ${d})`,
@@ -612,27 +522,7 @@ const ja: Msg = {
     colStore: '拠点', colPeriod: '対象期間', colGenerated: '生成時刻', colRuns: '巡回', colDone: '完了', colAnomalies: '異常', colReviews: '要確認', colPdf: 'PDF', colEmails: '送信先',
   },
   breadcrumb: {
-    admin: '設定', security: 'PATROL', bcp: 'BCP', infra: '死活監視',
-    infraIncidents: 'インシデント', infraChecks: 'チェック設定', infraReports: '稼働率レポート',
-    securityReports: '巡回レポート',
-  },
-  infraDashboard: {
-    title: 'インフラ ヘルス',
-    healthLabel: { ok: '正常', warn: '注意', fail: '障害', unk: '未検証', maint: 'メンテ' },
-    networkOutageTitle: 'ネットワーク/接続障害の疑い',
-    networkOutageBody: '多数の拠点が同時に無応答です。個別機器の状態は確認できません（未検証表示）。',
-    statMonitored: '監視拠点',
-    statOpen: '未対応インシデント',
-    legendStatus: '状態:',
-    allHealthyTitle: (n) => `全 ${n} 拠点 正常稼働中`,
-    allHealthyBody: '未対応インシデントはありません。各拠点の死活監視は継続中です。',
-    colStore: '拠点', colEdge: 'エッジ', colRecorder: 'レコーダ', colCamera: 'カメラ', colOpen: '未対応', colLastSeen: '最終確認',
-    notMonitored: '（未監視）',
-    inMaintenance: 'メンテ中',
-    incidentCount: (n) => `障害${n}`,
-    clockSkew: (sec) => `NVR時計ズレ ${sec}秒`,
-    emptyStores: '拠点がありません。先に管理画面で拠点を登録してください。',
-    footerNote: 'P1: エッジ死活は last_seen_at から判定。レコーダ/カメラの能動チェック（ping/映像受信確認）は P2 で有効化されます。',
+    admin: '設定', security: 'PATROL', bcp: 'BCP', securityReports: '巡回レポート',
   },
   securityTriage: {
     title: '即時巡回',
@@ -681,18 +571,6 @@ const ja: Msg = {
     colPrompt: '比較プロンプト（状態検出のみ）',
     colSensitivity: '感度',
     colBaselineUrls: '基準画像(昼/夜) URL',
-  },
-  infraSettings: {
-    title: '監視設定',
-    intro: '拠点ごとの監視有効/無効、エッジオフライン判定時間、メンテナンス期間の設定。',
-    sectionStores: '拠点別 監視設定',
-    colStore: '拠点', colEnabled: '有効', colEdgeThreshold: 'エッジ オフライン閾値', colMaintUntil: 'メンテ期限',
-    empty: '拠点が登録されていません。',
-    minutesUnit: '分',
-  },
-  infraGlossary: {
-    title: '用語説明',
-    intro: 'インフラ監視で使用される用語の解説。',
   },
   bcpDashboard: {
     title: 'BCP',
@@ -857,7 +735,6 @@ const en: Msg = {
     logs:     'Logs',
     reports:  'Reports',
     settings: 'Settings',
-    infra:    'Health',
     bcp:      'BCP',
     security: 'PATROL',
     logout:   'Log out',
@@ -981,35 +858,8 @@ const en: Msg = {
     intro: 'Terminology used on the BCP (Business Continuity Plan) pages.',
     crumb: 'Glossary',
   },
-  infraNav: { dashboard: 'Dashboard', incidents: 'Incidents', checks: 'Checks', reports: 'Uptime Reports', settings: 'Settings', glossary: 'Glossary' },
-  navTitle: { admin: 'Settings', security: 'PATROL', bcp: 'BCP', infra: 'Health Monitoring' },
+  navTitle: { admin: 'Settings', security: 'PATROL', bcp: 'BCP' },
   common: { open: 'Open', notGenerated: 'Not generated', dash: '—' },
-  infraIncidents: {
-    title: 'Incidents',
-    sectionOpen:     (n) => `Open (${n})`,
-    sectionAck:      (n) => `Acknowledged (${n})`,
-    sectionResolved: (n) => `Resolved (recent ${n})`,
-    emptyOpen:     'No open incidents at the moment.',
-    emptyAck:      'No incidents being handled.',
-    emptyResolved: 'No resolved incidents yet.',
-    statusOpen: 'Open', statusAck: 'Acknowledged', statusResolved: 'Resolved',
-    severityInfo: 'info', severityWarn: 'warn', severityDanger: 'danger',
-    colTime: 'Time', colStore: 'Site', colTarget: 'Target', colKind: 'Kind', colSeverity: 'Severity', colStatus: 'Status', colDetail: 'Detail',
-    tenantLabel: 'Tenant',
-  },
-  infraChecks: {
-    title: 'Check Configuration',
-    statRegistered: 'Registered checks', statEnabled: 'Enabled', statFailing: 'Currently failing',
-    empty: 'No checks registered yet. Enable monitoring for a site from /infra/settings to auto-register checks.',
-    colStore: 'Site', colTarget: 'Target', colCheckType: 'Check type', colInterval: 'Interval', colStatus: 'Status', colConsecFail: 'Consec. fails', colLastRun: 'Last run',
-    enabled: 'Enabled', disabled: 'Disabled', intervalSuffix: 'min',
-    checkLabel: { heartbeat: 'Heartbeat', ping: 'Ping', probe_camera: 'Camera probe', storage: 'Storage', recording_gap: 'Recording gap', ntp: 'NTP sync', tamper: 'Tamper detect', version: 'Version' },
-  },
-  infraReports: {
-    title: 'Uptime Reports', empty: 'No reports generated yet. Daily/weekly/monthly rollup jobs will list them here.',
-    colStore: 'Site', colKind: 'Kind', colPeriod: 'Period', colGenerated: 'Generated', colPdf: 'PDF', colEmails: 'Recipients',
-    kindDaily: 'Daily', kindWeekly: 'Weekly', kindMonthly: 'Monthly',
-  },
   securityReports: {
     title: 'Patrol Reports',
     statRegistered: 'Reports', statTotalRuns: 'Total patrols', statTotalRunsSub: (d) => `(done: ${d})`,
@@ -1018,27 +868,7 @@ const en: Msg = {
     colStore: 'Site', colPeriod: 'Period', colGenerated: 'Generated', colRuns: 'Patrols', colDone: 'Done', colAnomalies: 'Anomalies', colReviews: 'Review', colPdf: 'PDF', colEmails: 'Recipients',
   },
   breadcrumb: {
-    admin: 'Settings', security: 'PATROL', bcp: 'BCP', infra: 'Health',
-    infraIncidents: 'Incidents', infraChecks: 'Checks', infraReports: 'Uptime Reports',
-    securityReports: 'Patrol Reports',
-  },
-  infraDashboard: {
-    title: 'Infrastructure Health',
-    healthLabel: { ok: 'OK', warn: 'Warn', fail: 'Fail', unk: 'Unknown', maint: 'Maint.' },
-    networkOutageTitle: 'Possible network/connectivity outage',
-    networkOutageBody: 'Multiple sites are unresponsive simultaneously. Individual device state cannot be verified (shown as Unknown).',
-    statMonitored: 'Monitored sites',
-    statOpen: 'Open incidents',
-    legendStatus: 'Status:',
-    allHealthyTitle: (n) => `All ${n} sites operating normally`,
-    allHealthyBody: 'No open incidents. Liveness monitoring is ongoing for all sites.',
-    colStore: 'Site', colEdge: 'Edge', colRecorder: 'Recorder', colCamera: 'Camera', colOpen: 'Open', colLastSeen: 'Last seen',
-    notMonitored: '(not monitored)',
-    inMaintenance: 'In maintenance',
-    incidentCount: (n) => `${n} issues`,
-    clockSkew: (sec) => `NVR clock off by ${sec}s`,
-    emptyStores: 'No sites yet. Register sites in admin first.',
-    footerNote: 'P1: Edge liveness is derived from last_seen_at. Active checks for recorders/cameras (ping/frame verification) are enabled in P2.',
+    admin: 'Settings', security: 'PATROL', bcp: 'BCP', securityReports: 'Patrol Reports',
   },
   securityTriage: {
     title: 'Patrol Now',
@@ -1087,18 +917,6 @@ const en: Msg = {
     colPrompt: 'Comparison prompt (state only)',
     colSensitivity: 'Sensitivity',
     colBaselineUrls: 'Baseline URL (day/night)',
-  },
-  infraSettings: {
-    title: 'Monitoring Settings',
-    intro: 'Per-site monitoring on/off, edge-offline threshold, and maintenance windows.',
-    sectionStores: 'Per-Site Monitoring',
-    colStore: 'Site', colEnabled: 'Enabled', colEdgeThreshold: 'Edge offline threshold', colMaintUntil: 'Maintenance until',
-    empty: 'No sites registered.',
-    minutesUnit: 'min',
-  },
-  infraGlossary: {
-    title: 'Glossary',
-    intro: 'Terminology used in infrastructure monitoring.',
   },
   bcpDashboard: {
     title: 'BCP',
@@ -1263,7 +1081,6 @@ const zh: Msg = {
     logs:     '日志',
     reports:  '报表',
     settings: '设置',
-    infra:    '健康监控',
     bcp:      'BCP',
     security: 'PATROL',
     logout:   '退出',
@@ -1387,35 +1204,8 @@ const zh: Msg = {
     intro: '业务连续性计划 (BCP) 页面中使用的术语解释。',
     crumb: '术语说明',
   },
-  infraNav: { dashboard: '仪表盘', incidents: '事件', checks: '检查配置', reports: '可用率报告', settings: '监控设置', glossary: '术语表' },
-  navTitle: { admin: '设置', security: 'PATROL', bcp: 'BCP', infra: '健康监控' },
+  navTitle: { admin: '设置', security: 'PATROL', bcp: 'BCP' },
   common: { open: '打开', notGenerated: '未生成', dash: '—' },
-  infraIncidents: {
-    title: '事件',
-    sectionOpen:     (n) => `未处理 (${n})`,
-    sectionAck:      (n) => `处理中 (${n})`,
-    sectionResolved: (n) => `已解决 (最近 ${n})`,
-    emptyOpen:     '目前没有未处理的事件。',
-    emptyAck:      '没有正在处理的事件。',
-    emptyResolved: '尚无已解决的事件。',
-    statusOpen: '未处理', statusAck: '处理中', statusResolved: '已解决',
-    severityInfo: 'info', severityWarn: 'warn', severityDanger: 'danger',
-    colTime: '发生时间', colStore: '站点', colTarget: '对象', colKind: '类型', colSeverity: '严重度', colStatus: '状态', colDetail: '详情',
-    tenantLabel: '租户',
-  },
-  infraChecks: {
-    title: '检查配置',
-    statRegistered: '已注册检查', statEnabled: '启用中', statFailing: '连续失败中',
-    empty: '尚未注册检查。在 /infra/settings 启用站点监控后会自动注册。',
-    colStore: '站点', colTarget: '对象', colCheckType: '检查类型', colInterval: '间隔', colStatus: '状态', colConsecFail: '连续失败', colLastRun: '最后执行',
-    enabled: '启用', disabled: '禁用', intervalSuffix: '分钟',
-    checkLabel: { heartbeat: '心跳', ping: 'Ping', probe_camera: '摄像机探测', storage: '存储', recording_gap: '录像间隙', ntp: 'NTP 同步', tamper: '篡改检测', version: '版本' },
-  },
-  infraReports: {
-    title: '可用率报告', empty: '尚未生成报告。日/周/月汇总任务运行后将在此列出。',
-    colStore: '站点', colKind: '类型', colPeriod: '对象期间', colGenerated: '生成时间', colPdf: 'PDF', colEmails: '发送至',
-    kindDaily: '日报', kindWeekly: '周报', kindMonthly: '月报',
-  },
   securityReports: {
     title: '巡逻报告',
     statRegistered: '已登记报告', statTotalRuns: '累计巡逻次数', statTotalRunsSub: (d) => `(已完成 ${d})`,
@@ -1424,27 +1214,7 @@ const zh: Msg = {
     colStore: '站点', colPeriod: '对象期间', colGenerated: '生成时间', colRuns: '巡逻', colDone: '完成', colAnomalies: '异常', colReviews: '待确认', colPdf: 'PDF', colEmails: '发送至',
   },
   breadcrumb: {
-    admin: '设置', security: 'PATROL', bcp: 'BCP', infra: '健康监控',
-    infraIncidents: '事件', infraChecks: '检查配置', infraReports: '可用率报告',
-    securityReports: '巡逻报告',
-  },
-  infraDashboard: {
-    title: '基础设施健康',
-    healthLabel: { ok: '正常', warn: '注意', fail: '故障', unk: '未验证', maint: '维护' },
-    networkOutageTitle: '疑似网络/连接故障',
-    networkOutageBody: '多个站点同时无响应。无法确认各设备状态（显示为未验证）。',
-    statMonitored: '监控站点',
-    statOpen: '未处理事件',
-    legendStatus: '状态:',
-    allHealthyTitle: (n) => `全部 ${n} 个站点正常运行`,
-    allHealthyBody: '无未处理事件。各站点的死活监测持续进行中。',
-    colStore: '站点', colEdge: '边缘', colRecorder: '录像机', colCamera: '摄像头', colOpen: '未处理', colLastSeen: '最后确认',
-    notMonitored: '（未监控）',
-    inMaintenance: '维护中',
-    incidentCount: (n) => `故障 ${n}`,
-    clockSkew: (sec) => `NVR时钟偏差 ${sec}秒`,
-    emptyStores: '尚未注册站点。请先在管理界面添加站点。',
-    footerNote: 'P1: 边缘死活基于 last_seen_at 判定。录像机/摄像头的主动检查（ping/收帧验证）在 P2 启用。',
+    admin: '设置', security: 'PATROL', bcp: 'BCP', securityReports: '巡逻报告',
   },
   securityTriage: {
     title: '即时巡逻',
@@ -1493,18 +1263,6 @@ const zh: Msg = {
     colPrompt: '比较提示词（仅状态检测）',
     colSensitivity: '灵敏度',
     colBaselineUrls: '基准图像(白天/夜间) URL',
-  },
-  infraSettings: {
-    title: '监控设置',
-    intro: '按站点启用/停用监控，边缘离线判定时间，维护期间设置。',
-    sectionStores: '站点监控设置',
-    colStore: '站点', colEnabled: '启用', colEdgeThreshold: '边缘离线阈值', colMaintUntil: '维护至',
-    empty: '尚未注册站点。',
-    minutesUnit: '分钟',
-  },
-  infraGlossary: {
-    title: '术语表',
-    intro: '基础设施监控中使用的术语解释。',
   },
   bcpDashboard: {
     title: 'BCP',
@@ -1669,7 +1427,6 @@ const ko: Msg = {
     logs:     '로그',
     reports:  '보고서',
     settings: '설정',
-    infra:    '헬스 모니터링',
     bcp:      'BCP',
     security: 'PATROL',
     logout:   '로그아웃',
@@ -1793,35 +1550,8 @@ const ko: Msg = {
     intro: 'BCP(사업 연속성 계획) 페이지에서 사용되는 용어 해설입니다.',
     crumb: '용어 설명',
   },
-  infraNav: { dashboard: '대시보드', incidents: '인시던트', checks: '체크 설정', reports: '가동률 보고서', settings: '모니터링 설정', glossary: '용어 설명' },
-  navTitle: { admin: '설정', security: 'PATROL', bcp: 'BCP', infra: '헬스 모니터링' },
+  navTitle: { admin: '설정', security: 'PATROL', bcp: 'BCP' },
   common: { open: '열기', notGenerated: '미생성', dash: '—' },
-  infraIncidents: {
-    title: '인시던트',
-    sectionOpen:     (n) => `미대응 (${n})`,
-    sectionAck:      (n) => `대응 중 (${n})`,
-    sectionResolved: (n) => `해결 완료 (최근 ${n})`,
-    emptyOpen:     '현재 미대응 인시던트가 없습니다.',
-    emptyAck:      '대응 중인 인시던트가 없습니다.',
-    emptyResolved: '해결된 인시던트가 아직 없습니다.',
-    statusOpen: '미대응', statusAck: '대응 중', statusResolved: '해결 완료',
-    severityInfo: 'info', severityWarn: 'warn', severityDanger: 'danger',
-    colTime: '발생 시각', colStore: '거점', colTarget: '대상', colKind: '종류', colSeverity: '심각도', colStatus: '상태', colDetail: '상세',
-    tenantLabel: '테넌트',
-  },
-  infraChecks: {
-    title: '체크 설정',
-    statRegistered: '등록된 체크', statEnabled: '활성화', statFailing: '연속 실패 중',
-    empty: '아직 체크가 등록되지 않았습니다. /infra/settings 에서 거점 모니터링을 활성화하면 자동 등록됩니다.',
-    colStore: '거점', colTarget: '대상', colCheckType: '체크 종류', colInterval: '주기', colStatus: '상태', colConsecFail: '연속 실패', colLastRun: '최종 실행',
-    enabled: '활성', disabled: '비활성', intervalSuffix: '분',
-    checkLabel: { heartbeat: '하트비트', ping: 'Ping', probe_camera: '카메라 프로브', storage: '스토리지', recording_gap: '녹화 간격', ntp: 'NTP 동기화', tamper: '변조 감지', version: '버전' },
-  },
-  infraReports: {
-    title: '가동률 보고서', empty: '아직 보고서가 생성되지 않았습니다. 일/주/월 집계가 실행되면 여기 표시됩니다.',
-    colStore: '거점', colKind: '종류', colPeriod: '대상 기간', colGenerated: '생성 시각', colPdf: 'PDF', colEmails: '발송처',
-    kindDaily: '일간', kindWeekly: '주간', kindMonthly: '월간',
-  },
   securityReports: {
     title: '순찰 보고서',
     statRegistered: '등록 보고서', statTotalRuns: '누적 순찰 횟수', statTotalRunsSub: (d) => `(완료 ${d})`,
@@ -1830,27 +1560,7 @@ const ko: Msg = {
     colStore: '거점', colPeriod: '대상 기간', colGenerated: '생성 시각', colRuns: '순찰', colDone: '완료', colAnomalies: '이상', colReviews: '확인 필요', colPdf: 'PDF', colEmails: '발송처',
   },
   breadcrumb: {
-    admin: '설정', security: 'PATROL', bcp: 'BCP', infra: '헬스 모니터링',
-    infraIncidents: '인시던트', infraChecks: '체크 설정', infraReports: '가동률 보고서',
-    securityReports: '순찰 보고서',
-  },
-  infraDashboard: {
-    title: '인프라 헬스',
-    healthLabel: { ok: '정상', warn: '주의', fail: '장애', unk: '미검증', maint: '점검' },
-    networkOutageTitle: '네트워크/연결 장애 의심',
-    networkOutageBody: '여러 거점이 동시에 무응답입니다. 개별 기기 상태를 확인할 수 없습니다(미검증 표시).',
-    statMonitored: '모니터링 거점',
-    statOpen: '미대응 인시던트',
-    legendStatus: '상태:',
-    allHealthyTitle: (n) => `전체 ${n}개 거점 정상 운영 중`,
-    allHealthyBody: '미대응 인시던트가 없습니다. 각 거점의 사활 모니터링이 지속됩니다.',
-    colStore: '거점', colEdge: '엣지', colRecorder: '레코더', colCamera: '카메라', colOpen: '미대응', colLastSeen: '최종 확인',
-    notMonitored: '(미모니터링)',
-    inMaintenance: '점검 중',
-    incidentCount: (n) => `장애${n}`,
-    clockSkew: (sec) => `NVR 시계 오차 ${sec}초`,
-    emptyStores: '거점이 없습니다. 먼저 관리 화면에서 거점을 등록해주세요.',
-    footerNote: 'P1: 엣지 사활은 last_seen_at 기반으로 판정. 레코더/카메라의 능동 체크(ping/영상 수신 확인)는 P2에서 활성화됩니다.',
+    admin: '설정', security: 'PATROL', bcp: 'BCP', securityReports: '순찰 보고서',
   },
   securityTriage: {
     title: '즉시 순찰',
@@ -1899,18 +1609,6 @@ const ko: Msg = {
     colPrompt: '비교 프롬프트(상태 감지만)',
     colSensitivity: '감도',
     colBaselineUrls: '기준 이미지(주/야) URL',
-  },
-  infraSettings: {
-    title: '모니터링 설정',
-    intro: '거점별 모니터링 활성/비활성, 엣지 오프라인 판정 시간, 점검 기간 설정.',
-    sectionStores: '거점별 모니터링 설정',
-    colStore: '거점', colEnabled: '활성', colEdgeThreshold: '엣지 오프라인 임계치', colMaintUntil: '점검 기한',
-    empty: '거점이 등록되지 않았습니다.',
-    minutesUnit: '분',
-  },
-  infraGlossary: {
-    title: '용어 설명',
-    intro: '인프라 모니터링에서 사용되는 용어 해설.',
   },
   bcpDashboard: {
     title: 'BCP',

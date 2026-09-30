@@ -68,7 +68,7 @@ export function AppHeader({
 
   // オプション機能フラグで出し分け。未指定(=undefined)は全表示（フェイルオープン）。
   // 巡回=/security・発報=/alarms・検査=/baggage は有料オプションのため、
-  // テナントで無効なら中央タブから隠す。/stores・/bcp・/infra は基本パック＝常時表示。
+  // テナントで無効なら中央タブから隠す。/stores・/bcp は基本パック＝常時表示。
   const TABS: Array<{ href: string; label: string; base?: string }> = [
     { href: '/stores',   label: t.nav.monitor  },
     { href: '/bcp',      label: t.nav.bcp      },
@@ -80,7 +80,7 @@ export function AppHeader({
     // 手荷物検査モジュール（M4）。ラベルは ALARM と同様に固定表記。
     ...(features?.baggage !== false
       ? [{ href: '/baggage', label: '検査' }] : []),
-    // 死活監視(/infra)は SaaS 運営者向け＝中央タブから外し、②運営管理（/admin）へ移動。
+    // 死活監視 (/infra) は 2026-09-30 に廃止 (G・VMS の拠点の状態は /admin/fleet の拠点稼働で見る)。
     // F23: /logs タブは削除（マスタ内の監査ログと重複していたため）
     // F24: /admin（設定）は中央タブから外し、右側のアイコンに移動
   ]

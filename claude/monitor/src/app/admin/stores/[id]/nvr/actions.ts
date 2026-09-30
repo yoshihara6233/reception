@@ -125,7 +125,6 @@ export async function saveNvrConfig(formData: FormData): Promise<SaveResult> {
   // ライフサイクル VIEW も自動で再計算されるので revalidate するだけで OK
   revalidatePath(`/admin/stores/${raw.storeId}/nvr`)
   revalidatePath(`/admin/stores/${raw.storeId}`)
-  revalidatePath('/infra')
 
   return { ok: true, message: '保存しました' }
 }

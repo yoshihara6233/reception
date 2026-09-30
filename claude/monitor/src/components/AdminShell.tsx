@@ -17,10 +17,10 @@ import { AdminShellClient } from './AdminShellClient'
 import { getT } from '@/lib/i18n/server'
 import type { Msg } from '@/lib/i18n/messages'
 
-export type AdminSection = 'admin' | 'security' | 'bcp' | 'infra'
+export type AdminSection = 'admin' | 'security' | 'bcp'
 
 // F22: factory helpers — return translated nav for a given section. Pages
-// can pass `section="infra"` to AdminShell and let it build the nav, or
+// can pass `section="bcp"` to AdminShell and let it build the nav, or
 // call these directly when they need the typed array.
 // マスタ管理ナビは2プレーンに分離する:
 //   ①設定（テナント運用）— tenant_admin と super_admin が「操作中テナント」に対して使う
@@ -57,16 +57,16 @@ export function getAdminNav(t: Msg, opts?: { isSuper?: boolean; baggage?: boolea
       { href: '/admin/edges',      label: t.adminNav.edges, icon: '⌬' },
       // レコーダはエッジ配下（/admin/edges/[id]）で管理。専用ページは未実装のため
       // デッドリンク（/admin/recorders）はナビから除外。
-      // F49.J: NVR 機種マスタ (EOL/EOS 管理)
-      { href: '/admin/nvr-models', label: 'NVR 機種',   icon: '🛰' },
       // 保守自動化②: nvmsd リリース台帳と配備状況 (NVMS/docs/OTA_SPEC.md)
       { href: '/admin/nvmsd-releases', label: 'nvmsd リリース', icon: '⬆' },
       { href: '/admin/limits',     label: t.adminNav.limits, icon: '⏱' },
+      // F49.J: NVR 機種マスタ (EOL/EOS 管理)。使う場面が少ないので視聴上限の下へ (2026-09-30・発注者の指示)
+      { href: '/admin/nvr-models', label: 'NVR 機種',   icon: '🛰' },
       // 運営(super_admin)自身の行動履歴。テナント側/admin/auditには運営の行を出さない
       // （PR#213）ため、運営の説明責任はこのページで担保する。全テナント横断。
       { href: '/admin/ops-audit',  label: '運営アクセスログ', icon: '☰' },
-      // 死活監視(/infra)は SaaS 運営者向け＝中央タブから②運営管理へ移設。全テナント横断。
-      { href: '/infra',            label: '死活監視',   icon: '🩺' },
+      // 死活監視 (/infra) は 2026-09-30 に廃止した (発注者の判断)。G・VMS の拠点の状態は
+      // 拠点稼働 (/admin/fleet) で見る。オフラインの通知は cron/edge-health が別に送る。
     )
   }
   return items
@@ -85,20 +85,6 @@ export function getBcpNav(t: Msg): NavItem[] {
     { href: '/bcp/jalerts',  label: t.bcpNav.jalerts,       icon: '📡' },
     { href: '/bcp/test',     label: t.bcpNav.testIssue,     icon: '⚡' },
     { href: '/bcp/glossary', label: t.bcpNav.glossary,      icon: '?' },
-  ]
-}
-export function getInfraNav(t: Msg): NavItem[] {
-  // メニュー整理（2026-07-12）: 機能しているページのみ表示。以下は除外（残置・直URL有効）:
-  //   インシデント …… ダッシュボードの未対応一覧と重複
-  //   中央ノード ……… F49.G Tier3 集約モード未稼働
-  //   チェック設定 …… monitor_checks への書き込み元が未実装（P2 能動チェック）＝常に空
-  //   稼働率レポート … monitor_reports の生成が未実装（P3）＝常に空。実装時に戻す
-  return [
-    { href: '/infra',           label: t.infraNav.dashboard, icon: '🩺', exact: true },
-    // F50.E: SLO ダッシュボード (Phase 3)
-    { href: '/infra/slo',       label: 'SLO',                icon: '📈' },
-    { href: '/infra/settings',  label: t.infraNav.settings,  icon: '⚙' },
-    { href: '/infra/glossary',  label: t.infraNav.glossary,  icon: '?' },
   ]
 }
 
@@ -144,14 +130,6 @@ export const ALARM_NAV: NavItem[] = [
   { href: '/alarms/settings', label: '発報設定',         icon: '⚙' },
 ]
 
-// インフラ管理（機器ヘルス監視）— getInfraNav と同期を保つこと
-export const INFRA_NAV: NavItem[] = [
-  { href: '/infra',           label: 'ダッシュボード', icon: '🩺', exact: true },
-  { href: '/infra/slo',       label: 'SLO',            icon: '📈' },
-  { href: '/infra/settings',  label: '監視設定',       icon: '⚙' },
-  { href: '/infra/glossary',  label: '用語説明',       icon: '?' },
-]
-
 export async function AdminShell({
   pathname,
   children,
@@ -190,7 +168,6 @@ export async function AdminShell({
       ?? (section === 'admin'    ? getAdminNav(t!, { isSuper: ctx.isSuper, baggage: features.baggage })
         : section === 'security' ? getSecurityNav(t!)
         : section === 'bcp'      ? getBcpNav(t!)
-        : section === 'infra'    ? getInfraNav(t!)
         : ADMIN_NAV)
   // 手荷物検査がオプション無効なら「手荷物検査設定」を隠す（nav 明示指定の経路も含めて保険）。
   if (!features.baggage) {
