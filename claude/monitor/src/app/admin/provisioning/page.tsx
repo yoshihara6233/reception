@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
+import { GvmsTabs } from '@/components/admin/GvmsTabs'
 import { AdminDenied } from '@/components/admin/AdminDenied'
 import { requireAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
@@ -121,8 +122,9 @@ export default async function ProvisioningPage() {
     <AdminShell pathname="/admin/provisioning" section="admin">
       <PageHeader
         title="拠点導入"
-        crumb={[{ href: '/admin', label: t.breadcrumb.admin }, { href: '/admin/provisioning', label: '拠点導入' }]}
+        crumb={[{ href: '/admin', label: t.breadcrumb.admin }, { href: '/admin/fleet', label: '拠点の G・VMS' }, { href: '/admin/provisioning', label: '拠点導入' }]}
       />
+      <GvmsTabs current="/admin/provisioning" />
       <div className="p-5">
         <ProvisioningClient stores={stores} rows={rows} canIssue={canIssue} />
       </div>

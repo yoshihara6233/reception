@@ -26,33 +26,26 @@ export type AdminSection = 'admin' | 'security' | 'bcp' | 'infra'
 //   ①設定（テナント運用）— tenant_admin と super_admin が「操作中テナント」に対して使う
 //   ②運営管理（SaaS運営）— super_admin 専用。tenant_admin にはメニュー自体を出さない
 // CSV一括投入は店舗ページ右上に導線があるためメニューから除外（直URLは有効）。
+/** 「拠点の G・VMS」でまとめる 3 画面。左メニューの選択判定と、画面上のタブ (GvmsTabs) が同じ表を使う。 */
+export const GVMS_PATHS = ['/admin/fleet', '/admin/provisioning', '/admin/licenses'] as const
+
 export function getAdminNav(t: Msg, opts?: { isSuper?: boolean; baggage?: boolean }): NavItem[] {
   const items: NavItem[] = [
     // 利用状況レポートを最上部に。旧ダッシュボードは廃止し中身をここへ集約。
     { href: '/admin/reports/usage', label: '利用状況レポート', icon: '📊', exact: true },
     { href: '/admin/stores',     label: t.adminNav.stores,    icon: '⛬' },
     { href: '/admin/users',      label: t.adminNav.users,     icon: '⚇' },
-    { href: '/admin/bcp',        label: 'BCP発動条件',         icon: '🚨' },
-    { href: '/admin/audit',      label: t.adminNav.audit,     icon: '☰' },
-    // 拠点の G・VMS を遠隔から扱う画面は見出しでまとめる (2026-09-30・発注者の指示)。
-    // クラウド自身の設定 (拠点・ユーザ・BCP・ログ) と並列だと、どれが何のための
-    // 画面か分からない。見出しは閉じられないので、まとめない項目は見出しより上に置く。
-    { href: '#gvms', label: '拠点の G・VMS', icon: '', heading: true },
-    // 多拠点 統合ダッシュボード（B1・稼働/健全/設定反映/版/ライセンスを横断）。
-    { href: '/admin/fleet', label: '拠点稼働', icon: '📡' },
-    // 拠点導入（エンロールコード発行＋立ち上げ状況）。パートナー(tenant_admin)が使う。
-    { href: '/admin/provisioning', label: '拠点導入', icon: '⏻' },
-    // ライセンス管理（G・VMS 署名ライセンスの発行/差し替え/失効）。パートナーが使う。
-    { href: '/admin/licenses', label: 'ライセンス', icon: '🔑' },
-    // 手荷物検査は別の製品群なので、これも見出しで分ける。
-    // 「内容設定」（同意文言・STEP等）はテナント側の持ち物＝①。
+    // 拠点の G・VMS を遠隔から扱う 3 画面 (拠点稼働・拠点導入・ライセンス) は左メニューでは
+    // 1 項目にまとめ、画面の上のタブ (GvmsTabs) で行き来する (2026-09-30・発注者の指示)。
+    // クラウド自身の設定 (拠点・ユーザ・BCP・ログ) と並列だと、どれが何のための画面か
+    // 分からないため。3 画面のどれを開いていても、この項目が選択状態になる (match)。
+    { href: '/admin/fleet', label: '拠点の G・VMS', icon: '⌬', match: GVMS_PATHS },
+    // 手荷物検査の「内容設定」（同意文言・STEP等）はテナント側の持ち物＝①。
     // 「使えるか(ON/OFF=課金)」は②のテナント編集フラグで運営が制御する。
     ...(opts?.baggage !== false
-      ? [
-          { href: '#baggage', label: '手荷物検査', icon: '', heading: true },
-          { href: '/admin/baggage', label: '手荷物検査設定', icon: '🧳' },
-        ]
-      : []),
+      ? [{ href: '/admin/baggage', label: '手荷物検査設定', icon: '🧳' }] : []),
+    { href: '/admin/bcp',        label: 'BCP発動条件',         icon: '🚨' },
+    { href: '/admin/audit',      label: t.adminNav.audit,     icon: '☰' },
   ]
   if (opts?.isSuper) {
     items.push(
@@ -115,6 +108,8 @@ export interface NavItem {
   icon: string
   /** exact match only (section root, e.g. /admin, /security) — won't activate on sub-paths */
   exact?: boolean
+  /** これらのパス (とその配下) のどれかを開いているときも選択状態にする (1 項目で複数画面をまとめる用) */
+  match?: readonly string[]
   /** true = リンクではなく区切り見出し（②運営管理 の区分け表示に使用） */
   heading?: boolean
 }

@@ -69,9 +69,10 @@ export function AdminShellClient({
                   </div>
                 )
               }
+              const hit = (h: string) => pathname === h || pathname.startsWith(h + '/')
               const active = e.exact
                 ? pathname === e.href
-                : pathname === e.href || pathname.startsWith(e.href + '/')
+                : hit(e.href) || (e.match?.some(hit) ?? false)
               return (
                 <Link
                   key={e.href}
