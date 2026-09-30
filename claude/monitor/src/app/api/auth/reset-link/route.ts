@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { sendEmail, passwordResetEmail, SECURITY_FROM_ADDRESS } from '@/lib/email/send'
+import { resetLinkOrigin } from '@/lib/auth/reset-host'
 import { rateLimitAllows, clientIp } from '@/lib/rate-limit'
 
 /**
@@ -47,15 +48,7 @@ export async function POST(req: NextRequest) {
   // exact deployment. Validate the host to keep the recovery token on our own
   // domain (no open redirect / token exfiltration).
   const host  = req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? ''
-  const proto = req.headers.get('x-forwarded-proto') ?? 'https'
-  const hostname = host.split(':')[0]
-  const hostAllowed =
-    host !== '' &&
-    (hostname.endsWith('.vercel.app') ||
-      hostname === 'localhost' ||
-      hostname === '127.0.0.1' ||
-      hostname.endsWith('.genesis-edge.com'))
-  const origin = hostAllowed ? `${proto}://${host}` : 'https://intereco-monitor.vercel.app'
+  const origin = resetLinkOrigin(host, req.headers.get('x-forwarded-proto'))
 
   try {
     const supabase = createSupabaseService()
