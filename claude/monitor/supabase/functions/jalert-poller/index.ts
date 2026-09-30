@@ -803,7 +803,7 @@ async function sendAlertEmail(
     return
   }
 
-  const appUrl = Deno.env.get('NEXT_PUBLIC_APP_URL') ?? 'https://intereco-monitor.vercel.app'
+  const appUrl = Deno.env.get('NEXT_PUBLIC_APP_URL') ?? 'https://gvms-cloud.com'
   const eventUrl = `${appUrl}/bcp/${eventId}`
   const alertTime = new Date(alertIssuedAt).toLocaleString('ja-JP', {
     timeZone: 'Asia/Tokyo',

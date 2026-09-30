@@ -11,8 +11,12 @@
  * env 未設定でも必ず絶対URLになるようにする。
  */
 
-/** env 未設定時の既定（本番URL）。ローカル開発では env で上書きする。 */
-const FALLBACK_ORIGIN = 'https://intereco-monitor.vercel.app'
+/**
+ * env 未設定時の既定（本番URL）。ローカル開発では env で上書きする。
+ * 2026-09-30 に専用ドメイン gvms-cloud.com へ移すと決めた（発注者の判断）。旧 intereco-monitor.vercel.app も
+ * Vercel の既定の URL として当面は生きている（拠点の NVMS_UPLINK_URL を順に移すため）。
+ */
+const FALLBACK_ORIGIN = 'https://gvms-cloud.com'
 
 /**
  * 末尾スラッシュを落とした絶対オリジンを返す。

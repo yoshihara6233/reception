@@ -9,7 +9,7 @@ afterEach(() => {
 
 describe('appBaseUrl', () => {
   it('env 未設定でも本番URLに落ちる（メールのリンク切れを作らない）', () => {
-    expect(appBaseUrl()).toBe('https://intereco-monitor.vercel.app')
+    expect(appBaseUrl()).toBe('https://gvms-cloud.com')
   })
 
   it('NEXT_PUBLIC_SITE_URL を最優先する', () => {
@@ -26,7 +26,7 @@ describe('appBaseUrl', () => {
   it('空文字・空白のみの env は未設定として扱う（?? では素通りしてしまう罠）', () => {
     process.env.NEXT_PUBLIC_SITE_URL = ''
     process.env.NEXT_PUBLIC_APP_URL = '   '
-    expect(appBaseUrl()).toBe('https://intereco-monitor.vercel.app')
+    expect(appBaseUrl()).toBe('https://gvms-cloud.com')
   })
 
   it('末尾スラッシュを落とす（// の二重スラッシュを作らない）', () => {
@@ -37,10 +37,10 @@ describe('appBaseUrl', () => {
 
 describe('absoluteUrl', () => {
   it('必ず絶対URLになる（相対パスはメーラーが解決できない）', () => {
-    expect(absoluteUrl('/bcp/abc')).toBe('https://intereco-monitor.vercel.app/bcp/abc')
+    expect(absoluteUrl('/bcp/abc')).toBe('https://gvms-cloud.com/bcp/abc')
   })
 
   it('先頭スラッシュが無くても補う', () => {
-    expect(absoluteUrl('bcp/abc')).toBe('https://intereco-monitor.vercel.app/bcp/abc')
+    expect(absoluteUrl('bcp/abc')).toBe('https://gvms-cloud.com/bcp/abc')
   })
 })
