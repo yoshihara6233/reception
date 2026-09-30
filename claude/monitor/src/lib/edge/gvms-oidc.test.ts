@@ -2,10 +2,10 @@ import { describe, expect, it, vi } from 'vitest'
 import { sanitizeRedirectUris, syncGvmsOidcClient, GVMS_CALLBACK_PATH } from './gvms-oidc'
 
 describe('戻り先の検査', () => {
-  it('コールバックのパスの http(s) だけを、重複を除いて並べて残す', () => {
+  it('コールバックのパスの https (と http のループバック) だけを、重複を除いて並べて残す', () => {
     expect(sanitizeRedirectUris([
       'https://192.168.0.200:8443/api/v1/auth/oidc/callback',
-      'http://nvms.local/api/v1/auth/oidc/callback',
+      'http://localhost:8080/api/v1/auth/oidc/callback',
       'https://192.168.0.200:8443/api/v1/auth/oidc/callback',
       'https://evil.example/other',
       'https://u:p@x.example/api/v1/auth/oidc/callback',
@@ -13,10 +13,25 @@ describe('戻り先の検査', () => {
       'javascript:alert(1)',
       42,
     ])).toEqual([
-      'http://nvms.local/api/v1/auth/oidc/callback',
+      'http://localhost:8080/api/v1/auth/oidc/callback',
       'https://192.168.0.200:8443/api/v1/auth/oidc/callback',
     ])
     expect(sanitizeRedirectUris('x')).toEqual([])
+  })
+  it('ループバック以外の http は捨てる (Supabase が受けず、一覧全体の登録が止まるため・.200 の実例)', () => {
+    expect(sanitizeRedirectUris([
+      'http://192.168.0.200:8080/api/v1/auth/oidc/callback',
+      'https://10.9.0.1:8443/api/v1/auth/oidc/callback',
+      'https://192.168.0.200:8443/api/v1/auth/oidc/callback',
+      'https://site200.sites.genesis-edge.com:8443/api/v1/auth/oidc/callback',
+      'http://nvms.local/api/v1/auth/oidc/callback',
+      'http://127.0.0.1:8080/api/v1/auth/oidc/callback',
+    ])).toEqual([
+      'http://127.0.0.1:8080/api/v1/auth/oidc/callback',
+      'https://10.9.0.1:8443/api/v1/auth/oidc/callback',
+      'https://192.168.0.200:8443/api/v1/auth/oidc/callback',
+      'https://site200.sites.genesis-edge.com:8443/api/v1/auth/oidc/callback',
+    ])
   })
   it('10 件まで', () => {
     const many = Array.from({ length: 20 }, (_, i) => `https://10.0.0.${i}${GVMS_CALLBACK_PATH}`)
