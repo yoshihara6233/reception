@@ -73,3 +73,23 @@ export function prevMonth(year: number, month1to12: number): { year: number; mon
   if (month1to12 <= 1) return { year: year - 1, month: 12 }
   return { year, month: month1to12 - 1 }
 }
+
+/**
+ * 利用状況レポートで出す段と列。テナントが契約しているオプション (lib/tenant/features) で決める。
+ * G・VMS だけのテナントに巡回・手荷物検査・顔認証の 0 が並ぶと、何の画面か分からない (2026-09-30)。
+ * 顔認証と映像確認率は手荷物検査の中の数字なので baggage に従う。
+ */
+export interface UsageShow { patrol: boolean; alarm: boolean; baggage: boolean }
+
+/** 同時視聴の上限の契約: 登録カメラ 50 台ごとに 1 名 (2026-09-30・発注者の判断)。 */
+export const CAMERAS_PER_VIEWER = 50
+
+/**
+ * 登録カメラ台数から、同時視聴の上限の目安を出す (50 台ごとに 1 名・50 台未満は 1 名)。
+ * 実際の上限は運営が 運営管理 → 視聴上限 に入れる値 (session_limits.max_concurrent) で、
+ * これはその目安。台数から自動では決めない (運営が入れる方式・発注者の判断)。
+ */
+export function viewerLimitFor(cameras: number): number {
+  if (!Number.isFinite(cameras) || cameras < 0) return 1
+  return Math.max(1, Math.floor(cameras / CAMERAS_PER_VIEWER))
+}

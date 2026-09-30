@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { confirmRatePct, monthBounds, trendBounds, rollupWindow, prevMonth } from './usage'
+import { confirmRatePct, monthBounds, trendBounds, rollupWindow, prevMonth, viewerLimitFor } from './usage'
 
 describe('confirmRatePct', () => {
   it('分母0は null', () => {
@@ -43,5 +43,24 @@ describe('prevMonth', () => {
   it('前月（年跨ぎ）', () => {
     expect(prevMonth(2026, 7)).toEqual({ year: 2026, month: 6 })
     expect(prevMonth(2026, 1)).toEqual({ year: 2025, month: 12 })
+  })
+})
+
+describe('viewerLimitFor (同時視聴の上限の目安: カメラ 50 台ごとに 1 名)', () => {
+  it('50 台未満は 1 名 (0 台でも 1 名)', () => {
+    expect(viewerLimitFor(0)).toBe(1)
+    expect(viewerLimitFor(1)).toBe(1)
+    expect(viewerLimitFor(49)).toBe(1)
+  })
+  it('50 台ごとに 1 名 (端数は切り捨て)', () => {
+    expect(viewerLimitFor(50)).toBe(1)
+    expect(viewerLimitFor(99)).toBe(1)
+    expect(viewerLimitFor(100)).toBe(2)
+    expect(viewerLimitFor(149)).toBe(2)
+    expect(viewerLimitFor(500)).toBe(10)
+  })
+  it('壊れた値は 1 名に倒す', () => {
+    expect(viewerLimitFor(Number.NaN)).toBe(1)
+    expect(viewerLimitFor(-3)).toBe(1)
   })
 })
