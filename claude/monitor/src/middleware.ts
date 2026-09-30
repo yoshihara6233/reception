@@ -17,6 +17,8 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { createTokenCache, hashToken, jwtExpiresAtMs } from '@/lib/auth/token-cache'
+import { legacyRedirectTarget } from '@/lib/legacy-host'
+import { appBaseUrl } from '@/lib/app-url'
 
 /**
  * トークン → 「手荷物検査店長か」。
@@ -55,6 +57,11 @@ function isStaticAsset(path: string): boolean {
 
 export async function middleware(req: NextRequest) {
   const path = req.nextUrl.pathname
+  // 旧 URL の画面は新 URL へ（API・キオスクは除く・理由は lib/legacy-host.ts）。
+  const legacy = legacyRedirectTarget(
+    req.headers.get('host') ?? req.nextUrl.host, path, req.nextUrl.search, appBaseUrl())
+  if (legacy) return NextResponse.redirect(legacy, 307)
+
   // 許可パス・静的アセットはロール参照なしで通す（キオスク/履歴の常用経路を軽くする）。
   if (isAllowed(path) || isStaticAsset(path)) return NextResponse.next()
 

@@ -198,3 +198,21 @@ describe('ロール判定のキャッシュ（Auth 往復の削減）', () => {
     expect(getUserMock).toHaveBeenCalledTimes(2)
   })
 })
+
+describe('旧 URL の転送（middleware を通して）', () => {
+  const oldReq = (path: string) => new NextRequest(`https://intereco-monitor.vercel.app${path}`)
+
+  it('画面は 307 で新 URL へ（ロールの参照より前）', async () => {
+    getUserMock.mockClear()
+    const res = await middleware(oldReq('/stores?x=1'))
+    expect(res.status).toBe(307)
+    expect(res.headers.get('location')).toBe('https://gvms-cloud.com/stores?x=1')
+    expect(getUserMock).not.toHaveBeenCalled()
+  })
+
+  it('API は転送しない', async () => {
+    asRole(null)
+    const res = await middleware(oldReq('/api/edge/heartbeat'))
+    expect(res.headers.get('location')).toBeNull()
+  })
+})
