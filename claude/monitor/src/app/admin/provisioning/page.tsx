@@ -126,7 +126,8 @@ export default async function ProvisioningPage() {
       />
       <GvmsTabs current="/admin/provisioning" />
       <div className="p-5">
-        <ProvisioningClient stores={stores} rows={rows} canIssue={canIssue} />
+        {/* エッジサーバの詳細 (診断) は運営だけ。パートナーにはリンクを出さない (2026-09-30) */}
+        <ProvisioningClient stores={stores} rows={rows} canIssue={canIssue} canOpenEdge={guard.profile.role === 'super_admin'} />
       </div>
     </AdminShell>
   )

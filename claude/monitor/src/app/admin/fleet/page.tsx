@@ -129,7 +129,9 @@ export default async function FleetPage() {
         crumb={[{ href: '/admin', label: t.breadcrumb.admin }, { href: '/admin/fleet', label: '拠点の G・VMS' }, { href: '/admin/fleet', label: '拠点稼働' }]} />
       <GvmsTabs current="/admin/fleet" />
       <div className="p-5">
-        <FleetClient rows={rows} />
+        {/* エッジサーバの詳細は運営 (super_admin) だけが開ける。パートナーにはリンクを出さない
+            (押すと「権限がありません」になっていた・2026-09-30) */}
+        <FleetClient rows={rows} canOpenEdge={guard.profile.role === 'super_admin'} />
       </div>
     </AdminShell>
   )
