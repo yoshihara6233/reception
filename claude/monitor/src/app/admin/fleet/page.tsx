@@ -57,7 +57,8 @@ export default async function FleetPage() {
       const recEdge = new Map<string, string>()
       for (const r of recs ?? []) { recByEdge.set(r.edge_id as string, r as never); recIds.push(r.id as string); recEdge.set(r.id as string, r.edge_id as string) }
       if (recIds.length > 0) {
-        const { data: cams } = await svc.from('recorder_cameras').select('recorder_id').in('recorder_id', recIds).limit(200000)
+        // G・VMS で削除したカメラ (removed_at あり) は数えない
+        const { data: cams } = await svc.from('recorder_cameras').select('recorder_id').in('recorder_id', recIds).is('removed_at', null).limit(200000)
         for (const c of cams ?? []) { const e = recEdge.get(c.recorder_id as string); if (e) camByEdge.set(e, (camByEdge.get(e) ?? 0) + 1) }
       }
       const { data: lics } = await svc.from('licenses')

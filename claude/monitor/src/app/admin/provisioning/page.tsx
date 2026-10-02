@@ -72,7 +72,7 @@ export default async function ProvisioningPage() {
 
       if (recIds.length > 0) {
         const { data: cams } = await svc
-          .from('recorder_cameras').select('recorder_id').in('recorder_id', recIds).limit(200_000)
+          .from('recorder_cameras').select('recorder_id').in('recorder_id', recIds).is('removed_at', null).limit(200_000)
         for (const c of cams ?? []) {
           const k = c.recorder_id as string
           camByRec.set(k, (camByRec.get(k) ?? 0) + 1)

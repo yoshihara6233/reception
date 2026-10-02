@@ -67,14 +67,16 @@ export default async function AlarmDetailPage({ params }: { params: Promise<{ id
   // 店舗の全カメラ（edge_devices → recorders → recorder_cameras）。
   const { data: edgeRows } = await supa
     .from('edge_devices')
-    .select('recorders ( vendor, recorder_cameras ( id, name, channel ) )')
+    .select('recorders ( vendor, recorder_cameras ( id, name, channel, removed_at ) )')
     .eq('store_id', ev.store_id)
 
   const cameras: StoreCamera[] = []
   for (const er of arr(edgeRows as { recorders?: unknown }[] | null)) {
     for (const rec of arr((er as { recorders?: unknown }).recorders as { vendor: RecorderVendor; recorder_cameras: unknown }[] | null)) {
       const vendor = (rec as { vendor: RecorderVendor }).vendor ?? null
-      for (const c of arr((rec as { recorder_cameras?: unknown }).recorder_cameras as { id: string; name: string; channel: number }[] | null)) {
+      for (const c of arr((rec as { recorder_cameras?: unknown }).recorder_cameras as { id: string; name: string; channel: number; removed_at: string | null }[] | null)) {
+        // G・VMS で削除したカメラは外す。ただし発報したカメラそのものは、後で消していても残す
+        if (c.removed_at && c.id !== ev.camera_id) continue
         cameras.push({ id: c.id, name: c.name, channel: c.channel, vendor })
       }
     }

@@ -60,4 +60,21 @@ describe('computeGoneIds（NVMS から消えたカメラ）', () => {
   it('presentIds が空なら全カメラが対象（NVMS 側の全削除に追従）', () => {
     expect(computeGoneIds(existing, [])).toEqual(['a', 'b', 'c'])
   })
+
+  it('★既に削除の印がある行は返さない（消えた日時を毎回上書きしない）', () => {
+    const withRemoved: ExistingCam[] = [
+      ...existing,
+      { id: 'd', channel: 4, grid_pos: -1, removed_at: '2026-09-20T00:00:00Z' },
+    ]
+    expect(computeGoneIds(withRemoved, [1, 3])).toEqual(['b'])
+  })
+})
+
+describe('removed_at（G・VMS で削除したカメラの印）', () => {
+  it('★スナップショットにあるカメラは印を外す（消えて戻ったカメラも登録ありに戻る）', () => {
+    const existing: ExistingCam[] = [{ id: 'a', channel: 7, grid_pos: 3, removed_at: '2026-09-20T00:00:00Z' }]
+    const rows = planCameraRows('r1', existing, [inc(7), inc(8)])
+    expect(rows.map((r) => r.removed_at)).toEqual([null, null])
+    expect(rows[0].grid_pos).toBe(3)
+  })
 })

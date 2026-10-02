@@ -64,6 +64,8 @@ interface EdgePayload {
     // 秘密そのものは返さない。設定済みか否かだけ渡す。
     has_password: boolean
     vod_has_password: boolean
+    /** G・VMS で削除したカメラの台数 (一覧には出さない。証跡の参照のため行は残る) */
+    removed_cameras: number
     recorder_cameras: { id: string; channel: number; name: string; grid_pos: number; enabled: boolean; frigate_camera: string | null; hls_url: string | null; live_rtsp: string | null; folder_path: string | null }[]
   }[]
 }
@@ -78,7 +80,7 @@ interface RawRecorder {
   bcp_capture_mode: 'grid' | 'per_camera' | null; bcp_folder_paths: string[] | null
   desired_config: Record<string, unknown> | null; config_version: number
   health: Record<string, unknown> | null
-  recorder_cameras: EdgePayload['recorders'][number]['recorder_cameras']
+  recorder_cameras: (EdgePayload['recorders'][number]['recorder_cameras'][number] & { removed_at: string | null })[]
 }
 
 export default async function EdgeEditPage(
@@ -103,7 +105,7 @@ export default async function EdgeEditPage(
         id, vendor, model, host, rtsp_port, onvif_port, username, notes,
         live_host, vod_host, vod_username, vod_channel, password_enc, vod_password_enc,
         bcp_capture_mode, bcp_folder_paths, desired_config, config_version, health,
-        recorder_cameras ( id, channel, name, grid_pos, enabled, frigate_camera, hls_url, live_rtsp, folder_path )
+        recorder_cameras ( id, channel, name, grid_pos, enabled, frigate_camera, hls_url, live_rtsp, folder_path, removed_at )
       )
     `)
     .eq('id', id)
@@ -118,7 +120,11 @@ export default async function EdgeEditPage(
       id: r.id, vendor: r.vendor, model: r.model, host: r.host, rtsp_port: r.rtsp_port,
       onvif_port: r.onvif_port, username: r.username, notes: r.notes,
       live_host: r.live_host, vod_host: r.vod_host, vod_username: r.vod_username,
-      vod_channel: r.vod_channel, recorder_cameras: r.recorder_cameras,
+      vod_channel: r.vod_channel,
+      // G・VMS で削除したカメラ (removed_at あり) は一覧に出さず、台数だけ渡す
+      recorder_cameras: r.recorder_cameras.filter((c) => !c.removed_at)
+        .map(({ removed_at: _removed, ...c }) => c),
+      removed_cameras: r.recorder_cameras.filter((c) => !!c.removed_at).length,
       bcp_capture_mode: r.bcp_capture_mode, bcp_folder_paths: r.bcp_folder_paths,
       desired_config: r.desired_config, config_version: r.config_version,
       config_rejected: configRejected(r.health),

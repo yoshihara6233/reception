@@ -40,7 +40,7 @@ export async function StoreDetail({ storeId }: { storeId: string }) {
       id, name, address, area_code,
       edge_devices ( id, name, agent_version, status, last_seen_at,
         recorders ( id, vendor, model, host,
-          recorder_cameras ( id, channel, name, enabled )
+          recorder_cameras ( id, channel, name, enabled, removed_at )
         )
       )
     `)
@@ -57,13 +57,14 @@ export async function StoreDetail({ storeId }: { storeId: string }) {
       id: string; name: string; agent_version: string | null; status: string; last_seen_at: string | null;
       recorders: {
         vendor: string; model: string | null; host: string;
-        recorder_cameras: { id: string; channel: number; name: string; enabled: boolean }[]
+        recorder_cameras: { id: string; channel: number; name: string; enabled: boolean; removed_at: string | null }[]
       }[]
     }[]
   }
   const edge = s.edge_devices?.[0]
   const rec  = edge?.recorders?.[0]
-  const cams = rec?.recorder_cameras ?? []
+  // G・VMS で削除したカメラ (removed_at あり) は出さない。無効にしただけのカメラは「無効」で出す
+  const cams = (rec?.recorder_cameras ?? []).filter((c) => !c.removed_at)
   // TC3: last_seen 鮮度を真実源に監視プレーン状態を派生（status 文字列の固着を補正）。
   const derived    = deriveEdgeStatus(edge?.status, edge?.last_seen_at)
   const statusInfo = statusBadge(derived)

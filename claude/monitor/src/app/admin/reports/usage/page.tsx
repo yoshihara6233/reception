@@ -65,7 +65,8 @@ export default async function UsageReportPage({
   const [edges, recorders, cameras, online, offline] = await Promise.all([
     supa.from('edge_devices').select('*', { count: 'exact', head: true }),
     supa.from('recorders').select('*', { count: 'exact', head: true }),
-    supa.from('recorder_cameras').select('*', { count: 'exact', head: true }),
+    // G・VMS で削除したカメラ (removed_at あり) は数えない
+    supa.from('recorder_cameras').select('*', { count: 'exact', head: true }).is('removed_at', null),
     supa.from('edge_devices').select('*', { count: 'exact', head: true }).neq('status', 'offline'),
     supa.from('edge_devices').select('*', { count: 'exact', head: true }).eq('status', 'offline'),
   ])
@@ -188,7 +189,7 @@ export default async function UsageReportPage({
         const { data: recs } = await svc.from('recorders').select('id').in('edge_id', edgeIds).limit(10_000)
         const recIds = (recs ?? []).map((r) => r.id as string)
         if (recIds.length > 0) {
-          const { count } = await svc.from('recorder_cameras').select('id', { count: 'exact', head: true }).in('recorder_id', recIds)
+          const { count } = await svc.from('recorder_cameras').select('id', { count: 'exact', head: true }).in('recorder_id', recIds).is('removed_at', null)
           camCount = count ?? 0
         }
       }

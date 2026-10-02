@@ -46,14 +46,15 @@ export default async function LicensesPage() {
       .limit(500)
     const edgeIds = (ed ?? []).map((e) => e.id as string)
 
-    // エッジごとの現在カメラ台数（nvms レコーダの recorder_cameras 数）。
+    // エッジごとの現在カメラ台数（nvms レコーダの recorder_cameras 数）。G・VMS で削除したカメラ
+    // (removed_at あり) は数えない — 証跡の参照のため行は残っているが、ライセンスの台数ではない。
     const camByEdge = new Map<string, number>()
     if (edgeIds.length > 0) {
       const { data: recs } = await svc.from('recorders').select('id, edge_id').eq('vendor', 'nvms').in('edge_id', edgeIds)
       const recEdge = new Map((recs ?? []).map((r) => [r.id as string, r.edge_id as string]))
       const recIds = (recs ?? []).map((r) => r.id as string)
       if (recIds.length > 0) {
-        const { data: cams } = await svc.from('recorder_cameras').select('recorder_id').in('recorder_id', recIds).limit(200000)
+        const { data: cams } = await svc.from('recorder_cameras').select('recorder_id').in('recorder_id', recIds).is('removed_at', null).limit(200000)
         for (const c of cams ?? []) {
           const e = recEdge.get(c.recorder_id as string); if (!e) continue
           camByEdge.set(e, (camByEdge.get(e) ?? 0) + 1)

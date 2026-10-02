@@ -41,6 +41,8 @@ interface Recorder {
   desired_config: Record<string, unknown> | null
   config_version: number
   config_rejected: { key: string; reason: string }[]
+  /** G・VMS で削除したカメラの台数 (一覧には出さない) */
+  removed_cameras: number
   recorder_cameras: Camera[]
 }
 interface EdgePayload {
@@ -1424,6 +1426,10 @@ function RecorderCard({ recorder }: { recorder: Recorder }) {
         <p className="border-b border-slate-100 bg-blue-50/60 px-3 py-1.5 text-[10px] text-slate-600">
           カメラは NVMS から<b>自動同期</b>されます（10 分ごと・エッジ経由）。名前・フォルダ・有効/無効は
           NVMS 側の変更が優先され、ここでの編集は次回同期で上書きされます。ch = NVMS のカメラ ID です。
+          {recorder.removed_cameras > 0 && (
+            <> G・VMS で削除したカメラ {recorder.removed_cameras.toLocaleString()} 台は一覧と台数から外しています
+            （過去の録画・発報・BCP の記録のため、クラウドには残しています）。</>
+          )}
         </p>
       )}
       {bigList && (
