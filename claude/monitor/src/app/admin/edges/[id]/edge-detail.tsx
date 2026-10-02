@@ -223,6 +223,14 @@ function OtaPanel({ edge }: { edge: EdgePayload }) {
   const router = useRouter()
   const [agent, setAgent] = useState(edge.desired_agent_version ?? '')
   const [cfd, setCfd]     = useState(edge.desired_cloudflared_version ?? '')
+  // サーバ側の値が変わったら欄も合わせる (NvmsdOtaPanel と同じ理由)
+  const serverVals = `${edge.desired_agent_version ?? ''}|${edge.desired_cloudflared_version ?? ''}`
+  const [seenVals, setSeenVals] = useState(serverVals)
+  if (seenVals !== serverVals) {
+    setSeenVals(serverVals)
+    setAgent(edge.desired_agent_version ?? '')
+    setCfd(edge.desired_cloudflared_version ?? '')
+  }
   const [busy, setBusy]   = useState(false)
   const [msg, setMsg]     = useState<string | null>(null)
   const dirty = agent !== (edge.desired_agent_version ?? '') || cfd !== (edge.desired_cloudflared_version ?? '')
@@ -345,6 +353,17 @@ function NvmsdOtaPanel({ edge }: { edge: EdgePayload }) {
   const [desired, setDesired] = useState(edge.desired_agent_version ?? '')
   const [winStart, setWinStart] = useState(edge.update_window_start?.slice(0, 5) ?? '')
   const [winEnd, setWinEnd] = useState(edge.update_window_end?.slice(0, 5) ?? '')
+  // サーバ側の値が変わったら (保存・「目標版を解除」のあとの再読込)、欄も合わせる。
+  // useState の初期値は最初の 1 回しか効かず、解除したのに欄に 0.1.67 が残っていた
+  // (そのまま自動更新に切り替えて保存すると、消したはずの目標版が戻る)。
+  const serverVals = `${edge.desired_agent_version ?? ''}|${edge.update_window_start ?? ''}|${edge.update_window_end ?? ''}`
+  const [seenVals, setSeenVals] = useState(serverVals)
+  if (seenVals !== serverVals) {
+    setSeenVals(serverVals)
+    setDesired(edge.desired_agent_version ?? '')
+    setWinStart(edge.update_window_start?.slice(0, 5) ?? '')
+    setWinEnd(edge.update_window_end?.slice(0, 5) ?? '')
+  }
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const dirty =
