@@ -40,8 +40,8 @@ export default async function StorePage(
   const edge    = store.edge_devices?.[0]
   // Attach the owning recorder's vendor to each camera so the workspace can
   // gate the playback (VOD) button — VOD_VENDORS を見て出し分ける。
-  // enabled=false は NVMS 同期で「NVMS 側から消えたカメラ」。表示しない
-  // （行は消さない — 過去のクリップ・BCP が camera_id を参照しているため）。
+  // enabled=false (G・VMS で無効にしたカメラと、G・VMS から消えて removed_at の入ったカメラ) は表示しない
+  // （消えたカメラも行は消さない — 過去のクリップ・発報・BCP が camera_id を参照しているため）。
   const cameras =
     edge?.recorders?.flatMap((r) =>
       r.recorder_cameras

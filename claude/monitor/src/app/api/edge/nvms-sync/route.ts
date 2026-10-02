@@ -10,8 +10,9 @@
  * 同期の約束事:
  *   - channel = NVMS のカメラ ID（Phase 1 の規約どおり）
  *   - 突き合わせは (recorder_id, channel) の UNIQUE
- *   - スナップショットに無くなったカメラは enabled=false（消さない。
- *     録画クリップ・BCP イベントが camera_id を参照しているため）
+ *   - スナップショットに無くなったカメラは enabled=false＋removed_at（消さない。
+ *     録画クリップ・発報・BCP が camera_id を参照しているため）。removed_at の入った行は
+ *     画面と台数から外す。G・VMS で無効にしただけのカメラ（enabled=false・removed_at=null）とは別物
  *   - grid_pos: 新規は空きスロット 0..15 を先着で埋め、以降は -1
  *     （フォルダページ表示が主。固定スロットは互換のためだけに残す）
  *   - 1 リクエスト最大 500 台。エッジ側が分割して送る
@@ -69,13 +70,14 @@ export async function POST(req: NextRequest) {
   // 既存カメラ（channel→id, grid_pos）を一括で引く。10万台でも列2本なので軽い。
   const { data: existing, error: exErr } = await svc
     .from('recorder_cameras')
-    .select('id, channel, grid_pos')
+    .select('id, channel, grid_pos, removed_at')
     .eq('recorder_id', recorderId)
     .limit(200_000)
   if (exErr) return NextResponse.json({ error: exErr.message }, { status: 500 })
 
   const existingCams = (existing ?? []).map((c) => ({
     id: c.id as string, channel: c.channel as number, grid_pos: c.grid_pos as number,
+    removed_at: (c.removed_at as string | null) ?? null,
   }))
   // 割付ロジックは nvms-sync-plan.ts（純粋関数・テスト付き）。
   const rows = planCameraRows(recorderId, existingCams, cameras)
@@ -89,14 +91,14 @@ export async function POST(req: NextRequest) {
     upserted = rows.length
   }
 
-  // final chunk: NVMS 側から消えたカメラを無効化（削除はしない）。
+  // final chunk: NVMS 側から消えたカメラに印を付けて無効化（削除はしない）。
   let disabled = 0
   if (final) {
     const gone = computeGoneIds(existingCams, presentIds)
     if (gone.length > 0) {
       const { error } = await svc
         .from('recorder_cameras')
-        .update({ enabled: false })
+        .update({ enabled: false, removed_at: new Date().toISOString() })
         .in('id', gone)
       if (error) return NextResponse.json({ error: error.message }, { status: 500 })
       disabled = gone.length

@@ -6,7 +6,11 @@
  * グリッドが欠けたとき・過去クリップの参照が消えたとき。
  */
 
-export interface ExistingCam { id: string; channel: number; grid_pos: number }
+export interface ExistingCam {
+  id: string; channel: number; grid_pos: number
+  /** G・VMS 側で削除された日時。null/省略 = 登録あり */
+  removed_at?: string | null
+}
 export interface IncomingCam { id: number; name: string; folder_path: string | null; enabled: boolean }
 
 export interface PlannedRow {
@@ -16,6 +20,8 @@ export interface PlannedRow {
   folder_path: string | null
   enabled: boolean
   grid_pos: number
+  /** スナップショットにある = G・VMS に登録あり。一度消えて戻ったカメラもここで印を外す */
+  removed_at: null
 }
 
 /**
@@ -41,18 +47,20 @@ export function planCameraRows(
     folder_path: c.folder_path,
     enabled:     c.enabled,
     grid_pos:    byChannel.get(c.id)?.grid_pos ?? nextSlot(),
+    removed_at:  null,
   }))
 }
 
 /**
- * NVMS 側から消えたカメラ（無効化対象）の行 id。
- * **削除はしない** — vod_clips / bcp_clips が camera_id を参照しており、
- * 消すと過去の証跡が宙に浮く。enabled=false で画面から下げるだけにする。
+ * NVMS 側から**新たに**消えたカメラの行 id（enabled=false・removed_at を入れる対象）。
+ * **削除はしない** — vod_clips / video_sessions は一緒に消え（cascade）、alarm_events は
+ * 削除そのものが失敗し、bcp_clips などはカメラ名を失う。行は残し、removed_at で
+ * 画面と台数から外す。既に removed_at が入っている行は返さない（消えた日時を毎回上書きしない）。
  */
 export function computeGoneIds(
   existing: readonly ExistingCam[],
   presentIds: readonly number[],
 ): string[] {
   const present = new Set(presentIds)
-  return existing.filter((c) => !present.has(c.channel)).map((c) => c.id)
+  return existing.filter((c) => !present.has(c.channel) && !c.removed_at).map((c) => c.id)
 }
