@@ -12,14 +12,16 @@ interface Row {
   status: string
   agent_version: string | null
   desired_agent_version: string | null
+  ota_mode: 'onsite' | 'auto' | null
   last_seen_at: string | null
   stores: { id: string; name: string; area_code: string | null } | null
   recorders: { id: string }[]
 }
 
-/** 目標版が設定済みで未到達なら「更新待ち」（OTA_SPEC §6 の成否観測）。 */
+/** 目標版が設定済みで未到達なら「更新待ち」（OTA_SPEC §6 の成否観測）。
+ *  現地更新モードはクラウドから配らないので、目標版が残っていても待ちではない。 */
 function otaPending(e: Row): boolean {
-  if (!e.desired_agent_version) return false
+  if (!e.desired_agent_version || e.ota_mode !== 'auto') return false
   const running = (e.agent_version ?? '').replace(/^nvmsd\//, '')
   return running !== e.desired_agent_version
 }
@@ -50,7 +52,7 @@ export default async function EdgesAdmin({
   let query = supa
     .from('edge_devices')
     .select(`
-      id, name, status, agent_version, desired_agent_version, last_seen_at,
+      id, name, status, agent_version, desired_agent_version, ota_mode, last_seen_at,
       stores ( id, name, area_code ),
       recorders ( id )
     `)
