@@ -1,0 +1,28 @@
+# 画面を変えた PR に、取扱説明書 第 2 部のどの章を確かめるかを書き込む (G・VMS の G-3-2)。
+# 説明書の正本は G・VMS のリポジトリにあるので、ここでは落とさず知らせるだけにする。
+# 対応表は .github/manual-part2-map.json、決まりは CLAUDE.md の「取扱説明書 第 2 部」。
+name: Manual reminder
+
+on:
+  pull_request:
+    paths:
+      - 'claude/monitor/src/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  remind:
+    name: 取扱説明書 第 2 部の確認
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          sparse-checkout: .github
+      - name: Post reminder
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: node .github/scripts/manual-reminder.mjs
