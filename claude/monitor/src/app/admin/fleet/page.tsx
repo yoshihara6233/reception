@@ -40,7 +40,7 @@ export default async function FleetPage() {
     // nvms アップリンクのエッジ（＝拠点）。
     const { data: edges } = await svc
       .from('edge_devices')
-      .select('id, name, store_id, status, last_seen_at, agent_version, desired_agent_version, applied_config_version')
+      .select('id, name, store_id, status, last_seen_at, agent_version, desired_agent_version, ota_mode, applied_config_version')
       .in('store_id', allowedIds)
       .like('agent_version', 'nvmsd/%')
       .order('name')
@@ -74,7 +74,8 @@ export default async function FleetPage() {
       const seenStale = !e.last_seen_at || now - new Date(e.last_seen_at).getTime() > STALE_MS
       const running = (e.agent_version as string ?? '').replace(/^nvmsd\//, '')
       const desiredVer = e.desired_agent_version as string | null
-      const verPending = !!desiredVer && running !== desiredVer
+      // 現地更新モードはクラウドから配らない。目標版が残っていても「版 不一致」の要対応にしない
+      const verPending = e.ota_mode === 'auto' && !!desiredVer && running !== desiredVer
       const cfgVer = rec?.config_version ?? 0
       const cfgPending = cfgVer > 0 && (e.applied_config_version as number | null) !== cfgVer
       const lic = licByEdge.get(e.id as string) ?? null

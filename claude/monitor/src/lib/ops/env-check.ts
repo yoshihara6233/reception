@@ -17,6 +17,9 @@ export interface EnvCheckItem {
   purpose:  string
 }
 
+// 載せないもの (2026-10-02 に外した): 未設定でも既定値で正しく動くもの (GVMS_SITE_DOMAIN =
+// sites.genesis-edge.com・R2_EDGE_BUCKET = edge-images) と、運用で使わないと決めた任意の経路
+// (ALERT_WEBHOOK_URL・通知はメール ALERT_EMAILS)。毎回「欠落」と出て本物の欠落が埋もれるため。
 export function checkCriticalEnv(): EnvCheckItem[] {
   const has = (k: string) => !!process.env[k]?.trim()
   return [
@@ -26,7 +29,6 @@ export function checkCriticalEnv(): EnvCheckItem[] {
     { key: 'CRON_SECRET',                   required: true,  set: has('CRON_SECRET'),                   purpose: '未設定だと死活監視・PB7再送・クリーンアップの cron が全停止（503）' },
     { key: 'RESEND_API_KEY',                required: true,  set: has('RESEND_API_KEY'),                purpose: '未設定だと発報通知・死活アラート・パスワード再設定のメールが送れない' },
     { key: 'ALERT_EMAILS',                  required: false, set: has('ALERT_EMAILS'),                  purpose: '未設定だとエッジ死活アラートがログのみ（誰にも届かない）' },
-    { key: 'ALERT_WEBHOOK_URL',             required: false, set: has('ALERT_WEBHOOK_URL'),             purpose: '運用アラートの第2経路（Slack/Discord 等）。メール見落とし対策に推奨' },
     { key: 'NEXT_PUBLIC_SITE_URL',          required: false, set: has('NEXT_PUBLIC_SITE_URL'),          purpose: '通知メール内リンク・エッジ ingest URL の基点（未設定は既定URLで動作）' },
     // SFU（LiveKit Cloud）ベータ。LIVEKIT_ENABLED='true'＋以下3点が揃うと高画質SFUライブが有効。
     { key: 'LIVEKIT_URL',                   required: false, set: has('LIVEKIT_URL'),                   purpose: 'SFUベータ: LiveKit プロジェクトURL（wss://…）。LIVEKIT_ENABLED=true 時に必須' },
@@ -35,7 +37,6 @@ export function checkCriticalEnv(): EnvCheckItem[] {
     // 拠点の https（GVMS_CLOUD_SPEC §10・D-2-20）。拠点の名前の A レコードと証明書の検証用 TXT を書く
     { key: 'CLOUDFLARE_API_TOKEN',          required: false, set: has('CLOUDFLARE_API_TOKEN'),          purpose: '拠点の https: genesis-edge.com のゾーンの DNS 編集だけを許した API トークン。未設定だと拠点の名前を決められず、証明書の自動取得が 503' },
     { key: 'CLOUDFLARE_ZONE_ID',            required: false, set: has('CLOUDFLARE_ZONE_ID'),            purpose: '拠点の https: genesis-edge.com のゾーン ID' },
-    { key: 'GVMS_SITE_DOMAIN',              required: false, set: has('GVMS_SITE_DOMAIN'),              purpose: '拠点の名前を付けるドメイン（未設定は sites.genesis-edge.com）' },
     { key: 'GVMS_SFU_ENABLED',              required: false, set: has('GVMS_SFU_ENABLED'),              purpose: 'G・VMS の拠点の SFU（§5.4）。2026-09-29 から保留で既定 OFF。true で再開（LIVEKIT_* も必要）' },
     // R2（エグレス無料）。未設定でも静かに Supabase へフォールバックするため、
     // 「気づかないまま課金エグレスが積む」事故になりやすい（2026-08-03: Free 5GB に対し
@@ -45,7 +46,6 @@ export function checkCriticalEnv(): EnvCheckItem[] {
     { key: 'R2_ACCOUNT_ID',                 required: false, set: has('R2_ACCOUNT_ID'),                 purpose: '未設定だとクリップが Supabase 保存のまま。※eo光等は *.r2.cloudflarestorage.com を遮断するため、その回線ではS3 API経路は使えない' },
     { key: 'R2_ACCESS_KEY_ID',              required: false, set: has('R2_ACCESS_KEY_ID'),              purpose: 'R2 アクセスキー（3点揃って初めて R2 が有効）' },
     { key: 'R2_SECRET_ACCESS_KEY',          required: false, set: has('R2_SECRET_ACCESS_KEY'),          purpose: 'R2 シークレット（3点揃って初めて R2 が有効）' },
-    { key: 'R2_EDGE_BUCKET',                required: false, set: has('R2_EDGE_BUCKET'),                purpose: 'ライブ画像(grid/snapshot)の R2 バケット（既定 edge-images）' },
     { key: 'R2_BAGGAGE_BUCKET',             required: false, set: has('R2_BAGGAGE_BUCKET'),             purpose: '手荷物検査クリップの R2 バケット（既定 baggage-clips）' },
   ]
 }

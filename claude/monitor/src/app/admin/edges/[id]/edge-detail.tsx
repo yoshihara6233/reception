@@ -406,9 +406,11 @@ function NvmsdOtaPanel({ edge }: { edge: EdgePayload }) {
       <div className="mb-3 flex items-center justify-between">
         <h2 className="font-bold text-slate-900">自動バージョンアップ（nvmsd）</h2>
         <span className={'rounded px-2 py-0.5 text-[11px] font-semibold ' + (
-          !edge.desired_agent_version ? 'bg-slate-100 text-slate-600'
+          !isAuto ? 'bg-slate-100 text-slate-600'
+            : !edge.desired_agent_version ? 'bg-slate-100 text-slate-600'
             : pending ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700')}>
-          {!edge.desired_agent_version ? '指示なし' : pending ? '更新待ち' : '目標版で稼働中'}
+          {/* 現地更新モードは配らないので、目標版が残っていても「更新待ち」にしない */}
+          {!isAuto ? '現地更新' : !edge.desired_agent_version ? '指示なし' : pending ? '更新待ち' : '目標版で稼働中'}
         </span>
       </div>
 
@@ -460,6 +462,16 @@ function NvmsdOtaPanel({ edge }: { edge: EdgePayload }) {
         <p className="mt-3 rounded border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
           現地更新モードです。目標版を設定してもクラウドからは配信しません（拠点側は 204）。
           自動更新にすると下の設定が有効になります。
+          {/* 下の欄は現地更新モードでは触れないため、残った目標版はここで消す */}
+          {edge.desired_agent_version && (
+            <span className="mt-1.5 flex items-center gap-2">
+              以前の目標版 <span className="font-mono">{edge.desired_agent_version}</span> が残っています（このモードでは使いません）。
+              <button onClick={() => void put({ desired_agent_version: null, update_force: false }, '目標版を解除しました')}
+                      disabled={busy} className="ml-auto rounded border border-slate-300 bg-white px-2 py-0.5 text-[10px] text-slate-700">
+                目標版を解除
+              </button>
+            </span>
+          )}
         </p>
       )}
 
