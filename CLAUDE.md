@@ -46,7 +46,7 @@ Key routing rules:
 | 手元の場所 | `/Users/junji.y/claude/Intereco/monitor-recover` | `/Users/junji.y/claude/NVMS` |
 | GitHub | yoshihara6233/reception（本番 `monitor-prod`・**PR 必須**） | yoshihara6233/NVMS（`main`） |
 | 構成 | Next.js + Supabase（`claude/monitor`）・エッジ（`claude/edge-agent`）・Vercel | Go + FFmpeg / React / PostgreSQL |
-| 本番 | `https://intereco-monitor.vercel.app`（ドメインは当面そのまま） | 各現場の機械 |
+| 本番 | `https://gvms-cloud.com`（2026-09-30 に専用ドメインへ移行。旧 `intereco-monitor.vercel.app` も拠点の移行が終わるまで有効） | 各現場の機械 |
 
 **共通の仕様書（つなぎ方の正本）: G・VMS 側の `docs/GVMS_CLOUD_SPEC.md`**（接続仕様 v1）
 - 手元: `/Users/junji.y/claude/NVMS/docs/GVMS_CLOUD_SPEC.md` ／ GitHub: yoshihara6233/NVMS の `docs/GVMS_CLOUD_SPEC.md`
@@ -55,6 +55,21 @@ Key routing rules:
 - 以前の仕様書 7 本（UPLINK・CLIPS・OTA・診断・設定投入・ライセンス・エンロール）は付録 A〜H として凍結。**新しい契約は GVMS_CLOUD_SPEC.md に足す**（このリポジトリに写しを作らない。直したいときは G・VMS 側で変える）
 - G・VMS 側の動きの参考: 模擬クラウド `cmd/cloudsim`（HLS の払い出し・配信・WHIP の受け手）と `internal/uplink`（現場側の実装・fakecloud）
 - ログインの一本化（OIDC）は G・VMS の D-2-17 で扱う（まだ仕様に無い）
+
+## 取扱説明書 第 2 部（G・VMS-Cloud）を一緒に直す（必須）
+
+客先へ渡す取扱説明書のうち、**第 2 部が G・VMS-Cloud の説明**。正本は G・VMS のリポジトリにある
+（`/Users/junji.y/claude/NVMS/docs/ProjectFile/NVMS_取扱説明書_第2部_第N章.html`）。
+**画面・操作・表示の文言を変える PR では、該当の章も同じ日に直す。** 後回しにすると、客先が手順どおりに
+操作して画面と合わない説明書になる（2026-10-02 に、削除したカメラの表示・現地更新の札・環境変数の警告を
+変えた PR 3 本で、第 2 部の 9 章が古くなった）。
+
+- どの章に当たるかは `.github/manual-part2-map.json`（画面のソース → 章）。PR を出すと
+  ワークフロー「Manual reminder」が、変えたファイルから章を割り出して PR に書き込む（CI は落とさない）
+- PR 本文の「取扱説明書 第 2 部」の欄に、直した（NVMS のコミット）・変更なし・後で直す（理由）のどれかで印を付ける
+- 直したら G・VMS 側で `python3 scripts/manual_build.py --part 2 --word` で組み直す（目次と PDF は Word が作る）。
+  画面写真を撮り直すときは、カメラの映像は黒に置き換える（実映像を載せない）
+- 受け口（`app/api/`）・内部の処理だけの変更は対象外。新しい画面を足したら対応表にも行を足す
 
 ## Intereco プロジェクト状況（2026-06-13 更新）
 
