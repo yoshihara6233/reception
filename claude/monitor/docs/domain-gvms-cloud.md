@@ -21,7 +21,7 @@
 | 8 | ~~R2 の CORS~~（不要と確認済み） | — | — |
 | 9 | コードの PR をマージ | 発注者 | GitHub |
 | 10 | 動作確認（ログイン・パスワード再設定・遠隔視聴・BCP のメールのリンク） | 開発 | 本番 |
-| 11 | 拠点の G・VMS の接続先を順に移す | 開発・現地 | 各拠点 |
+| 11 | 拠点の G・VMS とエッジエージェントの接続先を移す（エッジエージェントは**クラウドと同時に**） | 開発・現地 | 各拠点 |
 | 12 | 利用者へ案内（新 URL・ログインし直し・ホーム画面のアイコンの作り直し） | 発注者 | — |
 | 13 | 旧 URL の画面を新 URL へ転送（API・キオスクは転送しない） | 開発 | PR（2026-09-30） |
 | 14 | Supabase の Redirect URLs から旧 URL を外す | 発注者 | Supabase |
@@ -145,6 +145,23 @@ NVMS_UPLINK_URL=https://gvms-cloud.com
 
 を書き換えて `sudo systemctl restart nvmsd`。拠点の 設定 → 基本 → クラウド連携 で「接続中」を確かめる。
 新しく立ち上げる拠点は、初回セットアップで新 URL を入れる。
+
+### エッジエージェント（旧 Recording Monitor の現地側）は後回しにできない
+
+G・VMS と違い、エッジエージェントは**クラウドの URL を変えた時点で一緒に変える**。
+エージェントの ingest-guard は、クラウドから届く `ingest_url` のオリジンが自分の `MONITOR_URL` と違うと
+`cross_origin` で断る。クラウドの `NEXT_PUBLIC_SITE_URL` を新ドメインにした瞬間から、
+巡回（07:00 / 12:00 / 17:00）のスナップショット取得が失敗する（2026-09-30 17:00 に 1 回起きた）。
+
+```
+# /home/intereco/edge/shared/agent.env
+MONITOR_URL=https://gvms-cloud.com
+```
+
+を書き換えて（控えを取ってから）`sudo systemctl restart intereco-edge`。nvmsd は再起動しなくてよい。
+確かめ方: `journalctl -u intereco-edge --since -1h | grep -E "ingest ok|ingest-guard"` で、
+次の巡回が `ingest ok` になり `ingest-guard` の拒否が出ないこと。
+2026-09-30 時点で本番のエッジエージェントは .110 の 1 台だけで、同日 18:03 に変更済み。
 
 影響しないもの: ログインの一本化の発行元（Supabase の URL）、拠点の https の名前（`*.sites.genesis-edge.com`・会社ドメインのまま）、
 通知メールの送り元（`notify.genesis-edge.com`）。
