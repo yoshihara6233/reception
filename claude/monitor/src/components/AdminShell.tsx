@@ -10,6 +10,7 @@ import { cookies } from 'next/headers'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { resolveTenantFeatures } from '@/lib/tenant/features'
 import { resolveAdminContext } from '@/lib/tenant/acting'
+import { resolveFeedbackEntry } from '@/lib/feedback/entry'
 import { ActingTenantBar } from './ActingTenantBar'
 import { AppHeader } from './AppHeader'
 import { StatusBar } from './StatusBar'
@@ -29,7 +30,7 @@ export type AdminSection = 'admin' | 'security' | 'bcp'
 /** 「拠点の G・VMS」でまとめる 3 画面。左メニューの選択判定と、画面上のタブ (GvmsTabs) が同じ表を使う。 */
 export const GVMS_PATHS = ['/admin/fleet', '/admin/provisioning', '/admin/licenses'] as const
 
-export function getAdminNav(t: Msg, opts?: { isSuper?: boolean; baggage?: boolean }): NavItem[] {
+export function getAdminNav(t: Msg, opts?: { isSuper?: boolean; baggage?: boolean; feedback?: boolean }): NavItem[] {
   const items: NavItem[] = [
     // 利用状況レポートを最上部に。旧ダッシュボードは廃止し中身をここへ集約。
     { href: '/admin/reports/usage', label: '利用状況レポート', icon: '📊', exact: true },
@@ -46,6 +47,9 @@ export function getAdminNav(t: Msg, opts?: { isSuper?: boolean; baggage?: boolea
       ? [{ href: '/admin/baggage', label: '手荷物検査設定', icon: '🧳' }] : []),
     { href: '/admin/bcp',        label: 'BCP発動条件',         icon: '🚨' },
     { href: '/admin/audit',      label: t.adminNav.audit,     icon: '☰' },
+    // 要望（送った要望の一覧・状態・返事）。テナント管理者だけ（基本設計 §3.1）。
+    // super_admin は送らないので出さない（運営管理の「要望ボード」で扱う）。
+    ...(opts?.feedback ? [{ href: '/settings/feedback', label: '要望', icon: '✎' }] : []),
   ]
   if (opts?.isSuper) {
     items.push(
@@ -65,6 +69,8 @@ export function getAdminNav(t: Msg, opts?: { isSuper?: boolean; baggage?: boolea
       // 運営(super_admin)自身の行動履歴。テナント側/admin/auditには運営の行を出さない
       // （PR#213）ため、運営の説明責任はこのページで担保する。全テナント横断。
       { href: '/admin/ops-audit',  label: '運営アクセスログ', icon: '☰' },
+      // 要望の収集 第 1 段（D-2-21）: 現場とテナントの要望を束ねて扱いを決める。
+      { href: '/admin/feedback',   label: '要望ボード', icon: '✎' },
       // 死活監視 (/infra) は 2026-09-30 に廃止した (発注者の判断)。G・VMS の拠点の状態は
       // 拠点稼働 (/admin/fleet) で見る。オフラインの通知は cron/edge-health が別に送る。
     )
@@ -155,9 +161,10 @@ export async function AdminShell({
 
   // テナントのオプション機能（巡回/発報/検査）とテナント文脈
   // （tenant_admin=自テナント / super_admin=操作中テナント）。
-  const [features, ctx] = await Promise.all([
+  const [features, ctx, feedbackEntry] = await Promise.all([
     resolveTenantFeatures(supa),
     resolveAdminContext(supa),
+    resolveFeedbackEntry(),
   ])
 
   // Resolve nav + title. Priority: section (translated) > explicit nav/title
@@ -165,7 +172,7 @@ export async function AdminShell({
   const t = section ? await getT() : null
   let effectiveNav: NavItem[] =
     nav
-      ?? (section === 'admin'    ? getAdminNav(t!, { isSuper: ctx.isSuper, baggage: features.baggage })
+      ?? (section === 'admin'    ? getAdminNav(t!, { isSuper: ctx.isSuper, baggage: features.baggage, feedback: feedbackEntry })
         : section === 'security' ? getSecurityNav(t!)
         : section === 'bcp'      ? getBcpNav(t!)
         : ADMIN_NAV)
@@ -184,7 +191,7 @@ export async function AdminShell({
 
   return (
     <div className="flex h-screen flex-col">
-      <AppHeader userName={userName} tenantName={ctx.tenantName} isSuper={ctx.isSuper} features={features} />
+      <AppHeader userName={userName} tenantName={ctx.tenantName} isSuper={ctx.isSuper} features={features} feedbackEntry={feedbackEntry} />
       <AdminShellClient nav={effectiveNav} title={effectiveTitle} pathname={pathname} initialCollapsed={collapsed}>
         {/* super_admin のみ: ①設定プレーンがどのテナントに固定されているかを常時明示 */}
         {ctx.isSuper && section === 'admin' && (

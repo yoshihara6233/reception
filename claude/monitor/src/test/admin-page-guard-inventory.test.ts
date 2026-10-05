@@ -62,6 +62,7 @@ const EXPECTED: Record<string, Guard> = {
   '/admin/edges':                 'super-admin',
   '/admin/edges/[id]':            'super-admin',
   '/admin/edges/new':             'super-admin',
+  '/admin/feedback':              'super-admin',  // 要望ボード（全テナント横断）
   '/admin/import':                'admin',
   '/admin/limits':                'admin',        // 本文でさらに super_admin に絞る
   '/admin/nvmsd-releases':        'super-admin',
