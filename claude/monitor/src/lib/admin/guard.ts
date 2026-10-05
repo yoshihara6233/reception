@@ -66,3 +66,13 @@ export function requireBaggageRole() {
 export function requireSuperAdmin() {
   return requireRole(['super_admin'])
 }
+
+/**
+ * テナント管理者（tenant_admin）だけ。要望の送信（基本設計 §3.1）に使う。
+ *
+ * super_admin は運営の側なので**送らない**（要望ボードで扱う）。store_manager・viewer
+ * も入れない（現場の声は管理者がまとめて送る）。requireAdmin とは対象が違うので混ぜないこと。
+ */
+export function requireTenantAdmin() {
+  return requireRole(['tenant_admin'])
+}

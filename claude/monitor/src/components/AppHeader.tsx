@@ -11,6 +11,7 @@ import { LogoutButton } from './LogoutButton'
 import { ServerClock } from './ServerClock'
 import { MonitorMark } from './MonitorMark'
 import { PRODUCT_NAME } from '@/lib/brand'
+import { FeedbackEntry } from './feedback/FeedbackEntry'
 
 // F25: userName / avatar はフッターの StatusBar に移動したので、ここでは表示しない。
 // プロップは互換性のためそのまま受領（残置）するが、UI には出さない。
@@ -20,6 +21,7 @@ export function AppHeader({
   features,
   tenantName,
   isSuper,
+  feedbackEntry = false,
 }: {
   userName?: string
   onMenuClick?: () => void
@@ -28,6 +30,9 @@ export function AppHeader({
   // 操作中/所属テナント名。super_admin 未選択時は null。
   tenantName?: string | null
   isSuper?: boolean
+  // 「要望・困りごと」を出すか（テナント管理者だけ・テナントが止めていないとき）。
+  // 判定はサーバ（lib/feedback/entry.ts の resolveFeedbackEntry）。既定は出さない。
+  feedbackEntry?: boolean
 }) {
   const pathname    = usePathname() ?? ''
   const { t }       = useLang()
@@ -172,6 +177,8 @@ export function AppHeader({
           <LangSwitcher />
         </div>
         <DisplayPrefsMenu />
+        {/* 要望・困りごと（基本設計 §3.1）。PWA でも出す（現場の管理者が使う画面のため）。 */}
+        {feedbackEntry && <FeedbackEntry />}
         {/* F24: settings (旧 マスタ) は中央タブから右側のアイコンへ移動。
             PWA(スタンドアロン)では非表示。 */}
         {!standalone && (

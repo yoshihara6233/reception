@@ -28,6 +28,7 @@ export function AppShellClient({
   features,
   tenantName,
   isSuper,
+  feedbackEntry,
 }: {
   userName: string
   groups: Group[]
@@ -36,6 +37,7 @@ export function AppShellClient({
   features?: { patrol: boolean; alarm: boolean; baggage: boolean }
   tenantName?: string | null
   isSuper?: boolean
+  feedbackEntry?: boolean
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
 
@@ -48,7 +50,7 @@ export function AppShellClient({
       }}
     >
       {/* Top header */}
-      <AppHeader userName={userName} onMenuClick={() => setDrawerOpen(true)} features={features} tenantName={tenantName} isSuper={isSuper} />
+      <AppHeader userName={userName} onMenuClick={() => setDrawerOpen(true)} features={features} tenantName={tenantName} isSuper={isSuper} feedbackEntry={feedbackEntry} />
 
       {/* Scrollable middle area; on mobile adds bottom padding for nav bar */}
       <div className="flex flex-1 flex-col overflow-hidden pb-0 md:pb-0">

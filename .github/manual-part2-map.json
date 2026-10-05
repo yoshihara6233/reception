@@ -58,6 +58,9 @@
     ["app/admin/ops-users", ["9"]],
     ["app/admin/limits", ["9"]],
     ["app/admin/nvr-models", ["9"]],
+    ["app/settings/feedback", ["10"]],
+    ["app/admin/feedback", ["9"]],
+    ["components/feedback", ["10"]],
     ["app/settings", ["9"]],
     ["components/admin", ["9"]],
     ["lib/ops/env-check.ts", ["9"]]

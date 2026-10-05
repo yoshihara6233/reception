@@ -23,6 +23,7 @@ import { describe, expect, it } from 'vitest'
 type Guard =
   | 'super-admin'     // ②運営管理。requireSuperAdmin()
   | 'admin'           // ①管理。requireAdmin() = super_admin/tenant_admin/store_manager
+  | 'tenant-admin'    // テナント管理者だけ。requireTenantAdmin()（要望の送信。super_admin も入れない）
   | 'baggage-role'    // + baggage_manager。requireBaggageRole()
   | 'baggage-store'   // 手荷物検査の店舗スコープ。requireBaggageAccess()
   | 'kiosk'           // iPad キオスクの署名 cookie
@@ -39,6 +40,7 @@ type Guard =
 const RULES: [Guard, RegExp][] = [
   ['super-admin',    /requireSuperAdmin\s*\(/],
   ['admin',          /requireAdmin\s*\(/],
+  ['tenant-admin',   /requireTenantAdmin\s*\(/],
   ['baggage-role',   /requireBaggageRole\s*\(/],
   ['baggage-store',  /requireBaggageAccess\s*\(/],
   ['kiosk',          /requireKioskStore|requireKioskSession|readKioskSession|KIOSK_COOKIE/],
@@ -108,6 +110,12 @@ const EXPECTED: Record<string, Guard> = {
   '/api/admin/licenses': 'admin',
   '/api/admin/licenses/[id]': 'admin',
   '/api/admin/geocode': 'admin',
+  // 要望ボード（要望の収集 第 1 段・D-2-21）。全テナント横断なので運営だけ。
+  '/api/admin/feedback': 'super-admin',
+  '/api/admin/feedback/items/[id]': 'super-admin',
+  '/api/admin/feedback/topics': 'super-admin',
+  '/api/admin/feedback/topics/[id]': 'super-admin',
+  '/api/admin/feedback/import': 'super-admin',
   '/api/admin/import/cameras': 'admin',
   '/api/admin/import/stores': 'admin',
   '/api/admin/recorders/[id]/cameras': 'admin',
@@ -188,6 +196,10 @@ const EXPECTED: Record<string, Guard> = {
   '/api/edge/bootstrap': 'device-token',
   '/api/edge/config': 'device-token',
   '/api/edge/events': 'device-token',
+  '/api/edge/feedback': 'device-token',
+  '/api/edge/feedback/status': 'device-token',
+  // クラウドの画面から送る要望（テナント管理者だけ・基本設計 §3.1）
+  '/api/feedback': 'tenant-admin',
   '/api/edge/license': 'device-token',
   '/api/edge/enroll': 'device-token',
   '/api/edges/[id]/cam/[cameraId]/snapshot': 'edge-view',
