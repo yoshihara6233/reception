@@ -22,6 +22,8 @@ export default async function MapPage(
       edge_devices ( id, status, last_seen_at )
     `)
     .in('id', scope.storeIds)
+    // 無効にした拠点は地図に出さない (2026-10-05・stores/page.tsx と同じ扱い)
+    .eq('is_active', true)
     .not('latitude', 'is', null)
     .not('longitude', 'is', null)
     .limit(10_000)
