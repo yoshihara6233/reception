@@ -4,6 +4,7 @@ import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
 import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { TenantForm, type Plan, type Status } from '../tenant-form'
+import { TenantDelete, type TenantDeleteCounts } from '../tenant-delete'
 
 export default async function EditTenantPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -37,6 +38,9 @@ export default async function EditTenantPage({ params }: { params: Promise<{ id:
   const [patrolOn, alarmOn, baggageOn] = await Promise.all([
     countOn('opt_patrol'), countOn('opt_alarm'), countOn('opt_baggage'),
   ])
+
+  // 削除の欄に出す「消える件数」。拠点 → エッジ → レコーダ → カメラと辿る
+  const deleteCounts = await countForDelete(svc, id, storeCount)
 
   return (
     <AdminShell pathname="/admin/tenants" section="admin">
@@ -76,7 +80,42 @@ export default async function EditTenantPage({ params }: { params: Promise<{ id:
           }}
           usage={{ stores: storeCount, patrol: patrolOn, alarm: alarmOn, baggage: baggageOn }}
         />
+
+        <TenantDelete
+          id={id}
+          name={tenant.name}
+          suspended={tenant.status === 'suspended'}
+          counts={deleteCounts}
+        />
       </div>
     </AdminShell>
   )
+}
+
+async function countForDelete(
+  svc: ReturnType<typeof createSupabaseService>,
+  tenantId: string,
+  stores: number,
+): Promise<TenantDeleteCounts> {
+  const { count: users } = await svc
+    .from('admin_users').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId)
+  const { data: storeRows } = await svc.from('stores').select('id').eq('tenant_id', tenantId)
+  const storeIds = (storeRows ?? []).map((s) => (s as { id: string }).id)
+  let edges = 0
+  let cameras = 0
+  if (storeIds.length > 0) {
+    const { data: edgeRows } = await svc.from('edge_devices').select('id').in('store_id', storeIds)
+    const edgeIds = (edgeRows ?? []).map((e) => (e as { id: string }).id)
+    edges = edgeIds.length
+    if (edgeIds.length > 0) {
+      const { data: recRows } = await svc.from('recorders').select('id').in('edge_id', edgeIds)
+      const recIds = (recRows ?? []).map((r) => (r as { id: string }).id)
+      if (recIds.length > 0) {
+        const { count } = await svc
+          .from('recorder_cameras').select('id', { count: 'exact', head: true }).in('recorder_id', recIds)
+        cameras = count ?? 0
+      }
+    }
+  }
+  return { stores, users: users ?? 0, edges, cameras }
 }
