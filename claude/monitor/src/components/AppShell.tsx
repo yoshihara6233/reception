@@ -61,6 +61,8 @@ export async function AppShell({
   let storesQuery = supa
     .from('stores')
     .select('id, name, area_code, edge_devices ( status, last_seen_at )')
+    // 無効にした拠点はツリーに出さない (2026-10-05・stores/page.tsx と同じ扱い)
+    .eq('is_active', true)
     .order('area_code', { ascending: true, nullsFirst: false })
     .order('name')
     .limit(10_000)

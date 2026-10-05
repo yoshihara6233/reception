@@ -10,11 +10,15 @@ import { createSupabaseServer } from '@/lib/supabase/server'
 export async function StatusBar() {
   const supa = await createSupabaseServer()
 
+  // 無効にした拠点は数えない (2026-10-05)。一覧・ツリー・地図に出さない拠点を
+  // 「◯ / ◯ 拠点オンライン」に含めると、数が画面と合わなくなる。
+  // エッジは所属拠点が有効なものだけ (stores!inner で拠点の is_active を見る)
   const [{ count: total }, { count: online }, { data: user }] = await Promise.all([
-    supa.from('stores').select('*', { count: 'exact', head: true }),
+    supa.from('stores').select('*', { count: 'exact', head: true }).eq('is_active', true),
     supa
       .from('edge_devices')
-      .select('*', { count: 'exact', head: true })
+      .select('id, stores!inner(is_active)', { count: 'exact', head: true })
+      .eq('stores.is_active', true)
       .neq('status', 'offline'),
     supa.auth.getUser(),
   ])

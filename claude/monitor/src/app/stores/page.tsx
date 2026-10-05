@@ -69,6 +69,9 @@ export default async function StoresIndex() {
           edge_devices ( id, status, last_seen_at )
         `)
         .in('id', scope.storeIds)   // テナント分離: 可視店舗のみ
+        // 無効にした拠点は一覧に出さない (2026-10-05)。発報やイベントは受け取り続け、
+        // 記録も残る。拠点の詳細は URL を直接開けば見られる (src/test/inactive-stores-hidden.test.ts)
+        .eq('is_active', true)
         .order('area_code', { ascending: true, nullsFirst: false })
         .order('name')
         .limit(10_000) as unknown as PromiseLike<{

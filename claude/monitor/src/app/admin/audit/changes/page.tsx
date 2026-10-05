@@ -39,6 +39,8 @@ const ACTION_STYLE: Record<string, string> = {
   'store.update':     'bg-blue-100 text-blue-700',
   'store.import':     'bg-violet-100 text-violet-700',
   'camera.import':    'bg-violet-100 text-violet-700',
+  'tenant.update':    'bg-blue-100 text-blue-700',
+  'tenant.delete':    'bg-red-100 text-red-700',
 }
 
 function fmtJST(iso: string) {
