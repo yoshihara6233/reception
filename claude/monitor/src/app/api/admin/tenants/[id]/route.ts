@@ -15,6 +15,7 @@
  * **Storage のファイル（録画の切り出し・画像・報告書）は消さない**（今回の範囲外。残る）。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { sameTenantName } from '@/lib/admin/tenant-name'
 import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
 import { recordAudit } from '@/lib/admin/audit'
@@ -104,8 +105,8 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
   if (tenant.status !== 'suspended') {
     return NextResponse.json({ error: 'not_suspended' }, { status: 409 })
   }
-  // 安全策 2: 名前の打ち込み（前後の空白だけ許す）
-  if (parsed.data.confirm_name.trim() !== String(tenant.name).trim()) {
+  // 安全策 2: 名前の打ち込み（空白と英数字の全角・半角の違いだけ許す・lib/admin/tenant-name.ts）
+  if (!sameTenantName(parsed.data.confirm_name, String(tenant.name))) {
     return NextResponse.json({ error: 'name_mismatch' }, { status: 400 })
   }
   // 安全策 3: 自分の所属テナントと、super_admin が所属するテナントは消さない
