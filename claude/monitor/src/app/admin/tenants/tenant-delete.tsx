@@ -67,7 +67,7 @@ export function TenantDelete({ id, name, counts }: {
       <p className="text-xs leading-relaxed text-slate-600">
         このテナントと、配下の拠点・ユーザ・エッジ・レコーダ・カメラ・監視や発報の記録をすべて削除します。
         <b className="text-red-700">元に戻せません。</b>
-        ユーザとエッジのログイン用アカウントも削除します。録画の切り出し・画像・報告書などの保存ファイルは削除しません。
+        ユーザとエッジのログイン用アカウントと、要望に添えた画像も削除します。録画の切り出し・発報の画像・報告書などの保存ファイルは削除しません。
       </p>
 
       <dl className="grid grid-cols-4 gap-2 rounded border border-slate-200 px-3 py-2 text-center">

@@ -39,6 +39,8 @@ import { POST as createTopic } from './topics/route'
 import { PATCH as patchItem } from './items/[id]/route'
 import { POST as importFile } from './import/route'
 import { GET as listBoard } from './route'
+import { GET as itemAttachment } from './items/[id]/attachment/route'
+import { createHash } from 'node:crypto'
 
 const T1 = '00000000-0000-4000-8000-0000000000a1'
 const I1 = '00000000-0000-4000-8000-0000000000b1'
@@ -181,21 +183,24 @@ describe('ファイルから取り込む（POST /api/admin/feedback/import）', 
   it('★source=import で入れ、伏せ字にし、2 回目は重複として飛ばす', async () => {
     const r1 = await importFile(req('/api/admin/feedback/import', 'POST', { tenant_id: TENANT, store_id: STORE, file: file([it1, it2, it1]) }))
     expect(r1.status).toBe(200)
-    expect(await r1.json()).toEqual({ imported: 2, duplicates: 1, invalid: [] })
+    expect(await r1.json()).toEqual({ imported: 2, duplicates: 1, invalid: [], attachments: { stored: 0, dropped: [] } })
     const rows = h.db.rows('feedback_items').filter((r) => r.source === 'import')
     expect(rows).toHaveLength(2)
     expect(rows[0]).toMatchObject({ tenant_id: TENANT, store_id: STORE, edge_id: null, context: { screen: 'live.grid' } })
     expect(String(rows[0].body)).not.toContain('090-1234-5678')
 
     const r2 = await importFile(req('/api/admin/feedback/import', 'POST', { tenant_id: TENANT, store_id: STORE, file: file([it1, it2]) }))
-    expect(await r2.json()).toEqual({ imported: 0, duplicates: 2, invalid: [] })
+    expect(await r2.json()).toEqual({ imported: 0, duplicates: 2, invalid: [], attachments: { stored: 0, dropped: [] } })
   })
 
   it('形の誤り・管理者以外の要望は飛ばして理由を返す', async () => {
     const res = await importFile(req('/api/admin/feedback/import', 'POST', {
       tenant_id: TENANT, store_id: STORE, file: file([{ ...it1, role: 'operator' }, { ...it2, kind: 'x' }]),
     }))
-    expect(await res.json()).toEqual({ imported: 0, duplicates: 0, invalid: [{ index: 0, reason: 'role_not_allowed' }, { index: 1, reason: 'invalid_item' }] })
+    expect(await res.json()).toEqual({
+      imported: 0, duplicates: 0, invalid: [{ index: 0, reason: 'role_not_allowed' }, { index: 1, reason: 'invalid_item' }],
+      attachments: { stored: 0, dropped: [] },
+    })
   })
 
   it('形式が違うファイル・テナントに属さない拠点は 400', async () => {
@@ -203,6 +208,54 @@ describe('ファイルから取り込む（POST /api/admin/feedback/import）', 
     expect((await r1.json()).error).toBe('unknown_format')
     const r2 = await importFile(req('/api/admin/feedback/import', 'POST', { tenant_id: '00000000-0000-4000-8000-0000000000ee', store_id: STORE, file: file([]) }))
     expect((await r2.json()).error).toBe('store_tenant_mismatch')
+  })
+
+  // ── 画像（§12.6）と該当の画面の URL ──────────────────────────────────────
+  const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d, 0x49, 0x48, 0x44, 0x52])
+  const sha = (b: Uint8Array) => createHash('sha256').update(b).digest('hex')
+  const att = (over: Record<string, unknown> = {}) => ({
+    type: 'image/png', size: PNG.length, sha256: sha(PNG), data_base64: Buffer.from(PNG).toString('base64'), ...over,
+  })
+  const imported = () => h.db.rows('feedback_items').filter((r) => r.source === 'import')
+
+  it('★sha256 と先頭の印が合う画像は置き場に置き、宣言と受けた印を書く', async () => {
+    const res = await importFile(req('/api/admin/feedback/import', 'POST', {
+      tenant_id: TENANT, store_id: STORE, file: file([{ ...it1, page_url: 'https://192.168.0.10/live/grid?split=64', attachment: att() }]),
+    }))
+    expect(await res.json()).toMatchObject({ imported: 1, attachments: { stored: 1, dropped: [] } })
+    const row = imported()[0]
+    expect(row).toMatchObject({
+      page_url: '/live/grid?split=64', attachment_type: 'image/png', attachment_size: PNG.length, attachment_sha256: sha(PNG),
+      attachment_path: `${TENANT}/${row.id}`,
+    })
+    expect(h.db.objects.has(`feedback-attachments/${TENANT}/${row.id}`)).toBe(true)
+  })
+
+  it.each([
+    ['sha256 が合わない', { sha256: 'a'.repeat(64) }, 'attachment_sha256_mismatch'],
+    ['大きさが合わない', { size: PNG.length + 1 }, 'attachment_size_mismatch'],
+    ['先頭の印が画像でない', { data_base64: Buffer.from('%PDF-1.7 aaaaaaa').toString('base64'), size: 16, sha256: sha(new TextEncoder().encode('%PDF-1.7 aaaaaaa')) }, 'attachment_magic_mismatch'],
+    ['宣言の type と中身が違う', { type: 'image/jpeg' }, 'attachment_type_mismatch'],
+    ['base64 として読めない', { data_base64: '***' }, 'attachment_base64'],
+    ['宣言の形が違う', { type: 'image/gif' }, 'attachment_invalid'],
+  ])('★%s 画像は捨てて、要望は入れる（理由を返す）', async (_n, over, reason) => {
+    const res = await importFile(req('/api/admin/feedback/import', 'POST', {
+      tenant_id: TENANT, store_id: STORE, file: file([it2, { ...it1, attachment: att(over) }]),
+    }))
+    expect(await res.json()).toEqual({ imported: 2, duplicates: 0, invalid: [], attachments: { stored: 0, dropped: [{ index: 1, reason }] } })
+    expect(imported()).toHaveLength(2)
+    for (const r of imported()) {
+      expect(r.attachment_sha256 ?? null).toBeNull()
+      expect(r.attachment_path ?? null).toBeNull()
+    }
+    expect(h.db.objects.size).toBe(0)
+  })
+
+  it('置き場に置けなければ宣言を外し、理由を返す（要望は入れる）', async () => {
+    h.db.storageFail.upload = true
+    const res = await importFile(req('/api/admin/feedback/import', 'POST', { tenant_id: TENANT, store_id: STORE, file: file([{ ...it1, attachment: att() }]) }))
+    expect(await res.json()).toMatchObject({ imported: 1, attachments: { stored: 0, dropped: [{ index: 0, reason: 'attachment_store_failed' }] } })
+    expect(imported()[0].attachment_sha256 ?? null).toBeNull()
   })
 })
 
@@ -227,5 +280,39 @@ describe('CSV の書き出し', () => {
     expect([...bytes.slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf])
     const text = new TextDecoder().decode(bytes)
     expect(text.split('\r\n').filter(Boolean)).toHaveLength(1 + 3)
+  })
+
+  it('★該当の画面の URL と「画像あり」の列がある', async () => {
+    const it1 = h.db.rows('feedback_items').find((r) => r.id === I1)!
+    Object.assign(it1, { page_url: '/live/grid?split=64', attachment_type: 'image/png', attachment_path: 'tn1/x' })
+    Object.assign(h.db.rows('feedback_items').find((r) => r.id === I2)!, { attachment_type: 'image/png', attachment_path: null, attachment_purged_at: '2026-01-01T00:00:00Z' })
+    const text = new TextDecoder().decode(new Uint8Array(await (await listBoard(req('/api/admin/feedback?view=all&format=csv', 'GET'))).arrayBuffer()))
+    const lines = text.split('\r\n').filter(Boolean)
+    expect(lines[0].endsWith(',該当の画面の URL,画像あり')).toBe(true)
+    const row = (id: string) => lines.find((l) => l.includes(id))!
+    expect(row(I1).endsWith(',/live/grid?split=64,あり')).toBe(true)
+    expect(row(I2).endsWith(',,消去済み（保存期間 1 年）')).toBe(true)
+    expect(row(I3).endsWith(',,なし')).toBe(true)
+  })
+})
+
+describe('GET /api/admin/feedback/items/[id]/attachment — 要望ボードの画像', () => {
+  const open = (id: string) => itemAttachment(req(`/api/admin/feedback/items/${id}/attachment`, 'GET'), params(id))
+
+  it('★画像のある要望は期限つきの URL へ 302', async () => {
+    Object.assign(item(I1), { attachment_path: `tn1/${I1}` })
+    const res = await open(I1)
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toContain(`feedback-attachments/tn1/${I1}`)
+  })
+
+  it('画像の無い要望は 404', async () => {
+    expect((await open(I3)).status).toBe(404)
+  })
+
+  it.each(['tenant_admin', 'store_manager', 'viewer'])('★%s は 403', async (role) => {
+    Object.assign(item(I1), { attachment_path: `tn1/${I1}` })
+    h.role = role
+    expect((await open(I1)).status).toBe(403)
   })
 })

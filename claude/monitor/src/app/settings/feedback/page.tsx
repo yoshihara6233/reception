@@ -7,6 +7,7 @@
  * 運営の話題・内部メモはここには出ない（テーブルごと読めない）。
  *
  * 本文と返事は文として出す（HTML として解釈しない・§7）。
+ * 該当の画面の URL と添えた画像も出す（画像は /api/feedback/[id]/attachment の期限つきの URL）。
  */
 import { redirect } from 'next/navigation'
 import { AdminShell } from '@/components/AdminShell'
@@ -17,7 +18,8 @@ import { FeedbackStatusBadge } from '@/components/feedback/FeedbackStatusBadge'
 import { requireTenantAdmin } from '@/lib/admin/guard'
 import { resolveFeedbackEntry } from '@/lib/feedback/entry'
 import { KIND_LABEL, URGENCY_LABEL, type FeedbackKind, type FeedbackUrgency } from '@/lib/feedback/schema'
-import { fmtJst } from '@/lib/feedback/board'
+import { attachmentState, fmtJst } from '@/lib/feedback/board'
+import { FeedbackAttachment } from '@/components/feedback/FeedbackAttachment'
 
 interface Row {
   id: string
@@ -31,6 +33,10 @@ interface Row {
   fixed_version: string | null
   created_at: string
   updated_at: string
+  page_url: string | null
+  attachment_type: string | null
+  attachment_path: string | null
+  attachment_purged_at: string | null
 }
 
 const PATH = '/settings/feedback'
@@ -47,7 +53,7 @@ export default async function FeedbackListPage() {
     resolveFeedbackEntry(),
     guard.supa
       .from('feedback_items')
-      .select('id, source, store_id, kind, urgency, body, status, reply, fixed_version, created_at, updated_at')
+      .select('id, source, store_id, kind, urgency, body, status, reply, fixed_version, created_at, updated_at, page_url, attachment_type, attachment_path, attachment_purged_at')
       .eq('tenant_id', tenantId)
       .order('created_at', { ascending: false })
       .limit(200),
@@ -94,6 +100,7 @@ export default async function FeedbackListPage() {
                   <span className="ml-auto font-ge-mono tabular-nums text-ge-ink-3 dark:text-gedink3">{fmtJst(r.created_at)}</span>
                 </div>
                 <p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed">{r.body}</p>
+                <FeedbackAttachment pageUrl={r.page_url} state={attachmentState(r)} imageHref={`/api/feedback/${r.id}/attachment`} />
                 {(r.reply || r.fixed_version) && (
                   <div className="mt-3 rounded border border-ge-line bg-ge-paper px-3 py-2 dark:border-gedline dark:bg-gedbg">
                     <div className="mb-1 flex flex-wrap items-center gap-3 text-[11px] text-ge-ink-3 dark:text-gedink3">

@@ -30,6 +30,8 @@ vi.mock('@/lib/feedback/notify', () => ({
 
 import { POST } from './route'
 import { GET } from './status/route'
+import { PUT } from './attachment/route'
+import { createHash } from 'node:crypto'
 
 const LOCAL = '0b6c1f0e-6a51-4d0f-9a43-2f7e0c1d9a10'
 
@@ -197,6 +199,231 @@ describe('POST /api/edge/feedback — 断る', () => {
     const res = await post(body())
     expect(res.status).toBe(200)
     expect((await res.json()).id).toBe('mine')
+  })
+})
+
+// ── 該当の画面の URL と画像の宣言（§12.2・§12.6） ─────────────────────────────
+
+const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d, 0x49, 0x48, 0x44, 0x52])
+const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 0x46])
+const sha = (b: Uint8Array) => createHash('sha256').update(b).digest('hex')
+const declOf = (b: Uint8Array, type = 'image/png') => ({ type, size: b.length, sha256: sha(b) })
+
+const put = (bytes: Uint8Array | null, opts: { localId?: string; type?: string | null; len?: string } = {}) => {
+  const headers: Record<string, string> = { authorization: 'Bearer t' }
+  if (opts.type !== null) headers['content-type'] = opts.type ?? 'image/png'
+  if (opts.len) headers['content-length'] = opts.len
+  const q = opts.localId === undefined ? `?local_id=${LOCAL}` : opts.localId === '' ? '' : `?local_id=${opts.localId}`
+  return PUT(new NextRequest(`http://localhost/api/edge/feedback/attachment${q}`, {
+    method: 'PUT', body: bytes ? Buffer.from(bytes) : undefined, headers,
+  }))
+}
+
+describe('POST /api/edge/feedback — 該当の画面の URL（page_url）', () => {
+  it.each([
+    ['/live/grid?split=64', '/live/grid?split=64'],
+    ['#/cameras/3', '#/cameras/3'],
+    ['https://192.168.0.10:8080/live/grid?split=64#t', '/live/grid?split=64#t'],
+    ['http://nvms-honten.local/#/settings', '/#/settings'],
+  ])('★%s は %s として保存する（拠点の IP や名前を残さない）', async (raw, want) => {
+    expect((await post(body({ page_url: raw }))).status).toBe(201)
+    expect(h.db.rows('feedback_items')[0].page_url).toBe(want)
+  })
+
+  it.each([['live/grid'], ['//evil.example/x'], ['javascript:alert(1)'], ['/' + 'a'.repeat(500)], [42]])(
+    '★形の違う %s は捨てて、要望は受ける（拒否しない）', async (raw) => {
+      expect((await post(body({ page_url: raw }))).status).toBe(201)
+      expect(h.db.rows('feedback_items')[0].page_url).toBeNull()
+    },
+  )
+
+  it('★クエリの IP アドレスも残さない（§12.5-4）', async () => {
+    await post(body({ page_url: '/cameras?host=192.168.0.101' }))
+    expect(String(h.db.rows('feedback_items')[0].page_url)).not.toContain('192.168')
+  })
+})
+
+describe('POST /api/edge/feedback — 画像の宣言（attachment）', () => {
+  it('★宣言を保存し、201 で attachment_needed=true', async () => {
+    const res = await post(body({ attachment: declOf(PNG) }))
+    expect(res.status).toBe(201)
+    expect((await res.json()).attachment_needed).toBe(true)
+    expect(h.db.rows('feedback_items')[0]).toMatchObject({
+      attachment_type: 'image/png', attachment_size: PNG.length, attachment_sha256: sha(PNG),
+    })
+    expect(h.db.rows('feedback_items')[0].attachment_path ?? null).toBeNull()
+  })
+
+  it('宣言が無ければ attachment_needed=false', async () => {
+    const res = await post(body())
+    expect(await res.json()).toMatchObject({ attachment_needed: false })
+  })
+
+  it.each([
+    ['形式が image/gif', { type: 'image/gif', size: 10, sha256: 'a'.repeat(64) }],
+    ['3 MiB を超える', { type: 'image/png', size: 3 * 1024 * 1024 + 1, sha256: 'a'.repeat(64) }],
+    ['sha256 が大文字', { type: 'image/png', size: 10, sha256: 'A'.repeat(64) }],
+    ['sha256 が短い', { type: 'image/png', size: 10, sha256: 'a'.repeat(63) }],
+    ['size が無い', { type: 'image/png', sha256: 'a'.repeat(64) }],
+  ])('★%s は宣言だけを捨てて要望は受ける（拠点を送り直しで詰まらせない）', async (_n, attachment) => {
+    const res = await post(body({ attachment }))
+    expect(res.status).toBe(201)
+    expect(await res.json()).toMatchObject({ attachment_needed: false })
+    const rows = h.db.rows('feedback_items')
+    expect(rows).toHaveLength(1)
+    expect(rows[0].attachment_sha256 ?? null).toBeNull()
+  })
+
+  it('★送り直しの 200 でも attachment_needed を返す（本文は届いたが画像がまだ）', async () => {
+    const first = await (await post(body({ attachment: declOf(PNG) }))).json()
+    const res = await post(body({ attachment: declOf(PNG) }))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ id: first.id, attachment_needed: true })
+  })
+
+  it('★同じ sha256 の中身を受けた後の送り直しは attachment_needed=false', async () => {
+    await post(body({ attachment: declOf(PNG) }))
+    expect((await put(PNG)).status).toBe(204)
+    const res = await post(body({ attachment: declOf(PNG) }))
+    expect(res.status).toBe(200)
+    expect((await res.json()).attachment_needed).toBe(false)
+  })
+
+  it('中身を受ける前に宣言が変われば置き換える（拠点の手元の画像が正）', async () => {
+    await post(body({ attachment: declOf(PNG) }))
+    const res = await post(body({ attachment: declOf(JPEG, 'image/jpeg') }))
+    expect((await res.json()).attachment_needed).toBe(true)
+    expect(h.db.rows('feedback_items')[0]).toMatchObject({ attachment_type: 'image/jpeg', attachment_sha256: sha(JPEG) })
+  })
+
+  it('受けた後に別の宣言で送り直されても、最初の画像を変えない（false）', async () => {
+    await post(body({ attachment: declOf(PNG) }))
+    await put(PNG)
+    const res = await post(body({ attachment: declOf(JPEG, 'image/jpeg') }))
+    expect((await res.json()).attachment_needed).toBe(false)
+    expect(h.db.rows('feedback_items')[0].attachment_sha256).toBe(sha(PNG))
+  })
+
+  it('1 年で消した後の送り直しは false（受け直さない）', async () => {
+    seed({ items: [{ id: 'old', edge_id: 'edge-1', local_id: LOCAL, tenant_id: 'tenant-1', ...declOfRow(PNG), attachment_path: null, attachment_purged_at: '2026-01-01T00:00:00Z' }] })
+    const res = await post(body({ attachment: declOf(PNG) }))
+    expect(await res.json()).toEqual({ id: 'old', attachment_needed: false })
+  })
+
+  it('宣言なしの送り直しでも、保存した宣言の中身がまだなら true', async () => {
+    await post(body({ attachment: declOf(PNG) }))
+    const res = await post(body())
+    expect((await res.json()).attachment_needed).toBe(true)
+  })
+})
+
+function declOfRow(b: Uint8Array, type = 'image/png') {
+  return { attachment_type: type, attachment_size: b.length, attachment_sha256: sha(b) }
+}
+
+describe('PUT /api/edge/feedback/attachment — 画像の受け口（§12.6）', () => {
+  beforeEach(async () => {
+    await post(body({ attachment: declOf(PNG) }))
+  })
+  const item = () => h.db.rows('feedback_items')[0]
+
+  it('★204 で受け、<tenant_id>/<item_id> に置き、path と受けた時刻を書く', async () => {
+    const res = await put(PNG)
+    expect(res.status).toBe(204)
+    const path = `tenant-1/${item().id}`
+    expect(item().attachment_path).toBe(path)
+    expect(typeof item().attachment_received_at).toBe('string')
+    const obj = h.db.objects.get(`feedback-attachments/${path}`)
+    expect(obj?.contentType).toBe('image/png')
+    expect([...obj!.bytes]).toEqual([...PNG])
+  })
+
+  it('★同じ中身の送り直しも 204（置き直さない）', async () => {
+    await put(PNG)
+    const at = item().attachment_received_at
+    const uploads = () => h.db.objects.size
+    expect((await put(PNG)).status).toBe(204)
+    expect(item().attachment_received_at).toBe(at)
+    expect(uploads()).toBe(1)
+  })
+
+  it('トークンが違えば 401', async () => {
+    h.edge = null
+    expect((await put(PNG)).status).toBe(401)
+  })
+
+  it('★その拠点のその local_id が無ければ 404（先に本文を送る）', async () => {
+    const res = await put(PNG, { localId: '99999999-9999-4999-8999-999999999999' })
+    expect(res.status).toBe(404)
+  })
+
+  it('★別の拠点の同じ local_id は 404（他の拠点の要望に画像を付けられない）', async () => {
+    h.edge = OTHER_EDGE
+    expect((await put(PNG)).status).toBe(404)
+    expect(h.db.objects.size).toBe(0)
+  })
+
+  it('local_id が無い・UUID でなければ 400', async () => {
+    expect((await put(PNG, { localId: '' })).status).toBe(400)
+    expect((await put(PNG, { localId: 'abc' })).status).toBe(400)
+  })
+
+  it.each([
+    ['大きさが宣言と違う', () => new Uint8Array([...PNG, 0]), 'size_mismatch'],
+    ['先頭の印が画像でない', () => { const b = new Uint8Array(PNG.length); b.set(new TextEncoder().encode('%PDF-1.7')); return b }, 'magic_mismatch'],
+    ['sha256 が宣言と違う', () => { const b = PNG.slice(); b[15] = 0x00; return b }, 'sha256_mismatch'],
+  ])('★%s は 400 で、置かない', async (_n, make, code) => {
+    const res = await put(make())
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toBe(code)
+    expect(h.db.objects.size).toBe(0)
+    expect(item().attachment_path ?? null).toBeNull()
+  })
+
+  it('★Content-Type が宣言の type と違えば 400', async () => {
+    const res = await put(PNG, { type: 'image/jpeg' })
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toBe('type_mismatch')
+  })
+
+  it('★宣言の無い要望への PUT は 400 no_declaration', async () => {
+    const other = '22222222-2222-4222-8222-222222222222'
+    await post(body({ local_id: other }))
+    const res = await put(PNG, { localId: other })
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toBe('no_declaration')
+  })
+
+  it('★テナントが止めていれば 409 feedback_disabled', async () => {
+    h.db.rows('tenants')[0].feedback_enabled = false
+    const res = await put(PNG)
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({ error: 'feedback_disabled' })
+  })
+
+  it('★3 MiB を超えたら 413（名乗った大きさで読む前に断る）', async () => {
+    const res = await put(PNG, { len: String(3 * 1024 * 1024 + 1) })
+    expect(res.status).toBe(413)
+  })
+
+  it('★大きさを名乗らずに 3 MiB を超えて送られても、読みながら数えて 413', async () => {
+    const big = new Uint8Array(3 * 1024 * 1024 + 10)
+    big.set(PNG)
+    const stream = new ReadableStream<Uint8Array>({
+      start(c) { for (let i = 0; i < big.length; i += 65536) c.enqueue(big.slice(i, i + 65536)); c.close() },
+    })
+    // ストリームの本文には duplex: 'half' が要る（型には無いので足す）
+    const res = await PUT(new NextRequest(`http://localhost/api/edge/feedback/attachment?local_id=${LOCAL}`, {
+      method: 'PUT', body: stream, headers: { authorization: 'Bearer t', 'content-type': 'image/png' }, duplex: 'half',
+    } as unknown as ConstructorParameters<typeof NextRequest>[1]))
+    expect(res.status).toBe(413)
+    expect(h.db.objects.size).toBe(0)
+  })
+
+  it('置き場に置けなければ 500 で、受けた印を書かない（拠点は次の周期で送り直す）', async () => {
+    h.db.storageFail.upload = true
+    expect((await put(PNG)).status).toBe(500)
+    expect(item().attachment_path ?? null).toBeNull()
   })
 })
 

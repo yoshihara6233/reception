@@ -10,12 +10,14 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Download, Upload } from 'lucide-react'
 import type { BoardFilters, BoardItem, BoardView } from '@/lib/feedback/board'
-import { fmtJst } from '@/lib/feedback/board'
+import { attachmentState, fmtJst } from '@/lib/feedback/board'
 import {
   FEEDBACK_KINDS, FEEDBACK_SOURCES, FEEDBACK_STATUSES, KIND_LABEL, REPLY_MAX, SOURCE_LABEL, STATUS_LABEL, URGENCY_LABEL,
   charCount, type FeedbackStatus,
 } from '@/lib/feedback/schema'
 import { FeedbackStatusBadge } from '@/components/feedback/FeedbackStatusBadge'
+import { FeedbackAttachment } from '@/components/feedback/FeedbackAttachment'
+import { chunkImportItems } from '@/lib/feedback/import-chunks'
 
 export interface TopicVM {
   id: string
@@ -52,6 +54,18 @@ const ERR: Record<string, string> = {
   store_tenant_mismatch: '拠点が選んだテナントに属していません。',
   forbidden: '権限がありません。',
 }
+/** 取り込みで捨てた画像の理由（/api/admin/feedback/import の attachments.dropped） */
+const DROP_REASON: Record<string, string> = {
+  attachment_invalid: '画像の宣言の形が違う',
+  attachment_base64: 'base64 として読めない',
+  attachment_too_large: '3 MB を超えている',
+  attachment_size_mismatch: '大きさが宣言と違う',
+  attachment_magic_mismatch: 'PNG・JPEG・WebP でない',
+  attachment_type_mismatch: '形式が宣言と違う',
+  attachment_sha256_mismatch: 'sha256 が宣言と違う',
+  attachment_store_failed: '置き場に保存できなかった',
+}
+
 const errText = (code: unknown, status: number) =>
   (typeof code === 'string' && ERR[code]) || `処理できませんでした（${status}）。`
 
@@ -313,6 +327,7 @@ function ItemRow({
             <span className={`ml-auto font-ge-mono tabular-nums ${muted}`}>{fmtJst(item.created_at)}</span>
           </div>
           <p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed">{item.body}</p>
+          <FeedbackAttachment pageUrl={item.page_url} state={attachmentState(item)} imageHref={`/api/admin/feedback/items/${item.id}/attachment`} />
           {(item.reply || item.fixed_version) && !editing && (
             <p className={`mt-1.5 whitespace-pre-wrap break-words ${muted}`}>
               返事: {item.reply ?? '—'}{item.fixed_version ? `（対応した版 ${item.fixed_version}）` : ''}
@@ -521,19 +536,41 @@ function ImportPanel({ tenants, stores, onImported }: { tenants: Named[]; stores
   const [file, setFile] = useState<File | null>(null)
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<string | null>(null)
+  const [dropped, setDropped] = useState<{ index: number; reason: string }[]>([])
   const [err, setErr] = useState<string | null>(null)
   const storeOptions = stores.filter((s) => s.tenant_id === tenantId)
 
   async function run() {
     if (!file || !tenantId || !storeId) return
-    setBusy(true); setErr(null); setResult(null)
+    setBusy(true); setErr(null); setResult(null); setDropped([])
     try {
       let parsed: unknown
       try { parsed = JSON.parse(await file.text()) } catch { setErr('JSON として読めないファイルです。'); return }
-      const r = await send('/api/admin/feedback/import', 'POST', { tenant_id: tenantId, store_id: storeId, file: parsed })
-      if (!r.ok) { setErr(errText(r.json.error, r.status)); return }
-      const invalid = Array.isArray(r.json.invalid) ? r.json.invalid.length : 0
-      setResult(`取り込み ${fmtNum(Number(r.json.imported ?? 0))} 件・取り込み済みで飛ばした ${fmtNum(Number(r.json.duplicates ?? 0))} 件・形の誤りで飛ばした ${fmtNum(invalid)} 件`)
+      const all = (parsed as { items?: unknown })?.items
+      // 画像（base64）を含むと 1 回の本文が大きくなるので、Vercel の上限の内側に分けて送る
+      const chunks = Array.isArray(all) && all.length > 0 ? chunkImportItems(all) : [{ start: 0, items: Array.isArray(all) ? all : [] }]
+      let imported = 0, duplicates = 0, invalid = 0, stored = 0
+      const drops: { index: number; reason: string }[] = []
+      for (const [n, chunk] of chunks.entries()) {
+        const body = { tenant_id: tenantId, store_id: storeId, file: { ...(parsed as Record<string, unknown>), items: Array.isArray(all) ? chunk.items : all } }
+        const r = await send('/api/admin/feedback/import', 'POST', body)
+        if (!r.ok) {
+          setErr(`${errText(r.json.error, r.status)}${n > 0 ? `（ファイルの先頭から ${fmtNum(chunk.start)} 件までは処理済みです。もう一度取り込むと、取り込み済みの要望は飛ばします）` : ''}`)
+          if (imported) onImported()
+          return
+        }
+        imported += Number(r.json.imported ?? 0)
+        duplicates += Number(r.json.duplicates ?? 0)
+        invalid += Array.isArray(r.json.invalid) ? r.json.invalid.length : 0
+        const att = (r.json.attachments ?? {}) as { stored?: number; dropped?: { index: number; reason: string }[] }
+        stored += Number(att.stored ?? 0)
+        for (const d of att.dropped ?? []) drops.push({ index: chunk.start + d.index, reason: d.reason })
+      }
+      setResult(
+        `取り込み ${fmtNum(imported)} 件・取り込み済みで飛ばした ${fmtNum(duplicates)} 件・形の誤りで飛ばした ${fmtNum(invalid)} 件` +
+        `・画像 ${fmtNum(stored)} 枚を保存${drops.length ? `・画像だけ捨てた ${fmtNum(drops.length)} 件` : ''}`,
+      )
+      setDropped(drops)
       setFile(null)
       onImported()
     } finally {
@@ -547,6 +584,7 @@ function ImportPanel({ tenants, stores, onImported }: { tenants: Named[]; stores
       <p className={`mt-2 ${muted}`}>
         クラウドにつながっていない拠点が G・VMS の 設定 → 要望 で書き出した JSON（gvms-feedback-export/1）を取り込みます。
         同じ拠点で取り込み済みの要望（同じ手元の id）は飛ばします。本文の電話番号・メールアドレス・URL は伏せ字にして保存します。
+        添えた画像は大きさ・形式・sha256 を確かめてから保存し、合わない画像は捨てます（要望は取り込みます）。
       </p>
       <div className="mt-3 flex flex-wrap items-end gap-3">
         <label className="block"><span className={`mb-1 block ${muted}`}>テナント</span>
@@ -570,6 +608,13 @@ function ImportPanel({ tenants, stores, onImported }: { tenants: Named[]; stores
       </div>
       {err && <p className="mt-2 text-ge-danger">{err}</p>}
       {result && <p className="mt-2 text-ge-success">{result}</p>}
+      {dropped.length > 0 && (
+        <ul className={`mt-1 list-inside list-disc ${muted}`}>
+          {dropped.map((d) => (
+            <li key={d.index}>ファイルの {fmtNum(d.index + 1)} 件目の画像: {DROP_REASON[d.reason] ?? d.reason}</li>
+          ))}
+        </ul>
+      )}
     </details>
   )
 }
