@@ -62,10 +62,32 @@ export interface BoardItem {
   submitted_at: string | null
   created_at: string
   updated_at: string
+  /** 該当の画面の場所（§12.2） */
+  page_url: string | null
+  /** 画像の宣言（§12.6）。中身を受けたかは attachment_path で見る */
+  attachment_type: string | null
+  attachment_size: number | null
+  attachment_path: string | null
+  attachment_received_at: string | null
+  attachment_purged_at: string | null
 }
 
 export const BOARD_ITEM_COLUMNS =
-  'id, tenant_id, store_id, edge_id, source, local_id, kind, urgency, body, contact_ok, role, context, topic_id, status, reply, fixed_version, submitted_at, created_at, updated_at'
+  'id, tenant_id, store_id, edge_id, source, local_id, kind, urgency, body, contact_ok, role, context, topic_id, status, reply, fixed_version, submitted_at, created_at, updated_at, page_url, attachment_type, attachment_size, attachment_path, attachment_received_at, attachment_purged_at'
+
+export type AttachmentState = 'none' | 'stored' | 'pending' | 'purged'
+
+/** 画像の状態: なし・あり・宣言だけ（拠点からまだ届いていない）・保存期間を過ぎて消した */
+export function attachmentState(it: Pick<BoardItem, 'attachment_type' | 'attachment_path' | 'attachment_purged_at'>): AttachmentState {
+  if (it.attachment_path) return 'stored'
+  if (it.attachment_purged_at) return 'purged'
+  if (it.attachment_type) return 'pending'
+  return 'none'
+}
+
+export const ATTACHMENT_STATE_LABEL: Record<AttachmentState, string> = {
+  none: 'なし', stored: 'あり', pending: '未着', purged: '消去済み（保存期間 1 年）',
+}
 
 export const BOARD_LIMIT = 1000
 
@@ -119,6 +141,7 @@ export interface CsvNames {
 const CSV_HEADER = [
   '受付日時', '種類', '困っている度合い', '状態', '出どころ', 'テナント', '拠点', '本文', '返事', '対応した版',
   '話題', '連絡してよいか', '画面', '版', 'ブラウザ', 'OS', '画面の幅', 'エラー', 'カメラ', 'ID',
+  '該当の画面の URL', '画像あり',
 ]
 
 /** 要望を CSV（UTF-8・BOM 付き・Excel で文字化けしない形）にする。 */
@@ -133,6 +156,7 @@ export function boardCsv(items: BoardItem[], names: CsvNames): string {
       names.tenant(it.tenant_id), names.store(it.store_id), it.body, it.reply ?? '', it.fixed_version ?? '',
       names.topic(it.topic_id), it.contact_ok ? 'はい' : 'いいえ',
       c.screen ?? '', c.agent_version ?? '', c.browser ?? '', c.os ?? '', c.viewport ?? '', c.error_code ?? '', cam, it.id,
+      it.page_url ?? '', ATTACHMENT_STATE_LABEL[attachmentState(it)],
     ].map(cell).join(','))
   }
   return '﻿' + lines.join('\r\n') + '\r\n'

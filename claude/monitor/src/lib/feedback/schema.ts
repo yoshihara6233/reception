@@ -70,6 +70,10 @@ export const EdgeFeedbackBody = z.object({
   role: z.string().max(32),
   submitted_at: z.string().max(64).optional().nullable(),
   context: z.unknown().optional(),
+  /** 該当の画面の場所（§12.2）。形を問わず受け、cleanPageUrl で整える（形の違うものは捨てる・拒否しない） */
+  page_url: z.unknown().optional(),
+  /** 画像の宣言（§12.2・§12.6）。受け口ごとに AttachmentDecl で検証する */
+  attachment: z.unknown().optional(),
 })
 export type EdgeFeedbackBody = z.infer<typeof EdgeFeedbackBody>
 
@@ -80,6 +84,8 @@ export const CloudFeedbackBody = z.object({
   body: bodySchema,
   contact_ok: z.boolean().optional().default(false),
   context: z.unknown().optional(),
+  /** 該当の画面の URL（任意）。cleanPageUrl で整える（形の違うものは捨てる） */
+  page_url: z.unknown().optional(),
 })
 export type CloudFeedbackBody = z.infer<typeof CloudFeedbackBody>
 

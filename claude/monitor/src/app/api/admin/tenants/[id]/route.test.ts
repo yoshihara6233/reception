@@ -12,6 +12,7 @@ import { NextRequest } from 'next/server'
  *   - 自分の所属テナントと、super_admin が所属するテナントは消さない
  * 消したあとは、ログイン用のアカウント (ユーザとエッジ) を消し、監査ログを残す。
  * アカウントの削除の失敗では全体を失敗にしない (DB からはもう消えている)。
+ * 要望に添えた画像 (feedback-attachments の `<tenant_id>/`) も消す。他のテナントの画像は消さない。
  */
 
 type Row = Record<string, unknown>
@@ -27,6 +28,9 @@ const h = vi.hoisted(() => ({
   rpcCalls: [] as unknown[],
   deleted: [] as string[],
   audits: [] as Row[],
+  /** Storage の置き場（`<bucket>/<path>`） */
+  objects: new Set<string>(),
+  storageFail: false,
 }))
 
 vi.mock('@/lib/admin/guard', () => ({ requireAdmin: async () => h.guard }))
@@ -60,6 +64,20 @@ vi.mock('@/lib/supabase/server', () => ({
     return {
       from,
       rpc: async (name: string, args: unknown) => { h.rpcCalls.push({ name, args }); return h.rpc },
+      storage: {
+        from: (bucket: string) => ({
+          list: async (prefix: string, o?: { limit?: number }) => {
+            if (h.storageFail) return { data: null, error: { message: 'storage down' } }
+            const head = `${bucket}/${prefix}/`
+            const names = [...h.objects].filter((k) => k.startsWith(head)).map((k) => ({ name: k.slice(head.length) }))
+            return { data: names.slice(0, o?.limit ?? 100), error: null }
+          },
+          remove: async (paths: string[]) => {
+            for (const p of paths) h.objects.delete(`${bucket}/${p}`)
+            return { data: [], error: null }
+          },
+        }),
+      },
       auth: {
         admin: {
           deleteUser: async (uid: string) => {
@@ -102,6 +120,8 @@ beforeEach(() => {
   h.rpcCalls = []
   h.deleted = []
   h.audits = []
+  h.objects = new Set(['feedback-attachments/t1/a', 'feedback-attachments/t1/b', 'feedback-attachments/t2/c', 'diagnostics/t1/x'])
+  h.storageFail = false
 })
 
 describe('DELETE /api/admin/tenants/[id] — 安全策', () => {
@@ -205,6 +225,28 @@ describe('DELETE /api/admin/tenants/[id] — 削除と後始末', () => {
     const res = await call({ confirm_name: '某家電量販店様 デモ' }, 'acting_tenant=t1')
     expect(res.status).toBe(200)
     expect(res.headers.get('set-cookie') ?? '').toMatch(/acting_tenant=;/)
+  })
+
+  it('★要望に添えた画像（feedback-attachments の <tenant_id>/）を消す。他のテナント・他の置き場は残す', async () => {
+    const res = await call({ confirm_name: '某家電量販店様 デモ' })
+    expect(res.status).toBe(200)
+    expect((await res.json()).feedback_attachments).toEqual({ deleted: 2, failed: false })
+    expect([...h.objects].sort()).toEqual(['diagnostics/t1/x', 'feedback-attachments/t2/c'])
+    expect(h.audits[0]).toMatchObject({ changes: { feedback_attachments: { deleted: 2, failed: false } } })
+  })
+
+  it('画像を消せなくても、DB からは消えているので成功で返し、失敗を記録する', async () => {
+    h.storageFail = true
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const res = await call({ confirm_name: '某家電量販店様 デモ' })
+    expect(res.status).toBe(200)
+    expect((await res.json()).feedback_attachments).toEqual({ deleted: 0, failed: true })
+  })
+
+  it('★RPC が失敗したら画像も消さない', async () => {
+    h.rpc = { data: null, error: { message: 'boom' } }
+    await call({ confirm_name: '某家電量販店様 デモ' })
+    expect(h.objects.size).toBe(4)
   })
 
   it('別のテナントを操作中なら cookie は触らない', async () => {

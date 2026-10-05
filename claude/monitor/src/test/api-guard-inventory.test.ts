@@ -116,6 +116,8 @@ const EXPECTED: Record<string, Guard> = {
   '/api/admin/feedback/topics': 'super-admin',
   '/api/admin/feedback/topics/[id]': 'super-admin',
   '/api/admin/feedback/import': 'super-admin',
+  // 要望に添えた画像を見る（期限つきの URL へ 302）。要望ボードと同じく運営だけ。
+  '/api/admin/feedback/items/[id]/attachment': 'super-admin',
   '/api/admin/import/cameras': 'admin',
   '/api/admin/import/stores': 'admin',
   '/api/admin/recorders/[id]/cameras': 'admin',
@@ -193,13 +195,19 @@ const EXPECTED: Record<string, Guard> = {
   '/api/cron/sfu-reaper': 'cron',
   '/api/cron/video-sessions': 'cron',
   '/api/cron/usage-rollup': 'cron',
+  // 要望の画像を受けてから 1 年で消す（GVMS_CLOUD_SPEC §12.6）
+  '/api/cron/feedback-attachments': 'cron',
   '/api/edge/bootstrap': 'device-token',
   '/api/edge/config': 'device-token',
   '/api/edge/events': 'device-token',
   '/api/edge/feedback': 'device-token',
   '/api/edge/feedback/status': 'device-token',
+  // 要望の画像 1 枚の受け口（§12.6）。その拠点の local_id にだけ付けられる。
+  '/api/edge/feedback/attachment': 'device-token',
   // クラウドの画面から送る要望（テナント管理者だけ・基本設計 §3.1）
   '/api/feedback': 'tenant-admin',
+  // 自分のテナントの要望の画像を見る（RLS で読めたものだけ署名する）
+  '/api/feedback/[id]/attachment': 'tenant-admin',
   '/api/edge/license': 'device-token',
   '/api/edge/enroll': 'device-token',
   '/api/edges/[id]/cam/[cameraId]/snapshot': 'edge-view',

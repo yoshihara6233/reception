@@ -12,7 +12,8 @@
  *   3. 自分の所属テナントと、super_admin が所属するテナントは消せない（締め出し防止）
  *   4. DB の削除は 1 トランザクション（RPC admin_delete_tenant）。全部消えるか、何も消えない
  * DB の行を消したあと、ログイン用のアカウント（auth.users・ユーザとエッジの分）を消す。
- * **Storage のファイル（録画の切り出し・画像・報告書）は消さない**（今回の範囲外。残る）。
+ * 要望に添えた画像（バケット feedback-attachments の `<tenant_id>/`）も消す（2026-10-05）。
+ * **それ以外の Storage のファイル（録画の切り出し・画像・報告書）は消さない**（今回の範囲外。残る）。
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { sameTenantName } from '@/lib/admin/tenant-name'
@@ -20,6 +21,7 @@ import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
 import { recordAudit } from '@/lib/admin/audit'
 import { createSupabaseService } from '@/lib/supabase/server'
+import { removeTenantAttachments } from '@/lib/feedback/attachment-store'
 
 // lib/tenant/acting.ts の ACTING_TENANT_COOKIE と同じ値。あちらは server-only を
 // 読み込むので、このルートの単体試験 (vitest) から辿れるよう値だけ持つ
@@ -145,6 +147,12 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
     }
   }
 
+  // 要望に添えた画像（置き場所の先頭がテナント）。DB からは消えたので、失敗では全体を失敗にしない
+  const fbAttach = await removeTenantAttachments(svc, id)
+  if (fbAttach.error) {
+    console.error('[admin/tenants DELETE] feedback attachments deletion failed:', id, fbAttach.error)
+  }
+
   await recordAudit(guard.supa, {
     actorUserId: guard.user.id,
     action:      'tenant.delete',
@@ -157,6 +165,7 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
       auth_deleted:  authDeleted,
       auth_failed:   authFailed,
       storage_files: 'not_deleted',
+      feedback_attachments: { deleted: fbAttach.deleted, failed: !!fbAttach.error },
     },
   })
 
@@ -164,6 +173,7 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
     ok:     true,
     counts,
     auth:   { deleted: authDeleted, failed: authFailed.length },
+    feedback_attachments: { deleted: fbAttach.deleted, failed: !!fbAttach.error },
   })
   // 消したテナントを「操作中」にしていたら外す（存在しないテナントの文脈を残さない）
   if (req.cookies.get(ACTING_TENANT_COOKIE)?.value === id) {

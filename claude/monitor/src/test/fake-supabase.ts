@@ -7,6 +7,9 @@
  * Postgres に当てて別に確かめる（試験の対象は「ルートが何をどの順で書くか」）。
  *
  * 一意の制約は `uniques` に列の組で渡す（違反すると code 23505 を返す）。
+ *
+ * Storage は使う分だけ（upload・remove・list・createSignedUrl）。置いたものは `objects` に
+ * `<bucket>/<path>` で残る。`storageFail` を立てるとその操作が失敗を返す。
  */
 import { randomUUID } from 'node:crypto'
 
@@ -132,10 +135,44 @@ export function createFakeDb(seed: Record<string, Row[]> = {}, opts: FakeDbOptio
 
   const from = (name: string) => new Query(name)
 
+  const objects = new Map<string, { bytes: Uint8Array; contentType?: string }>()
+  const storageFail: { upload?: boolean; remove?: boolean; list?: boolean; sign?: boolean } = {}
+  const fail = (op: string) => ({ data: null, error: { message: `storage ${op} failed` } })
+  const storage = {
+    from: (bucket: string) => ({
+      async upload(path: string, bytes: Uint8Array, o?: { contentType?: string; upsert?: boolean }) {
+        if (storageFail.upload) return fail('upload')
+        const key = `${bucket}/${path}`
+        if (objects.has(key) && !o?.upsert) return { data: null, error: { message: 'The resource already exists' } }
+        objects.set(key, { bytes, contentType: o?.contentType })
+        return { data: { path }, error: null }
+      },
+      async remove(paths: string[]) {
+        if (storageFail.remove) return fail('remove')
+        for (const p of paths) objects.delete(`${bucket}/${p}`)
+        return { data: paths.map((name) => ({ name })), error: null }
+      },
+      async list(prefix: string, o?: { limit?: number }) {
+        if (storageFail.list) return fail('list')
+        const head = `${bucket}/${prefix}/`
+        const names = [...objects.keys()]
+          .filter((k) => k.startsWith(head) && !k.slice(head.length).includes('/'))
+          .map((k) => ({ name: k.slice(head.length) }))
+        return { data: names.slice(0, o?.limit ?? 100), error: null }
+      },
+      async createSignedUrl(path: string, ttl: number) {
+        if (storageFail.sign) return fail('sign')
+        return { data: { signedUrl: `https://storage.example/${bucket}/${path}?ttl=${ttl}` }, error: null }
+      },
+    }),
+  }
+
   return {
-    client: { from, rpc: async () => ({ data: true, error: null }) },
+    client: { from, rpc: async () => ({ data: true, error: null }), storage },
     tables,
     calls,
+    objects,
+    storageFail,
     rows: (name: string) => table(name),
   }
 }

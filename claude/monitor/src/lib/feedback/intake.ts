@@ -39,3 +39,37 @@ export async function loadTenantFeedbackFlag(svc: SupabaseClient, tenantId: stri
   const row = data as { name: string | null; feedback_enabled: boolean | null }
   return { name: row.name ?? null, enabled: row.feedback_enabled !== false }
 }
+
+/**
+ * 本文をバイト列のまま読む（画像の受け口・画像つきの送信）。上限を超えたら読むのをやめて 413。
+ * content-length を先に見て、無い・偽っているときも読みながら数えて止める
+ * （Vercel の関数の本文の上限 4.5 MB より手前で締めるため）。
+ */
+export async function readBytesLimited(req: Request, maxBytes: number): Promise<
+  { ok: true; bytes: Uint8Array } | { ok: false; status: 400 | 413; error: string }
+> {
+  const len = Number(req.headers.get('content-length') ?? '0')
+  if (len > maxBytes) return { ok: false, status: 413, error: 'payload_too_large' }
+  if (!req.body) return { ok: true, bytes: new Uint8Array(0) }
+  const reader = req.body.getReader()
+  const chunks: Uint8Array[] = []
+  let total = 0
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      total += value.byteLength
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => {})
+        return { ok: false, status: 413, error: 'payload_too_large' }
+      }
+      chunks.push(value)
+    }
+  } catch {
+    return { ok: false, status: 400, error: 'invalid_body' }
+  }
+  const out = new Uint8Array(total)
+  let off = 0
+  for (const c of chunks) { out.set(c, off); off += c.byteLength }
+  return { ok: true, bytes: out }
+}

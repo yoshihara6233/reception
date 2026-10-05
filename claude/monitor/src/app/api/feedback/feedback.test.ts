@@ -33,6 +33,8 @@ vi.mock('@/lib/supabase/server', () => ({
 vi.mock('@/lib/feedback/notify', () => ({ notifyBlockingFeedback: async () => { h.notified += 1 } }))
 
 import { GET, POST } from './route'
+import { GET as getAttachment } from './[id]/attachment/route'
+import { createHash } from 'node:crypto'
 
 const TENANT = 'tenant-1'
 const post = (b: unknown) => POST(new NextRequest('http://localhost/api/feedback', {
@@ -140,5 +142,122 @@ describe('GET /api/feedback — 一覧もテナント管理者だけ', () => {
   it.each(['super_admin', 'store_manager', 'viewer'])('★%s は 403', async (role) => {
     as(role)
     expect((await GET()).status).toBe(403)
+  })
+})
+
+// ── 該当の画面の URL と画像 1 枚（GVMS_CLOUD_SPEC §12.2・§12.6） ──────────────────────
+
+const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d, 0x49, 0x48, 0x44, 0x52])
+const sha = (b: Uint8Array) => createHash('sha256').update(b).digest('hex')
+
+function postForm(payload: unknown, file?: { bytes: Uint8Array; type?: string; name?: string } | string) {
+  const form = new FormData()
+  form.set('payload', typeof payload === 'string' ? payload : JSON.stringify(payload))
+  if (typeof file === 'string') form.set('attachment', file)
+  else if (file) form.set('attachment', new File([Buffer.from(file.bytes)], file.name ?? 'shot.png', { type: file.type ?? 'image/png' }))
+  return POST(new NextRequest('http://localhost/api/feedback', { method: 'POST', body: form }))
+}
+
+describe('POST /api/feedback — 該当の画面の URL と画像', () => {
+  it('★page_url は画面の場所だけにして保存する（https の URL はパスとクエリに）', async () => {
+    await post({ ...valid, page_url: 'https://gvms-cloud.com/stores?tab=edge' })
+    expect(h.db.rows('feedback_items')[0].page_url).toBe('/stores?tab=edge')
+  })
+
+  it('形の違う page_url は捨てて、要望は受ける', async () => {
+    expect((await post({ ...valid, page_url: 'stores' })).status).toBe(201)
+    expect(h.db.rows('feedback_items')[0].page_url).toBeNull()
+  })
+
+  it('★画像つき（multipart）は置き場に置き、宣言と受けた印を書く', async () => {
+    const res = await postForm({ ...valid, page_url: '/settings/feedback' }, { bytes: PNG })
+    expect(res.status).toBe(201)
+    const row = h.db.rows('feedback_items')[0]
+    const { id } = await res.json()
+    expect(row).toMatchObject({
+      id, page_url: '/settings/feedback',
+      attachment_type: 'image/png', attachment_size: PNG.length, attachment_sha256: sha(PNG),
+      attachment_path: `${TENANT}/${id}`,
+    })
+    expect(typeof row.attachment_received_at).toBe('string')
+    expect([...h.db.objects.get(`feedback-attachments/${TENANT}/${id}`)!.bytes]).toEqual([...PNG])
+  })
+
+  it('★形式はブラウザの種類ではなく先頭の印で決める（GIF を image/png と名乗っても 400）', async () => {
+    const gif = new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 1, 2])
+    const res = await postForm(valid, { bytes: gif, type: 'image/png' })
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toBe('invalid_attachment')
+    expect(h.db.rows('feedback_items')).toHaveLength(0)
+    expect(h.db.objects.size).toBe(0)
+  })
+
+  it('★3 MiB を超える画像は 413 で、何も入れない', async () => {
+    const big = new Uint8Array(3 * 1024 * 1024 + 1)
+    big.set(PNG)
+    const res = await postForm(valid, { bytes: big })
+    expect(res.status).toBe(413)
+    expect(h.db.rows('feedback_items')).toHaveLength(0)
+  })
+
+  it('attachment が文字列なら 400・payload が無ければ 400', async () => {
+    expect((await postForm(valid, 'not-a-file')).status).toBe(400)
+    const form = new FormData()
+    form.set('attachment', new File([Buffer.from(PNG)], 'a.png'))
+    expect((await POST(new NextRequest('http://localhost/api/feedback', { method: 'POST', body: form }))).status).toBe(400)
+  })
+
+  it('★テナント管理者以外は画像つきでも 403 で、置き場に届かない', async () => {
+    as('super_admin')
+    expect((await postForm(valid, { bytes: PNG })).status).toBe(403)
+    expect(h.db?.objects.size ?? 0).toBe(0)
+  })
+
+  it('画像を置けなければ 500 で、要望も入れない', async () => {
+    h.db.storageFail.upload = true
+    expect((await postForm(valid, { bytes: PNG })).status).toBe(500)
+    expect(h.db.rows('feedback_items')).toHaveLength(0)
+  })
+
+  it('★一覧は置き場の場所を出さず、画像の有無だけ返す', async () => {
+    seed(true, [{ id: 'mine', tenant_id: TENANT, created_at: '2026-10-06T00:00:00Z', page_url: '/x', attachment_path: `${TENANT}/mine`, attachment_purged_at: null }])
+    const j = await (await GET()).json()
+    expect(j.items[0]).toMatchObject({ id: 'mine', page_url: '/x', has_attachment: true, attachment_purged: false })
+    expect(j.items[0]).not.toHaveProperty('attachment_path')
+  })
+})
+
+describe('GET /api/feedback/[id]/attachment — 画像を見る', () => {
+  const ID = '00000000-0000-4000-8000-0000000000f1'
+  const OTHER = '00000000-0000-4000-8000-0000000000f2'
+  const open = (id: string) => getAttachment(new NextRequest(`http://localhost/api/feedback/${id}/attachment`), { params: Promise.resolve({ id }) })
+
+  beforeEach(() => {
+    seed(true, [
+      { id: ID, tenant_id: TENANT, attachment_path: `${TENANT}/${ID}` },
+      { id: OTHER, tenant_id: 'tenant-2', attachment_path: `tenant-2/${OTHER}` },
+    ])
+  })
+
+  it('★自分のテナントの画像は期限つきの URL へ 302', async () => {
+    const res = await open(ID)
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toContain(`feedback-attachments/${TENANT}/${ID}`)
+    expect(res.headers.get('cache-control')).toBe('no-store')
+  })
+
+  it('★他のテナントの画像は 404（ID を知っていても届かない）', async () => {
+    const res = await open(OTHER)
+    expect(res.status).toBe(404)
+  })
+
+  it.each(['super_admin', 'store_manager', 'viewer'])('★%s は 403', async (role) => {
+    as(role)
+    expect((await open(ID)).status).toBe(403)
+  })
+
+  it('画像の無い要望は 404', async () => {
+    seed(true, [{ id: ID, tenant_id: TENANT, attachment_path: null }])
+    expect((await open(ID)).status).toBe(404)
   })
 })
