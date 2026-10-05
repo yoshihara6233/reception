@@ -31,4 +31,8 @@ describe('設定変更ログも運営の操作を出さない (2026-10-06)', () 
   it('運営には運営アクセスログへの案内を出す', () => {
     expect(changes).toMatch(/href="\/admin\/ops-audit"/)
   })
+  it('操作中テナントの拠点に絞る (アクセスログと同じ)', () => {
+    expect(changes).toMatch(/ctx\.tenantId/)
+    expect(changes).toMatch(/query\.in\('store_id'/)
+  })
 })

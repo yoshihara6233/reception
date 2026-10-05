@@ -85,11 +85,27 @@ export default async function AuditChangesPage({
     .from('admin_audit_log')
     .select('id, ts, actor_user_id, action, target_type, target_id, store_id, changes, stores ( name )', { count: 'exact' })
     .order('ts', { ascending: false })
+  const svc = createSupabaseService()
   {
-    const svc = createSupabaseService()
     const { data: supers } = await svc.from('admin_users').select('auth_user_id').eq('role', 'super_admin')
     const superIds = (supers ?? []).map((s) => s.auth_user_id as string)
     if (superIds.length) query = query.not('actor_user_id', 'in', `(${superIds.join(',')})`)
+  }
+  // 操作中テナントの拠点に絞る (2026-10-06 の利用者の指示・アクセスログと揃える)。
+  // tenant_admin は RLS で自テナントの拠点の行だけになるが、super_admin は全件が読めるため、
+  // テナントを選んで開いても他のテナントの変更が並んでいた。拠点に紐づかない行 (store_id が無い)
+  // はテナント管理者にも見えないので、絞ったときは出さない (テナントの管理者が見る中身と同じ)。
+  // テナント未選択の super_admin だけは従来どおり全件 (運営の操作は除く)。
+  let scopeStoreIds: string[] | null = null
+  if (ctx.storeIds) {
+    scopeStoreIds = ctx.storeIds
+  } else if (ctx.tenantId) {
+    const { data: ts } = await svc.from('stores').select('id').eq('tenant_id', ctx.tenantId)
+    scopeStoreIds = (ts ?? []).map((s) => s.id as string)
+  }
+  if (scopeStoreIds) {
+    // 拠点の無いテナントは 0 件 (空の in は書けないので、ありえない ID で絞る)
+    query = query.in('store_id', scopeStoreIds.length ? scopeStoreIds : ['00000000-0000-0000-0000-000000000000'])
   }
   const { data, count } = await query.range(offset, offset + PAGE_SIZE - 1)
 
