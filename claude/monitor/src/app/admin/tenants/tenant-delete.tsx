@@ -4,13 +4,15 @@
  * テナントの削除（編集画面の下・super_admin）。2026-10-05
  *
  * 配下ごと消えて元に戻せないので、次の順でしか押せないようにしてある:
- *   1. 状態を「停止 (suspended)」にして保存する（いきなり消せない）
+ *   1. 状態を「停止 (suspended)」にして保存する（いきなり消せない）。
+ *      **この欄は停止したテナントにだけ出る**（[id]/page.tsx・2026-10-05 の利用者の指示）
  *   2. 消える件数を見る
- *   3. テナント名を正確に打ち込む
+ *   3. テナント名を打ち込む（空白と英数字の全角・半角は問わない・lib/admin/tenant-name.ts）
  * サーバ側 (DELETE /api/admin/tenants/[id]) も同じ条件を確かめる。画面だけの安全策にしない。
  */
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { sameTenantName } from '@/lib/admin/tenant-name'
 
 export interface TenantDeleteCounts {
   stores:  number
@@ -28,10 +30,9 @@ const ERR_LABELS: Record<string, string> = {
   not_found:                'テナントが見つかりません（すでに削除された可能性があります）',
 }
 
-export function TenantDelete({ id, name, suspended, counts }: {
+export function TenantDelete({ id, name, counts }: {
   id: string
   name: string
-  suspended: boolean
   counts: TenantDeleteCounts
 }) {
   const router = useRouter()
@@ -39,8 +40,8 @@ export function TenantDelete({ id, name, suspended, counts }: {
   const [busy,  setBusy]  = useState(false)
   const [err,   setErr]   = useState<string | null>(null)
 
-  const matches = typed.trim() === name.trim()
-  const canDelete = suspended && matches && !busy
+  const matches = sameTenantName(typed, name)
+  const canDelete = matches && !busy
 
   async function remove() {
     if (!canDelete) return
@@ -76,23 +77,41 @@ export function TenantDelete({ id, name, suspended, counts }: {
         <Count label="カメラ" value={counts.cameras} />
       </dl>
 
-      {!suspended ? (
-        <p className="rounded bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          削除するには、上の「ステータス」を「停止 (suspended)」にして保存してください。
-        </p>
-      ) : (
-        <label className="block">
-          <span className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-            確認のため、テナント名「{name}」を入力
+      {/* 押せる条件を手順として見せる (2026-10-05 の利用者の指摘)。以前は説明が無く、停止すると
+          何日か後に自動で消えるのか、なぜボタンが押せないのかが分からなかった。入力欄の
+          placeholder にテナント名を出していたのも、入力済みに見えて紛らわしかった */}
+      <ol className="space-y-1 rounded border border-slate-200 px-3 py-2 text-xs text-slate-600">
+        <li>
+          <span className="font-bold text-emerald-700">済</span>
+          {' '}① 停止 (suspended) にして保存した。
+          <span className="text-slate-500">停止しただけでは何も消えず、日数が経っても自動では消えません（拠点からの受信とログインが止まるだけです）。削除しないときは、ステータスを戻して保存すればこの欄は消えます。</span>
+        </li>
+        <li>
+          <span className={matches ? 'font-bold text-emerald-700' : 'font-bold text-amber-700'}>
+            {matches ? '済' : '未'}
           </span>
-          <input value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off"
-                 className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm" placeholder={name} />
-        </label>
-      )}
+          {' '}② 下の欄にテナント名をそのまま入力する（空白の全角・半角は問いません）。
+        </li>
+        <li>③「このテナントを削除」を押すと、その場で削除します。</li>
+      </ol>
+
+      <label className="block">
+        <span className="mb-1 block text-[11px] font-bold tracking-wider text-slate-500">
+          確認のため、テナント名「{name}」を入力
+        </span>
+        <input value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off"
+               aria-label="削除するテナントの名前"
+               className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm" placeholder="ここにテナント名を入力" />
+      </label>
 
       {err && <p className="rounded bg-red-50 px-3 py-2 text-xs text-red-700">{err}</p>}
 
-      <div className="flex justify-end border-t border-slate-100 pt-3">
+      <div className="flex items-center justify-end gap-3 border-t border-slate-100 pt-3">
+        {!canDelete && !busy && (
+          <span className="text-xs text-slate-500">
+            ② の名前を入力すると押せます
+          </span>
+        )}
         <button type="button" onClick={remove} disabled={!canDelete}
                 className="rounded border border-red-300 bg-white px-4 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40">
           {busy ? '削除中…' : 'このテナントを削除'}

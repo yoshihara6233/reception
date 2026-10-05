@@ -39,8 +39,11 @@ export default async function EditTenantPage({ params }: { params: Promise<{ id:
     countOn('opt_patrol'), countOn('opt_alarm'), countOn('opt_baggage'),
   ])
 
-  // 削除の欄に出す「消える件数」。拠点 → エッジ → レコーダ → カメラと辿る
-  const deleteCounts = await countForDelete(svc, id, storeCount)
+  // 削除の欄は、停止 (suspended) にして保存したテナントにだけ出す (2026-10-05 の利用者の指示)。
+  // 普段の編集画面に「元に戻せない操作」を並べない。消える件数 (拠点 → エッジ → レコーダ →
+  // カメラと辿る) も、出すときだけ数える
+  const suspended = tenant.status === 'suspended'
+  const deleteCounts = suspended ? await countForDelete(svc, id, storeCount) : null
 
   return (
     <AdminShell pathname="/admin/tenants" section="admin">
@@ -81,12 +84,13 @@ export default async function EditTenantPage({ params }: { params: Promise<{ id:
           usage={{ stores: storeCount, patrol: patrolOn, alarm: alarmOn, baggage: baggageOn }}
         />
 
-        <TenantDelete
-          id={id}
-          name={tenant.name}
-          suspended={tenant.status === 'suspended'}
-          counts={deleteCounts}
-        />
+        {deleteCounts && (
+          <TenantDelete
+            id={id}
+            name={tenant.name}
+            counts={deleteCounts}
+          />
+        )}
       </div>
     </AdminShell>
   )
