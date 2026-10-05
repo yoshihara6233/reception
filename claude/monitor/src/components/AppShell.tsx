@@ -10,6 +10,7 @@ import { getServerClient, getSessionUser } from '@/lib/tenant/session'
 import { jmaIntensityLabel } from '@/lib/bcp/intensity'
 import { resolveTenantFeatures } from '@/lib/tenant/features'
 import { resolveAdminContext } from '@/lib/tenant/acting'
+import { resolveFeedbackEntry } from '@/lib/feedback/entry'
 import { AppHeader } from './AppHeader'
 import { StoreTree } from './StoreTree'
 import { StoreDetail } from './StoreDetail'
@@ -49,9 +50,10 @@ export async function AppShell({
 
   // features（ヘッダーの出し分け）と ctx（可視店舗の絞り込み）は同じ素材を使うため、
   // cache() により実クエリは共有される。並列にしておけば待ち時間も重ならない。
-  const [features, ctx] = await Promise.all([
+  const [features, ctx, feedbackEntry] = await Promise.all([
     resolveTenantFeatures(),
     resolveAdminContext(),
+    resolveFeedbackEntry(),
   ])
 
   // 可視店舗をロールで絞る: 店舗マネージャ等は担当店舗のみ／tenant_admin はテナント／
@@ -140,6 +142,7 @@ export async function AppShell({
       features={features}
       tenantName={ctx.tenantName}
       isSuper={ctx.isSuper}
+      feedbackEntry={feedbackEntry}
     >
       {/* Desktop 3-col layout with a collapsible detail panel (ShellBody) */}
       <ShellBody
