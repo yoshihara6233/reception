@@ -98,14 +98,16 @@ export default async function AuditPage() {
   const storeBy  = new Map((strs ?? []).map((s) => [s.id as string, (s.name as string | null) ?? '']))
   const cameraBy = new Map((cams ?? []).map((c) => [c.id as string, (c.name as string | null) ?? '']))
 
-  // SaaS運営者（super_admin）の閲覧はテナント側に見せない: 記録は残すが、
-  // 閲覧者が super_admin でない場合は super_admin 操作者の行を除外する。
+  // SaaS運営者（super_admin）の閲覧はテナントのアクセスログに出さない: 記録は残し、
+  // 運営アクセスログ（/admin/ops-audit）に出す。
+  // **見ている人が super_admin でも出さない** (2026-10-05 の利用者の指摘)。以前は super_admin が
+  // テナントを選んで開くと運営自身の閲覧が混ざり、テナントが見る画面と中身が違っていた
+  // (運営の閲覧がテナントのログに載っているように見える)。テナントの画面は誰が開いても同じ中身にする
   const superActorIds = new Set(
     (admins ?? []).filter((a) => a.role === 'super_admin').map((a) => a.auth_user_id as string),
   )
-  const hideSuperActors = ctx.role !== 'super_admin'
-  const visibleSessions = hideSuperActors ? sessions.filter((s) => !superActorIds.has(s.user_id)) : sessions
-  const visibleFootage  = hideSuperActors ? footage.filter((f) => !superActorIds.has(f.actor_user_id)) : footage
+  const visibleSessions = sessions.filter((s) => !superActorIds.has(s.user_id))
+  const visibleFootage  = footage.filter((f) => !superActorIds.has(f.actor_user_id))
   const email  = (uid: string) => emailBy.get(uid) || (uid ? uid.slice(0, 8) + '…' : '')
   const store  = (sid: string | null) => (sid && storeBy.get(sid)) || ''
   const camera = (cid: string | null) => (cid && cameraBy.get(cid)) || ''
@@ -150,6 +152,13 @@ export default async function AuditPage() {
             設定変更ログ →
           </Link>
         </div>
+
+        {ctx.role === 'super_admin' && (
+          <p className="rounded border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 dark:border-gedline dark:bg-gedbg2 dark:text-gedink2">
+            運営（システム管理者）の閲覧はここには出ません（テナントの管理者が見る中身と同じです）。運営の閲覧は{' '}
+            <Link href="/admin/ops-audit" className="underline">運営アクセスログ</Link> で確かめてください。
+          </p>
+        )}
 
         <AccessLogTable rows={rows} />
       </div>
