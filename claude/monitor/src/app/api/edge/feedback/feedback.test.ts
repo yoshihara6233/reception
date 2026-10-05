@@ -265,11 +265,13 @@ describe('POST /api/edge/feedback — 画像の宣言（attachment）', () => {
     ['sha256 が大文字', { type: 'image/png', size: 10, sha256: 'A'.repeat(64) }],
     ['sha256 が短い', { type: 'image/png', size: 10, sha256: 'a'.repeat(63) }],
     ['size が無い', { type: 'image/png', sha256: 'a'.repeat(64) }],
-  ])('★%s は 400 invalid_attachment で、何も入れない', async (_n, attachment) => {
+  ])('★%s は宣言だけを捨てて要望は受ける（拠点を送り直しで詰まらせない）', async (_n, attachment) => {
     const res = await post(body({ attachment }))
-    expect(res.status).toBe(400)
-    expect((await res.json()).error).toBe('invalid_attachment')
-    expect(h.db.rows('feedback_items')).toHaveLength(0)
+    expect(res.status).toBe(201)
+    expect(await res.json()).toMatchObject({ attachment_needed: false })
+    const rows = h.db.rows('feedback_items')
+    expect(rows).toHaveLength(1)
+    expect(rows[0].attachment_sha256 ?? null).toBeNull()
   })
 
   it('★送り直しの 200 でも attachment_needed を返す（本文は届いたが画像がまだ）', async () => {

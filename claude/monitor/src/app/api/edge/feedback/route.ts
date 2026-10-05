@@ -8,7 +8,6 @@
  *   201 { id, attachment_needed }      受け付けた
  *   200 { id, attachment_needed }      同じ local_id を受け付け済み
  *   400 { error: 'invalid_body' }      形が違う（本文 1〜1,000 字・kind・urgency・local_id）
- *   400 { error: 'invalid_attachment' } 画像の宣言の形が違う（type・size 3 MiB まで・sha256）
  *   401                                トークンが違う
  *   403 { error: 'role_not_allowed' }  role が admin でない（§12.1: 書けるのは拠点の管理者だけ）
  *   409 { error: 'feedback_disabled' } テナントが要望の受付を止めている（拠点は 7 日送らない）
@@ -51,11 +50,13 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
   const b = parsed.data
   if (b.role !== 'admin') return NextResponse.json({ error: 'role_not_allowed' }, { status: 403 })
+  // 画像の宣言の形が違うときは、**宣言だけを捨てて要望は受ける**（page_url と同じ扱い・§2 の
+  // 「知らないものは捨てて拒否しない」）。400 で断ると、拠点はその要望を届くまで送り直し続け、
+  // 後ろに並んだ要望まで止まる（拠点は 1 件失敗するとその周期を打ち切る）。
   let decl: AttachmentDecl | null = null
   if (b.attachment !== undefined && b.attachment !== null) {
     const d = AttachmentDecl.safeParse(b.attachment)
-    if (!d.success) return NextResponse.json({ error: 'invalid_attachment' }, { status: 400 })
-    decl = d.data
+    if (d.success) decl = d.data
   }
 
   const svc = createSupabaseService()
