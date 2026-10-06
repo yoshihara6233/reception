@@ -161,3 +161,16 @@ export function boardCsv(items: BoardItem[], names: CsvNames): string {
   }
   return '﻿' + lines.join('\r\n') + '\r\n'
 }
+
+/**
+ * 受け付けたまま返事もしていない要望の数（運営管理のメニューの印・毎朝のまとめメール）。
+ * 状態を変えるか返事を書けば数から外れる。読めなければ null（印を出さない）。
+ */
+export async function countUntouchedFeedback(svc: SupabaseClient): Promise<number | null> {
+  const { count, error } = await svc
+    .from('feedback_items')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'received')
+    .is('reply', null)
+  return error ? null : (count ?? 0)
+}

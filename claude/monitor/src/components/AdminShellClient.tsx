@@ -86,6 +86,15 @@ export function AdminShellClient({
                 >
                   <span className="w-4 text-center">{e.icon}</span>
                   {e.label}
+                  {e.count ? (
+                    <span
+                      title={`${e.countLabel ?? ''} ${e.count.toLocaleString('ja-JP')} 件`.trim()}
+                      aria-label={`${e.countLabel ?? ''} ${e.count.toLocaleString('ja-JP')} 件`.trim()}
+                      className="ml-auto rounded bg-ge-accent px-1.5 text-[10px] font-semibold leading-4 tabular-nums text-white dark:bg-gedaccent dark:text-gedbg"
+                    >
+                      {e.count > 99 ? '99+' : e.count}
+                    </span>
+                  ) : null}
                 </Link>
               )
             })}

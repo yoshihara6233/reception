@@ -197,6 +197,8 @@ const EXPECTED: Record<string, Guard> = {
   '/api/cron/usage-rollup': 'cron',
   // 要望の画像を受けてから 1 年で消す（GVMS_CLOUD_SPEC §12.6）
   '/api/cron/feedback-attachments': 'cron',
+  // 要望の新着を毎朝 8:30 にまとめて運営へ知らせる（基本設計 §3.5）
+  '/api/cron/feedback-digest': 'cron',
   '/api/edge/bootstrap': 'device-token',
   '/api/edge/config': 'device-token',
   '/api/edge/events': 'device-token',
