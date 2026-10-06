@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
+  bcpNothingToCollect,
   classifyAlertType,
   extractTag,
   isRelevantEntry,
@@ -219,5 +220,21 @@ describe('hasNoTargetPref（都道府県が取れないとき）', () => {
     // 津波・ミサイルの非対応化と一緒に廃止。残る 2 種別（地震・特別警報）は
     // どちらも都道府県を導出できるので、取れないのは電文の異常。
     expect(hasNoTargetPref(new Map())).toBe(true)
+  })
+})
+
+describe('証跡を取れる先が無い拠点の BCP (2026-10-06)', () => {
+  it('★先置きの行が 0 件なら取れる先が無い', () => {
+    expect(bcpNothingToCollect(0, 0)).toBe(true)
+    expect(bcpNothingToCollect(1, 0)).toBe(false)
+    expect(bcpNothingToCollect(0, 2)).toBe(false)
+  })
+
+  it('★poller は取れる先が無い拠点を recording のまま残さず failed にする', () => {
+    const src = readFileSync(fileURLToPath(new URL('../../../supabase/functions/jalert-poller/index.ts', import.meta.url)), 'utf8')
+    // エッジが 1 台も無い分岐
+    expect(src).toMatch(/No active edge devices[\s\S]{0,300}updateEventStatus\(supa, eventId, 'failed'\)\s*\n\s*return/)
+    // エッジはあるがカメラが無い分岐
+    expect(src).toMatch(/bcpNothingToCollect\(clipInserts\.length, gridRowCount\)\)\s*\{[\s\S]{0,200}'failed'/)
   })
 })

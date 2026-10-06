@@ -402,3 +402,16 @@ export function nvmsBcpRows(
   }
   return { clipRows, gridRows }
 }
+
+/**
+ * 発令した拠点に、証跡を取れる先が 1 つも無いか（2026-10-06）。
+ *
+ * G・VMS が未設置・オフライン・レコーダもカメラも無い拠点は、先置きの行（bcp_clips /
+ * bcp_grid_shots）が 0 件になり、何も届かないので BCP が「取得中」のまま終わらない。
+ * MONITOR の「対応中の BCP・他」に 24 時間残り続けるため、発令の時点で failed にする。
+ * 発令のメールは送る（拠点が対象になったことは知らせる）。発令 3 経路のうち
+ * poller と /api/bcp/test がこれを使う（retrieve は既存のイベントの取り直し）。
+ */
+export function bcpNothingToCollect(clipRows: number, gridRows: number): boolean {
+  return clipRows === 0 && gridRows === 0
+}

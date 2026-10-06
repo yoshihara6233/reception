@@ -94,7 +94,11 @@ export async function AppShell({
     max_intensity: string | null
     is_test: boolean
   }
-  const alertEventRows = (alertRes.data ?? []) as AlertEventRow[]
+  // ツリーに出ている拠点の分だけを数える (2026-10-06)。bcp_events は RLS で絞られるが、
+  // super_admin は全テナントを読めるため、操作中でない他のテナントの拠点まで件数に入っていた。
+  const treeStoreIds = new Set(groups.flatMap((g) => g.stores.map((s) => s.id)))
+  const alertEventRows = ((alertRes.data ?? []) as AlertEventRow[])
+    .filter((e) => e.store_id !== null && treeStoreIds.has(e.store_id))
   const alertStoreIds = [
     ...new Set(
       alertEventRows

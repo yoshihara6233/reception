@@ -327,6 +327,13 @@ export default async function BcpEventDetailPage({
               </span>
             </div>
           </div>
+          {/* 証跡を取れる先が無い拠点は発令の時点で失敗にする (2026-10-06・flow.ts bcpNothingToCollect)。
+              先置きの行が 0 件の失敗は、その理由を書く (エラーではなく、取れる機器が無かった) */}
+          {event.status === 'failed' && clips.length === 0 && gridShots.length === 0 && (
+            <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-600 dark:border-gedline dark:text-gedink2">
+              この拠点には証跡を取れる G・VMS・レコーダ・カメラが無かったため、映像は取得していません（未設置・オフライン・カメラ未登録）。
+            </p>
+          )}
           <dl className="grid grid-cols-2 gap-x-4 gap-y-0 divide-y divide-slate-100 px-4 text-xs md:grid-cols-5 md:divide-y-0 md:divide-x">
             <div className="py-3">
               <dt className="mb-0.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">拠点名</dt>

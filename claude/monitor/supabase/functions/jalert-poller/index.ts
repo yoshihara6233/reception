@@ -43,6 +43,7 @@ import {
   isWeatherWarningEntry,
   mergeFeedEntries,
   planNvmsBcpForEdges,
+  bcpNothingToCollect,
   nvmsBcpRows,
   type FeedEntry,
   type NvmsEdgePlan,
@@ -626,9 +627,10 @@ async function processStore(
   const activeEdges = (edges ?? []) as EdgeDevice[]
 
   if (activeEdges.length === 0) {
-    console.warn(`[jalert-poller] No active edge devices for store ${store.id} (${store.name})`)
-    await updateEventStatus(supa, eventId, 'recording')
+    // 取れる先が無い。取得中のまま残さず、発令の時点で失敗にする（flow.ts bcpNothingToCollect）
+    console.warn(`[jalert-poller] No active edge devices for store ${store.id} (${store.name}) — 証跡を取れないので failed`)
     await sendAlertEmail(settings, store, alertType, alertIssuedAt, eventId, false)
+    await updateEventStatus(supa, eventId, 'failed')
     return
   }
 
@@ -661,9 +663,11 @@ async function processStore(
   if (nvmsTruncated) {
     console.warn(`[jalert-poller] event ${eventId}: nvms BCP 計画が上限 512 枚で打ち切り`)
   }
+  let gridRowCount = 0
   {
     const { clipRows, gridRows } = nvmsBcpRows(nvmsPlanByEdge, eventId, alertIssuedAt, cmdOffsets)
     clipInserts.push(...clipRows)
+    gridRowCount = gridRows.length
     if (gridRows.length > 0) {
       const { error: gridErr } = await supa.from('bcp_grid_shots').insert(gridRows)
       if (gridErr) console.error(`[jalert-poller] Failed to insert bcp_grid_shots for event ${eventId}:`, gridErr)
@@ -684,6 +688,13 @@ async function processStore(
 
   // d. 取得開始の通知メール
   await sendAlertEmail(settings, store, alertType, alertIssuedAt, eventId, false)
+
+  // エッジはあるがレコーダ・カメラが無い: 何も届かないので失敗で終える（flow.ts bcpNothingToCollect）
+  if (bcpNothingToCollect(clipInserts.length, gridRowCount)) {
+    console.warn(`[jalert-poller] event ${eventId}: 証跡を取れるカメラが無いので failed`)
+    await updateEventStatus(supa, eventId, 'failed')
+    return
+  }
 
   // e. status='recording'（取得中）
   await updateEventStatus(supa, eventId, 'recording')

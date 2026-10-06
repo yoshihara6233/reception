@@ -71,7 +71,7 @@ const GROUPS: Group[] = [
       { term: 'clips_uploaded', desc: '全拠点のクリップが Storage にアップロード完了。あとは PDF 生成待ち。' },
       { term: 'report_generated', desc: 'PDF が生成・保存完了。あとはメール送付待ち / 手動配信。' },
       { term: 'completed', desc: 'メール送付まで完了。終了状態。' },
-      { term: 'failed', desc: 'どこかのステップでエラー。詳細はサーバログを参照。' },
+      { term: 'failed', desc: 'どこかのステップでエラー。詳細はサーバログを参照。G・VMS が未設置・オフライン・カメラが無いなど、証跡を取れる先が無い拠点も発令の時点でこの状態にする（取得中のまま残さない）。' },
     ],
   },
   {
