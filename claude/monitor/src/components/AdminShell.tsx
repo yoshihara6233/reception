@@ -11,6 +11,7 @@ import { createSupabaseServer } from '@/lib/supabase/server'
 import { resolveTenantFeatures } from '@/lib/tenant/features'
 import { resolveAdminContext } from '@/lib/tenant/acting'
 import { resolveFeedbackEntry } from '@/lib/feedback/entry'
+import { countUntouchedFeedback } from '@/lib/feedback/board'
 import { ActingTenantBar } from './ActingTenantBar'
 import { AppHeader } from './AppHeader'
 import { StatusBar } from './StatusBar'
@@ -30,7 +31,7 @@ export type AdminSection = 'admin' | 'security' | 'bcp'
 /** 「拠点の G・VMS」でまとめる 3 画面。左メニューの選択判定と、画面上のタブ (GvmsTabs) が同じ表を使う。 */
 export const GVMS_PATHS = ['/admin/fleet', '/admin/provisioning', '/admin/licenses'] as const
 
-export function getAdminNav(t: Msg, opts?: { isSuper?: boolean; baggage?: boolean; feedback?: boolean }): NavItem[] {
+export function getAdminNav(t: Msg, opts?: { isSuper?: boolean; baggage?: boolean; feedback?: boolean; feedbackUntouched?: number | null }): NavItem[] {
   const items: NavItem[] = [
     // 利用状況レポートを最上部に。旧ダッシュボードは廃止し中身をここへ集約。
     { href: '/admin/reports/usage', label: '利用状況レポート', icon: '📊', exact: true },
@@ -70,7 +71,8 @@ export function getAdminNav(t: Msg, opts?: { isSuper?: boolean; baggage?: boolea
       // （PR#213）ため、運営の説明責任はこのページで担保する。全テナント横断。
       { href: '/admin/ops-audit',  label: '運営アクセスログ', icon: '☰' },
       // 要望の収集 第 1 段（D-2-21）: 現場とテナントの要望を束ねて扱いを決める。
-      { href: '/admin/feedback',   label: '要望ボード', icon: '✎' },
+      // 件数の印 = 受け付けたまま返事もしていない要望（状態を変えるか返事を書けば減る）。
+      { href: '/admin/feedback',   label: '要望ボード', icon: '✎', count: opts?.feedbackUntouched ?? null, countLabel: '未対応' },
       // 死活監視 (/infra) は 2026-09-30 に廃止した (発注者の判断)。G・VMS の拠点の状態は
       // 拠点稼働 (/admin/fleet) で見る。オフラインの通知は cron/edge-health が別に送る。
     )
@@ -104,6 +106,10 @@ export interface NavItem {
   match?: readonly string[]
   /** true = リンクではなく区切り見出し（②運営管理 の区分け表示に使用） */
   heading?: boolean
+  /** 項目の右に出す件数の印（0・null は出さない） */
+  count?: number | null
+  /** 件数の意味（読み上げと吹き出しに使う。例: 未対応） */
+  countLabel?: string
 }
 
 // マスタ管理（既定・非i18nフォールバック）。ロール不明のため ①設定 のみ
@@ -166,13 +172,15 @@ export async function AdminShell({
     resolveAdminContext(supa),
     resolveFeedbackEntry(),
   ])
+  // 運営 (super_admin) のマスタ管理のメニューにだけ、要望ボードの未対応の件数を出す。
+  const feedbackUntouched = ctx.isSuper && section === 'admin' && !nav ? await countUntouchedFeedback(supa) : null
 
   // Resolve nav + title. Priority: section (translated) > explicit nav/title
   // > admin default.
   const t = section ? await getT() : null
   let effectiveNav: NavItem[] =
     nav
-      ?? (section === 'admin'    ? getAdminNav(t!, { isSuper: ctx.isSuper, baggage: features.baggage, feedback: feedbackEntry })
+      ?? (section === 'admin'    ? getAdminNav(t!, { isSuper: ctx.isSuper, baggage: features.baggage, feedback: feedbackEntry, feedbackUntouched })
         : section === 'security' ? getSecurityNav(t!)
         : section === 'bcp'      ? getBcpNav(t!)
         : ADMIN_NAV)
