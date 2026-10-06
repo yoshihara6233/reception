@@ -146,7 +146,9 @@ export function TreeClient({
             }
           >
             <Siren size={13} strokeWidth={1.5} aria-hidden />
-            <span className="flex-1 text-left">直近アラート対象拠点</span>
+            {/* 24 時間以内に BCP の発令の対象になった拠点 (終わったものも含む)。右の「対応中の BCP・他」は
+                終わっていないものだけを数えるので、数が違うことがある (2026-10-06・名前で区別する) */}
+            <span className="flex-1 text-left">24 時間以内の BCP 対象拠点</span>
             <span
               className={
                 'rounded-full px-1.5 py-px text-[10px] font-bold ' +

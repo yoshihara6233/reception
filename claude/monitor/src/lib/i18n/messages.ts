@@ -399,7 +399,7 @@ const ja: Msg = {
     live:       'LIVE',
     alerts:     'アラート',
     interrupted: '監視中断',
-    bcp:         'BCP・他',
+    bcp:         '対応中の BCP・他',
   },
   status: {
     offline: 'オフ',
@@ -745,7 +745,7 @@ const en: Msg = {
     live:       'LIVE',
     alerts:     'Alerts',
     interrupted: 'Monitor down',
-    bcp:         'BCP/Other',
+    bcp:         'Active BCP/Other',
   },
   status: {
     offline: 'Off',
@@ -1091,7 +1091,7 @@ const zh: Msg = {
     live:       '直播',
     alerts:     '警报',
     interrupted: '监控中断',
-    bcp:         'BCP·其他',
+    bcp:         '进行中 BCP·其他',
   },
   status: {
     offline: '离线',
@@ -1437,7 +1437,7 @@ const ko: Msg = {
     live:       'LIVE',
     alerts:     '알림',
     interrupted: '모니터링 중단',
-    bcp:         'BCP·기타',
+    bcp:         '진행 중 BCP·기타',
   },
   status: {
     offline: '오프',

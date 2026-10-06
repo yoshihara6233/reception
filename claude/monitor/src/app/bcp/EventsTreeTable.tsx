@@ -16,6 +16,7 @@ import { useLang } from '@/lib/i18n/context'
 import type { Msg } from '@/lib/i18n/messages'
 import { intensityRank, jmaIntensityLabel } from '@/lib/bcp/intensity'
 import { FileText } from 'lucide-react'
+import { aggregateBcpStatus } from '@/lib/bcp/aggregate-status'
 
 export interface BcpEventChild {
   id:               string
@@ -139,17 +140,9 @@ function groupByAlert(rows: BcpEventChild[]): AlertGroup[] {
     if (r.alert_issued_at < g.alert_issued_at) g.alert_issued_at = r.alert_issued_at
     g.stores.push(r)
   }
-  // Compute aggregated status: failed > in_progress > partial > completed
+  // 親の行の状態: 取得中 > 全部失敗 > 全部完了 > 一部 (lib/bcp/aggregate-status.ts)
   for (const g of map.values()) {
-    const statuses = g.stores.map((s) => s.status)
-    const anyFailed = statuses.some((s) => s === 'failed')
-    const anyActive = statuses.some((s) => s === 'pending' || s === 'recording')
-    const allDone   = statuses.every((s) => s === 'completed' || s === 'report_generated' || s === 'clips_uploaded')
-    g.aggregated_status =
-      anyFailed   ? 'failed' :
-      anyActive   ? 'in_progress' :
-      allDone     ? 'completed' :
-                    'partial'
+    g.aggregated_status = aggregateBcpStatus(g.stores.map((s) => s.status))
   }
   // Sort: newest issued_at first
   return [...map.values()].sort((a, b) =>

@@ -18,6 +18,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import {
   planNvmsBcpForEdges,
   nvmsBcpRows,
+  bcpNothingToCollect,
 } from '../../../../../supabase/functions/jalert-poller/flow'
 import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { resolveMonitorScope } from '@/lib/tenant/monitor-scope'
@@ -109,13 +110,22 @@ async function activateStore(
     )
   const { byEdge: nvmsPlanByEdge, truncated: nvmsTruncated } = planNvmsBcpForEdges(activeEdges, offsets.length)
   if (nvmsTruncated) console.warn(`[bcp-test] event ${eventId}: nvms BCP 計画が上限 512 枚で打ち切り`)
+  let gridRowCount = 0
   {
     const { clipRows, gridRows } = nvmsBcpRows(nvmsPlanByEdge, eventId, alertIssuedAt, offsets)
     clipInserts.push(...clipRows)
+    gridRowCount = gridRows.length
     if (gridRows.length > 0) {
       const { error: gridErr } = await supa.from('bcp_grid_shots').insert(gridRows)
       if (gridErr) throw new Error(`bcp_grid_shots insert failed: ${gridErr.message}`)
     }
+  }
+
+  // G・VMS が未設置・オフライン・カメラが無い拠点: 何も届かないので取得中のまま残さず失敗で終える
+  // （jalert-poller と同じ扱い・flow.ts bcpNothingToCollect）
+  if (bcpNothingToCollect(clipInserts.length, gridRowCount)) {
+    await supa.from('bcp_events').update({ status: 'failed' }).eq('id', eventId)
+    return { storeId: store.id, storeName: store.name, eventId }
   }
 
   let insertedClips: { id: string; camera_id: string }[] = []
