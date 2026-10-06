@@ -12,6 +12,8 @@ import { resolveTenantFeatures } from '@/lib/tenant/features'
 import { resolveAdminContext } from '@/lib/tenant/acting'
 import { resolveFeedbackEntry } from '@/lib/feedback/entry'
 import { countUntouchedFeedback } from '@/lib/feedback/board'
+import { countUnseenFeedback } from '@/lib/feedback/seen'
+import { getAdminUserRow } from '@/lib/tenant/session'
 import { ActingTenantBar } from './ActingTenantBar'
 import { AppHeader } from './AppHeader'
 import { StatusBar } from './StatusBar'
@@ -31,7 +33,7 @@ export type AdminSection = 'admin' | 'security' | 'bcp'
 /** 「拠点の G・VMS」でまとめる 3 画面。左メニューの選択判定と、画面上のタブ (GvmsTabs) が同じ表を使う。 */
 export const GVMS_PATHS = ['/admin/fleet', '/admin/provisioning', '/admin/licenses'] as const
 
-export function getAdminNav(t: Msg, opts?: { isSuper?: boolean; baggage?: boolean; feedback?: boolean; feedbackUntouched?: number | null }): NavItem[] {
+export function getAdminNav(t: Msg, opts?: { isSuper?: boolean; baggage?: boolean; feedback?: boolean; feedbackUntouched?: number | null; feedbackUnseen?: number | null }): NavItem[] {
   const items: NavItem[] = [
     // 利用状況レポートを最上部に。旧ダッシュボードは廃止し中身をここへ集約。
     { href: '/admin/reports/usage', label: '利用状況レポート', icon: '📊', exact: true },
@@ -50,7 +52,10 @@ export function getAdminNav(t: Msg, opts?: { isSuper?: boolean; baggage?: boolea
     { href: '/admin/audit',      label: t.adminNav.audit,     icon: '☰' },
     // 要望（送った要望の一覧・状態・返事）。テナント管理者だけ（基本設計 §3.1）。
     // super_admin は送らないので出さない（運営管理の「要望ボード」で扱う）。
-    ...(opts?.feedback ? [{ href: '/settings/feedback', label: '要望', icon: '✎' }] : []),
+    // 件数の印 = 一覧を最後に開いたあとに運営が状態・返事を変えた要望（§3.6・開けば消える）。
+    ...(opts?.feedback
+      ? [{ href: '/settings/feedback', label: '要望', icon: '✎', count: opts?.feedbackUnseen ?? null, countLabel: '新着の返事・状態' }]
+      : []),
   ]
   if (opts?.isSuper) {
     items.push(
@@ -148,6 +153,7 @@ export async function AdminShell({
   section,
   nav,
   navTitle,
+  feedbackSeen,
 }: {
   pathname: string
   children: React.ReactNode
@@ -158,6 +164,12 @@ export async function AdminShell({
   section?: AdminSection
   nav?: NavItem[]
   navTitle?: string
+  /**
+   * この画面で送った要望の一覧を開いて既読にした（/settings/feedback だけが渡す）。
+   * 印は数えずに 0 とする。数え直すと、一覧の画面が既読にする前に読んだ feedback_seen の
+   * 応答が同じ要求の中で使い回され（fetch の重複除去）、開いた画面に古い件数が残るため。
+   */
+  feedbackSeen?: boolean
 }) {
   const supa = await createSupabaseServer()
   const { data: { user } } = await supa.auth.getUser()
@@ -174,13 +186,19 @@ export async function AdminShell({
   ])
   // 運営 (super_admin) のマスタ管理のメニューにだけ、要望ボードの未対応の件数を出す。
   const feedbackUntouched = ctx.isSuper && section === 'admin' && !nav ? await countUntouchedFeedback(supa) : null
+  // テナント管理者のマスタ管理のメニューにだけ、返事が付いてまだ見ていない件数を出す。
+  // 入口の判定（feedbackEntry）が通ったとき = tenant_admin でテナントが受付を止めていないときだけ数える。
+  const me = feedbackEntry && section === 'admin' && !nav ? await getAdminUserRow() : null
+  const feedbackUnseen = !me?.tenant_id ? null
+    : feedbackSeen ? 0
+    : await countUnseenFeedback(supa, { userId: user.id, tenantId: me.tenant_id })
 
   // Resolve nav + title. Priority: section (translated) > explicit nav/title
   // > admin default.
   const t = section ? await getT() : null
   let effectiveNav: NavItem[] =
     nav
-      ?? (section === 'admin'    ? getAdminNav(t!, { isSuper: ctx.isSuper, baggage: features.baggage, feedback: feedbackEntry, feedbackUntouched })
+      ?? (section === 'admin'    ? getAdminNav(t!, { isSuper: ctx.isSuper, baggage: features.baggage, feedback: feedbackEntry, feedbackUntouched, feedbackUnseen })
         : section === 'security' ? getSecurityNav(t!)
         : section === 'bcp'      ? getBcpNav(t!)
         : ADMIN_NAV)

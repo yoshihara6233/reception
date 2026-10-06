@@ -8,7 +8,13 @@
  *
  * 本文と返事は文として出す（HTML として解釈しない・§7）。
  * 該当の画面の URL と添えた画像も出す（画像は /api/feedback/[id]/attachment の期限つきの URL）。
+ *
+ * 開いたら既読にする（feedback_seen・§3.6）。左メニューの「要望」の件数の印が消え、
+ * 前に開いたあとで運営が状態・返事を変えた要望には「新着」を付ける。
+ * 開いた画面の印は AdminShell に feedbackSeen を渡して 0 にする（数え直さない理由は AdminShell の注記）。
+ * Link の先読み（prefetch）では既読にしない（開いていないのに印が消えるのを避ける）。
  */
+import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
@@ -20,6 +26,8 @@ import { resolveFeedbackEntry } from '@/lib/feedback/entry'
 import { KIND_LABEL, URGENCY_LABEL, type FeedbackKind, type FeedbackUrgency } from '@/lib/feedback/schema'
 import { attachmentState, fmtJst } from '@/lib/feedback/board'
 import { FeedbackAttachment } from '@/components/feedback/FeedbackAttachment'
+import { isUnseenUpdate, loadSeenAt, markFeedbackSeen } from '@/lib/feedback/seen'
+import { createSupabaseService } from '@/lib/supabase/server'
 
 interface Row {
   id: string
@@ -48,8 +56,9 @@ export default async function FeedbackListPage() {
     return <AdminDenied pathname={PATH} message="要望の一覧を見られるのはテナント管理者だけです。" />
   }
   const tenantId = guard.profile.tenant_id
+  const me = { userId: guard.user.id, tenantId }
 
-  const [enabled, { data, error }, { data: stores }] = await Promise.all([
+  const [enabled, { data, error }, { data: stores }, seenAt] = await Promise.all([
     resolveFeedbackEntry(),
     guard.supa
       .from('feedback_items')
@@ -58,15 +67,20 @@ export default async function FeedbackListPage() {
       .order('created_at', { ascending: false })
       .limit(200),
     guard.supa.from('stores').select('id, name').eq('tenant_id', tenantId),
+    loadSeenAt(guard.supa, me.userId),
   ])
   const rows = (data ?? []) as Row[]
+  // 前に開いたあとに運営が状態・返事を変えたもの（今回の既読の前の時刻で判定する）
+  const fresh = new Set(rows.filter((r) => isUnseenUpdate(r, seenAt)).map((r) => r.id))
+  const seenNow = !error && !(await isPrefetch())
+  if (seenNow) await markFeedbackSeen(createSupabaseService(), me)
   const storeName = new Map(((stores ?? []) as { id: string; name: string }[]).map((s) => [s.id, s.name]))
   const from = (r: Row) =>
     r.source === 'cloud' ? 'クラウドの画面'
       : `${r.store_id ? storeName.get(r.store_id) ?? '拠点' : '拠点'}（${r.source === 'import' ? 'ファイル' : 'G・VMS'}）`
 
   return (
-    <AdminShell pathname={PATH} section="admin">
+    <AdminShell pathname={PATH} section="admin" feedbackSeen={seenNow}>
       <PageHeader
         title="要望"
         crumb={[{ href: '/admin', label: '設定' }, { href: PATH, label: '要望' }]}
@@ -94,6 +108,10 @@ export default async function FeedbackListPage() {
               <li key={r.id} className="rounded-md border border-ge-line bg-white p-4 text-xs dark:border-gedline dark:bg-gedbg2">
                 <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
                   <FeedbackStatusBadge status={r.status} />
+                  {fresh.has(r.id) && (
+                    // 藍は使わない（この画面の藍は「要望を送る」と左メニューの印）。墨の塗りで状態の札と分ける
+                    <span className="inline-block whitespace-nowrap rounded bg-ge-ink px-1.5 py-0.5 text-[11px] font-medium text-ge-paper dark:bg-gedink dark:text-gedbg">新着</span>
+                  )}
                   <span className="font-medium">{KIND_LABEL[r.kind] ?? r.kind}</span>
                   <span className="text-ge-ink-3 dark:text-gedink3">{URGENCY_LABEL[r.urgency] ?? r.urgency}</span>
                   <span className="text-ge-ink-3 dark:text-gedink3">{from(r)}</span>
@@ -118,4 +136,10 @@ export default async function FeedbackListPage() {
       </div>
     </AdminShell>
   )
+}
+
+/** Link の先読みの要求か（このときは既読にしない）。 */
+async function isPrefetch(): Promise<boolean> {
+  const h = await headers()
+  return h.get('next-router-prefetch') != null || h.get('next-router-segment-prefetch') != null
 }

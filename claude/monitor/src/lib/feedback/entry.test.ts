@@ -61,4 +61,16 @@ describe('設定の左メニュー（getAdminNav）', () => {
     expect(board(2)).toMatchObject({ count: 2, countLabel: '未対応' })
     expect(board(null).count).toBeNull()
   })
+
+  it('★テナント管理者の「要望」に、返事が付いてまだ見ていない件数を載せる (0・null は印なし)', async () => {
+    const { getAdminNav } = await import('@/components/AdminShell')
+    const t = { adminNav: { stores: '拠点', users: 'ユーザ', audit: 'アクセスログ', edges: 'エッジ', limits: '視聴上限' } } as never
+    const mine = (n: number | null | undefined) => getAdminNav(t, { feedback: true, feedbackUnseen: n }).find((e) => e.href === '/settings/feedback')!
+    expect(mine(3)).toMatchObject({ count: 3, countLabel: '新着の返事・状態' })
+    expect(mine(0).count).toBe(0)
+    expect(mine(null).count).toBeNull()
+    expect(mine(undefined).count).toBeNull()
+    // 受付を止めたテナント（feedback=false）は件数があっても項目ごと出さない
+    expect(getAdminNav(t, { feedback: false, feedbackUnseen: 3 }).map((e) => e.href)).not.toContain('/settings/feedback')
+  })
 })

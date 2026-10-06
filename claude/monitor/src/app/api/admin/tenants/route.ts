@@ -32,6 +32,8 @@ const Body = z.object({
   max_baggage: z.number().int().min(0).max(100000).nullable().optional(),
   // 月次レポート作成日（1〜28・null=既定）。
   report_day:  z.number().int().min(1).max(28).nullable().optional(),
+  // 要望の受付（基本設計 §3.1）。新規は既定で受ける（DB の既定と同じ）。
+  feedback_enabled: z.boolean().default(true),
 })
 
 export async function POST(req: NextRequest) {
@@ -56,6 +58,7 @@ export async function POST(req: NextRequest) {
     max_alarm:   body.max_alarm   ?? null,
     max_baggage: body.max_baggage ?? null,
     report_day:  body.report_day  ?? null,
+    feedback_enabled: body.feedback_enabled,
   }
   if (body.slug) insert.slug = body.slug
 
@@ -73,7 +76,8 @@ export async function POST(req: NextRequest) {
     targetId:    data.id,
     storeId:     null,
     changes:     { name: body.name, plan: body.plan, status: body.status, slug: body.slug ?? null,
-                   opt_patrol: body.opt_patrol, opt_alarm: body.opt_alarm, opt_baggage: body.opt_baggage },
+                   opt_patrol: body.opt_patrol, opt_alarm: body.opt_alarm, opt_baggage: body.opt_baggage,
+                   feedback_enabled: body.feedback_enabled },
   })
 
   return NextResponse.json({ ok: true, id: data.id })
