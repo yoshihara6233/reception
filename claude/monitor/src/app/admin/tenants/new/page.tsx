@@ -31,6 +31,7 @@ export default async function NewTenantPage() {
             opt_patrol: false, opt_alarm: false, opt_baggage: false,
             max_stores: null, max_patrol: null, max_alarm: null, max_baggage: null,
             report_day: null,
+            feedback_enabled: true,
           }}
         />
       </div>

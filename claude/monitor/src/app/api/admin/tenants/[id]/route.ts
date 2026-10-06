@@ -3,6 +3,10 @@
  * DELETE /api/admin/tenants/[id] — テナント削除（super_admin 限定・2026-10-05）
  *
  * PUT は name / plan / status / slug などを更新する。
+ * 要望の受付（feedback_enabled・基本設計 §3.1・GVMS_CLOUD_SPEC §12.1）もここで切り替える。
+ * 切り替えたときは、いつもの tenant.update とは別に tenant.feedback_enabled（前後の値）を
+ * 運営アクセスログへ残す（フォームは全項目を送るので、tenant.update だけでは
+ * 何が変わったか読み取れないため）。使われ方の集計（usage_enabled）は第 2 段なので受けない。
  *
  * DELETE は配下（拠点・ユーザ・エッジ・レコーダ・カメラ・各種記録）ごと消す。
  * 以前は「誤削除の被害が甚大」として提供していなかったが、デモや試用で作った
@@ -46,6 +50,8 @@ const Body = z.object({
   max_alarm:   z.number().int().min(0).max(100000).nullable().optional(),
   max_baggage: z.number().int().min(0).max(100000).nullable().optional(),
   report_day:  z.number().int().min(1).max(28).nullable().optional(),
+  // 要望の受付（false = 入口を出さず、拠点からの要望も 409 feedback_disabled で断る）。
+  feedback_enabled: z.boolean().optional(),
 })
 
 export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -67,6 +73,14 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
   if (patch.slug === '') patch.slug = null
 
   const svc = createSupabaseService()
+  // 要望の受付の切り替えを記録するため、変える前の値を読む（送られてきたときだけ）
+  let feedbackBefore: boolean | null = null
+  if (typeof parsed.data.feedback_enabled === 'boolean') {
+    const { data: cur } = await svc.from('tenants').select('feedback_enabled').eq('id', id).maybeSingle()
+    if (!cur) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+    feedbackBefore = (cur as { feedback_enabled: boolean | null }).feedback_enabled !== false
+  }
+
   const { error } = await svc.from('tenants').update(patch).eq('id', id)
   if (error) {
     const dup = /duplicate|unique/i.test(error.message)
@@ -81,6 +95,17 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
     storeId:     null,
     changes:     parsed.data,
   })
+
+  if (feedbackBefore !== null && feedbackBefore !== parsed.data.feedback_enabled) {
+    await recordAudit(guard.supa, {
+      actorUserId: guard.user.id,
+      action:      'tenant.feedback_enabled',
+      targetType:  'tenant',
+      targetId:    id,
+      storeId:     null,
+      changes:     { before: feedbackBefore, after: parsed.data.feedback_enabled },
+    })
+  }
 
   return NextResponse.json({ ok: true })
 }

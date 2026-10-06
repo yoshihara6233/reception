@@ -51,7 +51,8 @@ export function createFakeDb(seed: Record<string, Row[]> = {}, opts: FakeDbOptio
 
   class Query implements PromiseLike<{ data: unknown; error: unknown; count?: number | null }> {
     private filters: Filter[] = []
-    private op: 'select' | 'insert' | 'update' | 'delete' = 'select'
+    private op: 'select' | 'insert' | 'update' | 'delete' | 'upsert' = 'select'
+    private conflict: string[] = []
     private payload: unknown
     private wantCount = false
     private head = false
@@ -68,6 +69,29 @@ export function createFakeDb(seed: Record<string, Row[]> = {}, opts: FakeDbOptio
     insert(p: unknown) { this.op = 'insert'; this.payload = p; return this }
     update(p: unknown) { this.op = 'update'; this.payload = p; return this }
     delete() { this.op = 'delete'; return this }
+    /** onConflict の列が一致する行があれば上書き、無ければ足す */
+    upsert(p: unknown, o?: { onConflict?: string }) {
+      this.op = 'upsert'; this.payload = p
+      this.conflict = (o?.onConflict ?? 'id').split(',').map((c) => c.trim())
+      return this
+    }
+    /**
+     * PostgREST の or（使う形だけ: `col.eq.v`・`col.neq.v`・`col.is.null`・`col.not.is.null`）。
+     * 値は文字列として比べる。
+     */
+    or(expr: string) {
+      const parts = expr.split(',').map((p) => {
+        const [col, ...rest] = p.split('.')
+        const op = rest.join('.')
+        if (op === 'is.null') return (r: Row) => (r[col] ?? null) === null
+        if (op === 'not.is.null') return (r: Row) => (r[col] ?? null) !== null
+        if (op.startsWith('neq.')) return (r: Row) => String(r[col]) !== op.slice(4)
+        if (op.startsWith('eq.')) return (r: Row) => String(r[col]) === op.slice(3)
+        throw new Error(`fake-supabase: or の形を知らない: ${p}`)
+      })
+      this.filters.push((r) => parts.some((f) => f(r)))
+      return this
+    }
     eq(c: string, v: unknown) { this.filters.push((r) => r[c] === v); return this }
     neq(c: string, v: unknown) { this.filters.push((r) => r[c] !== v); return this }
     in(c: string, vs: unknown[]) { this.filters.push((r) => vs.includes(r[c])); return this }
@@ -103,6 +127,19 @@ export function createFakeDb(seed: Record<string, Row[]> = {}, opts: FakeDbOptio
           if (opts.onUpdate?.[this.name]) next = opts.onUpdate[this.name](r, next)
           Object.assign(r, next)
           out.push(r)
+        }
+      } else if (this.op === 'upsert') {
+        const list = (Array.isArray(this.payload) ? this.payload : [this.payload]) as Row[]
+        for (const p of list) {
+          const hit = rows.find((r) => this.conflict.every((c) => r[c] === p[c]))
+          if (hit) {
+            Object.assign(hit, p)
+            out.push(hit)
+          } else {
+            const row: Row = { ...(opts.defaults?.[this.name]?.() ?? {}), ...p }
+            rows.push(row)
+            out.push(row)
+          }
         }
       } else if (this.op === 'delete') {
         out = match()

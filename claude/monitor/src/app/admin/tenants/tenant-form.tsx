@@ -22,6 +22,8 @@ export interface TenantInitial {
   max_baggage: number | null
   // 月次レポート作成日（1〜28・null=既定28）
   report_day:  number | null
+  // 要望の受付（基本設計 §3.1・GVMS_CLOUD_SPEC §12.1）。既定は受ける
+  feedback_enabled: boolean
 }
 
 /** 現在の利用数（表示用・任意）。編集時のみ渡す。 */
@@ -76,6 +78,7 @@ export function TenantForm({ mode, id, initial, usage }: {
       max_alarm:   form.max_alarm,
       max_baggage: form.max_baggage,
       report_day:  form.report_day,
+      feedback_enabled: form.feedback_enabled,
     }
 
     const res = await fetch(url, {
@@ -193,6 +196,22 @@ export function TenantForm({ mode, id, initial, usage }: {
             usage={mode === 'edit' ? usage?.baggage : undefined}
           />
         </div>
+      </fieldset>
+
+      <fieldset className="rounded border border-slate-200 p-3">
+        <legend className="px-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+          要望の収集
+        </legend>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={form.feedback_enabled}
+                 onChange={(e) => setForm({ ...form, feedback_enabled: e.target.checked })} />
+          要望の受付
+        </label>
+        <p className="mt-1 text-[11px] text-slate-500">
+          テナント管理者がクラウドの画面から、拠点の G・VMS の管理者が G・VMS から、要望・困りごとを送れます。
+          外すと、クラウドの画面の入口（画面右上の「要望・困りごと」と設定の「要望」）を出さず、拠点の G・VMS から届く要望も受けません
+          （拠点は手元に残し、7 日おいて送り直します）。これまでの要望と返事は消えません。
+        </p>
       </fieldset>
 
       {err  && <p className="rounded bg-red-50 px-3 py-2 text-xs text-red-700">{err}</p>}
