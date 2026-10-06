@@ -21,3 +21,18 @@ describe('テナントのアクセスログは運営の閲覧を出さない', (
     expect(src).toMatch(/href="\/admin\/ops-audit"/)
   })
 })
+
+describe('設定変更ログも運営の操作を出さない (2026-10-06)', () => {
+  const changes = readFileSync(join(__dirname, '..', 'app/admin/audit/changes/page.tsx'), 'utf8')
+  it('見ている人の役割で除外するかを変えない', () => {
+    expect(changes).not.toMatch(/if \(ctx\.role !== 'super_admin'\) \{\s*const svc/)
+    expect(changes).toMatch(/query\.not\('actor_user_id', 'in'/)
+  })
+  it('運営には運営アクセスログへの案内を出す', () => {
+    expect(changes).toMatch(/href="\/admin\/ops-audit"/)
+  })
+  it('操作中テナントの拠点に絞る (アクセスログと同じ)', () => {
+    expect(changes).toMatch(/ctx\.tenantId/)
+    expect(changes).toMatch(/query\.in\('store_id'/)
+  })
+})

@@ -13,6 +13,7 @@
  * 送る前に、先頭の印で PNG・JPEG・WebP か、3 MB 以内かを確かめる（受け口でも同じ決まりで確かめる）。
  */
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
@@ -155,9 +156,13 @@ export function FeedbackDialog({ open, onClose, onSent }: { open: boolean; onClo
   const btnPrimary = `${btn} bg-ge-accent text-white hover:bg-ge-ink-2 dark:bg-gedaccent dark:text-gedbg`
   const btnSecondary = `${btn} border border-ge-line bg-white text-ge-ink-2 hover:bg-ge-paper-2 dark:border-gedline dark:bg-gedbg3 dark:text-gedink`
 
-  return (
+  // **body の直下に出し、地図より上に重ねる** (2026-10-06 の利用者の指摘)。ヘッダの中に置いたままだと、
+  // MONITOR の地図 (Leaflet の部品は重なり順 400〜1000) がダイアログの下半分を覆い、見出ししか見えなかった。
+  // 重なり順は Leaflet の操作部品 (1000) より上にする
+  if (typeof document === 'undefined') return null
+  return createPortal(
     <div
-      className="fixed inset-0 z-[300] flex items-start justify-center overflow-y-auto bg-ge-ink/50 p-3 sm:items-center sm:p-6"
+      className="fixed inset-0 z-[1100] flex items-start justify-center overflow-y-auto bg-ge-ink/50 p-3 sm:items-center sm:p-6"
       onMouseDown={(e) => { if (e.target === e.currentTarget) close() }}
     >
       <div
@@ -387,6 +392,7 @@ export function FeedbackDialog({ open, onClose, onSent }: { open: boolean; onClo
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

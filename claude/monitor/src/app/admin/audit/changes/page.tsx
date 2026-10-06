@@ -76,18 +76,36 @@ export default async function AuditChangesPage({
   }
   const supa = await createSupabaseServer()
 
-  // SaaS運営者（super_admin）の設定変更はテナント側に見せない。
-  // クエリ段階で actor を除外し、ページング件数も正しく保つ。
+  // SaaS運営者（super_admin）の設定変更はテナント側のログに出さない。記録は残し、
+  // 運営アクセスログ（/admin/ops-audit）に出す。クエリ段階で actor を除外し、ページング件数も正しく保つ。
+  // **見ている人が super_admin でも出さない** (2026-10-06 の利用者の指示・アクセスログと揃える)。
+  // 以前は super_admin が開くと運営自身の操作が混ざり、テナントが見る中身と違っていた
   const ctx = await resolveAdminContext(supa)
   let query = supa
     .from('admin_audit_log')
     .select('id, ts, actor_user_id, action, target_type, target_id, store_id, changes, stores ( name )', { count: 'exact' })
     .order('ts', { ascending: false })
-  if (ctx.role !== 'super_admin') {
-    const svc = createSupabaseService()
+  const svc = createSupabaseService()
+  {
     const { data: supers } = await svc.from('admin_users').select('auth_user_id').eq('role', 'super_admin')
     const superIds = (supers ?? []).map((s) => s.auth_user_id as string)
     if (superIds.length) query = query.not('actor_user_id', 'in', `(${superIds.join(',')})`)
+  }
+  // 操作中テナントの拠点に絞る (2026-10-06 の利用者の指示・アクセスログと揃える)。
+  // tenant_admin は RLS で自テナントの拠点の行だけになるが、super_admin は全件が読めるため、
+  // テナントを選んで開いても他のテナントの変更が並んでいた。拠点に紐づかない行 (store_id が無い)
+  // はテナント管理者にも見えないので、絞ったときは出さない (テナントの管理者が見る中身と同じ)。
+  // テナント未選択の super_admin だけは従来どおり全件 (運営の操作は除く)。
+  let scopeStoreIds: string[] | null = null
+  if (ctx.storeIds) {
+    scopeStoreIds = ctx.storeIds
+  } else if (ctx.tenantId) {
+    const { data: ts } = await svc.from('stores').select('id').eq('tenant_id', ctx.tenantId)
+    scopeStoreIds = (ts ?? []).map((s) => s.id as string)
+  }
+  if (scopeStoreIds) {
+    // 拠点の無いテナントは 0 件 (空の in は書けないので、ありえない ID で絞る)
+    query = query.in('store_id', scopeStoreIds.length ? scopeStoreIds : ['00000000-0000-0000-0000-000000000000'])
   }
   const { data, count } = await query.range(offset, offset + PAGE_SIZE - 1)
 
@@ -106,6 +124,13 @@ export default async function AuditChangesPage({
       />
 
       <div className="space-y-4 px-5 py-4">
+        {ctx.role === 'super_admin' && (
+          <p className="rounded border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 dark:border-gedline dark:bg-gedbg2 dark:text-gedink2">
+            運営（システム管理者）の操作はここには出ません（テナントの管理者が見る中身と同じです）。運営の操作は{' '}
+            <Link href="/admin/ops-audit" className="underline">運営アクセスログ</Link> で確かめてください。
+          </p>
+        )}
+
         <div className="flex items-center justify-between">
           <div className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs text-slate-600">
             設定変更 {count ?? 0} 件（レコーダ / カメラ / エッジ / 拠点 / ユーザ / 設定）
