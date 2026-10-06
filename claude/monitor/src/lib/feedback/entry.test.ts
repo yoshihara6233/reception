@@ -53,4 +53,12 @@ describe('設定の左メニュー（getAdminNav）', () => {
     expect(hrefs({ isSuper: true, feedback: false })).toContain('/admin/feedback')
     expect(hrefs({ isSuper: true, feedback: false })).not.toContain('/settings/feedback')
   })
+
+  it('★「要望ボード」に未対応の件数を載せる (0・null は印なし)', async () => {
+    const { getAdminNav } = await import('@/components/AdminShell')
+    const t = { adminNav: { stores: '拠点', users: 'ユーザ', audit: 'アクセスログ', edges: 'エッジ', limits: '視聴上限' } } as never
+    const board = (n: number | null) => getAdminNav(t, { isSuper: true, feedbackUntouched: n }).find((e) => e.href === '/admin/feedback')!
+    expect(board(2)).toMatchObject({ count: 2, countLabel: '未対応' })
+    expect(board(null).count).toBeNull()
+  })
 })
