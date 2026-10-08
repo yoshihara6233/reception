@@ -10,7 +10,7 @@
  *   400 { error: 'invalid_body' }      形が違う（本文 1〜1,000 字・kind・urgency・local_id）
  *   401                                トークンが違う
  *   403 { error: 'role_not_allowed' }  role が admin でない（§12.1: 書けるのは拠点の管理者だけ）
- *   409 { error: 'feedback_disabled' } テナントが要望の受付を止めている（拠点は 7 日送らない）
+ *   409 { error: 'feedback_disabled' } テナントが要望の受付を止めている（拠点は 1 時間送らず、そのあと 1 件で試し直す）
  *   413 { error: 'payload_too_large' }
  *   429 { error: 'daily_limit' }       1 拠点 1 日 50 件を超えた（拠点は翌日に送る）
  *
