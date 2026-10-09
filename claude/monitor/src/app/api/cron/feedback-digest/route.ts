@@ -2,8 +2,12 @@
  * 要望の新着のまとめメール cron（1 日 1 回・基本設計 §3.5）。
  *
  * vercel.json: 23:30 UTC = 8:30 JST。前の日の 8:30 から今日の 8:30 までに届いた要望を、
- * 運用アラートと同じ宛先（ALERT_EMAILS・カンマ区切り）へ 1 通で送る。
+ * 要望の宛先（FEEDBACK_EMAILS・未設定なら運用アラートの ALERT_EMAILS・recipients.ts）へ 1 通で送る。
  * 新着が 0 件の日・宛先が無いときは送らない。区切りは時計の 8:30 に揃える（digest.ts）。
+ *
+ * **毎回、件数・送ったか・宛先の数と出どころをログに残す**（宛先そのものは残さない）。
+ * 10/9 に「INFO に来ない」とき、応答が 200 でも送ったのか・どこへ送ったのかを
+ * Vercel のログから追えなかった。
  *
  * 認証: 他の cron と同じ CRON_SECRET（Bearer / x-cron-secret）。
  */
@@ -14,6 +18,7 @@ import { absoluteUrl } from '@/lib/app-url'
 import { PRODUCT_NAME } from '@/lib/brand'
 import { countUntouchedFeedback } from '@/lib/feedback/board'
 import { digestWindow, renderDigest, type DigestItem } from '@/lib/feedback/digest'
+import { feedbackRecipients } from '@/lib/feedback/recipients'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,7 +32,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     || req.headers.get('x-cron-secret') === secret
   if (!authed) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
-  const recipients = (process.env.ALERT_EMAILS ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+  const to = feedbackRecipients()
+  const recipients = to.emails
   const window = digestWindow(new Date())
   const range = { from: window.from.toISOString(), to: window.to.toISOString() }
 
@@ -39,11 +45,23 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     .lt('created_at', range.to)
     .order('created_at', { ascending: true })
     .limit(READ_LIMIT)
-  if (error) return NextResponse.json({ error: 'list_failed', ...range }, { status: 500 })
+  // 実行の結果をログに残す (件数・送ったか・宛先の数と出どころ)。宛先のアドレスは出さない
+  const note = (r: Record<string, unknown>) =>
+    console.info('[feedback-digest]', JSON.stringify({ ...r, ...range, recipients: recipients.length, recipientsFrom: to.source }))
+  if (error) {
+    note({ error: 'list_failed' })
+    return NextResponse.json({ error: 'list_failed', ...range }, { status: 500 })
+  }
   const items = (data ?? []) as DigestItem[]
 
-  if (items.length === 0) return NextResponse.json({ ok: true, count: 0, mailed: false, ...range })
-  if (recipients.length === 0) return NextResponse.json({ ok: true, count: items.length, mailed: false, skipped: 'no_recipients', ...range })
+  if (items.length === 0) {
+    note({ count: 0, mailed: false })
+    return NextResponse.json({ ok: true, count: 0, mailed: false, ...range })
+  }
+  if (recipients.length === 0) {
+    note({ count: items.length, mailed: false, skipped: 'no_recipients' })
+    return NextResponse.json({ ok: true, count: items.length, mailed: false, skipped: 'no_recipients', ...range })
+  }
 
   const tenantIds = [...new Set(items.map((i) => i.tenant_id))]
   const storeIds = [...new Set(items.map((i) => i.store_id).filter((v): v is string => !!v))]
@@ -64,6 +82,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     productName: PRODUCT_NAME,
   })
   const sent = await sendEmail(recipients, subject, html, undefined, SECURITY_FROM_ADDRESS)
-  if (!sent.ok) return NextResponse.json({ error: 'send_failed', count: items.length, ...range }, { status: 502 })
+  if (!sent.ok) {
+    note({ count: items.length, mailed: false, error: 'send_failed' })
+    return NextResponse.json({ error: 'send_failed', count: items.length, ...range }, { status: 502 })
+  }
+  note({ count: items.length, mailed: true })
   return NextResponse.json({ ok: true, count: items.length, mailed: true, ...range })
 }

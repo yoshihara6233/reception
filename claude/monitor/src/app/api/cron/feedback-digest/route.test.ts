@@ -59,6 +59,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers()
   delete process.env.ALERT_EMAILS
+  delete process.env.FEEDBACK_EMAILS
 })
 
 describe('/api/cron/feedback-digest', () => {
@@ -88,6 +89,24 @@ describe('/api/cron/feedback-digest', () => {
     process.env.ALERT_EMAILS = ''
     expect(await (await call()).json()).toMatchObject({ ok: true, count: 2, mailed: false, skipped: 'no_recipients' })
     expect(h.sent).toHaveLength(0)
+  })
+
+  it('★FEEDBACK_EMAILS があればそちらへ送る (運用アラートの宛先とは分ける)', async () => {
+    process.env.FEEDBACK_EMAILS = 'info@example.com'
+    expect(await (await call()).json()).toMatchObject({ ok: true, count: 2, mailed: true })
+    expect(h.sent[0].to).toEqual(['info@example.com'])
+  })
+
+  it('★実行の結果をログに残す (宛先のアドレスは出さない)', async () => {
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {})
+    await call()
+    const line = spy.mock.calls.map((c) => c.join(' ')).find((s) => s.startsWith('[feedback-digest]')) ?? ''
+    expect(line).toContain('"count":2')
+    expect(line).toContain('"mailed":true')
+    expect(line).toContain('"recipients":2')
+    expect(line).toContain('"recipientsFrom":"ALERT_EMAILS"')
+    expect(line).not.toContain('ops@example.com')
+    spy.mockRestore()
   })
 
   it('送れなかったら 502 を返す (cron の失敗として残す)', async () => {
