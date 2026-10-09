@@ -159,7 +159,7 @@ supabase backups restore --project-ref <ref>   # 任意タイムスタンプへ�
 ## 4. S2: Vercel（アプリ）復旧
 - **直近の正常デプロイへロールバック**: Vercel → Deployments → 正常な過去デプロイの「Promote to Production」。
 - **git から再デプロイ**: `monitor-prod` の正しいコミットを push / Redeploy。
-- env 破損時は Settings → Environment Variables を復元（§3.4 の3鍵＋通知系 `CRON_SECRET`/`RESEND_API_KEY`/`ALERT_EMAILS`/`ALERT_WEBHOOK_URL`）。`/admin` ダッシュボードの env 欠落警告で不足を確認。
+- env 破損時は Settings → Environment Variables を復元（§3.4 の3鍵＋通知系 `CRON_SECRET`/`RESEND_API_KEY`/`ALERT_EMAILS`/`ALERT_WEBHOOK_URL`、要望の知らせの宛先 `FEEDBACK_EMAILS`（任意・未設定なら `ALERT_EMAILS`））。`/admin` ダッシュボードの env 欠落警告で不足を確認。
 
 ---
 
