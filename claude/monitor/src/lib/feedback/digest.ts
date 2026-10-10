@@ -5,6 +5,8 @@
  * 集計の区切りは毎朝 8:30（日本時間）。cron が数分遅れても、区切りは時計の 8:30 に揃えるので、
  * 取りこぼしも二重の載せもない（8:30〜実行までに来た要望は翌朝のまとめに載る）。
  * 「業務が止まる」は受けた時点で別に知らせている（notify.ts）が、まとめにも載せる（一覧で見渡すため）。
+ * 新着が 0 件の日も「0 件」として送る（2026-10-10 発注者の判断）。届いたことで、毎朝の集計が
+ * 動いていること・宛先が生きていることを確かめられる（10/9 に届かない理由を追えなかった）。
  */
 import { KIND_LABEL, SOURCE_LABEL, URGENCY_LABEL, type FeedbackKind, type FeedbackSource, type FeedbackUrgency } from './schema'
 
@@ -90,20 +92,27 @@ export function renderDigest(p: {
   const more = p.items.length > shown.length
     ? `<p style="font-size:13px">ほか ${n(p.items.length - shown.length)} 件は要望ボードで見てください。</p>` : ''
 
-  const html = `<!DOCTYPE html>
-<html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:16px;background:#F7F5F1;color:#0F0F10;font-family:'Noto Sans JP',sans-serif">
-<p style="font-size:14px">${jstShort(p.window.from.toISOString())} 〜 ${jstShort(p.window.to.toISOString())} に届いた要望は ${n(p.items.length)} 件です。
-受け付けたまま返事をしていない要望は、全部で ${n(p.untouched)} 件あります。</p>
-<table style="border-collapse:collapse;width:100%;background:#FFFFFF;border:1px solid #E4E0D8">
+  const summary = p.items.length
+    ? `${jstShort(p.window.from.toISOString())} 〜 ${jstShort(p.window.to.toISOString())} に届いた要望は ${n(p.items.length)} 件です。`
+    : `${jstShort(p.window.from.toISOString())} 〜 ${jstShort(p.window.to.toISOString())} に届いた要望はありませんでした（0 件）。`
+  const table = p.items.length
+    ? `<table style="border-collapse:collapse;width:100%;background:#FFFFFF;border:1px solid #E4E0D8">
 <thead><tr>
 <th style="${cell};text-align:left">受けた時刻</th><th style="${cell};text-align:left">種類・度合い</th>
 <th style="${cell};text-align:left">テナント / 拠点</th><th style="${cell};text-align:left">本文</th>
 </tr></thead>
 <tbody>${rows}</tbody></table>
-${more}
+${more}`
+    : ''
+
+  const html = `<!DOCTYPE html>
+<html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:16px;background:#F7F5F1;color:#0F0F10;font-family:'Noto Sans JP',sans-serif">
+<p style="font-size:14px">${summary}
+受け付けたまま返事をしていない要望は、全部で ${n(p.untouched)} 件あります。</p>
+${table}
 <p style="font-size:13px"><a href="${esc(p.boardUrl)}" style="color:#2C4A7E">要望ボードを開く</a></p>
-<p style="font-size:12px;color:#6B6862">このメールは毎朝 8:30 に、前の日の 8:30 からの新着をまとめて送っています。新着が無い日は送りません。</p>
+<p style="font-size:12px;color:#6B6862">このメールは毎朝 8:30 に、前の日の 8:30 からの新着をまとめて送っています。新着が無い日も 0 件として送ります。</p>
 </body></html>`
   return { subject, html }
 }

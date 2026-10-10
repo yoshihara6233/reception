@@ -6,7 +6,7 @@ import { createFakeDb } from '@/test/fake-supabase'
  * 要望の新着のまとめメール cron（基本設計 §3.5）。
  *
  *   ★前日 8:30〜当日 8:30（日本時間）に届いた要望だけを 1 通で ALERT_EMAILS へ送る
- *   ★新着が 0 件・宛先が無いときは送らない
+ *   ★新着が 0 件の日も「0 件」として送る・宛先が無いときは送らない
  *   ★CRON_SECRET が無い・違えば何もしない
  */
 
@@ -79,9 +79,20 @@ describe('/api/cron/feedback-digest', () => {
     expect(h.sent[0].html).toContain('全部で 3 件')
   })
 
-  it('★新着が 0 件なら送らない', async () => {
+  it('★新着が 0 件の日も「0 件」として送る (毎朝届くことで集計と宛先が生きていると分かる)', async () => {
     vi.setSystemTime(new Date('2026-10-09T23:32:00Z'))
-    expect(await (await call()).json()).toMatchObject({ ok: true, count: 0, mailed: false })
+    expect(await (await call()).json()).toMatchObject({ ok: true, count: 0, mailed: true })
+    expect(h.sent).toHaveLength(1)
+    expect(h.sent[0].subject).toBe('[G・VMS-Cloud] 要望の新着 0 件')
+    expect(h.sent[0].html).toContain('届いた要望はありませんでした（0 件）')
+    expect(h.sent[0].html).not.toContain('<table')
+    expect(h.sent[0].html).toContain('全部で 3 件')
+  })
+
+  it('★0 件の日も、宛先が無ければ送らない', async () => {
+    vi.setSystemTime(new Date('2026-10-09T23:32:00Z'))
+    process.env.ALERT_EMAILS = ''
+    expect(await (await call()).json()).toMatchObject({ ok: true, count: 0, mailed: false, skipped: 'no_recipients' })
     expect(h.sent).toHaveLength(0)
   })
 

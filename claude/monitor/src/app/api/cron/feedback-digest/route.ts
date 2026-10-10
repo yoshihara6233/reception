@@ -3,7 +3,8 @@
  *
  * vercel.json: 23:30 UTC = 8:30 JST。前の日の 8:30 から今日の 8:30 までに届いた要望を、
  * 要望の宛先（FEEDBACK_EMAILS・未設定なら運用アラートの ALERT_EMAILS・recipients.ts）へ 1 通で送る。
- * 新着が 0 件の日・宛先が無いときは送らない。区切りは時計の 8:30 に揃える（digest.ts）。
+ * 新着が 0 件の日も「0 件」として送る（毎朝届くことで、集計と宛先が生きていると分かる・10/10 判断）。
+ * 宛先が無いときは送らない。区切りは時計の 8:30 に揃える（digest.ts）。
  *
  * **毎回、件数・送ったか・宛先の数と出どころをログに残す**（宛先そのものは残さない）。
  * 10/9 に「INFO に来ない」とき、応答が 200 でも送ったのか・どこへ送ったのかを
@@ -54,10 +55,6 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
   const items = (data ?? []) as DigestItem[]
 
-  if (items.length === 0) {
-    note({ count: 0, mailed: false })
-    return NextResponse.json({ ok: true, count: 0, mailed: false, ...range })
-  }
   if (recipients.length === 0) {
     note({ count: items.length, mailed: false, skipped: 'no_recipients' })
     return NextResponse.json({ ok: true, count: items.length, mailed: false, skipped: 'no_recipients', ...range })
@@ -66,7 +63,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const tenantIds = [...new Set(items.map((i) => i.tenant_id))]
   const storeIds = [...new Set(items.map((i) => i.store_id).filter((v): v is string => !!v))]
   const [tenants, stores, untouched] = await Promise.all([
-    svc.from('tenants').select('id, name').in('id', tenantIds),
+    tenantIds.length ? svc.from('tenants').select('id, name').in('id', tenantIds) : Promise.resolve({ data: [] }),
     storeIds.length ? svc.from('stores').select('id, name').in('id', storeIds) : Promise.resolve({ data: [] }),
     countUntouchedFeedback(svc),
   ])
