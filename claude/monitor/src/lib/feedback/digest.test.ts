@@ -77,6 +77,15 @@ describe('renderDigest', () => {
     expect(html).toContain('ほか 3 件は要望ボードで見てください。')
   })
 
+  it('★0 件の日は表を出さず「ありませんでした」と書く', () => {
+    const { subject, html } = renderDigest({ ...base, items: [] })
+    expect(subject).toBe('[G・VMS-Cloud] 要望の新着 0 件')
+    expect(html).toContain('10/06 08:30 〜 10/07 08:30 に届いた要望はありませんでした（0 件）。')
+    expect(html).not.toContain('<table')
+    expect(html).toContain('全部で 3 件')
+    expect(html).toContain('新着が無い日も 0 件として送ります。')
+  })
+
   it('拠点の無い要望 (クラウドの画面から) はテナント名だけ', () => {
     const { html } = renderDigest({ ...base, items: [item({ store_id: null, source: 'cloud' })] })
     expect(html).toContain('>某ドラッグストア様<br>')
