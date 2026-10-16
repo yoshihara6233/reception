@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireSuperAdmin } from '@/lib/admin/guard'
 import { recordAudit, storeIdForEdge } from '@/lib/admin/audit'
-import { purgeEdgeAlarmRecords } from '@/lib/admin/edge-delete'
+import { alarmPurgeCounts, alarmPurgeFailureBody, purgeEdgeAlarmRecords } from '@/lib/admin/alarm-purge'
 
 // 版フィールドは前後空白を除去（末尾スペース混入で git worktree add が
 // "invalid reference" となり OTA が恒久 stage_failed する事故の防止）。
@@ -74,14 +74,9 @@ export async function DELETE(
   const storeId = await storeIdForEdge(guard.supa, id)   // 削除前に解決 (監査の拠点スコープ)
 
   // 配下のカメラを参照する発報の記録 (alarm_frames / alarm_events) は ON DELETE の指定が
-  // 無く、残っているとエッジの削除が外部キー違反で止まる。先に消す (lib/admin/edge-delete.ts)。
+  // 無く、残っているとエッジの削除が外部キー違反で止まる。先に消す (lib/admin/alarm-purge.ts)。
   const purge = await purgeEdgeAlarmRecords(guard.supa, id)
-  if (!purge.ok) {
-    return NextResponse.json(
-      { error: 'alarm_purge_failed', message: `${purge.stage}: ${purge.message}` },
-      { status: 500 },
-    )
-  }
+  if (!purge.ok) return NextResponse.json(alarmPurgeFailureBody(purge), { status: 500 })
 
   const { error } = await guard.supa.from('edge_devices').delete().eq('id', id)
   if (error) return NextResponse.json({ error: 'delete_failed', message: error.message }, { status: 500 })
@@ -92,7 +87,7 @@ export async function DELETE(
     targetType: 'edge',
     targetId: id,
     storeId,
-    changes: { cameras: purge.cameras, alarm_events: purge.alarmEvents, alarm_frames: purge.alarmFrames },
+    changes: alarmPurgeCounts(purge),
   })
-  return NextResponse.json({ ok: true, deleted: { alarm_events: purge.alarmEvents, alarm_frames: purge.alarmFrames } })
+  return NextResponse.json({ ok: true, deleted: alarmPurgeCounts(purge) })
 }

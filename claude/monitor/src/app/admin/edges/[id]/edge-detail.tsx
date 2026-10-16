@@ -1227,11 +1227,13 @@ function RecorderCard({ recorder }: { recorder: Recorder }) {
   }
 
   async function save() {
-    setBusy(true); setMsg(null)
     const payload = {
       upsert: cams.filter((c) => !c._del && (c._new || c._dirty)),
       delete: cams.filter((c) => c._del && c.id).map((c) => c.id!),
     }
+    if (payload.delete.length > 0
+      && !confirm(`${payload.delete.length.toLocaleString()} 台のカメラを削除しますか？\nそのカメラの発報の記録も削除されます。`)) return
+    setBusy(true); setMsg(null)
     const res = await fetch(`/api/admin/recorders/${recorder.id}/cameras`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -1239,8 +1241,9 @@ function RecorderCard({ recorder }: { recorder: Recorder }) {
     })
     setBusy(false)
     if (!res.ok) {
-      const j = await res.json().catch(() => ({}))
-      setMsg(j.error ?? `保存失敗: ${res.status}`)
+      // 状態コードだけでは理由が分からないので、サーバが返す error / message も出す
+      const j = await res.json().catch(() => ({})) as { error?: string; message?: string }
+      setMsg(`保存失敗: ${j.error ?? res.status}${j.message ? ` (${j.message})` : ''}`)
       return
     }
     setMsg('保存しました')
@@ -1248,10 +1251,12 @@ function RecorderCard({ recorder }: { recorder: Recorder }) {
   }
 
   async function deleteRec() {
-    if (!confirm(`レコーダ ${recorder.host} を削除しますか？`)) return
+    if (!confirm(`レコーダ ${recorder.host} を削除しますか？\n配下のカメラと、そのカメラの発報の記録も削除されます。`)) return
     const res = await fetch(`/api/admin/recorders/${recorder.id}`, { method: 'DELETE' })
-    if (res.ok) router.refresh()
-    else alert(`削除失敗: ${res.status}`)
+    if (res.ok) { router.refresh(); return }
+    // 状態コードだけでは理由が分からないので、サーバが返す error / message も出す
+    const j = await res.json().catch(() => ({})) as { error?: string; message?: string }
+    alert(`削除失敗: ${j.error ?? res.status}${j.message ? `\n${j.message}` : ''}`)
   }
 
   // ── 大規模カメラ向けの絞り込み（Phase 1.5 M2）─────────────────────

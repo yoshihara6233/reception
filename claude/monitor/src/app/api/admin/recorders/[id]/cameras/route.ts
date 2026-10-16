@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
 import { recordAudit, storeIdForRecorder } from '@/lib/admin/audit'
+import { alarmPurgeCounts, alarmPurgeFailureBody, purgeCameraAlarmRecords } from '@/lib/admin/alarm-purge'
 
 const Camera = z.object({
   id:             z.string().uuid().optional(),
@@ -39,13 +40,21 @@ export async function PUT(
   const { upsert, delete: toDelete } = parsed.data
 
   // Delete first so users can recycle channel numbers in the same save.
+  let purged: ReturnType<typeof alarmPurgeCounts> | null = null
   if (toDelete.length) {
+    // 消すカメラを参照する発報の記録 (alarm_frames / alarm_events) は ON DELETE の指定が
+    // 無く、残っているとカメラの削除が外部キー違反で止まる。先に消す (lib/admin/alarm-purge.ts)。
+    // 対象はこのレコーダに属して RLS 配下で見えるカメラだけ (リクエストの id をそのまま使わない)。
+    const purge = await purgeCameraAlarmRecords(guard.supa, recorderId, toDelete)
+    if (!purge.ok) return NextResponse.json(alarmPurgeFailureBody(purge), { status: 500 })
+    purged = alarmPurgeCounts(purge)
+
     const { error } = await guard.supa
       .from('recorder_cameras')
       .delete()
       .eq('recorder_id', recorderId)
       .in('id', toDelete)
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) return NextResponse.json({ error: 'delete_failed', message: error.message }, { status: 500 })
   }
 
   if (upsert.length) {
@@ -75,6 +84,7 @@ export async function PUT(
     changes: {
       upserted: upsert.map((c) => ({ channel: c.channel, name: c.name, grid_pos: c.grid_pos, enabled: c.enabled, hls_url: c.hls_url ?? null, live_rtsp: c.live_rtsp ?? null })),
       deleted: toDelete,
+      ...(purged ? { alarm_events: purged.alarm_events, alarm_frames: purged.alarm_frames } : {}),
     },
   })
   return NextResponse.json({ ok: true, upserted: upsert.length, deleted: toDelete.length })
