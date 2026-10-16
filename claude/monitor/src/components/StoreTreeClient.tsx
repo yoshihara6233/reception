@@ -5,6 +5,7 @@ import { prefName } from '@/lib/jp-prefectures'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Siren } from 'lucide-react'
 import { deriveEdgeStatus } from '@/lib/edge-status'
+import { pickPrimaryEdge } from '@/lib/edge/primary-edge'
 
 // Persist the tree scroll position across navigations. The tree is re-mounted
 // on every /stores/[id] change (it lives in each page's AppShell, not a shared
@@ -28,7 +29,7 @@ interface StoreRow {
   id: string
   name: string
   area_code: string | null
-  edge_devices: { status: string; last_seen_at: string | null }[] | null
+  edge_devices: { id: string; status: string; last_seen_at: string | null }[] | null
 }
 
 /** TC3: last_seen 鮮度を真実源にツリードットの色を決める（監視中断=赤）。 */
@@ -205,7 +206,7 @@ export function TreeClient({
               </div>
               {isOpen &&
                 g.stores.map((s) => {
-                  const dotColor = treeDotColor(s.edge_devices?.[0])   // TC3: 派生色
+                  const dotColor = treeDotColor(pickPrimaryEdge(s.edge_devices))   // TC3: 派生色 (複数台の拠点は最後に通知が届いたエッジ)
                   const active = s.id === selectedId
                   return (
                     <Link key={s.id} href={`/stores/${s.id}`} className="block">

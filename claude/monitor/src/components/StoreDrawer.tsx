@@ -2,12 +2,13 @@
 
 import { useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { pickPrimaryEdge } from '@/lib/edge/primary-edge'
 
 interface StoreRow {
   id: string
   name: string
   area_code: string | null
-  edge_devices: { status: string }[] | null
+  edge_devices: { id: string; status: string; last_seen_at: string | null }[] | null
 }
 
 interface Group {
@@ -99,7 +100,8 @@ export function StoreDrawer({
                 {g.area}
               </div>
               {g.stores.map((store) => {
-                const status = store.edge_devices?.[0]?.status ?? 'offline'
+                // 複数台の拠点は最後に通知が届いたエッジの状態を出す (埋め込みの先頭は順不同)
+                const status = pickPrimaryEdge(store.edge_devices)?.status ?? 'offline'
                 const isSelected = store.id === selectedId
                 return (
                   <button

@@ -5,6 +5,7 @@
 import { Video } from 'lucide-react'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { deriveEdgeStatus, type DerivedEdgeStatus } from '@/lib/edge-status'
+import { pickPrimaryEdge } from '@/lib/edge/primary-edge'
 
 // 鮮度OK の動作モード表示（status 文字列ベース）。中断/停止/未設置は派生結果で上書き。
 const MODE_LABEL: Record<string, { label: string; cls: string }> = {
@@ -61,7 +62,8 @@ export async function StoreDetail({ storeId }: { storeId: string }) {
       }[]
     }[]
   }
-  const edge = s.edge_devices?.[0]
+  // エッジが複数ある拠点は、最後に通知が届いたエッジを代表にする (埋め込みの先頭は順不同)
+  const edge = pickPrimaryEdge(s.edge_devices)
   const rec  = edge?.recorders?.[0]
   // G・VMS で削除したカメラ (removed_at あり) は出さない。無効にしただけのカメラは「無効」で出す
   const cams = (rec?.recorder_cameras ?? []).filter((c) => !c.removed_at)

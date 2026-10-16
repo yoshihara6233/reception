@@ -7,6 +7,7 @@ import { createSupabaseServer } from '@/lib/supabase/server'
 import { resolveAdminContext } from '@/lib/tenant/acting'
 import { requireAdmin } from '@/lib/admin/guard'
 import { getT } from '@/lib/i18n/server'
+import { pickPrimaryEdge } from '@/lib/edge/primary-edge'
 
 interface Row {
   id: string
@@ -16,7 +17,7 @@ interface Row {
   latitude: number | null
   longitude: number | null
   is_active: boolean
-  edge_devices: { id: string; status: string }[]
+  edge_devices: { id: string; status: string; last_seen_at: string | null }[]
 }
 
 export default async function StoresAdmin({
@@ -47,7 +48,7 @@ export default async function StoresAdmin({
     .from('stores')
     .select(`
       id, name, address, area_code, latitude, longitude, is_active,
-      edge_devices ( id, status )
+      edge_devices ( id, status, last_seen_at )
     `)
     .order('name')
     .limit(500)
@@ -98,7 +99,8 @@ export default async function StoresAdmin({
             </thead>
             <tbody>
               {rows.map((s) => {
-                const status = s.edge_devices?.[0]?.status ?? t.common.dash
+                // 複数台の拠点は最後に通知が届いたエッジの状態を出す (埋め込みの先頭は順不同)
+                const status = pickPrimaryEdge(s.edge_devices)?.status ?? t.common.dash
                 const geo = s.latitude != null && s.longitude != null
                   ? `${s.latitude.toFixed(4)}, ${s.longitude.toFixed(4)}`
                   : <span className="text-amber-600">{ts.notSet}</span>

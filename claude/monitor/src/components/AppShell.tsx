@@ -60,7 +60,7 @@ export async function AppShell({
   // super_admin は全店舗（操作中テナント選択時はそのテナント）。
   let storesQuery = supa
     .from('stores')
-    .select('id, name, area_code, edge_devices ( status, last_seen_at )')
+    .select('id, name, area_code, edge_devices ( id, status, last_seen_at )')
     // 無効にした拠点はツリーに出さない (2026-10-05・stores/page.tsx と同じ扱い)
     .eq('is_active', true)
     .order('area_code', { ascending: true, nullsFirst: false })
@@ -71,8 +71,8 @@ export async function AppShell({
 
   const [storeRes, alertRes] = await Promise.all([storesQuery, alertPromise])
 
-  const byArea = new Map<string, { id: string; name: string; area_code: string | null; edge_devices: { status: string; last_seen_at: string | null }[] | null }[]>()
-  for (const s of (storeRes.data ?? []) as { id: string; name: string; area_code: string | null; edge_devices: { status: string; last_seen_at: string | null }[] | null }[]) {
+  const byArea = new Map<string, { id: string; name: string; area_code: string | null; edge_devices: { id: string; status: string; last_seen_at: string | null }[] | null }[]>()
+  for (const s of (storeRes.data ?? []) as { id: string; name: string; area_code: string | null; edge_devices: { id: string; status: string; last_seen_at: string | null }[] | null }[]) {
     // **都道府県（先頭 2 桁）でまとめる。**
     // stores.area_code は JIS 市区町村コード（例 43100 = 熊本市）なので、
     // 完全一致でまとめると同じ県が市ごとに割れる。今は全店が県レベルの

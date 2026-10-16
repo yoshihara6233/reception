@@ -14,6 +14,8 @@ import dynamic from 'next/dynamic'
 import type { EdgeStatus } from '@/lib/types/db'
 import { useLang } from '@/lib/i18n/context'
 import { deriveEdgeStatus, isMonitoringDown, type DerivedEdgeStatus } from '@/lib/edge-status'
+// 複数台の拠点は最後に通知が届いたエッジを代表にする (埋め込みの先頭は順不同)
+import { pickPrimaryEdge } from '@/lib/edge/primary-edge'
 import { OctagonAlert, WifiOff, Siren, TriangleAlert, Eye, Video, Check, type LucideIcon } from 'lucide-react'
 
 const StoreMap = dynamic(() => import('@/app/map/store-map'), {
@@ -153,19 +155,19 @@ export function StoresDashboard({
       return alertStoreIds.map((id) => ({
         storeId: id, storeName: byId.get(id)?.name ?? '—',
         kind: 'edge_offline' as AlertKind,
-        occurredAt: byId.get(id)?.edge_devices?.[0]?.last_seen_at ?? null,
+        occurredAt: pickPrimaryEdge(byId.get(id)?.edge_devices)?.last_seen_at ?? null,
         href: `/stores/${id}`,
       }))
     }
     // 完全な後方互換: 監視中断/停止/エラー（TC3: stale な status=grid も中断扱い）
     return stores
       .filter((s) => {
-        const dev = s.edge_devices?.[0]
+        const dev = pickPrimaryEdge(s.edge_devices)
         const d = deriveEdgeStatus(dev?.status, dev?.last_seen_at)
         return isMonitoringDown(d) || (d.plane === 'monitoring' && d.mode === 'error')
       })
       .map((s) => {
-        const dev = s.edge_devices?.[0]
+        const dev = pickPrimaryEdge(s.edge_devices)
         const d = deriveEdgeStatus(dev?.status, dev?.last_seen_at)
         return {
           storeId: s.id, storeName: s.name,
@@ -190,7 +192,7 @@ export function StoresDashboard({
     let monitoring = 0, live = 0
     // TC3: KPI も派生で数える。stale な grid は「監視中」に数えない（中断を隠さない）。
     stores.forEach((s) => {
-      const dev = s.edge_devices?.[0]
+      const dev = pickPrimaryEdge(s.edge_devices)
       const d = deriveEdgeStatus(dev?.status, dev?.last_seen_at)
       if (d.plane !== 'monitoring') return
       if (d.mode === 'grid')      monitoring++
@@ -323,7 +325,7 @@ function ListView({
 
               {items.map((s) => {
                 // TC3: last_seen 鮮度を真実源に監視プレーン状態を派生（status 固着を補正）。
-                const dev = s.edge_devices?.[0]
+                const dev = pickPrimaryEdge(s.edge_devices)
                 const d   = deriveEdgeStatus(dev?.status, dev?.last_seen_at)
                 const mode = (d.mode ?? 'offline') as EdgeStatus
                 const dot   = d.plane === 'monitoring' ? STATUS_DOT[mode]   : PLANE_DOT[d.plane]

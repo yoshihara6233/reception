@@ -16,9 +16,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 type Row = { id: string; store_id: string | null; occurred_at: string; source: string; timeline_dispatched_at: string | null }
 
+type EdgeRow = { id: string; store_id: string; last_seen_at: string | null }
+
 const h = vi.hoisted(() => ({
   rows: [] as Row[],
+  edges: [] as EdgeRow[],
   dispatched: [] as string[],
+  /** 指示を投入したエッジ (発報 id → エッジ id) */
+  dispatchedTo: {} as Record<string, string>,
 }))
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -42,9 +47,12 @@ vi.mock('@/lib/supabase/server', () => ({
         return b
       }
       if (table === 'edge_devices') {
+        let rows = [...h.edges]
         const b = {
-          select: () => b, eq: () => b, limit: () => b,
-          maybeSingle: async () => ({ data: { id: 'edge-1' }, error: null }),
+          select: () => b,
+          eq: (col: keyof EdgeRow, v: string) => { rows = rows.filter((r) => r[col] === v); return b },
+          then: (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) =>
+            Promise.resolve({ data: rows, error: null }).then(res, rej),
         }
         return b
       }
@@ -57,8 +65,9 @@ vi.mock('@/lib/alarms/dispatch', async (orig) => {
   const real = await orig<typeof import('@/lib/alarms/dispatch')>()
   return {
     ...real,
-    dispatchAlarmTimeline: async (_s: unknown, _edge: string, alarmId: string) => {
+    dispatchAlarmTimeline: async (_s: unknown, edgeId: string, alarmId: string) => {
       h.dispatched.push(alarmId)
+      h.dispatchedTo[alarmId] = edgeId
       return true
     },
   }
@@ -76,6 +85,8 @@ describe('alarm-dispatch-retry', () => {
     process.env.CRON_SECRET = 'test-secret'
     const now = new Date().toISOString()
     h.dispatched = []
+    h.dispatchedTo = {}
+    h.edges = [{ id: 'edge-1', store_id: 's1', last_seen_at: now }]
     h.rows = [
       { id: 'cam-alarm', store_id: 's1', occurred_at: now, source: 'onvif', timeline_dispatched_at: null },
       { id: 'gvms-event', store_id: 's1', occurred_at: now, source: 'nvms', timeline_dispatched_at: null },
@@ -97,5 +108,24 @@ describe('alarm-dispatch-retry', () => {
     const body = await (await call()).json()
     expect(h.dispatched).toEqual([])
     expect(body).toMatchObject({ ok: true, pending: 0, dispatched: 0 })
+  })
+
+  // 2026-10-16: 拠点に止まった旧エッジと動いているエッジの 2 台があると、順序指定なしの
+  // limit(1) では止まった方に投入されることがあった。最後に通知が届いたエッジへ送る。
+  it('エッジが複数ある拠点では、最後に通知が届いたエッジへ投入する', async () => {
+    h.rows = h.rows.filter((r) => r.id === 'cam-alarm')
+    h.edges = [
+      { id: 'edge-old', store_id: 's1', last_seen_at: '2026-09-01T00:00:00Z' },
+      { id: 'edge-live', store_id: 's1', last_seen_at: new Date().toISOString() },
+    ]
+    await call()
+    expect(h.dispatchedTo).toEqual({ 'cam-alarm': 'edge-live' })
+  })
+
+  it('拠点にエッジが無ければ送らない', async () => {
+    h.edges = []
+    const body = await (await call()).json()
+    expect(h.dispatched).toEqual([])
+    expect(body).toMatchObject({ ok: true, dispatched: 0 })
   })
 })

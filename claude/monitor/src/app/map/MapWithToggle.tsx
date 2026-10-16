@@ -12,6 +12,7 @@ import { useState } from 'react'
 import dynamic from 'next/dynamic'
 import { useLang } from '@/lib/i18n/context'
 import type { EdgeStatus } from '@/lib/types/db'
+import { pickPrimaryEdge } from '@/lib/edge/primary-edge'
 
 const StoreMap = dynamic(() => import('./store-map'), { ssr: false })
 
@@ -33,7 +34,8 @@ export function MapWithToggle({ stores, focusId }: { stores: StoreRow[]; focusId
   // ここで返ってくる store は全て座標を持っている。よって geoAlertIds == alertIds。
   const geoAlertIds = stores
     .filter((s) => {
-      const st = s.edge_devices?.[0]?.status
+      // 複数台の拠点は最後に通知が届いたエッジの状態で見る (埋め込みの先頭は順不同)
+      const st = pickPrimaryEdge(s.edge_devices)?.status
       return st === 'offline' || st === 'error'
     })
     .map((s) => s.id)

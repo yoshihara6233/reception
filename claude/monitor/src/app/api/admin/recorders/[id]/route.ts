@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
 import { recordAudit, storeIdForRecorder } from '@/lib/admin/audit'
+import { alarmPurgeCounts, alarmPurgeFailureBody, purgeRecorderAlarmRecords } from '@/lib/admin/alarm-purge'
 import { encryptSecret } from '@intereco/shared'
 
 const PatchBody = z.object({
@@ -80,14 +81,21 @@ export async function DELETE(
 
   const { id } = await ctx.params
   const storeId = await storeIdForRecorder(guard.supa, id)   // 削除前に解決
+
+  // 配下のカメラを参照する発報の記録 (alarm_frames / alarm_events) は ON DELETE の指定が
+  // 無く、残っているとレコーダの削除が外部キー違反で止まる。先に消す (lib/admin/alarm-purge.ts)。
+  const purge = await purgeRecorderAlarmRecords(guard.supa, id)
+  if (!purge.ok) return NextResponse.json(alarmPurgeFailureBody(purge), { status: 500 })
+
   const { error } = await guard.supa.from('recorders').delete().eq('id', id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: 'delete_failed', message: error.message }, { status: 500 })
   await recordAudit(guard.supa, {
     actorUserId: guard.user.id,
     action: 'recorder.delete',
     targetType: 'recorder',
     targetId: id,
     storeId,
+    changes: alarmPurgeCounts(purge),
   })
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, deleted: alarmPurgeCounts(purge) })
 }

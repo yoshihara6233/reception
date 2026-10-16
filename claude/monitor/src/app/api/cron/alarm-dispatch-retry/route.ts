@@ -15,6 +15,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { NO_TIMELINE_SOURCES, dispatchAlarmTimeline } from '@/lib/alarms/dispatch'
+import { pickPrimaryEdge } from '@/lib/edge/primary-edge'
 
 export const runtime = 'nodejs'
 
@@ -44,15 +45,16 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   if (!pendings?.length) return NextResponse.json({ ok: true, pending: 0, dispatched: 0 })
 
   let dispatched = 0
-  // 店舗→エッジは 1:1 運用（複数台でも先頭 1 台に投入すれば全カメラを撮る）。
+  // 店舗→エッジは 1:1 運用（複数台でも 1 台に投入すれば全カメラを撮る）。
+  // 複数台の拠点では、止まった旧エッジに投入しないよう最後に通知が届いたエッジを選ぶ
+  // （以前は順序指定なしの limit(1) で、どれに当たるかが DB 次第だった・2026-10-16）。
   for (const ev of pendings) {
     if (!ev.store_id) continue
-    const { data: edge } = await supa
+    const { data: edges } = await supa
       .from('edge_devices')
-      .select('id')
+      .select('id, last_seen_at')
       .eq('store_id', ev.store_id)
-      .limit(1)
-      .maybeSingle()
+    const edge = pickPrimaryEdge(edges)
     if (!edge) continue
     if (await dispatchAlarmTimeline(supa, edge.id, ev.id, ev.occurred_at)) dispatched++
   }

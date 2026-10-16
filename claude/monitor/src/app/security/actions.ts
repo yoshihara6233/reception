@@ -7,6 +7,7 @@ import { listPatrolCameraIds, buildCaptureCommand } from '@/lib/security/patrol-
 import { generateAndStoreRunReport } from '@/lib/security/patrol-report'
 import { recordFootageAccess } from '@/lib/audit/footage-access'
 import { isStoreOptionEnabled } from '@/lib/admin/tenant-quota'
+import { pickPrimaryEdge } from '@/lib/edge/primary-edge'
 
 export interface ReportSnapshot { url: string; camera: string; at: string }
 
@@ -114,11 +115,13 @@ async function dispatchManualPatrol(
   storeId: string,
 ): Promise<{ ok: boolean; error?: string }> {
   // 認可ゲート: 店舗のエッジをセッション RLS 越しに読む。見えなければアクセス権なし。
-  const { data: edge } = await supa
+  // エッジが複数ある拠点では maybeSingle が失敗して「未登録」扱いになっていたので、
+  // 全件を読んで最後に通知が届いたエッジへ投入する (2026-10-16)。
+  const { data: edges } = await supa
     .from('edge_devices')
     .select('id, pending_command, last_seen_at')
     .eq('store_id', storeId)
-    .maybeSingle()
+  const edge = pickPrimaryEdge(edges)
   if (!edge) return { ok: false, error: 'エッジ未登録／権限なし' }
 
   // Phase2: 店舗別オプション（巡回）ゲート。opt_patrol=false は手動巡回も不可。
