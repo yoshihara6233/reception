@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import L from 'leaflet'
 import type { EdgeStatus } from '@/lib/types/db'
 import { deriveEdgeStatus } from '@/lib/edge-status'
+// 複数台の拠点は最後に通知が届いたエッジを代表にする (埋め込みの先頭は順不同)
+import { pickPrimaryEdge } from '@/lib/edge/primary-edge'
 
 type StoreRow = {
   id: string
@@ -119,7 +121,7 @@ export default function StoreMap({
     markersRef.current = markers
 
     stores.forEach((s) => {
-      const disp = displayDot(s.edge_devices?.[0])   // TC3: 派生色/ラベル
+      const disp = displayDot(pickPrimaryEdge(s.edge_devices))   // TC3: 派生色/ラベル
       // F28: data-store-id 属性を仕込んでおき、popupopen ハンドラ側で
       // クリックを捕まえて router.push に流す（プレーン <a> による
       // フルページリロードを回避）。
@@ -200,7 +202,7 @@ export default function StoreMap({
       const variant: 'normal' | 'highlight' | 'dimmed' =
         !highlight        ? 'normal' :
         highlight.has(s.id) ? 'highlight' : 'dimmed'
-      m.setIcon(makeIcon(displayDot(s.edge_devices?.[0]).color, variant))
+      m.setIcon(makeIcon(displayDot(pickPrimaryEdge(s.edge_devices)).color, variant))
     })
 
     // Fit the viewport to highlighted stores (if any).

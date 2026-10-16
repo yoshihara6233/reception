@@ -11,6 +11,7 @@ import { AppShell } from '@/components/AppShell'
 import { StoresDashboard } from '@/components/StoresDashboard'
 import type { StoreDashRow, AlertRecord } from '@/components/StoresDashboard'
 import { deriveEdgeStatus, isMonitoringDown } from '@/lib/edge-status'
+import { pickPrimaryEdge } from '@/lib/edge/primary-edge'
 import { resolveMonitorScope } from '@/lib/tenant/monitor-scope'
 import { TenantGate } from '@/components/TenantGate'
 
@@ -127,7 +128,7 @@ export default async function StoresIndex() {
   //    エッジ（クラッシュ/回線断）も interrupted として確実にアラート化する。
   //    未設置(unconfigured)・正常監視中(monitoring) はアラートにしない。
   stores.forEach((s) => {
-    const dev = s.edge_devices?.[0]
+    const dev = pickPrimaryEdge(s.edge_devices)   // 複数台の拠点は最後に通知が届いたエッジ
     const d   = deriveEdgeStatus(dev?.status, dev?.last_seen_at)
     if (d.plane === 'monitoring' && d.mode === 'error') {
       alerts.push({ storeId: s.id, storeName: s.name, kind: 'edge_error',

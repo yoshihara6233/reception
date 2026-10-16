@@ -24,6 +24,7 @@ import { createSupabaseService } from '@/lib/supabase/server'
 import { MONITOR_STALE_SECONDS } from '@intereco/shared'
 import { jstNow, isDue, type PatrolSettings } from '@/lib/security/patrol-schedule'
 import { listPatrolCameraIds, buildCaptureCommand } from '@/lib/security/patrol-dispatch'
+import { pickPrimaryEdge } from '@/lib/edge/primary-edge'
 import { generateAndStoreRunReport } from '@/lib/security/patrol-report'
 
 export const runtime = 'nodejs'
@@ -64,12 +65,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   for (const s of due as PatrolSettings[]) {
     const storeId = s.store_id as string
 
-    // エッジ（1店舗=1エッジ）を取得。単一スロットを踏まないよう空きと応答を確認。
-    const { data: edge } = await supa
+    // エッジを取得。単一スロットを踏まないよう空きと応答を確認。
+    // 複数台の拠点では maybeSingle が失敗して no_edge になっていたので、
+    // 全件を読んで最後に通知が届いたエッジへ投入する (2026-10-16)。
+    const { data: edges } = await supa
       .from('edge_devices')
       .select('id, pending_command, last_seen_at')
       .eq('store_id', storeId)
-      .maybeSingle()
+    const edge = pickPrimaryEdge(edges)
 
     if (!edge) { skippedOffline++; details.push({ store_id: storeId, result: 'no_edge' }); continue }
     const fresh = edge.last_seen_at && (now.getTime() - new Date(edge.last_seen_at).getTime()) < staleMs

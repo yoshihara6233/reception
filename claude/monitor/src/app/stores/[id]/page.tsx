@@ -3,6 +3,7 @@ import { createSupabaseServer } from '@/lib/supabase/server'
 import { AppShell } from '@/components/AppShell'
 import { MonitorWorkspace } from '@/components/MonitorWorkspace'
 import type { RecorderVendor } from '@/lib/types/db'
+import { pickPrimaryEdge } from '@/lib/edge/primary-edge'
 
 interface StorePayload {
   id: string
@@ -10,6 +11,7 @@ interface StorePayload {
   area_code: string | null
   edge_devices: {
     id: string
+    last_seen_at: string | null
     recorders: {
       vendor: RecorderVendor
       recorder_cameras: { id: string; channel: number; name: string; grid_pos: number; folder_path: string | null; enabled: boolean }[]
@@ -27,7 +29,7 @@ export default async function StorePage(
     .from('stores')
     .select(`
       id, name, area_code,
-      edge_devices ( id,
+      edge_devices ( id, last_seen_at,
         recorders ( vendor, recorder_cameras ( id, channel, name, grid_pos, folder_path, enabled ) )
       )
     `)
@@ -37,7 +39,8 @@ export default async function StorePage(
   if (!data) notFound()
   const store = data as never as StorePayload
 
-  const edge    = store.edge_devices?.[0]
+  // エッジが複数ある拠点は、最後に通知が届いたエッジを代表にする (埋め込みの先頭は順不同)
+  const edge    = pickPrimaryEdge(store.edge_devices)
   // Attach the owning recorder's vendor to each camera so the workspace can
   // gate the playback (VOD) button — VOD_VENDORS を見て出し分ける。
   // enabled=false (G・VMS で無効にしたカメラと、G・VMS から消えて removed_at の入ったカメラ) は表示しない

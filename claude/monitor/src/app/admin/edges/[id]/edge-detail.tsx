@@ -94,10 +94,12 @@ export function EdgeDetail({ edge, bundles = [] }: { edge: EdgePayload; bundles?
   const hostDirty = go2rtcHost !== (edge.go2rtc_host ?? '')
 
   async function deleteEdge() {
-    if (!confirm(`エッジ "${edge.name}" を削除しますか？\n関連レコーダ・カメラ・セッションも削除されます。`)) return
+    if (!confirm(`エッジ "${edge.name}" を削除しますか？\n関連レコーダ・カメラ・セッションと、そのカメラの発報の記録も削除されます。`)) return
     const res = await fetch(`/api/admin/edges/${edge.id}`, { method: 'DELETE' })
-    if (res.ok) router.push('/admin/edges')
-    else alert(`削除失敗: ${res.status}`)
+    if (res.ok) { router.push('/admin/edges'); return }
+    // 状態コードだけでは理由が分からないので、サーバが返す error / message も出す
+    const j = await res.json().catch(() => ({})) as { error?: string; message?: string }
+    alert(`削除失敗: ${j.error ?? res.status}${j.message ? `\n${j.message}` : ''}`)
   }
 
   async function saveGo2rtcHost() {

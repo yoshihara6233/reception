@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { AppShell } from '@/components/AppShell'
 import type { RecorderVendor } from '@/lib/types/db'
+import { pickPrimaryEdge } from '@/lib/edge/primary-edge'
 import MultiVodPlayer, { type MultiVodCam } from './multi-vod-player'
 
 /**
@@ -32,7 +33,7 @@ export default async function MultiVodPage({
     .from('stores')
     .select(`
       id, name,
-      edge_devices ( recorders ( vendor, recorder_cameras ( id, channel, name, frigate_camera ) ) )
+      edge_devices ( id, last_seen_at, recorders ( vendor, recorder_cameras ( id, channel, name, frigate_camera ) ) )
     `)
     .eq('id', storeId)
     .single()
@@ -40,9 +41,10 @@ export default async function MultiVodPage({
 
   const s = store as unknown as {
     name: string
-    edge_devices: { recorders: { vendor: RecorderVendor; recorder_cameras: { id: string; channel: number; name: string; frigate_camera: string | null }[] }[] }[]
+    edge_devices: { id: string; last_seen_at: string | null; recorders: { vendor: RecorderVendor; recorder_cameras: { id: string; channel: number; name: string; frigate_camera: string | null }[] }[] }[]
   }
-  const candidates: MultiVodCam[] = (s.edge_devices?.[0]?.recorders ?? [])
+  // 複数台の拠点は最後に通知が届いたエッジのカメラを候補にする (埋め込みの先頭は順不同)
+  const candidates: MultiVodCam[] = (pickPrimaryEdge(s.edge_devices)?.recorders ?? [])
     .filter((r) => r.vendor === 'frigate')
     .flatMap((r) => r.recorder_cameras)
     .filter((c) => !!c.frigate_camera)
