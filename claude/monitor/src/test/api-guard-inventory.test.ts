@@ -206,6 +206,8 @@ const EXPECTED: Record<string, Guard> = {
   '/api/edge/feedback/status': 'device-token',
   // 要望の画像 1 枚の受け口（§12.6）。その拠点の local_id にだけ付けられる。
   '/api/edge/feedback/attachment': 'device-token',
+  // 使われ方の 1 日の集計（GVMS_CLOUD_SPEC §12.4・D-2-22）。約款の施行前は GVMS_USAGE_INTAKE で閉じる
+  '/api/edge/usage': 'device-token',
   // クラウドの画面から送る要望（テナント管理者だけ・基本設計 §3.1）
   '/api/feedback': 'tenant-admin',
   // 自分のテナントの要望の画像を見る（RLS で読めたものだけ署名する）
