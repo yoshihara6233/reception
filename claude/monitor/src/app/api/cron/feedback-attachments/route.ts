@@ -8,12 +8,15 @@
  *
  * 1 回に 500 件ずつ、最大 20 回まで回す。消すのに失敗した分は行を書き換えず、次の実行で取り直す。
  *
+ * あわせて使われ方の 1 日の集計（edge_usage_reports・D-2-22）の 25 か月を過ぎた日を消す。
+ *
  * 認証: 他の cron と同じ CRON_SECRET（Bearer / x-cron-secret）。
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { attachmentPurgeCutoff } from '@/lib/feedback/image'
 import { removeAttachments } from '@/lib/feedback/attachment-store'
+import { usageRetentionCutoff } from '@/lib/edge-usage/report'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,5 +60,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     if (rows.length < BATCH) break
   }
 
-  return NextResponse.json({ ok: true, purged, failed, cutoff })
+  // 使われ方の集計も同じ 1 日 1 回の片付けで、25 か月を過ぎた日を消す（§12.4・D-2-22）
+  const usageCutoff = usageRetentionCutoff(now)
+  const { error: usageErr } = await svc.from('edge_usage_reports').delete().lt('day', usageCutoff)
+
+  return NextResponse.json({ ok: true, purged, failed, cutoff, usage_cutoff: usageCutoff, usage_purge_failed: !!usageErr })
 }

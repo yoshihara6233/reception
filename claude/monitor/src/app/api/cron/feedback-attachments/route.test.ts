@@ -31,6 +31,10 @@ function seed() {
       { id: 'pending', tenant_id: 't1', ...decl, attachment_path: null, attachment_received_at: null },
       { id: 'none', tenant_id: 't1', attachment_path: null, attachment_received_at: null },
     ],
+    edge_usage_reports: [
+      { id: 'u-old', edge_id: 'e1', day: ago(800).slice(0, 10) },
+      { id: 'u-new', edge_id: 'e1', day: ago(30).slice(0, 10) },
+    ],
   })
   for (const p of ['t1/old', 't2/older', 't1/recent']) h.db.objects.set(`feedback-attachments/${p}`, { bytes: new Uint8Array([1]) })
 }
@@ -86,5 +90,13 @@ describe('/api/cron/feedback-attachments', () => {
 
   it('x-cron-secret でも通る', async () => {
     expect((await call({ 'x-cron-secret': 's3cret' })).status).toBe(200)
+  })
+})
+
+describe('使われ方の集計の片付け (D-2-22)', () => {
+  it('25 か月を過ぎた日だけを消す', async () => {
+    const j = await (await call()).json()
+    expect(j.usage_purge_failed).toBe(false)
+    expect(h.db.rows('edge_usage_reports').map((r) => r.id)).toEqual(['u-new'])
   })
 })
