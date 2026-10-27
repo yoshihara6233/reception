@@ -124,6 +124,44 @@ export function mayWithholdServiceRole(opts: {
   mintedToken: boolean
   /** エッジが x-scoped-until で「手持ちがまだ有効」と申告している */
   clientTokenStillFresh: boolean
+  /**
+   * G・VMS 本体の内蔵アップリンク (nvmsd) か。**真なら無条件で省く。**
+   *
+   * nvmsd は bootstrap を一度も使わず、service_role を必要としない (G・VMS 側の
+   * internal/uplink に呼び出しが無い)。一方でその device_token は現場のサーバの
+   * /etc/nvms/uplink.env に置かれ、現場の管理者や販売店が root で読める。ここで鍵を
+   * 返すと、1 拠点のトークンの漏れが全テナントの DB・置き場の読み書きになる
+   * (2026-10-28 の自主診断で発見)。丸腰の心配 (上の安全装置) も、使わない鍵には当たらない。
+   */
+  gvmsUplink?: boolean
 }): boolean {
+  if (opts.gvmsUplink) return true
   return opts.scopedOnly && (opts.mintedToken || opts.clientTokenStillFresh)
+}
+
+/**
+ * このエッジが G・VMS 本体の内蔵アップリンク (nvmsd) か。
+ *
+ * 次のどれか 1 つでも当たれば G・VMS とみなす (どれも G・VMS にしか付かない印):
+ *   - heartbeat の agent_version が `nvmsd/` で始まる (管理画面・艦隊集計と同じ見分け方)
+ *   - vendor='nvms' のレコーダを持つ (エンロールで自動で作る)
+ *   - kind='nvms' のエンロールトークンで登録された (最初の heartbeat の前でも当たる)
+ *
+ * 照会に失敗したときは false (= 従来どおり) を返す。試作のエッジ箱 (intereco-edge) は
+ * まだ service_role で動くため、DB の一時的な失敗で鍵を止めると止まってしまう。
+ * G・VMS の拠点は agent_version でたいてい先に当たる。
+ */
+export async function isGvmsUplinkEdge(
+  svc: SupabaseClient,
+  edge: { id: string; agent_version?: string | null },
+): Promise<boolean> {
+  if (edge.agent_version?.startsWith('nvmsd/')) return true
+  const [rec, tok] = await Promise.all([
+    svc.from('recorders').select('id').eq('edge_id', edge.id).eq('vendor', 'nvms').limit(1),
+    svc.from('enrollment_tokens').select('id').eq('edge_id', edge.id).eq('kind', 'nvms').limit(1),
+  ])
+  if (rec.error || tok.error) {
+    console.error('[bootstrap] gvms uplink lookup failed', rec.error?.message ?? tok.error?.message)
+  }
+  return (rec.data?.length ?? 0) > 0 || (tok.data?.length ?? 0) > 0
 }
