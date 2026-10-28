@@ -133,6 +133,7 @@ const EXPECTED: Record<string, Guard> = {
   '/api/admin/tenants/[id]': 'admin',
   '/api/admin/tenants': 'admin',
   '/api/admin/users/[id]': 'admin',
+  '/api/admin/users/[id]/mfa-reset': 'admin',
   '/api/admin/users': 'admin',
   '/api/admin/vod/cleanup': 'cron',
   '/api/alarms/frames/[frameId]/image': 'session-only',

@@ -9,6 +9,11 @@
  * （ロール判定は非許可パスに来た認証済みリクエストのみ）。ページ側の getUser が
  * 従来どおりセッションを扱うため、許可パスで getUser を省いても認証は成立する。
  *
+ * **多要素認証の確認（2026-10-28）**: 多要素を登録した利用者は、パスワードのあと番号を確かめる
+ * まで（トークンが aal2 になるまで）非許可パスを使えない。画面は /login/mfa へ、API は 401。
+ * 判定はロールと同じ getUser の結果から作り、同じキャッシュに載せる（往復を増やさない）。
+ * 許可パス（ログイン・パスワード再設定・キオスク）は従来どおり見ない（lib/auth/mfa.ts）。
+ *
  * さらに、ライブ画像（`/api/edges/**` を1〜2秒ごとにポーリング）は非許可パスなので、
  * 1フレームごとに `getUser()`＋`admin_users` 1行引きが走っていた。判定をトークン単位で
  * 30秒メモ化して往復を削る（理由と代償は `lib/auth/token-cache.ts` 冒頭）。
@@ -19,12 +24,19 @@ import { createServerClient } from '@supabase/ssr'
 import { createTokenCache, hashToken, jwtExpiresAtMs } from '@/lib/auth/token-cache'
 import { legacyRedirectTarget } from '@/lib/legacy-host'
 import { appBaseUrl } from '@/lib/app-url'
+import { mfaPending } from '@/lib/auth/mfa'
+
+/** トークンについての判定（手荷物検査店長か・多要素の番号の確認が済んでいないか）。 */
+interface Verdict {
+  isBaggageManager: boolean
+  mfaPending: boolean
+}
 
 /**
- * トークン → 「手荷物検査店長か」。
+ * トークン → 判定。
  * null は未ログイン（＝このミドルウェアは素通しし、各ページの getUser に委ねる）。
  */
-const roleCache = createTokenCache<boolean | null>()
+const roleCache = createTokenCache<Verdict | null>()
 
 /** テスト用（ロールを差し替えたときに前のテストの判定を持ち越さない）。 */
 export function resetMiddlewareRoleCache(): void {
@@ -82,29 +94,33 @@ export async function middleware(req: NextRequest) {
   const token = session?.access_token ?? null
   const tokenHash = token ? await hashToken(token) : null
 
-  let isBaggageManager: boolean | null
+  let verdict: Verdict | null
   const hit = tokenHash ? roleCache.read(tokenHash, 'role') : undefined
   if (hit) {
-    isBaggageManager = hit.value
+    verdict = hit.value
   } else {
     const { data: { user } } = await supa.auth.getUser()
     if (!user) {
-      isBaggageManager = null
+      verdict = null
     } else {
+      // getUser が同じトークンの署名と失効を確かめたあとなので、トークンの aal を信じてよい
+      const pending = mfaPending(user, token)
       const { data: profile, error } = await supa
         .from('admin_users').select('role').eq('auth_user_id', user.id).single()
       // 参照できなかった（瞬断など）ときは従来どおり素通しし、**覚えない**。
       // ここで false を30秒持つと、直後に境界が効かなくなる窓を自分で作ってしまう。
-      if (error) return res
-      isBaggageManager = profile?.role === 'baggage_manager'
+      // ただし多要素の確認が済んでいない人は、ロールが分からなくても止める。
+      if (error) return pending ? mfaBlock(req, path) : res
+      verdict = { isBaggageManager: profile?.role === 'baggage_manager', mfaPending: pending }
     }
     if (tokenHash && token) {
-      roleCache.write(tokenHash, 'role', isBaggageManager, jwtExpiresAtMs(token))
+      roleCache.write(tokenHash, 'role', verdict, jwtExpiresAtMs(token))
     }
   }
 
-  if (isBaggageManager === null) return res  // 未ログインは各ページの getUser がログインへ誘導。
-  if (!isBaggageManager) return res          // 通常ロールは制限しない。
+  if (verdict === null) return res  // 未ログインは各ページの getUser がログインへ誘導。
+  if (verdict.mfaPending) return mfaBlock(req, path)
+  if (!verdict.isBaggageManager) return res  // 通常ロールは制限しない。
 
   // 手荷物検査店長が非許可パスに来た → API は 403、ページは /baggage へ。
   if (path.startsWith('/api/')) {
@@ -113,6 +129,21 @@ export async function middleware(req: NextRequest) {
   const url = req.nextUrl.clone()
   url.pathname = '/baggage'
   url.search = ''
+  return NextResponse.redirect(url)
+}
+
+/**
+ * 多要素の番号の確認が済んでいない人を止める。API は 401（画面の fetch がログインへ戻す）、
+ * 画面は /login/mfa へ（確かめたら元の画面へ戻れるよう next を付ける。戻り先の可否は safeNext が決める）。
+ */
+function mfaBlock(req: NextRequest, path: string): NextResponse {
+  if (path.startsWith('/api/')) {
+    return NextResponse.json({ error: 'mfa_required' }, { status: 401 })
+  }
+  const url = req.nextUrl.clone()
+  url.pathname = '/login/mfa'
+  url.search = ''
+  url.searchParams.set('next', path + req.nextUrl.search)
   return NextResponse.redirect(url)
 }
 

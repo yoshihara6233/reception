@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
-import { SlidersHorizontal } from 'lucide-react'
+import { ShieldCheck, SlidersHorizontal } from 'lucide-react'
 import { useLang } from '@/lib/i18n/context'
 import { LangSwitcher } from './LangSwitcher'
 import { ThemeToggle } from './ThemeToggle'
@@ -204,6 +204,15 @@ export function AppHeader({
             </svg>
           </Link>
         )}
+        {/* 多要素認証の設定（2026-10-28・利用者が自分で登録・解除する） */}
+        <Link
+          href="/account/security"
+          aria-label={t.nav.mfa}
+          title={t.nav.mfa}
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
+        >
+          <ShieldCheck size={18} strokeWidth={1.5} aria-hidden />
+        </Link>
         {/* F25: userName + avatar は StatusBar に移行 */}
         {/* F24: logout — rightmost */}
         <LogoutButton />
