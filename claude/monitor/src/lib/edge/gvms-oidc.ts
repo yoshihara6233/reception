@@ -20,6 +20,38 @@ function isLoopbackHost(hostname: string): boolean {
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]'
 }
 
+/** 社内の網でだけ引ける名前の末尾 (公の DNS では誰も取れない)。 */
+const INTERNAL_SUFFIXES = ['.local', '.lan', '.internal', '.intranet', '.corp', '.home.arpa', '.localdomain']
+
+function privateIPv4(h: string): boolean {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h)
+  if (!m) return false
+  const [a, b] = [Number(m[1]), Number(m[2])]
+  if ([m[1], m[2], m[3], m[4]].some((x) => Number(x) > 255)) return false
+  return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127)
+}
+
+/**
+ * 戻り先のホストとして受けてよいか (2026-10-29・自主診断 ASVS 10.4.1)。
+ *
+ * 戻り先は拠点の heartbeat の申告で決まる。以前は https ならホストを問わず登録していたので、
+ * 拠点のトークン (device_token) を持つ人が任意の外部のホストを戻り先にでき、その拠点へ
+ * サインインした利用者の認可コードを外へ送らせられた。受けるのは次だけにする:
+ *   - ループバック・私設の IP (10/8・172.16/12・192.168/16・100.64/10・IPv6 の ULA)
+ *   - クラウドがその拠点に割り当てた名前 (edge_devices.site_hostname・拠点ごとの証明書の名前)
+ *   - 社内の網でだけ引ける名前 (ドットの無い名前・.local・.lan・.internal など)
+ */
+export function allowedRedirectHost(hostname: string, siteHostname: string | null): boolean {
+  const h = hostname.toLowerCase().replace(/\.$/, '')
+  if (isLoopbackHost(h)) return true
+  if (privateIPv4(h)) return true
+  if (h.startsWith('[')) return /^\[f[cd][0-9a-f]{2}:/i.test(h)  // IPv6 は ULA (fc00::/7) だけ
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(h)) return false         // 公の IPv4
+  if (siteHostname && h === siteHostname.toLowerCase().replace(/\.$/, '')) return true
+  if (!h.includes('.')) return true
+  return INTERNAL_SUFFIXES.some((s) => h.endsWith(s))
+}
+
 /**
  * 申告された戻り先を検査する。形の崩れたものは捨てる（heartbeat は落とさない）。
  *
@@ -29,7 +61,7 @@ function isLoopbackHost(hostname: string): boolean {
  * 足された https の名前の戻り先が使えず、SSO が invalid redirect_uri で落ちていた。
  * 1 件の受けられない値で一覧全体を止めないよう、ここで落とす。
  */
-export function sanitizeRedirectUris(raw: unknown): string[] {
+export function sanitizeRedirectUris(raw: unknown, siteHostname: string | null = null): string[] {
   if (!Array.isArray(raw)) return []
   const out = new Set<string>()
   for (const v of raw) {
@@ -39,6 +71,7 @@ export function sanitizeRedirectUris(raw: unknown): string[] {
     if ((u.protocol !== 'https:' && u.protocol !== 'http:') || u.username || u.password || u.search || u.hash) continue
     if (u.pathname !== GVMS_CALLBACK_PATH) continue
     if (u.protocol === 'http:' && !isLoopbackHost(u.hostname)) continue
+    if (!allowedRedirectHost(u.hostname, siteHostname)) continue
     out.add(`${u.protocol}//${u.host}${GVMS_CALLBACK_PATH}`)
     if (out.size >= MAX_URIS) break
   }
@@ -98,7 +131,12 @@ export async function syncGvmsOidcClient(
   svc: SupabaseClient, edgeId: string, capabilities: string[] | null, rawUris: unknown,
 ): Promise<OidcSyncResult> {
   const wants = (capabilities ?? []).includes('oidc')
-  const uris = wants ? sanitizeRedirectUris(rawUris) : []
+  let siteHostname: string | null = null
+  if (wants) {
+    const { data: e } = await svc.from('edge_devices').select('site_hostname').eq('id', edgeId).maybeSingle()
+    siteHostname = (e?.site_hostname as string | null | undefined) ?? null
+  }
+  const uris = wants ? sanitizeRedirectUris(rawUris, siteHostname) : []
   const { data: cur, error: readErr } = await svc.from('gvms_oidc_clients')
     .select('client_id, redirect_uris').eq('edge_id', edgeId).maybeSingle()
   if (readErr) return 'skipped'  // 表がまだ無い（migration の前）など

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { sanitizeRedirectUris, syncGvmsOidcClient, GVMS_CALLBACK_PATH } from './gvms-oidc'
+import { allowedRedirectHost, sanitizeRedirectUris, syncGvmsOidcClient, GVMS_CALLBACK_PATH } from './gvms-oidc'
 
 describe('戻り先の検査', () => {
   it('コールバックのパスの https (と http のループバック) だけを、重複を除いて並べて残す', () => {
@@ -26,12 +26,30 @@ describe('戻り先の検査', () => {
       'https://site200.sites.genesis-edge.com:8443/api/v1/auth/oidc/callback',
       'http://nvms.local/api/v1/auth/oidc/callback',
       'http://127.0.0.1:8080/api/v1/auth/oidc/callback',
-    ])).toEqual([
+    ], 'site200.sites.genesis-edge.com')).toEqual([
       'http://127.0.0.1:8080/api/v1/auth/oidc/callback',
       'https://10.9.0.1:8443/api/v1/auth/oidc/callback',
       'https://192.168.0.200:8443/api/v1/auth/oidc/callback',
       'https://site200.sites.genesis-edge.com:8443/api/v1/auth/oidc/callback',
     ])
+  })
+  it('★戻り先のホストは LAN・拠点に割り当てた名前・社内の名前だけ (ASVS 10.4.1)', () => {
+    const site = 'site200.sites.genesis-edge.com'
+    for (const ok of ['localhost', '127.0.0.1', '10.0.0.5', '172.20.1.1', '192.168.0.200', '100.64.1.2',
+      '[fd12:3456::1]', site, 'SITE200.sites.genesis-edge.com', 'nvms', 'nvms.local', 'vms.corp', 'gvms.home.arpa']) {
+      expect(allowedRedirectHost(ok, site), ok).toBe(true)
+    }
+    for (const ng of ['evil.example', 'site201.sites.genesis-edge.com', '8.8.8.8', '172.32.0.1', '[2001:db8::1]',
+      'gvms-cloud.com', 'local.evil.example']) {
+      expect(allowedRedirectHost(ng, site), ng).toBe(false)
+    }
+    expect(allowedRedirectHost(site, null)).toBe(false)  // 割り当てが無ければ公の名前は受けない
+  })
+  it('★外部のホストを混ぜた申告は、そのホストだけ捨てる', () => {
+    expect(sanitizeRedirectUris([
+      `https://192.168.0.200:8443${GVMS_CALLBACK_PATH}`,
+      `https://evil.example${GVMS_CALLBACK_PATH}`,
+    ], null)).toEqual([`https://192.168.0.200:8443${GVMS_CALLBACK_PATH}`])
   })
   it('10 件まで', () => {
     const many = Array.from({ length: 20 }, (_, i) => `https://10.0.0.${i}${GVMS_CALLBACK_PATH}`)
