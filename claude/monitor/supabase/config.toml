@@ -300,8 +300,10 @@ max_enrolled_factors = 10
 
 # Control MFA via App Authenticator (TOTP)
 [auth.mfa.totp]
-enroll_enabled = false
-verify_enabled = false
+# 認証アプリの番号 (TOTP) の多要素を使う (2026-10-28・src/lib/auth/mfa.ts)。
+# 本番は Supabase のダッシュボード (Authentication → Multi-Factor) で TOTP を有効にしておくこと
+enroll_enabled = true
+verify_enabled = true
 
 # Configure MFA via Phone Messaging
 [auth.mfa.phone]

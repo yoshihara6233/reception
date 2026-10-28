@@ -27,6 +27,8 @@ export interface Msg {
     security: string
     // F24: header right-side icon labels (tooltips + aria-labels)
     logout:   string
+    /** 多要素認証の設定 (/account/security・2026-10-28) */
+    mfa:      string
   }
   kpi: {
     total:      string
@@ -392,6 +394,7 @@ const ja: Msg = {
     bcp:      'BCP',
     security: 'PATROL',
     logout:   'ログアウト',
+    mfa:      '多要素認証',
   },
   kpi: {
     total:      '全拠点',
@@ -738,6 +741,7 @@ const en: Msg = {
     bcp:      'BCP',
     security: 'PATROL',
     logout:   'Log out',
+    mfa:      'Two-factor authentication',
   },
   kpi: {
     total:      'Total',
@@ -1084,6 +1088,7 @@ const zh: Msg = {
     bcp:      'BCP',
     security: 'PATROL',
     logout:   '退出',
+    mfa:      '双重验证',
   },
   kpi: {
     total:      '站点总数',
@@ -1430,6 +1435,7 @@ const ko: Msg = {
     bcp:      'BCP',
     security: 'PATROL',
     logout:   '로그아웃',
+    mfa:      '2단계 인증',
   },
   kpi: {
     total:      '전체 거점',

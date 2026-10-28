@@ -12,6 +12,7 @@ import { requireSuperAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { countSuperAdmins } from '@/lib/admin/super-admin-floor'
 import { UserForm, type Role } from '../../users/user-form'
+import { MfaResetSection } from '../../users/mfa-reset'
 
 export const dynamic = 'force-dynamic'
 
@@ -67,6 +68,7 @@ export default async function EditOpsUserPage(
           stores={[]}
           canCreateSuperAdmin
         />
+        <MfaResetSection id={id} name={(target as { display_name: string | null }).display_name ?? (target as { email: string }).email} />
       </div>
     </AdminShell>
   )

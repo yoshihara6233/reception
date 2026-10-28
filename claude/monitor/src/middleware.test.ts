@@ -216,3 +216,61 @@ describe('旧 URL の転送（middleware を通して）', () => {
     expect(res.headers.get('location')).toBeNull()
   })
 })
+
+/**
+ * 多要素認証（2026-10-28）: 多要素を登録した人は、番号を確かめるまで（トークンが aal2 になるまで）
+ * 非許可パスを使えない。判定はロールと同じ getUser から作り、往復を増やさない。
+ */
+describe('多要素の番号の確認が済んでいない人', () => {
+  const b64 = (o: unknown) =>
+    btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  const jwt = (aal: string) => `${b64({ alg: 'none' })}.${b64({ aal, n: ++tokenSeq })}.sig`
+  function asMfaUser(aal: string) {
+    asRole('store_manager')
+    state.user = { id: 'u-1', factors: [{ status: 'verified' }] } as unknown as { id: string }
+    state.token = jwt(aal)
+  }
+
+  it('画面は /login/mfa へ（元の画面を next に付ける）', async () => {
+    asMfaUser('aal1')
+    const res = await middleware(req('/stores?x=1'))
+    expect(res.status).toBe(307)
+    const loc = new URL(res.headers.get('location')!)
+    expect(loc.pathname).toBe('/login/mfa')
+    expect(loc.searchParams.get('next')).toBe('/stores?x=1')
+  })
+
+  it('API は 401', async () => {
+    asMfaUser('aal1')
+    const res = await middleware(req('/api/vod'))
+    expect(res.status).toBe(401)
+  })
+
+  it('拠点の SSO の同意の画面も止める（番号を確かめてから拠点のトークンを出す）', async () => {
+    asMfaUser('aal1')
+    const res = await middleware(req('/oauth/consent?authorization_id=abc'))
+    expect(new URL(res.headers.get('location')!).pathname).toBe('/login/mfa')
+  })
+
+  it('aal2 になれば通す', async () => {
+    asMfaUser('aal2')
+    const res = await middleware(req('/stores'))
+    expect(res.status).toBe(200)
+    expect(res.headers.get('location')).toBeNull()
+  })
+
+  it('ログインと番号の画面は止めない（許可パス）', async () => {
+    asMfaUser('aal1')
+    for (const p of ['/login', '/login/mfa', '/api/auth/callback']) {
+      const res = await middleware(req(p))
+      expect(res.headers.get('location')).toBeNull()
+    }
+  })
+
+  it('★判定はキャッシュされ、getUser は 1 回だけ', async () => {
+    asMfaUser('aal1')
+    await middleware(req('/api/edges/e1/grid'))
+    await middleware(req('/api/edges/e1/grid'))
+    expect(getUserMock).toHaveBeenCalledTimes(1)
+  })
+})

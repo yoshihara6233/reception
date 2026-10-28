@@ -18,6 +18,7 @@
   },
   "map": [
     ["app/login", ["2"]],
+    ["app/account", ["2"]],
     ["app/forgot-password", ["2"]],
     ["app/reset-password", ["2"]],
     ["app/oauth", ["2", "9"]],

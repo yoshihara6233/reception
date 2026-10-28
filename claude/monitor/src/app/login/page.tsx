@@ -44,9 +44,20 @@ export default function LoginPage() {
     setError(null)
     setBusy(true)
     const { error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) {
+      setBusy(false)
+      return setError(error.message)
+    }
+    const next = new URL(window.location.href).searchParams.get('next')
+    // 多要素を登録している人は、番号を確かめる画面へ（2026-10-28・lib/auth/mfa.ts）。
+    // 戻り先 (next) はそのまま渡し、可否は番号の画面で safeNext が決める
+    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
     setBusy(false)
-    if (error) return setError(error.message)
-    router.push(safeNext(new URL(window.location.href).searchParams.get('next')))
+    if (aal && aal.nextLevel === 'aal2' && aal.currentLevel !== 'aal2') {
+      router.push(next ? `/login/mfa?next=${encodeURIComponent(next)}` : '/login/mfa')
+      return
+    }
+    router.push(safeNext(next))
   }
 
   return (

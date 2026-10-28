@@ -3,6 +3,7 @@ import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
 import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { UserForm, type Role, type TenantOpt, type StoreOpt } from '../user-form'
+import { MfaResetSection } from '../mfa-reset'
 
 export default async function EditUserPage(
   { params }: { params: Promise<{ id: string }> },
@@ -75,6 +76,7 @@ export default async function EditUserPage(
           stores={(stores ?? []) as StoreOpt[]}
           canCreateSuperAdmin={me.role === 'super_admin'}
         />
+        <MfaResetSection id={id} name={(target as { display_name: string | null }).display_name ?? (target as { email: string }).email} />
       </div>
     </AdminShell>
   )
