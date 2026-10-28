@@ -20,11 +20,13 @@
  *
  * ⚠ 移行中は service_role も従来通り返す。Phase B4（全エッジがスコープ運用に載ったら）で
  *   service_role 返却を撤廃し、device_token 漏洩時の影響限定を完成させる。
+ *   **ただし G・VMS 本体の内蔵アップリンク (nvmsd) には、移行を待たずに一切返さない**
+ *   (2026-10-28・isGvmsUplinkEdge)。nvmsd は鍵を使わず、トークンは現場のサーバに置かれるため。
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createSupabaseService } from '@/lib/supabase/server'
-import { edgeAuthEmail, ensureEdgeAuthPassword, mayWithholdServiceRole } from '@/lib/edge/auth-provision'
+import { edgeAuthEmail, ensureEdgeAuthPassword, isGvmsUplinkEdge, mayWithholdServiceRole } from '@/lib/edge/auth-provision'
 import { hashDeviceToken } from '@/lib/edge/device-token'
 
 /**
@@ -46,7 +48,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const supa = createSupabaseService()
   const { data, error } = await supa
     .from('edge_devices')
-    .select('id, store_id, scoped_only, auth_user_id, auth_password_enc, desired_agent_version, desired_cloudflared_version')
+    .select('id, store_id, scoped_only, auth_user_id, auth_password_enc, agent_version, desired_agent_version, desired_cloudflared_version')
     .eq('device_token_hash', hashDeviceToken(token))
     .maybeSingle()
 
@@ -128,6 +130,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     scopedOnly: data.scoped_only === true,
     mintedToken: !!body.scoped_access_token,
     clientTokenStillFresh: stillFresh,
+    gvmsUplink: await isGvmsUplinkEdge(supa, { id: data.id, agent_version: data.agent_version as string | null }),
   })
   if (!withhold) body.supabase_service_role_key = key
 

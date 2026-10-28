@@ -34,4 +34,13 @@ describe('mayWithholdServiceRole（Phase B4 の安全装置）', () => {
       scopedOnly: true, mintedToken: false, clientTokenStillFresh: false,
     })).toBe(false)
   })
+
+  it('★G・VMS の内蔵アップリンクには、トークンの有無にかかわらず鍵を返さない (2026-10-28)', () => {
+    // nvmsd は bootstrap の鍵を使わない。トークンは現場のサーバに置かれ、漏れると全テナントに届く。
+    for (const minted of [false, true]) for (const fresh of [false, true]) for (const scoped of [false, true]) {
+      expect(mayWithholdServiceRole({
+        scopedOnly: scoped, mintedToken: minted, clientTokenStillFresh: fresh, gvmsUplink: true,
+      })).toBe(true)
+    }
+  })
 })
