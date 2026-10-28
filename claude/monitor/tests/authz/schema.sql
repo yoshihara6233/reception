@@ -282,45 +282,67 @@ create policy "edges_select" on public.edge_devices
         )
     )
   );
--- edges_modify: 20260621_003 修正後(select と同じ可視範囲にスコープ)。
-create policy "edges_modify" on public.edge_devices
-  for all
-  using (
-    exists (select 1 from public.admin_users u
-      where u.auth_user_id = auth.uid()
-        and (u.role = 'super_admin'
-          or exists (select 1 from public.stores s
-                     where s.id = edge_devices.store_id
-                       and (u.role = 'tenant_admin' and s.tenant_id in (
-                              select tenant_id from public.admin_users where auth_user_id = auth.uid()))
-                          or edge_devices.store_id = any(u.store_ids))))
+-- 書き込み: 20261028120000_rls_write_scope の最終状態。
+--   edge_devices は super_admin だけ。録画機・カメラは担当の管理者だけ（店舗の範囲）。
+create or replace function public.can_manage_store(p_store uuid)
+returns boolean language sql stable security definer set search_path = public, pg_temp as $$
+  select p_store is not null and exists (
+    select 1 from public.admin_users u
+     where u.auth_user_id = auth.uid()
+       and (
+         u.role = 'super_admin'
+         or (u.role = 'tenant_admin'
+             and exists (select 1 from public.stores s
+                          where s.id = p_store and s.tenant_id = u.tenant_id))
+         or (u.role = 'store_manager'
+             and p_store = any (coalesce(u.store_ids, '{}'::uuid[])))
+       )
   )
-  with check (
-    exists (select 1 from public.admin_users u
-      where u.auth_user_id = auth.uid()
-        and (u.role = 'super_admin'
-          or exists (select 1 from public.stores s
-                     where s.id = edge_devices.store_id
-                       and (u.role = 'tenant_admin' and s.tenant_id in (
-                              select tenant_id from public.admin_users where auth_user_id = auth.uid()))
-                          or edge_devices.store_id = any(u.store_ids))))
-  );
+$$;
+create or replace function public.store_of_edge(p_edge uuid)
+returns uuid language sql stable security definer set search_path = public, pg_temp as $$
+  select store_id from public.edge_devices where id = p_edge
+$$;
+create or replace function public.store_of_recorder(p_recorder uuid)
+returns uuid language sql stable security definer set search_path = public, pg_temp as $$
+  select e.store_id from public.recorders r join public.edge_devices e on e.id = r.edge_id
+   where r.id = p_recorder
+$$;
+create or replace function public.is_super_admin()
+returns boolean language sql stable security definer set search_path = public, pg_temp as $$
+  select exists (select 1 from public.admin_users where auth_user_id = auth.uid() and role = 'super_admin')
+$$;
 
--- recorders: edge_devices の可視性に連鎖
+create policy "edge_devices_admin_insert" on public.edge_devices
+  for insert to authenticated with check (public.is_super_admin());
+create policy "edge_devices_admin_update" on public.edge_devices
+  for update to authenticated using (public.is_super_admin()) with check (public.is_super_admin());
+create policy "edge_devices_admin_delete" on public.edge_devices
+  for delete to authenticated using (public.is_super_admin());
+
+-- recorders: 読みは edge_devices の可視性に連鎖・書きは担当の管理者
 create policy "recorders_select" on public.recorders
   for select using (exists (select 1 from public.edge_devices e where e.id = recorders.edge_id));
-create policy "recorders_modify" on public.recorders
-  for all
-  using (exists (select 1 from public.edge_devices e where e.id = recorders.edge_id))
-  with check (exists (select 1 from public.edge_devices e where e.id = recorders.edge_id));
+create policy "recorders_admin_insert" on public.recorders
+  for insert to authenticated with check (public.can_manage_store(public.store_of_edge(edge_id)));
+create policy "recorders_admin_update" on public.recorders
+  for update to authenticated
+  using (public.can_manage_store(public.store_of_edge(edge_id)))
+  with check (public.can_manage_store(public.store_of_edge(edge_id)));
+create policy "recorders_admin_delete" on public.recorders
+  for delete to authenticated using (public.can_manage_store(public.store_of_edge(edge_id)));
 
--- recorder_cameras: recorders の可視性に連鎖
+-- recorder_cameras: 読みは recorders の可視性に連鎖・書きは担当の管理者
 create policy "cameras_select" on public.recorder_cameras
   for select using (exists (select 1 from public.recorders r where r.id = recorder_cameras.recorder_id));
-create policy "cameras_modify" on public.recorder_cameras
-  for all
-  using (exists (select 1 from public.recorders r where r.id = recorder_cameras.recorder_id))
-  with check (exists (select 1 from public.recorders r where r.id = recorder_cameras.recorder_id));
+create policy "recorder_cameras_admin_insert" on public.recorder_cameras
+  for insert to authenticated with check (public.can_manage_store(public.store_of_recorder(recorder_id)));
+create policy "recorder_cameras_admin_update" on public.recorder_cameras
+  for update to authenticated
+  using (public.can_manage_store(public.store_of_recorder(recorder_id)))
+  with check (public.can_manage_store(public.store_of_recorder(recorder_id)));
+create policy "recorder_cameras_admin_delete" on public.recorder_cameras
+  for delete to authenticated using (public.can_manage_store(public.store_of_recorder(recorder_id)));
 
 -- live_sessions: 自分 or super_admin or テナント/店舗スコープ(20260621_003 修正後)
 create policy "sessions_select" on public.live_sessions
