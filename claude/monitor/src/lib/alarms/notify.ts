@@ -10,6 +10,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { sendEmail, SECURITY_FROM_ADDRESS } from '@/lib/email/send'
+import { postAlarmWebhook } from './webhook-url'
 
 /** now(UTC) が JST の [from,to) 静音窓に入るか。to='HH:MM'。日跨ぎ対応。 */
 export function inQuietHours(now: Date, from: string | null, to: string | null): boolean {
@@ -63,14 +64,10 @@ export async function notifyAlarm(
     didSomething = didSomething || res.ok
   }
   if (st.notify_webhook_url) {
-    try {
-      await fetch(st.notify_webhook_url, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ store: storeName, source: ev.source, event_type: ev.event_type, occurred_at: ev.occurred_at, event_id: ev.id }),
-      })
-      didSomething = true
-    } catch { /* best-effort */ }
+    // 宛先を確かめ、転送を追わず 5 秒で打ち切る (lib/alarms/webhook-url.ts)。best-effort
+    const sent = await postAlarmWebhook(st.notify_webhook_url,
+      { store: storeName, source: ev.source, event_type: ev.event_type, occurred_at: ev.occurred_at, event_id: ev.id })
+    didSomething = didSomething || sent
   }
 
   await service.from('alarm_events').update({ notified_at: new Date().toISOString() }).eq('id', eventId)

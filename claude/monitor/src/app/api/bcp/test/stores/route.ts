@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { haversineKm } from '@/lib/bcp/geo'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 export async function GET(req: NextRequest) {
   const supa = await createSupabaseServer()
@@ -29,7 +30,7 @@ export async function GET(req: NextRequest) {
     .not('longitude', 'is', null)
     .limit(10_000)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/bcp/test/stores') }, { status: 500 })
 
   const stores = (data ?? []) as {
     id: string; name: string; area_code: string | null

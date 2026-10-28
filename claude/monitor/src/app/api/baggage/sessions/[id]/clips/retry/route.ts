@@ -19,6 +19,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { loadTenantSettings } from '@/lib/baggage/tenant-settings'
 import { buildClipJobs } from '@intereco/shared/baggage'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 export async function POST(
   _req: NextRequest,
@@ -107,7 +108,7 @@ export async function POST(
       status: 'pending',
     }))
     const { error, count } = await svc.from('inspection_clip_jobs').insert(insertRows, { count: 'exact' })
-    if (error) return NextResponse.json({ error: `job_create_failed: ${error.message}` }, { status: 500 })
+    if (error) return NextResponse.json({ error: `job_create_failed: ${dbErrorCode(error, '/api/baggage/sessions/[id]/clips/retry')}` }, { status: 500 })
     created = count ?? insertRows.length
   }
 

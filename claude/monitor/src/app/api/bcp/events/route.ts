@@ -19,6 +19,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 const CLIPS_BUCKET   = 'bcp-clips'
 const REPORTS_BUCKET = 'bcp-reports'
@@ -45,7 +46,7 @@ export async function DELETE(req: NextRequest) {
     .select('id, is_test')
     .in('id', eventIds)
   if (loadErr) {
-    return NextResponse.json({ error: 'load_failed', message: loadErr.message }, { status: 500 })
+    return NextResponse.json({ error: 'load_failed', message: dbErrorCode(loadErr, '/api/bcp/events') }, { status: 500 })
   }
   if (!events || events.length === 0) {
     return NextResponse.json({ error: 'not_found' }, { status: 404 })
@@ -75,7 +76,7 @@ export async function DELETE(req: NextRequest) {
   // 3. bcp_clips 行を削除
   {
     const { error } = await svc.from('bcp_clips').delete().in('event_id', ids)
-    if (error) return NextResponse.json({ error: 'clips_delete_failed', message: error.message }, { status: 500 })
+    if (error) return NextResponse.json({ error: 'clips_delete_failed', message: dbErrorCode(error, '/api/bcp/events') }, { status: 500 })
   }
 
   // 4. bcp_reports の PDF を remove (<eventId>/report.pdf)
@@ -86,13 +87,13 @@ export async function DELETE(req: NextRequest) {
   // 5. bcp_reports 行を削除
   {
     const { error } = await svc.from('bcp_reports').delete().in('event_id', ids)
-    if (error) return NextResponse.json({ error: 'reports_delete_failed', message: error.message }, { status: 500 })
+    if (error) return NextResponse.json({ error: 'reports_delete_failed', message: dbErrorCode(error, '/api/bcp/events') }, { status: 500 })
   }
 
   // 6. bcp_events 行を削除
   {
     const { error } = await svc.from('bcp_events').delete().in('id', ids)
-    if (error) return NextResponse.json({ error: 'events_delete_failed', message: error.message }, { status: 500 })
+    if (error) return NextResponse.json({ error: 'events_delete_failed', message: dbErrorCode(error, '/api/bcp/events') }, { status: 500 })
   }
 
   return NextResponse.json({ ok: true, deleted: ids.length })

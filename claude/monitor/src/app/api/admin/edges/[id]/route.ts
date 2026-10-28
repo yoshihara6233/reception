@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { requireSuperAdmin } from '@/lib/admin/guard'
 import { recordAudit, storeIdForEdge } from '@/lib/admin/audit'
 import { alarmPurgeCounts, alarmPurgeFailureBody, purgeEdgeAlarmRecords } from '@/lib/admin/alarm-purge'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 // 版フィールドは前後空白を除去（末尾スペース混入で git worktree add が
 // "invalid reference" となり OTA が恒久 stage_failed する事故の防止）。
@@ -51,7 +52,7 @@ export async function PUT(
   if (patch.update_window_end === '') patch.update_window_end = null
 
   const { error } = await guard.supa.from('edge_devices').update(patch).eq('id', id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/admin/edges/[id]') }, { status: 500 })
   await recordAudit(guard.supa, {
     actorUserId: guard.user.id,
     action: 'edge.update',
@@ -79,7 +80,7 @@ export async function DELETE(
   if (!purge.ok) return NextResponse.json(alarmPurgeFailureBody(purge), { status: 500 })
 
   const { error } = await guard.supa.from('edge_devices').delete().eq('id', id)
-  if (error) return NextResponse.json({ error: 'delete_failed', message: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: 'delete_failed', message: dbErrorCode(error, '/api/admin/edges/[id]') }, { status: 500 })
 
   await recordAudit(guard.supa, {
     actorUserId: guard.user.id,

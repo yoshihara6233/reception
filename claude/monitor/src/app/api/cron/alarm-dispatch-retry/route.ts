@@ -16,6 +16,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { NO_TIMELINE_SOURCES, dispatchAlarmTimeline } from '@/lib/alarms/dispatch'
 import { pickPrimaryEdge } from '@/lib/edge/primary-edge'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 export const runtime = 'nodejs'
 
@@ -41,7 +42,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     .gte('occurred_at', since)
     .order('occurred_at', { ascending: true })
     .limit(BATCH_LIMIT)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/cron/alarm-dispatch-retry') }, { status: 500 })
   if (!pendings?.length) return NextResponse.json({ ok: true, pending: 0, dispatched: 0 })
 
   let dispatched = 0

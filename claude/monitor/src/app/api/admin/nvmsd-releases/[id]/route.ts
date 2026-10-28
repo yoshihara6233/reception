@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireSuperAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { NVMSD_RELEASES_BUCKET, edgePkg } from '@/lib/admin/nvmsd-releases'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,6 +45,6 @@ export async function DELETE(
 
   await svc.storage.from(NVMSD_RELEASES_BUCKET).remove([rel.storage_path])
   const { error } = await svc.from('nvmsd_releases').delete().eq('id', id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/admin/nvmsd-releases/[id]') }, { status: 500 })
   return NextResponse.json({ ok: true })
 }

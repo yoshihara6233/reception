@@ -14,6 +14,7 @@ import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
 import { recordAudit } from '@/lib/admin/audit'
 import { createSupabaseService } from '@/lib/supabase/server'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 const Body = z.object({
   name:   z.string().trim().min(1).max(120),
@@ -66,7 +67,7 @@ export async function POST(req: NextRequest) {
   if (error) {
     // slug UNIQUE 衝突など
     const dup = /duplicate|unique/i.test(error.message)
-    return NextResponse.json({ error: dup ? 'slug_taken' : error.message }, { status: dup ? 409 : 500 })
+    return NextResponse.json({ error: dup ? 'slug_taken' : dbErrorCode(error, '/api/admin/tenants') }, { status: dup ? 409 : 500 })
   }
 
   await recordAudit(guard.supa, {

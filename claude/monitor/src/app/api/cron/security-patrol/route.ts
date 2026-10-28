@@ -26,6 +26,7 @@ import { jstNow, isDue, type PatrolSettings } from '@/lib/security/patrol-schedu
 import { listPatrolCameraIds, buildCaptureCommand } from '@/lib/security/patrol-dispatch'
 import { pickPrimaryEdge } from '@/lib/edge/primary-edge'
 import { generateAndStoreRunReport } from '@/lib/security/patrol-report'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 export const runtime = 'nodejs'
 export const maxDuration = 120
@@ -55,7 +56,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     .select('store_id, enabled, schedule_mode, patrol_interval_min, active_from, active_to, active_days, patrol_times, last_run_at, stores!inner(opt_patrol)')
     .eq('enabled', true)
     .eq('stores.opt_patrol', true)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/cron/security-patrol') }, { status: 500 })
 
   const due = (settings ?? []).filter((s) => isDue(s as PatrolSettings, jst, now, cronWindowMin))
 

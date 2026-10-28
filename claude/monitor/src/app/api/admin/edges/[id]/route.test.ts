@@ -76,11 +76,11 @@ describe('DELETE /api/admin/edges/[id]', () => {
     expect(h.audits).toEqual([])
   })
 
-  it('エッジの削除が失敗したら、DB の文言を message で返す (画面に出す)', async () => {
+  it('エッジの削除が失敗したら、DB の文言は返さず db_error を返す (中身はサーバのログ・ASVS 16.5.1)', async () => {
     fake.state.failOn = 'edge_devices'
     const res = await call('old')
     expect(res.status).toBe(500)
-    expect(await res.json()).toEqual({ error: 'delete_failed', message: 'edge_devices down' })
+    expect(await res.json()).toEqual({ error: 'delete_failed', message: 'db_error' })
   })
 
   it('カメラが多くても in 句は 200 個ずつに分け、1,000 行を超えて読む', async () => {

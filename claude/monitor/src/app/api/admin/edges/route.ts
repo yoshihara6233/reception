@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { requireSuperAdmin } from '@/lib/admin/guard'
 import { recordAudit } from '@/lib/admin/audit'
 import { hashDeviceToken } from '@/lib/edge/device-token'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 const Body = z.object({
   store_id: z.string().uuid(),
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest) {
     })
     .select('id')
     .single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/admin/edges') }, { status: 500 })
 
   // 監査: device_token は記録しない。
   await recordAudit(guard.supa, {

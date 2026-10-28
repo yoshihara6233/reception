@@ -11,6 +11,7 @@ import { requireAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { recordAudit } from '@/lib/admin/audit'
 import { generateEnrollToken, hashEnrollToken, enrollExpiryIso, generateShortCode, hashShortCode } from '@/lib/admin/enrollment'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 const Body = z.object({
   store_id:    z.string().uuid(),
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest) {
     })
     .select('id, expires_at')
     .single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/admin/enrollments') }, { status: 500 })
 
   await recordAudit(guard.supa, {
     actorUserId: guard.user.id,

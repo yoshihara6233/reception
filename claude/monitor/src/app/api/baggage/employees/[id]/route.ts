@@ -10,6 +10,7 @@ import { requireBaggageAccess } from '@/lib/baggage/kiosk-guard'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { recordAudit } from '@/lib/admin/audit'
 import { deleteFaceInCollection, employeeCollectionId } from '@/lib/aws/rekognition'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 export async function DELETE(
   _req: NextRequest,
@@ -52,7 +53,7 @@ export async function DELETE(
     .from('employees')
     .update({ status: 'inactive', rekognition_face_id: null, face_photo_path: null })
     .eq('id', id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/baggage/employees/[id]') }, { status: 500 })
 
   await recordAudit(guard.supa, {
     actorUserId: guard.user.id, action: 'baggage.employee.deactivate', targetType: 'employee',

@@ -14,6 +14,7 @@ import { z } from 'zod'
 import { requireSuperAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { recordAudit, storeIdForEdge } from '@/lib/admin/audit'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 export const dynamic = 'force-dynamic'
 
@@ -75,7 +76,7 @@ export async function POST(
     edge_id: id,
     requested_by: guard.user.id,
   })
-  if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 })
+  if (insErr) return NextResponse.json({ error: dbErrorCode(insErr, '/api/admin/edges/[id]/diagnostics') }, { status: 500 })
 
   const { error: cmdErr } = await svc
     .from('edge_devices')
@@ -89,7 +90,7 @@ export async function POST(
       pending_command_at: new Date().toISOString(),
     })
     .eq('id', id)
-  if (cmdErr) return NextResponse.json({ error: cmdErr.message }, { status: 500 })
+  if (cmdErr) return NextResponse.json({ error: dbErrorCode(cmdErr, '/api/admin/edges/[id]/diagnostics') }, { status: 500 })
 
   await recordAudit(guard.supa, {
     actorUserId: guard.user.id,

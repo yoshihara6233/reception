@@ -15,6 +15,7 @@ import { createSupabaseService } from '@/lib/supabase/server'
 import { authenticateEdge } from '@/lib/edge/device-auth'
 import { sanitizeCapabilities, sanitizeSpecVersion } from '@/lib/edge/capabilities'
 import { syncGvmsOidcClient } from '@/lib/edge/gvms-oidc'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 export const dynamic = 'force-dynamic'
 
@@ -81,7 +82,7 @@ export async function POST(req: NextRequest) {
   if (error?.code === 'PGRST204') {
     ;({ error } = await svc.from('edge_devices').update(payload).eq('id', edge.id))
   }
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/edge/heartbeat') }, { status: 500 })
 
   // ログインの一本化（§9）。拠点ごとの OAuth クライアントを名乗りと申告に合わせる。
   // **失敗しても死活は落とさない**（OAuth 2.1 Server が無効なプロジェクトなど）

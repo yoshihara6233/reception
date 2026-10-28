@@ -17,6 +17,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { hashDeviceToken } from '@/lib/edge/device-token'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 export const runtime = 'nodejs'
 
@@ -71,7 +72,7 @@ export async function POST(req: NextRequest) {
   const { error: upErr } = await supa
     .storage.from('security-snapshots')
     .upload(path, bytes, { contentType: image.type || 'image/jpeg', upsert: true })
-  if (upErr) return NextResponse.json({ error: `storage: ${upErr.message}` }, { status: 500 })
+  if (upErr) return NextResponse.json({ error: `storage: ${dbErrorCode(upErr, '/api/security/patrol/ingest')}` }, { status: 500 })
 
   // The security-snapshots bucket is Private (by design). Store the auth-gated
   // proxy path — /api/security/patrol/<runId>/<cameraId>/snapshot signs a

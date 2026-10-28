@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { jstDateStr } from '@/lib/baggage/unmatch'
 import { rollupWindow } from '@/lib/reports/usage'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 export const maxDuration = 300
 
@@ -40,7 +41,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   const svc = createSupabaseService()
   const { data, error } = await svc.rpc('refresh_usage_daily', { p_from: from, p_to: to })
-  if (error) return NextResponse.json({ error: error.message, from, to }, { status: 500 })
+  if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/cron/usage-rollup'), from, to }, { status: 500 })
 
   return NextResponse.json({ ok: true, from, to, upserted: data ?? 0 })
 }

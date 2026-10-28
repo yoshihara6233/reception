@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { recordAudit, storeIdForEdge } from '@/lib/admin/audit'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,7 +28,7 @@ export async function DELETE(
 
   const { error } = await createSupabaseService()
     .from('licenses').update({ status: 'revoked', updated_at: new Date().toISOString() }).eq('id', id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/admin/licenses/[id]') }, { status: 500 })
 
   await recordAudit(guard.supa, {
     actorUserId: guard.user.id,

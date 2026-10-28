@@ -18,6 +18,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { ALARM_TIMELINE_OFFSETS_SEC, offsetKeySec } from '@/lib/alarms/timeline'
 import { hashDeviceToken } from '@/lib/edge/device-token'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 export const runtime = 'nodejs'
 
@@ -69,7 +70,7 @@ export async function POST(req: NextRequest) {
   const { error: upErr } = await supa.storage
     .from(BUCKET)
     .upload(path, bytes, { contentType: 'image/jpeg', upsert: true })
-  if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 })
+  if (upErr) return NextResponse.json({ error: dbErrorCode(upErr, '/api/alarms/frames/ingest') }, { status: 500 })
 
   // 5. alarm_frames upsert（(alarm_event_id, camera_id, offset_sec) 一意）
   const { error: dbErr } = await supa
@@ -83,7 +84,7 @@ export async function POST(req: NextRequest) {
       source,
       captured_at:    new Date().toISOString(),
     }, { onConflict: 'alarm_event_id,camera_id,offset_sec' })
-  if (dbErr) return NextResponse.json({ error: dbErr.message }, { status: 500 })
+  if (dbErr) return NextResponse.json({ error: dbErrorCode(dbErr, '/api/alarms/frames/ingest') }, { status: 500 })
 
   return NextResponse.json({ ok: true })
 }
