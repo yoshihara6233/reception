@@ -11,6 +11,7 @@
 import { useEffect, useState } from 'react'
 import type { BadgeDef } from '@/lib/baggage/status'
 import { SessionDetailPane } from './SessionDetailPane'
+import { writeClientPrefCookie } from '@/lib/security/cookie-names'
 
 export interface RowVM {
   id: string
@@ -50,7 +51,7 @@ export function HistoryWorkspace({ rows, storeId }: { rows: RowVM[]; storeId: st
 
   // 選択中の店舗を記憶（次回 ?store 無しアクセスの既定に使う・server が cookie を読む）
   useEffect(() => {
-    if (storeId) document.cookie = `bg_store=${encodeURIComponent(storeId)}; path=/; max-age=15552000; samesite=lax`
+    if (storeId) writeClientPrefCookie('bg_store', encodeURIComponent(storeId), 15552000)
   }, [storeId])
 
   if (rows.length === 0) {

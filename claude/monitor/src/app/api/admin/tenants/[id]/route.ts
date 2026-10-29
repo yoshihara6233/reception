@@ -27,6 +27,7 @@ import { recordAudit } from '@/lib/admin/audit'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { removeTenantAttachments } from '@/lib/feedback/attachment-store'
 import { dbErrorCode } from '@/lib/api/db-error'
+import { hostCookieName, readHostCookie } from '@/lib/security/cookie-names'
 
 // lib/tenant/acting.ts の ACTING_TENANT_COOKIE と同じ値。あちらは server-only を
 // 読み込むので、このルートの単体試験 (vitest) から辿れるよう値だけ持つ
@@ -202,7 +203,8 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
     feedback_attachments: { deleted: fbAttach.deleted, failed: !!fbAttach.error },
   })
   // 消したテナントを「操作中」にしていたら外す（存在しないテナントの文脈を残さない）
-  if (req.cookies.get(ACTING_TENANT_COOKIE)?.value === id) {
+  if (readHostCookie(req.cookies, ACTING_TENANT_COOKIE) === id) {
+    res.cookies.delete(hostCookieName(ACTING_TENANT_COOKIE))
     res.cookies.delete(ACTING_TENANT_COOKIE)
   }
   return res

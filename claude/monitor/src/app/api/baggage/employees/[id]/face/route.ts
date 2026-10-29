@@ -18,6 +18,7 @@ import {
   deleteFaceInCollection, employeeCollectionId, indexFaceInCollection,
 } from '@/lib/aws/rekognition'
 import { dbErrorCode } from '@/lib/api/db-error'
+import { readHostCookie } from '@/lib/security/cookie-names'
 
 /**
  * DELETE /api/baggage/employees/[id]/face — 顔データのみ削除（再登録用）
@@ -99,7 +100,7 @@ export async function POST(
   // 認証プレゲート（未認証者への UUID 存在オラクル・認証前の service 読みを作らない）:
   // 正規のキオスクPINセッション or 手荷物検査ロールのログイン。iPad は PIN 経路で
   // 「はじめての方の顔登録（セルフ登録）」を行えるようにする。
-  const pinStore = kioskSessionStoreId((await cookies()).get(KIOSK_COOKIE)?.value, new Date())
+  const pinStore = kioskSessionStoreId(readHostCookie(await cookies(), KIOSK_COOKIE), new Date())
   if (!pinStore) {
     const role = await requireBaggageRole()
     if (!role.ok) return NextResponse.json({ error: role.error }, { status: role.status })

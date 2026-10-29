@@ -9,6 +9,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import type { NavItem } from './AdminShell'
+import { writeClientPrefCookie } from '@/lib/security/cookie-names'
 
 export function AdminShellClient({
   nav, title, pathname, initialCollapsed, children,
@@ -24,7 +25,7 @@ export function AdminShellClient({
   const toggle = () => {
     setCollapsed((c) => {
       const next = !c
-      document.cookie = `nav_collapsed=${next ? '1' : '0'}; path=/; max-age=15552000; samesite=lax`
+      writeClientPrefCookie('nav_collapsed', next ? '1' : '0', 15552000)
       return next
     })
   }

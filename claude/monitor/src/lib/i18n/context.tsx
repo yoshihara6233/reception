@@ -9,6 +9,7 @@ import {
 } from 'react'
 import { useRouter } from 'next/navigation'
 import { MESSAGES, type Lang, type Msg } from './messages'
+import { writeClientPrefCookie } from '@/lib/security/cookie-names'
 
 const STORAGE_KEY = 'intereco-lang'
 const DEFAULT_LANG: Lang = 'ja'
@@ -58,7 +59,7 @@ export function LangProvider({
     // Write a cookie so server components on the next request can read
     // the user's choice and render in the right language.
     try {
-      document.cookie = `${STORAGE_KEY}=${l}; path=/; max-age=31536000; samesite=lax`
+      writeClientPrefCookie(STORAGE_KEY, l, 31536000)
     } catch { /* ignore */ }
     // CRITICAL: re-render server components with the new cookie, otherwise
     // AdminShell nav / breadcrumb / any t.xxx server-rendered text stays

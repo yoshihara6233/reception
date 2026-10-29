@@ -20,6 +20,7 @@ import { StatusBar } from './StatusBar'
 import { AdminShellClient } from './AdminShellClient'
 import { getT } from '@/lib/i18n/server'
 import type { Msg } from '@/lib/i18n/messages'
+import { readHostCookie } from '@/lib/security/cookie-names'
 
 export type AdminSection = 'admin' | 'security' | 'bcp'
 
@@ -213,7 +214,7 @@ export async function AdminShell({
             : '設定')
 
   // 左メニュー折りたたみの初期値は cookie から（サーバ確定でちらつき防止）。
-  const collapsed = (await cookies()).get('nav_collapsed')?.value === '1'
+  const collapsed = readHostCookie(await cookies(), 'nav_collapsed') === '1'
 
   return (
     <div className="flex h-screen flex-col">

@@ -20,6 +20,7 @@ import {
 } from '@/lib/baggage/status'
 import { jstDateStr } from '@/lib/baggage/unmatch'
 import { HistoryWorkspace, type RowVM } from './HistoryWorkspace'
+import { readHostCookie } from '@/lib/security/cookie-names'
 
 interface SessionRow {
   id: string
@@ -66,7 +67,7 @@ export default async function BaggageHistoryPage(
     .filter(Boolean) as { id: string; name: string }[]
 
   // 店舗の既定: ?store → cookie(bg_store・前回選択) → 先頭。いずれも可視店舗に限る。
-  const cookieStore = (await cookies()).get('bg_store')?.value
+  const cookieStore = readHostCookie(await cookies(), 'bg_store')
   const storeId =
     (sp.store && storeOptions.some((s) => s.id === sp.store) && sp.store) ||
     (cookieStore && storeOptions.some((s) => s.id === cookieStore) && cookieStore) ||

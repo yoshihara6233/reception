@@ -29,6 +29,8 @@ import { isForeignClientToken } from '@/lib/auth/foreign-client'
 import { logSecurityEvent, requestIp } from '@/lib/security/events'
 import { makeNonce, pageCsp } from '@/lib/security/csp'
 import { SESSION_COOKIE_OPTIONS } from '@/lib/supabase/cookie-options'
+import { PREFIXED_COOKIES } from '@/lib/security/cookie-names'
+import { isCrossSiteWrite } from '@/lib/security/fetch-metadata'
 
 /** トークンについての判定（手荷物検査店長か・多要素の番号の確認が済んでいないか）。 */
 interface Verdict {
@@ -80,6 +82,11 @@ function isStaticAsset(path: string): boolean {
  * Next が nonce を読めるよう、次へ渡す要求の見出しにも CSP と x-nonce を載せる。
  */
 export async function middleware(req: NextRequest) {
+  // 別のサイトからの書き込み (CSRF) はどの受け口でも断る (lib/security/fetch-metadata.ts・ASVS 3.5.2)
+  if (req.nextUrl.pathname.startsWith('/api/') && isCrossSiteWrite(req)) {
+    logSecurityEvent({ kind: 'auth.cross_site', ip: requestIp(req.headers), path: req.nextUrl.pathname })
+    return NextResponse.json({ error: 'cross_site' }, { status: 403 })
+  }
   const nonce = makeNonce()
   const csp = pageCsp(nonce)
   const reqHeaders = new Headers(req.headers)
@@ -87,6 +94,13 @@ export async function middleware(req: NextRequest) {
   reqHeaders.set('content-security-policy', csp)
   const res = await route(req, () => NextResponse.next({ request: { headers: reqHeaders } }))
   res.headers.set('Content-Security-Policy', csp)
+  // セッションの Cookie を __Host- の名前へ移した (2026-10-29)。以前の名前の Cookie (古いトークン) は
+  // もう読まないので、ブラウザに残さない
+  if (PREFIXED_COOKIES) {
+    for (const c of req.cookies.getAll()) {
+      if (/^sb-[a-z0-9]+-auth-token/.test(c.name)) res.cookies.delete(c.name)
+    }
+  }
   return res
 }
 

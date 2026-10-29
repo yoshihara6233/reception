@@ -42,6 +42,7 @@ import {
   LIVE_PROXY_COOKIE_TTL_SEC,
 } from '@/lib/live-proxy-session'
 import { allowedUpstreamOrigin, fetchUpstream, safeContentType, safeSubPath } from '@/lib/proxy/upstream'
+import { secureCookieName } from '@/lib/security/cookie-names'
 
 export async function GET(
   req: NextRequest,
@@ -60,7 +61,7 @@ export async function GET(
   const isHlsSub       = subPathRaw.startsWith('api/hls/')
 
   const signingSecret = process.env.LIVE_SIGNING_SECRET
-  const cookieName    = liveProxyCookieName(cameraId)
+  const cookieName    = secureCookieName(liveProxyCookieName(cameraId))   // 本番は __Secure- (Path を絞るため __Host- は使えない)
 
   // 1. origin の解決。hls/* はクッキー高速パス（DB往復ゼロ）を優先し、
   //    ダメなら stream.m3u8 と同じフル認証へフォールバック。
