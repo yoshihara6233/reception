@@ -17,6 +17,7 @@ import { resolveAdminContext } from '@/lib/tenant/acting'
 import { getT } from '@/lib/i18n/server'
 import type { Msg } from '@/lib/i18n/messages'
 import { UserDeleteButton } from './user-actions'
+import { suspendedAuthUserIds } from '@/lib/admin/user-access'
 
 interface Row {
   id: string
@@ -105,6 +106,8 @@ export default async function UsersAdmin({
 
   const { data } = await query
   const rows = (data ?? []) as unknown as Row[]
+  // 利用を止めている人 (編集の画面の「利用の状態」・ASVS 7.4.2)
+  const suspended = await suspendedAuthUserIds(svc, rows.map((r) => r.auth_user_id))
 
   return (
     <AdminShell pathname="/admin/users" section="admin">
@@ -189,7 +192,11 @@ export default async function UsersAdmin({
                       : (u.store_ids?.length ?? 0)}
                   </td>
                   <td className="px-3 py-2">
-                    {u.auth_user_id ? (
+                    {u.auth_user_id && suspended.has(u.auth_user_id) ? (
+                      <span className="inline-block rounded bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">
+                        停止中
+                      </span>
+                    ) : u.auth_user_id ? (
                       <span className="inline-block rounded bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
                         {tu.authVerified}
                       </span>
