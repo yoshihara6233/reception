@@ -4,6 +4,7 @@ import { PageHeader } from '@/components/admin/PageHeader'
 import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { UserForm, type Role, type TenantOpt, type StoreOpt } from '../user-form'
 import { MfaResetSection } from '../mfa-reset'
+import { UserAccessSection } from '../user-access'
 
 export default async function EditUserPage(
   { params }: { params: Promise<{ id: string }> },
@@ -28,7 +29,7 @@ export default async function EditUserPage(
   // Authorization is enforced by the role check above + the tenant scope below.
   const { data: target } = await createSupabaseService()
     .from('admin_users')
-    .select('id, email, display_name, role, tenant_id, store_ids')
+    .select('id, email, display_name, role, tenant_id, store_ids, auth_user_id')
     .eq('id', id)
     .single()
   if (!target) notFound()
@@ -77,6 +78,11 @@ export default async function EditUserPage(
           canCreateSuperAdmin={me.role === 'super_admin'}
         />
         <MfaResetSection id={id} name={(target as { display_name: string | null }).display_name ?? (target as { email: string }).email} />
+        <UserAccessSection
+          id={id}
+          name={(target as { display_name: string | null }).display_name ?? (target as { email: string }).email}
+          self={(target as { auth_user_id: string | null }).auth_user_id === user.id}
+        />
       </div>
     </AdminShell>
   )

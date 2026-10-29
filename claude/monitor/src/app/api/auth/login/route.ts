@@ -1,5 +1,5 @@
 /**
- * POST /api/auth/login  { email, password } → { ok: true, mfa: boolean }
+ * POST /api/auth/login  { email, password } → { ok: true, mfa: boolean, passwordChange: boolean }
  *
  * ログインをサーバで行い、セッションを HttpOnly の Cookie に置く (2026-10-29・ASVS 3.3.4・
  * lib/supabase/cookie-options.ts)。多要素を登録した人は mfa: true を返し、画面は /login/mfa へ進む。
@@ -9,12 +9,18 @@
  *   - 回数で縛る (メール 10 回/15 分・IP 30 回/15 分)。Supabase の回数の制限は送り元の IP
  *     (ここでは Vercel) で数えるため、利用者ごとの制限はこちらで持つ
  *   - 誤りの文は 1 種類にする (アカウントの有無を教えない)
+ *
+ * 管理者が決めた仮のパスワード (lib/auth/initial-password.ts・ASVS 6.4.1) で入った人は
+ * passwordChange: true を返し、画面は本人のパスワードに変える画面 (/login/password) へ進む。
+ * 仮のパスワードの期限が過ぎていればサインアウトして断る (パスワードが合ったあとなので、
+ * 期限切れと伝えてもアカウントの有無は漏れない)。
  */
 import { NextRequest } from 'next/server'
 import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { rateLimitAllows, clientIp } from '@/lib/rate-limit'
 import { authJson, readJson, rejectCrossSite } from '@/lib/auth/server-auth'
 import { logSecurityEvent } from '@/lib/security/events'
+import { initialPasswordState } from '@/lib/auth/initial-password'
 
 export const dynamic = 'force-dynamic'
 
@@ -48,8 +54,15 @@ export async function POST(req: NextRequest) {
     return authJson({ error: BAD_CREDENTIALS }, 401)
   }
 
+  const pw = initialPasswordState(data.user)
+  if (pw === 'expired') {
+    await supa.auth.signOut().catch(() => {})
+    logSecurityEvent({ kind: 'auth.initial_password_expired', ip, path: '/api/auth/login', actor: data.user.id })
+    return authJson({ error: '仮のパスワードの有効期限が過ぎています。管理者にパスワードの再発行を依頼してください。' }, 401)
+  }
+
   // 多要素を登録している人は、番号を確かめる画面へ (lib/auth/mfa.ts)
   const { data: aal } = await supa.auth.mfa.getAuthenticatorAssuranceLevel()
   const mfa = !!aal && aal.nextLevel === 'aal2' && aal.currentLevel !== 'aal2'
-  return authJson({ ok: true, mfa })
+  return authJson({ ok: true, mfa, passwordChange: pw === 'pending' })
 }

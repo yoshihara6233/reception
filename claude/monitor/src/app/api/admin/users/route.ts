@@ -5,6 +5,10 @@
  *   1. supabase.auth.admin.createUser() → auth.users row + UID
  *   2. INSERT admin_users with auth_user_id = UID
  *
+ * 管理者が入れたパスワードは「仮」(2026-10-30・ASVS 6.4.1・lib/auth/initial-password.ts):
+ * 本人は初回のログインで自分のパスワードに変えるまで画面と API を使えず、仮のパスワードは
+ * INITIAL_PASSWORD_TTL_HOURS で使えなくなる。
+ *
  * Permissions:
  *   - super_admin: can create any role
  *   - tenant_admin: can create within own tenant, cannot create super_admin
@@ -16,6 +20,7 @@ import { requireAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { storeIdsBelongToTenant } from '@/lib/admin/user-scope'
 import { recordAudit } from '@/lib/admin/audit'
+import { initialPasswordMetadata } from '@/lib/auth/initial-password'
 
 const Body = z.object({
   email:        z.string().email(),
@@ -73,6 +78,8 @@ export async function POST(req: NextRequest) {
     password:      body.password,
     email_confirm: true,
     user_metadata: { display_name: body.display_name },
+    // 仮のパスワードの印と期限 (本人は書き換えられない app_metadata)
+    app_metadata:  initialPasswordMetadata(),
   })
   if (authErr || !createData?.user) {
     return NextResponse.json(

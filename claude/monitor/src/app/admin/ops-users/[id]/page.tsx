@@ -13,6 +13,7 @@ import { createSupabaseService } from '@/lib/supabase/server'
 import { countSuperAdmins } from '@/lib/admin/super-admin-floor'
 import { UserForm, type Role } from '../../users/user-form'
 import { MfaResetSection } from '../../users/mfa-reset'
+import { UserAccessSection } from '../../users/user-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,7 +28,7 @@ export default async function EditOpsUserPage(
 
   const { data: target } = await svc
     .from('admin_users')
-    .select('id, email, display_name, role, tenant_id, store_ids')
+    .select('id, email, display_name, role, tenant_id, store_ids, auth_user_id')
     .eq('id', id)
     .single()
   if (!target) notFound()
@@ -69,6 +70,11 @@ export default async function EditOpsUserPage(
           canCreateSuperAdmin
         />
         <MfaResetSection id={id} name={(target as { display_name: string | null }).display_name ?? (target as { email: string }).email} />
+        <UserAccessSection
+          id={id}
+          name={(target as { display_name: string | null }).display_name ?? (target as { email: string }).email}
+          self={(target as { auth_user_id: string | null }).auth_user_id === guard.user.id}
+        />
       </div>
     </AdminShell>
   )

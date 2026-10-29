@@ -17,6 +17,8 @@ export type SecurityEventKind =
   | 'auth.mfa_required'     // 多要素の番号が済んでいない (middleware)
   | 'auth.foreign_token'    // 拠点向けのトークンでクラウドに来た (middleware)
   | 'auth.tenant_suspended' // 停止したテナントの利用者 (middleware)
+  | 'auth.password_change_required' // 仮のパスワードのまま (middleware・ASVS 6.4.1)
+  | 'auth.initial_password_expired'  // 期限の過ぎた仮のパスワードでのログイン (/api/auth/login)
   | 'auth.boundary'         // 手荷物検査店長が許可パスの外へ (middleware)
   | 'auth.login_failed'     // ログインのパスワードの誤り (/api/auth/login)
   | 'auth.mfa_failed'       // 多要素の番号の誤り (/api/auth/mfa・/api/account/mfa/verify)

@@ -14,6 +14,7 @@ import { storeIdsBelongToTenant } from '@/lib/admin/user-scope'
 import { checkSuperAdminFloor } from '@/lib/admin/super-admin-floor'
 import { recordAudit } from '@/lib/admin/audit'
 import { dbErrorCode } from '@/lib/api/db-error'
+import { initialPasswordMetadata } from '@/lib/auth/initial-password'
 
 const UpdateBody = z.object({
   display_name: z.string().min(1).optional(),
@@ -106,9 +107,13 @@ export async function PUT(
   }
 
   // Optional: password update via auth.admin
+  // 管理者がほかの人のパスワードを決めたら「仮」にする (本人が次のログインで変える・ASVS 6.4.1)。
+  // 自分のパスワードを変えたときは仮にしない。
+  const isSelf = target.auth_user_id === guard.user.id
   if (body.password && target.auth_user_id) {
     const { error: pwErr } = await svc.auth.admin.updateUserById(target.auth_user_id, {
       password: body.password,
+      ...(isSelf ? {} : { app_metadata: initialPasswordMetadata() }),
     })
     if (pwErr) {
       return NextResponse.json({ error: 'password_update_failed', message: dbErrorCode(pwErr, '/api/admin/users/[id]') }, { status: 500 })
@@ -117,7 +122,7 @@ export async function PUT(
 
   // 監査: パスワードは値を残さず「変更あり」のみ。
   const auditChanges: Record<string, unknown> = { ...patch }
-  if (body.password) auditChanges.password = '(changed)'
+  if (body.password) auditChanges.password = isSelf ? '(changed)' : '(changed: temporary)'
   await recordAudit(guard.supa, {
     actorUserId: guard.user.id,
     action:      'user.update',
