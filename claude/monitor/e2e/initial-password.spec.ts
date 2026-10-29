@@ -1,16 +1,17 @@
 /**
  * 管理者が作った利用者は、初回のログインで本人のパスワードに変えるまで使えない (2026-10-30・ASVS 6.4.1)。
  *
- * テナント A の管理者が利用者を作り (仮のパスワード)、その人が画面からログインすると
+ * 運営 (super_admin) が利用者を作り (仮のパスワード)、その人が画面からログインすると
  * /login/password へ送られ、変えると使い始められる。最後に作った利用者を消す。
+ *
+ * 作るのは運営の利用者 (テナントを持たない)。seed のテナントの ID ('00000000-…-b1') は
+ * 作成の受け口の UUID の検査 (zod) を通らないため、テナントの利用者はここでは作れない。
  */
 import { randomUUID } from 'node:crypto'
 import { expect, test } from '@playwright/test'
 import { storageStatePath } from './personas'
 
-const TENANT_A_ID = '00000000-0000-0000-0000-0000000000b1'
-
-test.use({ storageState: storageStatePath('adminA') })
+test.use({ storageState: storageStatePath('super') })
 
 test('仮のパスワードで入った人は、変えるまで画面を使えない', async ({ page, browser }) => {
   const email = `temp-${randomUUID().slice(0, 8)}@local.dev`
@@ -18,7 +19,7 @@ test('仮のパスワードで入った人は、変えるまで画面を使え�
   const mine = `Mine-${randomUUID()}`
 
   const created = await page.request.post('/api/admin/users', {
-    data: { email, password: temp, display_name: '仮パスワードの試験', role: 'viewer', tenant_id: TENANT_A_ID, store_ids: [] },
+    data: { email, password: temp, display_name: '仮パスワードの試験', role: 'super_admin', tenant_id: null, store_ids: [] },
   })
   expect(created.status(), await created.text()).toBe(200)
   const { id } = await created.json() as { id: string }
