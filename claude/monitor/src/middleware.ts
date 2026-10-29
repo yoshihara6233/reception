@@ -33,6 +33,8 @@ interface Verdict {
   mfaPending: boolean
   /** 拠点 (G・VMS) の OAuth クライアント向けに出したトークン。クラウドでは使わせない */
   foreignClient?: boolean
+  /** 利用者のテナントが停止 (suspended) している。画面も API も使わせない (ASVS 7.4.2) */
+  tenantSuspended?: boolean
 }
 
 /**
@@ -50,7 +52,7 @@ export function resetMiddlewareRoleCache(): void {
 const ALLOW_PREFIXES = [
   '/baggage', '/kiosk',
   '/api/baggage', '/api/auth', '/api/server-time',
-  '/login', '/logout', '/forgot-password', '/reset-password',
+  '/login', '/logout', '/forgot-password', '/reset-password', '/suspended',
   // Service Worker の本体。isStaticAsset は拡張子 .js を静的扱いしないので、
   // これが無いと手荷物検査店長のときだけ /sw-v2.js が /baggage へリダイレクトされ、
   // ブラウザが "script resource is behind a redirect" で登録を拒む。
@@ -113,6 +115,14 @@ export async function middleware(req: NextRequest) {
         if (tokenHash && token) roleCache.write(tokenHash, 'role', verdict, jwtExpiresAtMs(token))
         return foreignClientBlock(req, path)
       }
+      // テナントの停止を先に見る (停止すると admin_users も RLS で読めなくなり、下の「引けない
+      // ときは素通し」に落ちてしまうため・20261029170000_tenant_suspension.sql)
+      const { data: suspended } = await supa.rpc('auth_tenant_suspended')
+      if (suspended === true) {
+        verdict = { isBaggageManager: false, mfaPending: false, tenantSuspended: true }
+        if (tokenHash && token) roleCache.write(tokenHash, 'role', verdict, jwtExpiresAtMs(token))
+        return suspendedBlock(req, path)
+      }
       const { data: profile, error } = await supa
         .from('admin_users').select('role').eq('auth_user_id', user.id).single()
       // 参照できなかった（瞬断など）ときは従来どおり素通しし、**覚えない**。
@@ -128,6 +138,7 @@ export async function middleware(req: NextRequest) {
 
   if (verdict === null) return res  // 未ログインは各ページの getUser がログインへ誘導。
   if (verdict.foreignClient) return foreignClientBlock(req, path)
+  if (verdict.tenantSuspended) return suspendedBlock(req, path)
   if (verdict.mfaPending) return mfaBlock(req, path)
   if (!verdict.isBaggageManager) return res  // 通常ロールは制限しない。
 
@@ -155,6 +166,17 @@ function foreignClientBlock(req: NextRequest, path: string): NextResponse {
   }
   const url = req.nextUrl.clone()
   url.pathname = '/login'
+  url.search = ''
+  return NextResponse.redirect(url)
+}
+
+/** 停止したテナントの利用者を止める。API は 403、画面は /suspended (理由とサインアウト)。 */
+function suspendedBlock(req: NextRequest, path: string): NextResponse {
+  if (path.startsWith('/api/')) {
+    return NextResponse.json({ error: 'tenant_suspended' }, { status: 403 })
+  }
+  const url = req.nextUrl.clone()
+  url.pathname = '/suspended'
   url.search = ''
   return NextResponse.redirect(url)
 }

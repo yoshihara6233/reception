@@ -13,7 +13,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 
 // ── @supabase/ssr モック（ロールとログイン状態をテスト側から注入） ──────────
-const state: { user: { id: string } | null; role: string | null; token: string | null } =
+const state: { user: { id: string } | null; role: string | null; token: string | null; suspended?: boolean } =
   { user: null, role: null, token: null }
 const getUserMock = vi.fn(async () => ({ data: { user: state.user } }))
 // access_token は cookie から読むだけの想定なので、往復カウントの対象外。
@@ -24,6 +24,7 @@ const getSessionMock = vi.fn(async () => ({
 vi.mock('@supabase/ssr', () => ({
   createServerClient: () => ({
     auth: { getUser: getUserMock, getSession: getSessionMock },
+    rpc: async (name: string) => ({ data: name === 'auth_tenant_suspended' ? state.suspended === true : null, error: null }),
     from: () => ({
       select: () => ({
         eq: () => ({
@@ -311,6 +312,45 @@ describe('拠点向けのトークン', () => {
 
   it('クラウド自身のログインのトークンは通す', async () => {
     asSiteToken(null)
+    const res = await middleware(req('/stores'))
+    expect(res.status).toBe(200)
+  })
+})
+
+/**
+ * テナントを停止したら、画面も API も使わせない（2026-10-29・自主診断 ASVS 7.4.2）。
+ */
+describe('停止したテナントの利用者', () => {
+  it('API は 403・画面は /suspended へ', async () => {
+    asRole('tenant_admin')
+    state.suspended = true
+    try {
+      const api = await middleware(req('/api/vod'))
+      expect(api.status).toBe(403)
+      asRole('tenant_admin')
+      state.suspended = true
+      const page = await middleware(req('/stores'))
+      expect(new URL(page.headers.get('location')!).pathname).toBe('/suspended')
+    } finally {
+      state.suspended = false
+    }
+  })
+
+  it('案内の画面とログインは止めない（許可パス）', async () => {
+    asRole('tenant_admin')
+    state.suspended = true
+    try {
+      for (const p of ['/suspended', '/login']) {
+        const res = await middleware(req(p))
+        expect(res.headers.get('location')).toBeNull()
+      }
+    } finally {
+      state.suspended = false
+    }
+  })
+
+  it('停止していなければ今までどおり', async () => {
+    asRole('tenant_admin')
     const res = await middleware(req('/stores'))
     expect(res.status).toBe(200)
   })

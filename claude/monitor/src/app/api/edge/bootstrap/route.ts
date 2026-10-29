@@ -28,6 +28,7 @@ import { createClient } from '@supabase/supabase-js'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { edgeAuthEmail, ensureEdgeAuthPassword, isGvmsUplinkEdge, mayWithholdServiceRole } from '@/lib/edge/auth-provision'
 import { hashDeviceToken } from '@/lib/edge/device-token'
+import { storeTenantSuspended } from '@/lib/edge/device-auth'
 
 /**
  * 手持ちトークンの残り寿命がこれ以上あれば再発行しない（秒）。
@@ -66,6 +67,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'bootstrap lookup failed' }, { status: 500 })
   }
   if (!data) return NextResponse.json({ error: 'invalid device token' }, { status: 401 })
+  // 停止したテナントの拠点には何も渡さない (2026-10-29・ASVS 7.4.2)
+  if (await storeTenantSuspended(supa, data.store_id as string)) {
+    return NextResponse.json({ error: 'tenant suspended' }, { status: 403 })
+  }
 
   const body: {
     edge_id: string
