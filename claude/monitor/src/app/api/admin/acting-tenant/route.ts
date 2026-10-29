@@ -7,6 +7,7 @@
  * 置かないための土台（選び間違いで他テナントへ書き込む事故を構造的に防ぐ）。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
@@ -23,7 +24,7 @@ export async function POST(req: NextRequest) {
   }
 
   const parsed = Body.safeParse(await req.json().catch(() => null))
-  if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
+  if (!parsed.success) return invalidInput(req, { error: 'invalid_body' }, guard.user.id)
 
   // 実在テナントのみ許可（削除済み・偽IDを cookie に入れさせない）。
   const svc = createSupabaseService()

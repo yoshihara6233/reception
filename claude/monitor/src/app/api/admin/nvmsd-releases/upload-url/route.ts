@@ -7,6 +7,7 @@
  * メタ登録（サーバが実体から sha256 を計算して台帳に載せる）。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { requireSuperAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
@@ -33,7 +34,7 @@ export async function POST(req: NextRequest) {
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status })
 
   const parsed = Body.safeParse(await req.json().catch(() => null))
-  if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
+  if (!parsed.success) return invalidInput(req, { error: 'invalid_body' }, guard.user.id)
   const { version, pkg_format, pkg_arch } = parsed.data
 
   const svc = createSupabaseService()

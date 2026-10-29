@@ -11,6 +11,7 @@
  * 任意キーへは書けない。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { createSupabaseService } from '@/lib/supabase/server'
 import {
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   }
 
   const parsed = Body.safeParse(await req.json().catch(() => ({})))
-  if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
+  if (!parsed.success) return invalidInput(req, { error: 'invalid_body' })
   const cameraIds = parsed.data.cameraIds ?? []
 
   // 経路1（推奨）: 自社ドメインの Worker 経由。

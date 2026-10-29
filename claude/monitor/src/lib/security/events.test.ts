@@ -17,3 +17,21 @@ describe('安全に関わる出来事の記録 (ASVS 16.3)', () => {
     expect(requestIp(new Headers())).toBeNull()
   })
 })
+
+describe('記録の間引き (ASVS 16.3.3)', () => {
+  it('同じ種類・道・接続元は 60 秒に 1 行・捨てた件数を次の行に載せる', async () => {
+    const { logSecurityEventThrottled, resetSecurityEventThrottle, THROTTLE_WINDOW_MS } = await import('./events')
+    resetSecurityEventThrottle()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const e = { kind: 'input.invalid' as const, path: '/api/x', ip: '203.0.113.5' }
+    expect(logSecurityEventThrottled(e, 1_000)).toBe(true)
+    expect(logSecurityEventThrottled(e, 2_000)).toBe(false)
+    expect(logSecurityEventThrottled(e, 3_000)).toBe(false)
+    // 別の接続元は別に数える
+    expect(logSecurityEventThrottled({ ...e, ip: '203.0.113.6' }, 3_000)).toBe(true)
+    expect(logSecurityEventThrottled(e, 1_000 + THROTTLE_WINDOW_MS)).toBe(true)
+    expect(warn).toHaveBeenCalledTimes(3)
+    const last = JSON.parse(String(warn.mock.calls[2][0]).slice('[security] '.length))
+    expect(last.detail).toEqual({ suppressed: 2 })
+  })
+})

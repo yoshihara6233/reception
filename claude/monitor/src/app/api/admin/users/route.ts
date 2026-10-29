@@ -15,6 +15,7 @@
  *   - others: 403
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest) {
 
   const parsed = Body.safeParse(await req.json())
   if (!parsed.success) {
-    return NextResponse.json({ error: 'invalid_body', detail: parsed.error.format() }, { status: 400 })
+    return invalidInput(req, { error: 'invalid_body', detail: parsed.error.format() }, guard.user.id)
   }
   const body = parsed.data
 

@@ -13,6 +13,7 @@
  * （ログイン済み admin_users ＋店舗スコープ＋enabled 店舗のみ）を通過したものに限る。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { requireKioskStore } from '@/lib/baggage/kiosk-guard'
 import { buildClipJobs } from '@/lib/baggage/clip-jobs'
@@ -40,7 +41,7 @@ const Body = z.object({
 
 export async function POST(req: NextRequest) {
   const parsed = Body.safeParse(await req.json().catch(() => null))
-  if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
+  if (!parsed.success) return invalidInput(req, { error: 'invalid_body' })
   const body = parsed.data
 
   const guard = await requireKioskStore(body.storeId)

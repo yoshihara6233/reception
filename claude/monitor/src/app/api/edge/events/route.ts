@@ -14,6 +14,7 @@
  * disk_ok（容量の回復）は G・VMS に対応イベントが無く送られない（SMART 回復と混ぜない）。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { authenticateEdge } from '@/lib/edge/device-auth'
@@ -53,7 +54,7 @@ export async function POST(req: NextRequest) {
   if (!edge || !edge.store_id) return NextResponse.json({ error: 'invalid device token' }, { status: 401 })
 
   const parsed = Body.safeParse(await req.json().catch(() => null))
-  if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
+  if (!parsed.success) return invalidInput(req, { error: 'invalid_body' })
   const { event_type, node, at, message } = parsed.data
   const recovers = RECOVERS[event_type] ?? null
   // 復旧は常に info（送り手の severity 指定に依らない）。

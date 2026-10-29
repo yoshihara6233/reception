@@ -21,6 +21,7 @@
  *   （画像つきの要望は 1 回に 1 件ずつ）。index は送った items の中での番号。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { requireSuperAdmin } from '@/lib/admin/guard'
 import { recordAudit } from '@/lib/admin/audit'
@@ -56,7 +57,7 @@ export async function POST(req: NextRequest) {
   const parsed = Body.safeParse(raw.value)
   if (!parsed.success) {
     const fmt = (raw.value as { file?: { format?: unknown } } | null)?.file?.format
-    return NextResponse.json({ error: fmt !== undefined && fmt !== IMPORT_FORMAT ? 'unknown_format' : 'invalid_body' }, { status: 400 })
+    return invalidInput(req, { error: fmt !== undefined && fmt !== IMPORT_FORMAT ? 'unknown_format' : 'invalid_body' }, guard.user.id)
   }
   const { tenant_id: tenantId, store_id: storeId, file } = parsed.data
 
