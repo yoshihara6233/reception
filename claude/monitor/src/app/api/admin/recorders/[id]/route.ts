@@ -4,6 +4,7 @@ import { requireAdmin } from '@/lib/admin/guard'
 import { recordAudit, storeIdForRecorder } from '@/lib/admin/audit'
 import { alarmPurgeCounts, alarmPurgeFailureBody, purgeRecorderAlarmRecords } from '@/lib/admin/alarm-purge'
 import { encryptSecret } from '@intereco/shared'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 const PatchBody = z.object({
   model:      z.string().nullable().optional(),
@@ -55,7 +56,7 @@ export async function PUT(
   delete patch.vod_password
 
   const { error } = await guard.supa.from('recorders').update(patch).eq('id', id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/admin/recorders/[id]') }, { status: 500 })
 
   // 監査ログ（秘密はマスク。変更されたキーのみ記録）。
   const changes: Record<string, unknown> = { ...parsed.data }
@@ -88,7 +89,7 @@ export async function DELETE(
   if (!purge.ok) return NextResponse.json(alarmPurgeFailureBody(purge), { status: 500 })
 
   const { error } = await guard.supa.from('recorders').delete().eq('id', id)
-  if (error) return NextResponse.json({ error: 'delete_failed', message: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: 'delete_failed', message: dbErrorCode(error, '/api/admin/recorders/[id]') }, { status: 500 })
   await recordAudit(guard.supa, {
     actorUserId: guard.user.id,
     action: 'recorder.delete',

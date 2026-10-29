@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { notifyAlarm } from '@/lib/alarms/notify'
+import { webhookUrlProblem } from '@/lib/alarms/webhook-url'
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/
 
@@ -67,6 +68,8 @@ export async function upsertAlarmSettings(input: AlarmSettingsInput): Promise<{ 
   if ((qf && !HHMM.test(qf)) || (qt && !HHMM.test(qt))) {
     return { ok: false, error: '静音時間は HH:MM 形式で入力してください' }
   }
+  const whProblem = webhookUrlProblem(input.notifyWebhookUrl)
+  if (whProblem) return { ok: false, error: whProblem }
 
   const { error } = await supa.from('alarm_settings').upsert(
     {
@@ -100,6 +103,11 @@ export async function bulkUpsertAlarmSettings(
     if ((qf && !HHMM.test(qf)) || (qt && !HHMM.test(qt))) {
       return { ok: false, error: '静音時間は HH:MM 形式で入力してください' }
     }
+  }
+
+  for (const input of inputs) {
+    const whProblem = webhookUrlProblem(input.notifyWebhookUrl)
+    if (whProblem) return { ok: false, error: whProblem }
   }
 
   const rows = inputs.map((input) => ({

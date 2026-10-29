@@ -17,6 +17,7 @@ import {
   getTenantQuota, getStoreCount, getOptionOnCount, exceedsStoreLimit,
   OPTION_KEYS, OPTION_STORE_COL, type OptionKey,
 } from '@/lib/admin/tenant-quota'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 const Body = z.object({
   name:      z.string().trim().min(1).max(160),
@@ -97,7 +98,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { data, error } = await svc.from('stores').insert(insert).select('id').single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/admin/stores') }, { status: 500 })
 
   await recordAudit(guard.supa, {
     actorUserId: guard.user.id,

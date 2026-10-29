@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireBaggageAccess } from '@/lib/baggage/kiosk-guard'
 import { recordAudit } from '@/lib/admin/audit'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 const Body = z.object({
   storeId: z.string().uuid(),
@@ -53,7 +54,7 @@ export async function PUT(req: NextRequest) {
     ...(body.notifyEmails !== undefined ? { notify_emails: body.notifyEmails } : {}),
     updated_at: new Date().toISOString(),
   }, { onConflict: 'store_id' })
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/baggage/settings') }, { status: 500 })
 
   await recordAudit(guard.supa, {
     actorUserId: guard.user.id,

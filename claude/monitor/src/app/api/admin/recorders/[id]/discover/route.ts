@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 export async function POST(
   _req: NextRequest,
@@ -26,6 +27,6 @@ export async function POST(
     .insert({ edge_id: rec.edge_id, kind: 'onvif_discovery', params: { recorder_id: id }, created_by: guard.user.id })
     .select('id')
     .single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/admin/recorders/[id]/discover') }, { status: 500 })
   return NextResponse.json({ job_id: data.id })
 }

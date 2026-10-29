@@ -3,9 +3,14 @@
  *
  * - best-effort: 記録失敗で本処理(設定変更)を失敗させない（warn ログのみ）。
  * - 秘密(パスワード等)は呼び出し側で changes に入れない／マスクすること。
- * - RLS: actor_user_id = auth.uid() の行のみ INSERT 可（guard.supa=セッションクライアントで呼ぶ）。
+ * - **書くのはサーバ (サービスの接続) だけ** (2026-10-29・自主診断 ASVS 16.4.2)。以前は利用者の接続で
+ *   書いており、admin_audit_log に「操作者 = 自分」なら何でも INSERT できるポリシーがあった。管理の
+ *   利用者が PostgREST を直接呼ぶと、していない操作の行を作れた (証跡として信じられない)。いまは
+ *   その INSERT のポリシーを外し (migration 20261029120000)、ここでだけサービスの接続で書く。
+ *   actorUserId は呼び出し側が guard で確かめた利用者を渡す。
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { createSupabaseService } from '@/lib/supabase/server'
 
 export interface AuditEntry {
   actorUserId: string
@@ -18,8 +23,9 @@ export interface AuditEntry {
   changes?:    Record<string, unknown>
 }
 
-export async function recordAudit(supa: SupabaseClient, e: AuditEntry): Promise<void> {
-  const { error } = await supa.from('admin_audit_log').insert({
+export async function recordAudit(_supa: SupabaseClient, e: AuditEntry): Promise<void> {
+  // 第 1 引数 (呼び出し元のセッションの接続) は互換のため受けるだけで、書き込みには使わない
+  const { error } = await createSupabaseService().from('admin_audit_log').insert({
     actor_user_id: e.actorUserId,
     action:        e.action,
     target_type:   e.targetType,

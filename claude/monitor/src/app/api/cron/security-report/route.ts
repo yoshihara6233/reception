@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { sendEmail, SECURITY_FROM_ADDRESS } from '@/lib/email/send'
 import { renderReportForRuns, type ReportRun } from '@/lib/security/patrol-report'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
@@ -49,7 +50,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     .select('store_id, notify_emails, stores!inner ( name, opt_patrol )')
     .eq('enabled', true)
     .eq('stores.opt_patrol', true)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/cron/security-report') }, { status: 500 })
 
   let generated = 0, skippedNoRuns = 0, skippedExists = 0, mailed = 0
   const details: Array<{ store_id: string; result: string }> = []

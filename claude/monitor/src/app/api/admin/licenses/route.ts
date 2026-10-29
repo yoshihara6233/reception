@@ -11,6 +11,7 @@ import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { recordAudit, storeIdForEdge } from '@/lib/admin/audit'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,7 +38,7 @@ export async function GET() {
     .select('id, edge_id, store_id, org_name, max_cameras, expires_at, bound_mac, notes, license_version, status, created_at, updated_at')
     .order('created_at', { ascending: false })
     .limit(500)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/admin/licenses') }, { status: 500 })
   return NextResponse.json({ licenses: data ?? [] })
 }
 
@@ -71,7 +72,7 @@ export async function POST(req: NextRequest) {
     const { error } = await svc.from('licenses').update({
       ...meta, license_blob, license_version: cur.license_version + 1, updated_at: new Date().toISOString(),
     }).eq('id', cur.id)
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/admin/licenses') }, { status: 500 })
     id = cur.id
   } else {
     const { data, error } = await svc.from('licenses').insert({
@@ -80,7 +81,7 @@ export async function POST(req: NextRequest) {
     }).select('id').single()
     if (error) {
       const dup = error.code === '23505'
-      return NextResponse.json({ error: dup ? 'active_license_exists' : error.message }, { status: dup ? 409 : 500 })
+      return NextResponse.json({ error: dup ? 'active_license_exists' : dbErrorCode(error, '/api/admin/licenses') }, { status: dup ? 409 : 500 })
     }
     id = data.id
   }

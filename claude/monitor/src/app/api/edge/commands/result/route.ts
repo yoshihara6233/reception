@@ -15,6 +15,7 @@ import { createSupabaseService } from '@/lib/supabase/server'
 import { authenticateEdge } from '@/lib/edge/device-auth'
 import { applyStartResult } from '@/lib/video/dispatch'
 import { normalizeVideoError } from '@/lib/video/session-logic'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,7 +43,7 @@ export async function POST(req: NextRequest) {
     })
     .eq('request_id', request_id)
     .eq('edge_id', edge.id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/edge/commands/result') }, { status: 500 })
 
   // 診断バンドル（DIAGNOSTICS_SPEC §2.3）は result の ok=true をもって「到着」と
   // 扱う — 完了通知の専用エンドポイントを作らない取り決め。診断以外の

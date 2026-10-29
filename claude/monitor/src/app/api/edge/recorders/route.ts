@@ -15,6 +15,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { authenticateEdge } from '@/lib/edge/device-auth'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,7 +42,7 @@ export async function GET(req: NextRequest) {
     .select('id')
     .eq('edge_id', edge.id)
     .eq('vendor', 'nvms')
-  if (recErr) return NextResponse.json({ error: recErr.message }, { status: 500 })
+  if (recErr) return NextResponse.json({ error: dbErrorCode(recErr, '/api/edge/recorders') }, { status: 500 })
 
   const recorders = []
   for (const rec of recs ?? []) {
@@ -53,7 +54,7 @@ export async function GET(req: NextRequest) {
       ? q.in('id', ids)
       : q.gte('grid_pos', 0).order('grid_pos').limit(MAX_DEFAULT_ROWS)
     const { data: cams, error: camErr } = await q
-    if (camErr) return NextResponse.json({ error: camErr.message }, { status: 500 })
+    if (camErr) return NextResponse.json({ error: dbErrorCode(camErr, '/api/edge/recorders') }, { status: 500 })
     recorders.push({ recorder_id: rec.id, cameras: cams ?? [] })
   }
 

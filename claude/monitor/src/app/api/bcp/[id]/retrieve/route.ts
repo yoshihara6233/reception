@@ -20,6 +20,7 @@ import {
   nvmsBcpRows,
 } from '../../../../../../supabase/functions/jalert-poller/flow'
 import { createSupabaseService } from '@/lib/supabase/server'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 interface EdgeRow {
   id: string
@@ -83,7 +84,7 @@ export async function POST(
     .eq('store_id', event.store_id)
     .neq('status', 'offline')
   if (edgesErr) {
-    return NextResponse.json({ error: 'edges_fetch_failed', message: edgesErr.message }, { status: 500 })
+    return NextResponse.json({ error: 'edges_fetch_failed', message: dbErrorCode(edgesErr, '/api/bcp/[id]/retrieve') }, { status: 500 })
   }
   const edges = (edgesData ?? []) as unknown as EdgeRow[]
   if (edges.length === 0) {
@@ -115,7 +116,7 @@ export async function POST(
       const { error: gridErr } = await svc.from('bcp_grid_shots')
         .upsert(gridRows, { onConflict: 'event_id,page_no,offset_min', ignoreDuplicates: true })
       if (gridErr) {
-        return NextResponse.json({ error: 'grid_shot_insert_failed', message: gridErr.message }, { status: 500 })
+        return NextResponse.json({ error: 'grid_shot_insert_failed', message: dbErrorCode(gridErr, '/api/bcp/[id]/retrieve') }, { status: 500 })
       }
     }
   }
@@ -129,7 +130,7 @@ export async function POST(
     .insert(clipInserts)
     .select('id, camera_id')
   if (clipErr) {
-    return NextResponse.json({ error: 'clip_insert_failed', message: clipErr.message }, { status: 500 })
+    return NextResponse.json({ error: 'clip_insert_failed', message: dbErrorCode(clipErr, '/api/bcp/[id]/retrieve') }, { status: 500 })
   }
   const cameraToClip = new Map<string, string>((inserted ?? []).map((c) => [c.camera_id as string, c.id as string]))
 
@@ -164,7 +165,7 @@ export async function POST(
       .update({ pending_command: command, pending_command_at: new Date().toISOString() })
       .eq('id', edge.id)
     if (cmdErr) {
-      return NextResponse.json({ error: 'dispatch_failed', message: cmdErr.message }, { status: 500 })
+      return NextResponse.json({ error: 'dispatch_failed', message: dbErrorCode(cmdErr, '/api/bcp/[id]/retrieve') }, { status: 500 })
     }
   }
 

@@ -26,6 +26,7 @@ import { requireAdmin } from '@/lib/admin/guard'
 import { recordAudit } from '@/lib/admin/audit'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { removeTenantAttachments } from '@/lib/feedback/attachment-store'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 // lib/tenant/acting.ts の ACTING_TENANT_COOKIE と同じ値。あちらは server-only を
 // 読み込むので、このルートの単体試験 (vitest) から辿れるよう値だけ持つ
@@ -84,7 +85,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
   const { error } = await svc.from('tenants').update(patch).eq('id', id)
   if (error) {
     const dup = /duplicate|unique/i.test(error.message)
-    return NextResponse.json({ error: dup ? 'slug_taken' : error.message }, { status: dup ? 409 : 500 })
+    return NextResponse.json({ error: dup ? 'slug_taken' : dbErrorCode(error, '/api/admin/tenants/[id]') }, { status: dup ? 409 : 500 })
   }
 
   await recordAudit(guard.supa, {
@@ -156,7 +157,7 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
     if (/tenant_not_found/.test(rpcErr.message)) {
       return NextResponse.json({ error: 'not_found' }, { status: 404 })
     }
-    return NextResponse.json({ error: 'delete_failed', message: rpcErr.message }, { status: 500 })
+    return NextResponse.json({ error: 'delete_failed', message: dbErrorCode(rpcErr, '/api/admin/tenants/[id]') }, { status: 500 })
   }
 
   // DB からは消えたので、アカウントの削除の失敗では全体を失敗にしない（記録だけ残す）

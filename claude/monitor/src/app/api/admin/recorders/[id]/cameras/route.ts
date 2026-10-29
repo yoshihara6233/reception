@@ -8,6 +8,7 @@ import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
 import { recordAudit, storeIdForRecorder } from '@/lib/admin/audit'
 import { alarmPurgeCounts, alarmPurgeFailureBody, purgeCameraAlarmRecords } from '@/lib/admin/alarm-purge'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 const Camera = z.object({
   id:             z.string().uuid().optional(),
@@ -54,7 +55,7 @@ export async function PUT(
       .delete()
       .eq('recorder_id', recorderId)
       .in('id', toDelete)
-    if (error) return NextResponse.json({ error: 'delete_failed', message: error.message }, { status: 500 })
+    if (error) return NextResponse.json({ error: 'delete_failed', message: dbErrorCode(error, '/api/admin/recorders/[id]/cameras') }, { status: 500 })
   }
 
   if (upsert.length) {
@@ -72,7 +73,7 @@ export async function PUT(
     const { error } = await guard.supa
       .from('recorder_cameras')
       .upsert(rows, { onConflict: 'recorder_id,channel' })
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/admin/recorders/[id]/cameras') }, { status: 500 })
   }
 
   await recordAudit(guard.supa, {

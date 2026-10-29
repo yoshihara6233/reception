@@ -13,6 +13,7 @@ import { createSupabaseService } from '@/lib/supabase/server'
 import { storeIdsBelongToTenant } from '@/lib/admin/user-scope'
 import { checkSuperAdminFloor } from '@/lib/admin/super-admin-floor'
 import { recordAudit } from '@/lib/admin/audit'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 const UpdateBody = z.object({
   display_name: z.string().min(1).optional(),
@@ -100,7 +101,7 @@ export async function PUT(
   if (Object.keys(patch).length > 0) {
     const { error: updErr } = await svc.from('admin_users').update(patch).eq('id', id)
     if (updErr) {
-      return NextResponse.json({ error: 'update_failed', message: updErr.message }, { status: 500 })
+      return NextResponse.json({ error: 'update_failed', message: dbErrorCode(updErr, '/api/admin/users/[id]') }, { status: 500 })
     }
   }
 
@@ -110,7 +111,7 @@ export async function PUT(
       password: body.password,
     })
     if (pwErr) {
-      return NextResponse.json({ error: 'password_update_failed', message: pwErr.message }, { status: 500 })
+      return NextResponse.json({ error: 'password_update_failed', message: dbErrorCode(pwErr, '/api/admin/users/[id]') }, { status: 500 })
     }
   }
 
@@ -177,7 +178,7 @@ export async function DELETE(
   // Delete profile row first, then auth user
   const { error: delErr } = await svc.from('admin_users').delete().eq('id', id)
   if (delErr) {
-    return NextResponse.json({ error: 'profile_delete_failed', message: delErr.message }, { status: 500 })
+    return NextResponse.json({ error: 'profile_delete_failed', message: dbErrorCode(delErr, '/api/admin/users/[id]') }, { status: 500 })
   }
 
   if (target.auth_user_id) {

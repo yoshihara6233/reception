@@ -15,6 +15,7 @@ import {
   OPTION_KEYS, OPTION_STORE_COL, type OptionKey,
 } from '@/lib/admin/tenant-quota'
 import { recordAudit } from '@/lib/admin/audit'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 const Body = z.object({
   name:       z.string().min(1).optional(),
@@ -84,7 +85,7 @@ export async function PUT(
   }
 
   const { error } = await guard.supa.from('stores').update(patch).eq('id', id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/admin/stores/[id]') }, { status: 500 })
 
   await recordAudit(guard.supa, {
     actorUserId: guard.user.id,

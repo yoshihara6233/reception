@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 const Body = z.object({ channel: z.coerce.number().int().min(1).max(64).optional() })
 
@@ -31,6 +32,6 @@ export async function POST(
     .insert({ edge_id: rec.edge_id, kind: 'connection_test', params: { recorder_id: id, channel }, created_by: guard.user.id })
     .select('id')
     .single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/admin/recorders/[id]/conn-test') }, { status: 500 })
   return NextResponse.json({ job_id: data.id })
 }

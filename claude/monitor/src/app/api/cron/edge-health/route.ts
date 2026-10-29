@@ -28,6 +28,7 @@ import { recordMetric } from '@/lib/metrics'
 import { MONITOR_STALE_SECONDS } from '@intereco/shared'
 import { PRODUCT_NAME } from '@/lib/brand'
 import { appBaseUrl } from '@/lib/app-url'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 interface EdgeRow {
   id: string
@@ -94,7 +95,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const { data, error } = await supa
     .from('edge_devices')
     .select('id, name, store_id, last_seen_at, alerted_at, go2rtc_host, tunnel_down_since, tunnel_alerted_at, stores ( name )')
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/cron/edge-health') }, { status: 500 })
 
   const edges = (data ?? []) as unknown as EdgeRow[]
   let wentDown = 0, recovered = 0

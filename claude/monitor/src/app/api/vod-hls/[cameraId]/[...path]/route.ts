@@ -16,6 +16,7 @@
  * upstream は recorders.live_host（Frigate origin）。`vod/` 配下のみ許可。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { allowedUpstreamOrigin, fetchUpstream, safeContentType, safeSubPath } from '@/lib/proxy/upstream'
 import { createSupabaseServer } from '@/lib/supabase/server'
 
 export async function GET(
@@ -23,10 +24,10 @@ export async function GET(
   ctx: { params: Promise<{ cameraId: string; path: string[] }> },
 ) {
   const { cameraId, path } = await ctx.params
-  const subPathRaw = (path ?? []).join('/')
-
   // 0. パス許可リスト — 録画HLS(/vod/配下)のみ。Frigate の制御API等への到達を防ぐ。
-  if (!subPathRaw.startsWith('vod/')) {
+  //    部品に `..` などが混じったものも断る (lib/proxy/upstream.ts・ASVS 1.1.1)。
+  const subPathRaw = safeSubPath(path, ['vod/'])
+  if (!subPathRaw) {
     return new NextResponse('Forbidden path', { status: 403 })
   }
 
@@ -48,8 +49,9 @@ export async function GET(
   const originSrc = row.recorders.live_host
   if (!originSrc) return new NextResponse('VOD not configured for this camera', { status: 404 })
 
-  let origin: string
-  try { origin = new URL(originSrc).origin } catch { return new NextResponse('Invalid frigate host', { status: 500 }) }
+  // 許した名前のホストだけ (サービストークンを外へ送らない・ASVS 13.2.4)
+  const origin = allowedUpstreamOrigin(originSrc)
+  if (!origin) return new NextResponse('frigate host is not allowed', { status: 403 })
 
   const clientId     = process.env.GO2RTC_CF_ACCESS_CLIENT_ID
   const clientSecret = process.env.GO2RTC_CF_ACCESS_CLIENT_SECRET
@@ -63,12 +65,9 @@ export async function GET(
 
   let upstream: Response
   try {
-    upstream = await fetch(target, {
-      headers: {
-        'CF-Access-Client-Id':     clientId,
-        'CF-Access-Client-Secret': clientSecret,
-      },
-      cache: 'no-store',
+    upstream = await fetchUpstream(target, {
+      'CF-Access-Client-Id':     clientId,
+      'CF-Access-Client-Secret': clientSecret,
     })
   } catch {
     return new NextResponse('Upstream fetch failed', { status: 502 })
@@ -82,7 +81,7 @@ export async function GET(
   return new NextResponse(upstream.body, {
     status: 200,
     headers: {
-      'Content-Type':  upstream.headers.get('content-type') ?? 'application/octet-stream',
+      'Content-Type':  safeContentType(upstream.headers.get('content-type')),
       'Cache-Control': 'no-store, no-cache, must-revalidate',
     },
   })

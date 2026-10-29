@@ -13,11 +13,50 @@ export const GVMS_ROLE_CLAIM = 'gvms_role'
 const MAX_URIS = 10
 
 /**
+ * 拠点のクライアントに許す grant (2026-10-29・自主診断 ASVS 10.1.1)。
+ * 拠点は認可コードで 1 度だけ身元を受け取り、自分のセッションを作る。refresh トークンは使わない。
+ * 以前は refresh_token も許しており、拠点が期限の無い refresh トークンを受け取っていた。
+ */
+const GVMS_GRANT_TYPES: ['authorization_code'] = ['authorization_code']
+
+/**
  * http の戻り先で受けてよいホスト。Supabase の OAuth 2.1 Server は、ループバック以外の http の
  * redirect_uri を受け付けない（登録・更新が validation_failed 400 になる）。
  */
 function isLoopbackHost(hostname: string): boolean {
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]'
+}
+
+/** 社内の網でだけ引ける名前の末尾 (公の DNS では誰も取れない)。 */
+const INTERNAL_SUFFIXES = ['.local', '.lan', '.internal', '.intranet', '.corp', '.home.arpa', '.localdomain']
+
+function privateIPv4(h: string): boolean {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h)
+  if (!m) return false
+  const [a, b] = [Number(m[1]), Number(m[2])]
+  if ([m[1], m[2], m[3], m[4]].some((x) => Number(x) > 255)) return false
+  return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127)
+}
+
+/**
+ * 戻り先のホストとして受けてよいか (2026-10-29・自主診断 ASVS 10.4.1)。
+ *
+ * 戻り先は拠点の heartbeat の申告で決まる。以前は https ならホストを問わず登録していたので、
+ * 拠点のトークン (device_token) を持つ人が任意の外部のホストを戻り先にでき、その拠点へ
+ * サインインした利用者の認可コードを外へ送らせられた。受けるのは次だけにする:
+ *   - ループバック・私設の IP (10/8・172.16/12・192.168/16・100.64/10・IPv6 の ULA)
+ *   - クラウドがその拠点に割り当てた名前 (edge_devices.site_hostname・拠点ごとの証明書の名前)
+ *   - 社内の網でだけ引ける名前 (ドットの無い名前・.local・.lan・.internal など)
+ */
+export function allowedRedirectHost(hostname: string, siteHostname: string | null): boolean {
+  const h = hostname.toLowerCase().replace(/\.$/, '')
+  if (isLoopbackHost(h)) return true
+  if (privateIPv4(h)) return true
+  if (h.startsWith('[')) return /^\[f[cd][0-9a-f]{2}:/i.test(h)  // IPv6 は ULA (fc00::/7) だけ
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(h)) return false         // 公の IPv4
+  if (siteHostname && h === siteHostname.toLowerCase().replace(/\.$/, '')) return true
+  if (!h.includes('.')) return true
+  return INTERNAL_SUFFIXES.some((s) => h.endsWith(s))
 }
 
 /**
@@ -29,7 +68,7 @@ function isLoopbackHost(hostname: string): boolean {
  * 足された https の名前の戻り先が使えず、SSO が invalid redirect_uri で落ちていた。
  * 1 件の受けられない値で一覧全体を止めないよう、ここで落とす。
  */
-export function sanitizeRedirectUris(raw: unknown): string[] {
+export function sanitizeRedirectUris(raw: unknown, siteHostname: string | null = null): string[] {
   if (!Array.isArray(raw)) return []
   const out = new Set<string>()
   for (const v of raw) {
@@ -39,6 +78,7 @@ export function sanitizeRedirectUris(raw: unknown): string[] {
     if ((u.protocol !== 'https:' && u.protocol !== 'http:') || u.username || u.password || u.search || u.hash) continue
     if (u.pathname !== GVMS_CALLBACK_PATH) continue
     if (u.protocol === 'http:' && !isLoopbackHost(u.hostname)) continue
+    if (!allowedRedirectHost(u.hostname, siteHostname)) continue
     out.add(`${u.protocol}//${u.host}${GVMS_CALLBACK_PATH}`)
     if (out.size >= MAX_URIS) break
   }
@@ -98,9 +138,14 @@ export async function syncGvmsOidcClient(
   svc: SupabaseClient, edgeId: string, capabilities: string[] | null, rawUris: unknown,
 ): Promise<OidcSyncResult> {
   const wants = (capabilities ?? []).includes('oidc')
-  const uris = wants ? sanitizeRedirectUris(rawUris) : []
+  let siteHostname: string | null = null
+  if (wants) {
+    const { data: e } = await svc.from('edge_devices').select('site_hostname').eq('id', edgeId).maybeSingle()
+    siteHostname = (e?.site_hostname as string | null | undefined) ?? null
+  }
+  const uris = wants ? sanitizeRedirectUris(rawUris, siteHostname) : []
   const { data: cur, error: readErr } = await svc.from('gvms_oidc_clients')
-    .select('client_id, redirect_uris').eq('edge_id', edgeId).maybeSingle()
+    .select('client_id, redirect_uris, code_grant_only').eq('edge_id', edgeId).maybeSingle()
   if (readErr) return 'skipped'  // 表がまだ無い（migration の前）など
 
   try {
@@ -117,14 +162,24 @@ export async function syncGvmsOidcClient(
         client_name: `G・VMS ${edgeId}`,
         redirect_uris: uris,
         token_endpoint_auth_method: 'none',  // 公開クライアント（PKCE 必須）。拠点へ秘密を配らない
-        grant_types: ['authorization_code', 'refresh_token'],
+        grant_types: GVMS_GRANT_TYPES,
         response_types: ['code'],
         scope: 'openid email profile',
       })
       if (error || !data) { logAuthError('create', edgeId, uris, error); return 'error' }
-      await svc.from('gvms_oidc_clients').insert({ edge_id: edgeId, client_id: data.client_id, redirect_uris: uris })
+      await svc.from('gvms_oidc_clients').insert({
+        edge_id: edgeId, client_id: data.client_id, redirect_uris: uris, code_grant_only: true,
+      })
       await bumpConfigVersion(svc, edgeId)
       return 'created'
+    }
+    // 以前に作ったクライアントは refresh_token を許したまま。次の heartbeat で 1 度だけ直す
+    if (cur.code_grant_only === false) {
+      const { error } = await svc.auth.admin.oauth.updateClient(cur.client_id, { grant_types: GVMS_GRANT_TYPES })
+      if (error) { logAuthError('grant', edgeId, uris, error); return 'error' }
+      await svc.from('gvms_oidc_clients')
+        .update({ code_grant_only: true, updated_at: new Date().toISOString() }).eq('edge_id', edgeId)
+      if (sameList([...(cur.redirect_uris ?? [])].sort(), uris)) return 'updated'
     }
     if (sameList([...(cur.redirect_uris ?? [])].sort(), uris)) return 'unchanged'
     const { error } = await svc.auth.admin.oauth.updateClient(cur.client_id, { redirect_uris: uris })

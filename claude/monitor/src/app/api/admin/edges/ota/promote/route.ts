@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireSuperAdmin } from '@/lib/admin/guard'
 import { recordAudit } from '@/lib/admin/audit'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 const Body = z.object({
   kind: z.enum(['agent', 'cloudflared']),
@@ -36,14 +37,14 @@ export async function POST(req: NextRequest) {
     .eq(currentCol, version)
     .eq('ota_status', 'healthy')
     .limit(1)
-  if (hErr) return NextResponse.json({ error: hErr.message }, { status: 500 })
+  if (hErr) return NextResponse.json({ error: dbErrorCode(hErr, '/api/admin/edges/ota/promote') }, { status: 500 })
   if (!healthy || healthy.length === 0) {
     return NextResponse.json({ error: 'no_healthy_canary' }, { status: 400 })
   }
 
   // 可視（書込可）エッジ一覧を取得して明示的に対象化（RLS がテナント/店舗にスコープ）。
   const { data: edges, error: lErr } = await guard.supa.from('edge_devices').select('id')
-  if (lErr) return NextResponse.json({ error: lErr.message }, { status: 500 })
+  if (lErr) return NextResponse.json({ error: dbErrorCode(lErr, '/api/admin/edges/ota/promote') }, { status: 500 })
   const ids = (edges ?? []).map((e) => e.id as string)
   if (ids.length === 0) return NextResponse.json({ updated: 0 })
 
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest) {
     .from('edge_devices')
     .update({ [desiredCol]: version })
     .in('id', ids)
-  if (uErr) return NextResponse.json({ error: uErr.message }, { status: 500 })
+  if (uErr) return NextResponse.json({ error: dbErrorCode(uErr, '/api/admin/edges/ota/promote') }, { status: 500 })
 
   await recordAudit(guard.supa, {
     actorUserId: guard.user.id,

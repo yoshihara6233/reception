@@ -14,6 +14,7 @@ import { z } from 'zod'
 import { requireBaggageAccess } from '@/lib/baggage/kiosk-guard'
 import { recordAudit } from '@/lib/admin/audit'
 import { KIOSK_ORIENTATIONS } from '@/lib/baggage/kiosk-layout'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 const Body = z.object({
   storeId: z.string().uuid(),
@@ -36,7 +37,7 @@ export async function PUT(req: NextRequest) {
     .update({ kiosk_orientation: body.orientation, updated_at: new Date().toISOString() })
     .eq('store_id', store.id)
     .select('store_id')
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/baggage/kiosk-orientation') }, { status: 500 })
   if (!data || data.length === 0) {
     return NextResponse.json({ error: 'settings_not_found' }, { status: 404 })
   }

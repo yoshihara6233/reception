@@ -11,6 +11,7 @@ import { requireAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { recordAudit } from '@/lib/admin/audit'
 import { normalizeAnnounceSteps, STEP_TEXT_MAX } from '@/lib/baggage/inspection-flow'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 const Body = z.object({
   tenantId: z.string().uuid().optional(),   // super_admin のみ指定可
@@ -79,7 +80,7 @@ export async function PUT(req: NextRequest) {
     ...(body.exitMessageText !== undefined ? { exit_message_text: body.exitMessageText.trim() } : {}),
     updated_at: new Date().toISOString(),
   }, { onConflict: 'tenant_id' })
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/admin/baggage-settings') }, { status: 500 })
 
   await recordAudit(guard.supa, {
     actorUserId: guard.user.id,

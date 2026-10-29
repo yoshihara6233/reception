@@ -7,6 +7,7 @@ import { createSupabaseBrowser } from '@/lib/supabase/browser'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { MonitorMark } from '@/components/MonitorMark'
 import { PRODUCT_NAME } from '@/lib/brand'
+import { isRecentRecoverySession } from '@/lib/auth/recovery-session'
 
 function ResetPasswordInner() {
   const router   = useRouter()
@@ -41,10 +42,12 @@ function ResetPasswordInner() {
         return
       }
 
-      // Fall back to an existing recovery session (e.g. opened via a hash link).
+      // 番号の無いときは、今あるセッションが**最近の再設定の番号で入ったもの**のときだけ通す
+      // (2026-10-29・自主診断 ASVS 6.2.3・lib/auth/recovery-session.ts)。普通のログインの
+      // セッションでは、今のパスワードを聞かずに書き換えさせない
       const { data } = await supabase.auth.getSession()
       if (cancelled) return
-      if (data.session) { setReady(true); return }
+      if (data.session && isRecentRecoverySession(data.session.access_token)) { setReady(true); return }
       setSessionError('リンクが無効または期限切れです。お手数ですが再度お試しください。')
     }
     bootstrap()
@@ -58,6 +61,13 @@ function ResetPasswordInner() {
     if (password !== confirm) { setError('パスワードが一致しません。'); return }
     setError(null)
     setBusy(true)
+    // 押すまでに時間が経ったときも、再設定のセッションでなければ書き換えない
+    const { data: cur } = await supabase.auth.getSession()
+    if (!isRecentRecoverySession(cur.session?.access_token)) {
+      setError('再設定のリンクの有効時間を過ぎました。お手数ですが、もう一度メールを送ってください。')
+      setBusy(false)
+      return
+    }
     const { error: upErr } = await supabase.auth.updateUser({ password })
     if (upErr) { setError(upErr.message); setBusy(false); return }
     // Sign out the recovery session so the user logs in fresh with the new password.
