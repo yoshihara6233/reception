@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { generateInitialPassword, INITIAL_PASSWORD_TTL_HOURS } from '@/lib/auth/initial-password'
 
 export type Role = 'super_admin' | 'tenant_admin' | 'store_manager' | 'baggage_manager' | 'viewer'
 
@@ -38,6 +39,8 @@ export function UserForm({ mode, id, initial, tenants, stores, canCreateSuperAdm
   const router = useRouter()
   const [form, setForm] = useState(initial)
   const [password, setPassword] = useState('')
+  // 「自動で作る」で作ったときは、本人へ渡せるよう見える形で出す
+  const [showPassword, setShowPassword] = useState(false)
   const [busy, setBusy] = useState(false)
   const [err,  setErr]  = useState<string | null>(null)
   const [done, setDone] = useState(false)
@@ -129,18 +132,33 @@ export function UserForm({ mode, id, initial, tenants, stores, canCreateSuperAdm
         )}
       </Field>
 
-      <Field label={mode === 'create' ? 'パスワード * (8文字以上)' : 'パスワード変更 (空欄なら変更しない)'}>
-        <input
-          type="password"
-          required={mode === 'create'}
-          minLength={8}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          autoComplete="new-password"
-          name="new_user_password_field"
-          className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm font-mono"
-          placeholder={mode === 'edit' ? '••••••••' : ''}
-        />
+      <Field label={mode === 'create' ? '仮のパスワード * (8文字以上)' : 'パスワードの再発行 (空欄なら変更しない)'}>
+        <div className="flex gap-2">
+          <input
+            type={showPassword ? 'text' : 'password'}
+            required={mode === 'create'}
+            minLength={8}
+            value={password}
+            onChange={(e) => { setPassword(e.target.value); setShowPassword(false) }}
+            autoComplete="new-password"
+            name="new_user_password_field"
+            className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm font-mono"
+            placeholder={mode === 'edit' ? '••••••••' : ''}
+          />
+          <button
+            type="button"
+            onClick={() => { setPassword(generateInitialPassword()); setShowPassword(true) }}
+            className="shrink-0 rounded border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
+          >
+            自動で作る
+          </button>
+        </div>
+        {/* 管理者が決めたパスワードは仮 (ASVS 6.4.1・lib/auth/initial-password.ts) */}
+        <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
+          {mode === 'create'
+            ? `本人は初回のログインで、ご自身のパスワードに変更します。仮のパスワードは ${INITIAL_PASSWORD_TTL_HOURS} 時間で使えなくなります。`
+            : `入れると仮のパスワードになり、本人は次のログインで変更します（${INITIAL_PASSWORD_TTL_HOURS} 時間で使えなくなります）。ご自身のパスワードを変えたときは仮になりません。`}
+        </p>
       </Field>
 
       <Field label="表示名 *">

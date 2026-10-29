@@ -156,6 +156,7 @@ const EXPECTED: Record<string, Guard> = {
   '/api/auth/recovery': 'session-only',
   '/api/auth/logout': 'session-only',
   '/api/auth/mfa': 'session-only',
+  '/api/auth/initial-password': 'session-only',
   '/api/account/mfa': 'session-only',
   '/api/account/mfa/verify': 'session-only',
   '/api/baggage/clips/[id]': 'session-only',
@@ -318,7 +319,9 @@ describe('API ルートの認可ガード棚卸し', () => {
     // 32 = ログインまわりをブラウザからサーバへ移した 5 本 (2026-10-29・セッションの Cookie を HttpOnly に)。
     // /api/auth/{logout,mfa,recovery}・/api/account/mfa{,/verify}。どれも本人のセッションの操作だけで、
     // DB の行には触れない (service の接続は回数の制限だけ)。以前は同じ操作をブラウザが直接していた。
+    // 33 = /api/auth/initial-password (2026-10-30・ASVS 6.4.1)。仮のパスワードを本人のパスワードに
+    // 変える。service の接続は「本人 (getUser で確かめた id) の仮の印を外す」ことだけに使う。
     const n = Object.values(actual).filter((g) => g === 'session-only').length
-    expect(n).toBeLessThanOrEqual(32)
+    expect(n).toBeLessThanOrEqual(33)
   })
 })

@@ -60,6 +60,12 @@ export default function LoginPage() {
       router.push(next ? `/login/mfa?next=${encodeURIComponent(next)}` : '/login/mfa')
       return
     }
+    // 管理者が決めた仮のパスワードで入った人は、本人のパスワードに変える画面へ (ASVS 6.4.1)。
+    // 多要素の人は番号のあとに middleware がここへ送る
+    if (data.passwordChange === true) {
+      router.push('/login/password')
+      return
+    }
     router.push(safeNext(next))
   }
 
