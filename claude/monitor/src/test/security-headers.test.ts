@@ -74,7 +74,7 @@ describe('セキュリティヘッダー', () => {
       expect((await headerMap()).get('Content-Security-Policy')).not.toContain('frame-src')
     })
 
-    it('CSP に script-src / style-src を書かない（nonce の配線が未了・白画面になる）', async () => {
+    it('全応答の CSP に script-src / style-src / default-src を書かない（script-src は画面だけ・middleware が nonce つきで付ける）', async () => {
       const csp = (await headerMap()).get('Content-Security-Policy')!
       expect(csp).not.toContain('script-src')
       expect(csp).not.toContain('style-src')
@@ -84,7 +84,7 @@ describe('セキュリティヘッダー', () => {
 
   it('nonce 不要で効く指令は入れてある', async () => {
     const csp = (await headerMap()).get('Content-Security-Policy')!
-    expect(csp).toContain("base-uri 'self'")
+    expect(csp).toContain("base-uri 'none'")
     expect(csp).toContain("form-action 'self'")
     expect(csp).toContain("object-src 'none'")
   })

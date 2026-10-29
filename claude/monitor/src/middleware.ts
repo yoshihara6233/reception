@@ -27,6 +27,7 @@ import { appBaseUrl } from '@/lib/app-url'
 import { mfaPending } from '@/lib/auth/mfa'
 import { isForeignClientToken } from '@/lib/auth/foreign-client'
 import { logSecurityEvent, requestIp } from '@/lib/security/events'
+import { makeNonce, pageCsp } from '@/lib/security/csp'
 
 /** トークンについての判定（手荷物検査店長か・多要素の番号の確認が済んでいないか）。 */
 interface Verdict {
@@ -73,7 +74,22 @@ function isStaticAsset(path: string): boolean {
   return !path.startsWith('/api/') && /\.(?:svg|png|jpg|jpeg|gif|webp|ico|webmanifest|txt|xml)$/.test(path)
 }
 
+/**
+ * 入口。要求ごとの nonce を作って CSP を付け (lib/security/csp.ts・ASVS 3.4.3)、判定は route に任せる。
+ * Next が nonce を読めるよう、次へ渡す要求の見出しにも CSP と x-nonce を載せる。
+ */
 export async function middleware(req: NextRequest) {
+  const nonce = makeNonce()
+  const csp = pageCsp(nonce)
+  const reqHeaders = new Headers(req.headers)
+  reqHeaders.set('x-nonce', nonce)
+  reqHeaders.set('content-security-policy', csp)
+  const res = await route(req, () => NextResponse.next({ request: { headers: reqHeaders } }))
+  res.headers.set('Content-Security-Policy', csp)
+  return res
+}
+
+async function route(req: NextRequest, next: () => NextResponse): Promise<NextResponse> {
   const path = req.nextUrl.pathname
   // 旧 URL の画面は新 URL へ（API・キオスクは除く・理由は lib/legacy-host.ts）。
   const legacy = legacyRedirectTarget(
@@ -81,9 +97,9 @@ export async function middleware(req: NextRequest) {
   if (legacy) return NextResponse.redirect(legacy, 307)
 
   // 許可パス・静的アセットはロール参照なしで通す（キオスク/履歴の常用経路を軽くする）。
-  if (isAllowed(path) || isStaticAsset(path)) return NextResponse.next()
+  if (isAllowed(path) || isStaticAsset(path)) return next()
 
-  const res = NextResponse.next()
+  const res = next()
   const supa = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
