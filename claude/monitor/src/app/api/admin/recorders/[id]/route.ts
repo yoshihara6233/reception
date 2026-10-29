@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
 import { recordAudit, storeIdForRecorder } from '@/lib/admin/audit'
 import { alarmPurgeCounts, alarmPurgeFailureBody, purgeRecorderAlarmRecords } from '@/lib/admin/alarm-purge'
-import { encryptSecret } from '@intereco/shared'
+import { encryptSecretForEdge } from '@intereco/shared'
 import { dbErrorCode } from '@/lib/api/db-error'
 
 const PatchBody = z.object({
@@ -44,14 +44,21 @@ export async function PUT(
   for (const k of NULLABLE_TEXT) {
     if (patch[k] === '') patch[k] = null
   }
-  // Vault化: AES-256-GCM で保存（鍵=env SECRETS_ENC_KEY。未設定時は plain: フォールバック）。
+  // Vault化: そのエッジの鍵で暗号化 (enc:v2・エッジごとの鍵)。どのエッジの録画機かを先に引く
+  const needsEnc = !!patch.password || (typeof patch.vod_password === 'string' && patch.vod_password !== '')
+  let edgeId: string | null = null
+  if (needsEnc) {
+    const { data: rec } = await guard.supa.from('recorders').select('edge_id').eq('id', id).maybeSingle()
+    edgeId = (rec?.edge_id as string | undefined) ?? null
+    if (!edgeId) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  }
   if (patch.password) {
-    patch.password_enc = encryptSecret(patch.password as string)
+    patch.password_enc = encryptSecretForEdge(patch.password as string, edgeId!)
   }
   delete patch.password
   // VOD パスワードは空欄=現状維持。非空のときだけ暗号化して更新。
   if (typeof patch.vod_password === 'string' && patch.vod_password !== '') {
-    patch.vod_password_enc = encryptSecret(patch.vod_password)
+    patch.vod_password_enc = encryptSecretForEdge(patch.vod_password, edgeId!)
   }
   delete patch.vod_password
 

@@ -20,6 +20,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { config } from './config.js'
 import { logger } from './logger.js'
 import { applyDesired, type RunnerDeps } from './ota/runner.js'
+import { setEdgeSecretKeys } from '@intereco/shared'
 
 // 自律OTA: bootstrap が返す desired 版を1度に1更新だけ処理する多重起動ガード。
 let otaBusy = false
@@ -124,6 +125,7 @@ export async function refreshSupabaseKey(): Promise<void> {
       scoped_expires_at?: number
       desired_agent_version?: string | null
       desired_cloudflared_version?: string | null
+      secret_keys?: Record<string, string>
     }
 
     const key = j.supabase_service_role_key
@@ -137,6 +139,15 @@ export async function refreshSupabaseKey(): Promise<void> {
       currentKey = undefined
       client = null
       logger.info('bootstrap: service_role no longer issued (scoped_only) — dropped from memory')
+    }
+
+    // このエッジの録画機の秘密を解く鍵 (enc:v2)。メモリにだけ置く (ファイルに書かない)
+    if (j.secret_keys && Object.keys(j.secret_keys).length > 0) {
+      try {
+        setEdgeSecretKeys(config.EDGE_ID, j.secret_keys)
+      } catch (e) {
+        logger.warn({ err: String(e) }, 'bootstrap: secret_keys rejected')
+      }
     }
 
     // scoped トークン（あれば反映）。値が変わった時だけクライアントを作り直す。

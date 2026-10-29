@@ -126,6 +126,8 @@ const EXPECTED: Record<string, Guard> = {
   '/api/admin/recorders/[id]': 'admin',
   '/api/admin/recorders/[id]/config': 'admin',
   '/api/admin/recorders': 'admin',
+  // 録画機の秘密をエッジごとの鍵へ包み直す (全テナントの行を読む)。運営だけ。
+  '/api/admin/secrets/rewrap': 'super-admin',
   '/api/admin/reports/monthly': 'tenant-scope',
   '/api/admin/stores/[id]/nvr/test-connection': 'admin',
   '/api/admin/stores/[id]': 'admin',

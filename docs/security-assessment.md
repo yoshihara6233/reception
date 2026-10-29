@@ -36,7 +36,7 @@ GA前ロードマップの「脆弱性診断（外部）」を、当面 **内部
 
 - **テナント分離**：Supabase RLS。越権は authz 契約テストで不可侵化。`FOR ALL` ポリシーは SELECT も許可し OR 合成される落とし穴に注意（過去に実脆弱性を検出・修正）。
 - **公開面**：`/api/edge/enroll`（トークン認証・単一使用）、`/api/edge/bootstrap`（device_token）、`/api/live-proxy`（セッション+CF Access）、cron（CRON_SECRET）。
-- **秘密**：env のみ（Vercel + beelink `.env`）。カメラ/VODパスワードは **AES-256-GCM で Vault化**（`SECRETS_ENC_KEY`・DBに鍵を置かない）。`enrollment_tokens`/`edge_jobs` は RLS deny（service専用）。
+- **秘密**：env のみ（Vercel + beelink `.env`）。カメラ/VODパスワードは **AES-256-GCM で Vault化**（`SECRETS_ENC_KEY`・DBに鍵を置かない）。2026-10-29 からはエッジごとの鍵 (enc:v2・HKDF・エッジの ID を AAD に縛る・鍵の ID で入れ替え) で、マスタはクラウドだけが持つ。エッジは bootstrap で自分の鍵だけを受け取る。`enrollment_tokens`/`edge_jobs` は RLS deny（service専用）。
 - **エッジ**：service_role 鍵で動作。ジョブ/カメラ取得は `edge_id=EDGE_ID` でスコープ。
 
 ## 4. 既知の残リスク（受容 or 計画中）
