@@ -13,6 +13,7 @@ import { AdminShell } from '@/components/AdminShell'
 import { AdminDenied } from '@/components/admin/AdminDenied'
 import { PageHeader } from '@/components/admin/PageHeader'
 import { requireSuperAdmin } from '@/lib/admin/guard'
+import { suspendedAuthUserIds } from '@/lib/admin/user-access'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { UserDeleteButton } from '../users/user-actions'
 
@@ -39,6 +40,8 @@ export default async function OpsUsersPage() {
     .order('display_name')
 
   const rows = (data ?? []) as Row[]
+  // 利用を止めている人 (編集の画面の「利用の状態」・ASVS 7.4.2)
+  const suspended = await suspendedAuthUserIds(svc, rows.map((r) => r.auth_user_id))
   // 最後の 1 人は消させない。API 側でも 409 で弾くが（lib/admin/super-admin-floor）、
   // 押せてしまうボタンを出さないほうが親切。
   const isLastOne = rows.length <= 1
@@ -101,7 +104,7 @@ export default async function OpsUsersPage() {
                   </td>
                   <td className="px-4 py-2 font-mono text-xs text-slate-600">{r.email}</td>
                   <td className="px-4 py-2 text-xs text-slate-500">
-                    {r.auth_user_id ? '有効' : '未連携'}
+                    {r.auth_user_id && suspended.has(r.auth_user_id) ? '停止中' : r.auth_user_id ? '有効' : '未連携'}
                   </td>
                   <td className="px-4 py-2">
                     <div className="flex justify-end gap-2">
