@@ -42,6 +42,9 @@ export function checkCriticalEnv(): EnvCheckItem[] {
     // 「気づかないまま課金エグレスが積む」事故になりやすい（2026-08-03: Free 5GB に対し
     // 11.4GB 超過。原因はライブ画像を毎フレーム Supabase から配信していたこと）。
     { key: 'EDGE_IMAGES_BASE_URL',          required: false, set: has('EDGE_IMAGES_BASE_URL'),          purpose: 'ライブ画像を自社ドメインのWorker経由でR2へ（例 https://img.genesis-edge.com）。未設定だと Supabase 配信のまま＝課金エグレスが視聴時間に比例して増える' },
+    // 用途ごとの署名鍵（2026-10-30・ASVS 11.1.2）。無ければ以前の作り方で動くが、キオスクは
+    // service_role の鍵から導くので、service_role の鍵を作り直すとキオスクのセッションが全部切れる
+    { key: 'KIOSK_SESSION_SECRET',          required: false, set: has('KIOSK_SESSION_SECRET'),          purpose: '手荷物検査のキオスクの PIN のセッションの署名鍵（32 バイト以上の乱数）。未設定だと service_role の鍵から導く＝service_role の鍵の作り直しでキオスクが全部ログアウトする' },
     { key: 'EDGE_IMAGES_SIGNING_SECRET',    required: false, set: has('EDGE_IMAGES_SIGNING_SECRET'),    purpose: 'ライブ画像 Worker と共有する署名鍵（Worker 側 secret と同値でないと全フレーム403）' },
     { key: 'R2_ACCOUNT_ID',                 required: false, set: has('R2_ACCOUNT_ID'),                 purpose: '未設定だとクリップが Supabase 保存のまま。※eo光等は *.r2.cloudflarestorage.com を遮断するため、その回線ではS3 API経路は使えない' },
     { key: 'R2_ACCESS_KEY_ID',              required: false, set: has('R2_ACCESS_KEY_ID'),              purpose: 'R2 アクセスキー（3点揃って初めて R2 が有効）' },

@@ -8,12 +8,35 @@
  *
  * 対策: 初回の stream.m3u8 だけフル認証し、その応答で本クッキーを発行。以降の
  * api/hls/*（プレイリスト/init/セグメント）はクッキーの HMAC 検証のみ（DB往復ゼロ）で
- * 通す。鍵は 案2 live-gate と同じ LIVE_SIGNING_SECRET を流用。
+ * 通す。
+ *
+ * 鍵（2026-10-30・自主診断 ASVS 11.1.2）: 以前は live-gate（Cloudflare Worker と共有する URL の署名）と
+ * 同じ LIVE_SIGNING_SECRET をそのまま使っていた。1 本の鍵を 2 つの用途に使うと、片方の作りの
+ * 誤りがもう片方の偽造に効き、片方だけを替えることもできない。いまは用途ごとに分ける
+ * （liveProxyCookieSecret）。
  *
  * 形式: `${exp}.${b64url(origin)}.${sig}` / sig = HMAC-SHA256(`${cameraId}\n${origin}\n${exp}`)
  * origin をペイロードに含めるので hls/* パスでは DB の origin 照会も不要。
  */
 import { createHmac, timingSafeEqual } from 'node:crypto'
+
+/**
+ * クッキーの署名鍵。
+ * - LIVE_PROXY_COOKIE_SECRET があればそれ（live-gate の鍵と独立。どちらかだけを替えられる）。
+ * - 無ければ LIVE_SIGNING_SECRET から用途の名前で導いた鍵（live-gate の署名とは別の鍵になる。
+ *   新しい環境変数が無くても今までどおり動く）。
+ * - どちらも無ければ null（＝クッキーを出さず、毎回フル認証。以前と同じ）。
+ *
+ * 切り替えた時点で出ていたクッキー（最長 10 分）は通らなくなるが、通らないものはフル認証に
+ * 落ちるだけで、視聴は止まらない。
+ */
+export function liveProxyCookieSecret(): string | null {
+  const own = process.env.LIVE_PROXY_COOKIE_SECRET?.trim()
+  if (own) return own
+  const shared = process.env.LIVE_SIGNING_SECRET?.trim()
+  if (!shared) return null
+  return createHmac('sha256', shared).update('live-proxy-cookie-v1').digest('base64url')
+}
 
 export const LIVE_PROXY_COOKIE_TTL_SEC = 600   // 10分（視聴継続中は stream.m3u8 再取得で更新）
 

@@ -1,9 +1,12 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import {
   makeLiveProxyCookie,
   verifyLiveProxyCookie,
   liveProxyCookieName,
   LIVE_PROXY_COOKIE_TTL_SEC,
+  liveProxyCookieSecret,
 } from './live-proxy-session'
 
 const CAM = '26b45a98-b852-44f2-91ed-b00dd5e73adb'
@@ -54,5 +57,45 @@ describe('live-proxy session cookie', () => {
   it('cookie 名はカメラIDから安全な文字だけで構成', () => {
     expect(liveProxyCookieName(CAM)).toBe(`lp_${CAM}`)
     expect(liveProxyCookieName('a/b;c=d')).toBe('lp_abcd')
+  })
+})
+
+describe('クッキーの鍵は live-gate の鍵と分ける (ASVS 11.1.2)', () => {
+  const saved = { gate: process.env.LIVE_SIGNING_SECRET, own: process.env.LIVE_PROXY_COOKIE_SECRET }
+  afterEach(() => {
+    if (saved.gate === undefined) delete process.env.LIVE_SIGNING_SECRET
+    else process.env.LIVE_SIGNING_SECRET = saved.gate
+    if (saved.own === undefined) delete process.env.LIVE_PROXY_COOKIE_SECRET
+    else process.env.LIVE_PROXY_COOKIE_SECRET = saved.own
+  })
+
+  it('LIVE_PROXY_COOKIE_SECRET があればそれを使う', () => {
+    process.env.LIVE_SIGNING_SECRET = 'gate-secret'
+    process.env.LIVE_PROXY_COOKIE_SECRET = 'cookie-secret'
+    expect(liveProxyCookieSecret()).toBe('cookie-secret')
+  })
+
+  it('無ければ LIVE_SIGNING_SECRET から導いた別の鍵 (同じ値は使わない)', () => {
+    process.env.LIVE_SIGNING_SECRET = 'gate-secret'
+    delete process.env.LIVE_PROXY_COOKIE_SECRET
+    const k = liveProxyCookieSecret()
+    expect(k).toBeTruthy()
+    expect(k).not.toBe('gate-secret')
+    // live-gate の鍵で作ったクッキーは通らない (用途が混ざらない)
+    const forged = makeLiveProxyCookie(CAM, ORIGIN, 'gate-secret', NOW)
+    expect(verifyLiveProxyCookie(forged, CAM, k!, NOW)).toBeNull()
+  })
+
+  it('どちらも無ければ null (クッキーを出さず毎回フル認証)', () => {
+    delete process.env.LIVE_SIGNING_SECRET
+    delete process.env.LIVE_PROXY_COOKIE_SECRET
+    expect(liveProxyCookieSecret()).toBeNull()
+  })
+
+  it('live-proxy の受け口は LIVE_SIGNING_SECRET を直に読まない', () => {
+    const route = readFileSync(
+      fileURLToPath(new URL('../app/api/live-proxy/[cameraId]/[...path]/route.ts', import.meta.url)), 'utf8')
+    expect(route).not.toMatch(/process\.env\.LIVE_SIGNING_SECRET/)
+    expect(route).toMatch(/liveProxyCookieSecret\(\)/)
   })
 })

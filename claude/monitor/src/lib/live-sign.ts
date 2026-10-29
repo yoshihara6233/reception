@@ -4,6 +4,8 @@
  * 案2: カメラ側 Cloudflare Access のログインを、アプリ発行の短TTL HMAC 署名に置き換える。
  * monitor（本ファイル）が `exp`(失効UNIX秒) と `sig`(HMAC-SHA256) を URL に付与し、
  * Cloudflare Worker `live-gate` が **同じ鍵 LIVE_SIGNING_SECRET** で検証して Frigate へ通す。
+ * この鍵は live-gate との URL の署名だけに使う（live-proxy のクッキーは別の鍵・
+ * lib/live-proxy-session.ts の liveProxyCookieSecret・ASVS 11.1.2）。
  * → エンドユーザは monitor ログインのみ、カメラ側の CF ログインは不要。低遅延の MJPEG を維持。
  *
  * 署名鍵が未設定なら null を返す＝呼び出し側は従来の生URL（CFログイン方式）にフォールバックする

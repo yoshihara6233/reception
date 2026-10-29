@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterEach } from 'vitest'
 import {
   isValidPinFormat, hashPin, verifyPinHash,
   nextLockState, isLocked, MAX_PIN_ATTEMPTS, LOCK_MINUTES,
@@ -83,5 +83,49 @@ describe('signKioskSession / verifyKioskSession', () => {
     expect(verifyKioskSession(token.slice(0, -2) + 'xy', store, now)).toBe(false)
     expect(verifyKioskSession('', store, now)).toBe(false)
     expect(verifyKioskSession('abc', store, now)).toBe(false)
+  })
+})
+
+describe('署名鍵を用途ごとに分ける (ASVS 11.1.2)', () => {
+  const now = new Date('2026-10-30T09:00:00Z')
+  const store = '4a9efcec-ab80-4293-9e04-9e355b504855'
+  const saved = { srk: process.env.SUPABASE_SERVICE_ROLE_KEY, kiosk: process.env.KIOSK_SESSION_SECRET }
+  afterEach(() => {
+    process.env.SUPABASE_SERVICE_ROLE_KEY = saved.srk
+    if (saved.kiosk === undefined) delete process.env.KIOSK_SESSION_SECRET
+    else process.env.KIOSK_SESSION_SECRET = saved.kiosk
+  })
+
+  it('KIOSK_SESSION_SECRET があれば、service_role の鍵を作り直してもセッションは切れない', () => {
+    process.env.KIOSK_SESSION_SECRET = 'kiosk-dedicated-secret-0123456789abcdef'
+    const { token } = signKioskSession(store, now)
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'rotated-service-role-key'
+    expect(verifyKioskSession(token, store, now)).toBe(true)
+  })
+
+  it('KIOSK_SESSION_SECRET があれば、service_role の鍵が無くても動く', () => {
+    process.env.KIOSK_SESSION_SECRET = 'kiosk-dedicated-secret-0123456789abcdef'
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY
+    const { token } = signKioskSession(store, now)
+    expect(verifyKioskSession(token, store, now)).toBe(true)
+  })
+
+  it('service_role の鍵から作った以前のトークンは、専用の鍵では通らない', () => {
+    delete process.env.KIOSK_SESSION_SECRET
+    const { token: legacy } = signKioskSession(store, now)
+    process.env.KIOSK_SESSION_SECRET = 'kiosk-dedicated-secret-0123456789abcdef'
+    expect(verifyKioskSession(legacy, store, now)).toBe(false)
+  })
+
+  it('KIOSK_SESSION_SECRET が無ければ以前の作り方で動く (移行の間の逃げ道)', () => {
+    delete process.env.KIOSK_SESSION_SECRET
+    const { token } = signKioskSession(store, now)
+    expect(verifyKioskSession(token, store, now)).toBe(true)
+  })
+
+  it('どちらの鍵も無ければ署名しない (例外)', () => {
+    delete process.env.KIOSK_SESSION_SECRET
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY
+    expect(() => signKioskSession(store, now)).toThrow()
   })
 })

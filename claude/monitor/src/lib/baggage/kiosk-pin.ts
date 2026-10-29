@@ -4,7 +4,8 @@
  * - PIN は scrypt でハッシュ化して保存（平文は保持しない）。照合は定数時間比較。
  * - オンライン総当り対策: 5回失敗で15分ロック（状態遷移は純関数 nextLockState）。
  * - 一致時は「キオスク限定・店舗限定」の署名トークンを httpOnly cookie で発行する。
- *   署名鍵は SUPABASE_SERVICE_ROLE_KEY から導出（新規 env 不要・サーバ専用）。
+ *   署名鍵は専用の KIOSK_SESSION_SECRET（2026-10-30・自主診断 ASVS 11.1.2）。未設定なら
+ *   以前どおり SUPABASE_SERVICE_ROLE_KEY から導出する（移行の間だけの逃げ道）。
  *
  * すべてサーバ専用（node:crypto）。クライアントへ鍵・ハッシュを渡さない。
  */
@@ -70,10 +71,25 @@ export function nextLockState(current: PinLockState, success: boolean, now: Date
 
 // ── 署名セッション（HMAC-SHA256・payload.sig / base64url） ─────────────────────
 
+/**
+ * 署名鍵（2026-10-30・自主診断 ASVS 11.1.2）。
+ *
+ * 以前は SUPABASE_SERVICE_ROLE_KEY（DB を何でも読み書きできる鍵）から導いていた。
+ * 用途の違う鍵に依存していると、service_role の鍵を作り直したときにキオスクのセッションが
+ * 全部切れ、逆にキオスクの鍵だけを替えたいときも service_role を替えるしかない。
+ *
+ * - **KIOSK_SESSION_SECRET があればそれだけを使う**（service_role に依存しない）。
+ *   設定した時点で、それまでのキオスクのセッションは無効になる（iPad で PIN を 1 回入れ直す）。
+ * - 無ければ以前の作り方（service_role の鍵から用途固定で導く）。本番は鍵を足すまでこちら。
+ *
+ * どちらも鍵をそのまま使わず、用途の名前で導いた鍵にする（同じ値をほかへ流用しても混ざらない）。
+ */
 function signingKey(): Buffer {
+  const own = process.env.KIOSK_SESSION_SECRET?.trim()
+  if (own) return createHmac('sha256', own).update('baggage-kiosk-session-v2').digest()
   const secret = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!secret) throw new Error('SUPABASE_SERVICE_ROLE_KEY not configured')
-  // サービス鍵を直接使わず、用途固定の派生鍵にする。
+  if (!secret) throw new Error('KIOSK_SESSION_SECRET not configured')
+  // 以前の作り方（移行の間だけ）。サービス鍵を直接使わず、用途固定の派生鍵にする。
   return createHmac('sha256', secret).update('baggage-kiosk-session-v1').digest()
 }
 
