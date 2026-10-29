@@ -23,7 +23,8 @@ export function MonthlyFinalize({ ym, monthLabel }: { ym: string; monthLabel: st
       setMsg({ ok: true, text: `${monthLabel}を確定しました（${j.storeCount ?? 0} 拠点）` })
       router.refresh()
     } else {
-      setMsg({ ok: false, text: j.error === 'tenant_required' ? 'テナントを選択してください' : `確定に失敗: ${j.error ?? res.status}` })
+      // 回数の上限（429）などはサーバの日本語の文（message）をそのまま出す
+      setMsg({ ok: false, text: j.error === 'tenant_required' ? 'テナントを選択してください' : (j.message ?? `確定に失敗: ${j.error ?? res.status}`) })
     }
   }
 
