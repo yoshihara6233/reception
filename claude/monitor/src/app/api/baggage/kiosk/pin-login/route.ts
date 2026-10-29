@@ -10,6 +10,7 @@
  * /baggage 履歴や /admin には一切アクセスできない（cookie はそれらのガードで無視される）。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { createSupabaseService } from '@/lib/supabase/server'
 import {
@@ -23,7 +24,7 @@ const Body = z.object({ storeId: z.string().uuid(), pin: z.string() })
 
 export async function POST(req: NextRequest) {
   const parsed = Body.safeParse(await req.json().catch(() => null))
-  if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
+  if (!parsed.success) return invalidInput(req, { error: 'invalid_body' })
   if (!isValidPinFormat(parsed.data.pin)) return NextResponse.json({ error: 'invalid_pin' }, { status: 401 })
 
   const svc = createSupabaseService()

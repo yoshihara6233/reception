@@ -6,6 +6,7 @@
  * （パスは自店舗プレフィックスのみ受理される）。認可は requireKioskStore（PIN or ログイン）。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { requireKioskStore } from '@/lib/baggage/kiosk-guard'
 import { jstYmd } from '@/lib/baggage/face-auth'
@@ -25,7 +26,7 @@ function dataUrlToBuffer(dataUrl: string): { buf: Buffer; ext: string; mime: str
 
 export async function POST(req: NextRequest) {
   const parsed = Body.safeParse(await req.json().catch(() => null))
-  if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
+  if (!parsed.success) return invalidInput(req, { error: 'invalid_body' })
 
   const guard = await requireKioskStore(parsed.data.storeId)
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status })

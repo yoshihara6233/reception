@@ -9,6 +9,7 @@
  *   DELETE { name, value } → 204（値の一致するものを消す。無くても 204）
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { authenticateEdge } from '@/lib/edge/device-auth'
 import { createSupabaseService } from '@/lib/supabase/server'
@@ -26,7 +27,7 @@ async function handle(req: NextRequest, op: 'add' | 'delete') {
   const edge = await authenticateEdge(req)
   if (!edge) return NextResponse.json({ error: 'invalid device token' }, { status: 401 })
   const parsed = Body.safeParse(await req.json().catch(() => null))
-  if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
+  if (!parsed.success) return invalidInput(req, { error: 'invalid_body' })
   if (!cloudflareDnsConfigured()) return NextResponse.json({ error: 'dns_unavailable' }, { status: 503 })
 
   const svc = createSupabaseService()

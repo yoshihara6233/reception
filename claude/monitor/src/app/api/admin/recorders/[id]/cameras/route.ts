@@ -4,6 +4,7 @@
  *   { upsert: Camera[], delete: string[] }
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
 import { recordAudit, storeIdForRecorder } from '@/lib/admin/audit'
@@ -36,7 +37,7 @@ export async function PUT(
 
   const { id: recorderId } = await ctx.params
   const parsed = Body.safeParse(await req.json())
-  if (!parsed.success) return NextResponse.json({ error: 'invalid_body', detail: parsed.error.format() }, { status: 400 })
+  if (!parsed.success) return invalidInput(req, { error: 'invalid_body', detail: parsed.error.format() }, guard.user.id)
 
   const { upsert, delete: toDelete } = parsed.data
 

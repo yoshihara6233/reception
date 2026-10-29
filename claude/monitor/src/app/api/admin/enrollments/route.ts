@@ -6,6 +6,7 @@
  * tenant_id は store 由来（クライアント入力に依存しない＝store_id 詐称を封じる）。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status })
 
   const parsed = Body.safeParse(await req.json())
-  if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
+  if (!parsed.success) return invalidInput(req, { error: 'invalid_body' }, guard.user.id)
   const { store_id, name, camera_tier, kind } = parsed.data
 
   // 認可: その店舗が呼び出し管理者から見えるか（RLS セッションで確認）→ tenant_id を取得。

@@ -97,3 +97,39 @@ export const FACE_AUTH_TIMEOUT_SEC = 3
  * サーバ側の実タイムアウトはこちらで別に持つ（温間は 1秒前後で返る）。
  */
 export const FACE_SEARCH_TIMEOUT_SEC = 8
+
+/**
+ * 検査の窓 (inspectionStartedAt〜inspectionEndedAt) の上限（秒）。
+ * 1 回の検査は STEP 最大 10 個 × 各 STEP の無操作タイムアウト最大 600 秒 = 100 分
+ * （/api/admin/baggage-settings の上限）で必ず終わる。余裕を見て 2 時間。
+ * キオスクの値をそのまま受けると、何日分もの切り出しを頼めてしまう（ASVS 2.2.3）。
+ */
+export const MAX_INSPECTION_WINDOW_SEC = 2 * 60 * 60
+/** キオスクの時計とサーバの時計のずれの許容（秒）。退室は検査の直後に送られる。 */
+export const KIOSK_CLOCK_SKEW_SEC = 15 * 60
+
+export type InspectionWindow =
+  | { ok: true; startedAt: Date; endedAt: Date; shifted: boolean }
+  | { ok: false; error: 'window_invalid' | 'window_reversed' | 'window_too_long' }
+
+/**
+ * キオスクが送った検査の窓を、切り出しのジョブに使える形に整える。
+ *   - 日時として読めない → window_invalid
+ *   - 終わりが始まりより前 → window_reversed
+ *   - 長さが MAX_INSPECTION_WINDOW_SEC を超える → window_too_long
+ *   - 終わりがサーバの今から KIOSK_CLOCK_SKEW_SEC より離れている（キオスクの時計がずれている・
+ *     古い時刻や先の時刻を送ってきた）→ 長さはそのままに、終わりをサーバの今へ置き直す（shifted）。
+ *     退室は検査の直後に送られるので、サーバの今の方が録画の時刻に近い。
+ */
+export function normalizeInspectionWindow(startedAt: Date, endedAt: Date, now: Date): InspectionWindow {
+  const s = startedAt.getTime()
+  const e = endedAt.getTime()
+  if (!Number.isFinite(s) || !Number.isFinite(e)) return { ok: false, error: 'window_invalid' }
+  if (e < s) return { ok: false, error: 'window_reversed' }
+  const len = e - s
+  if (len > MAX_INSPECTION_WINDOW_SEC * 1000) return { ok: false, error: 'window_too_long' }
+  if (Math.abs(e - now.getTime()) > KIOSK_CLOCK_SKEW_SEC * 1000) {
+    return { ok: true, startedAt: new Date(now.getTime() - len), endedAt: new Date(now.getTime()), shifted: true }
+  }
+  return { ok: true, startedAt: new Date(s), endedAt: new Date(e), shifted: false }
+}

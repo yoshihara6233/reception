@@ -73,6 +73,8 @@ export async function GET(
       'Pragma':        'no-cache',
     },
     cache: 'no-store',
+    // Storage が詰まったときに関数の上限まで待たない (自主診断 ASVS 15.2.2)
+    signal: AbortSignal.timeout(10_000),
   })
 
   if (!res.ok) {

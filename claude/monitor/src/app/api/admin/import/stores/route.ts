@@ -22,7 +22,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/admin/guard'
 import { resolveAdminContext } from '@/lib/tenant/acting'
-import { parseCsv } from '@/lib/admin/csv'
+import { parseCsv, CSV_MAX_ROWS, csvTooManyRows } from '@/lib/admin/csv'
+import { heavyAllows, tooManyRequests } from '@/lib/limits/heavy'
 import { createSupabaseService } from '@/lib/supabase/server'
 import {
   getTenantQuota, getStoreCount, getOptionOnCount,
@@ -61,11 +62,18 @@ export async function POST(req: NextRequest) {
   const ctx = await resolveAdminContext(guard.supa)
   const defaultTenantId = ctx.tenantId  // null = super_admin が操作中テナント未選択
 
+  const svc = createSupabaseService()
+
+  // 回数の上限 (60 秒 3 回・1 時間 30 回) と行数の上限 (自主診断 ASVS 15.2.2)
+  const allowed = await heavyAllows(svc, 'csv-import', { user: guard.user.id })
+  if (!allowed.ok) return tooManyRequests(allowed.retryAfterSec)
+
   const text = await req.text()
   const rows = parseCsv(text)
   if (!rows.length) return NextResponse.json({ error: 'empty_csv' }, { status: 400 })
-
-  const svc = createSupabaseService()
+  if (rows.length > CSV_MAX_ROWS.stores) {
+    return NextResponse.json(csvTooManyRows(rows.length, CSV_MAX_ROWS.stores), { status: 413 })
+  }
 
   // 同一名称の重複登録を防ぐ: 登録先テナント毎に既存の店舗名を先読みし、名前で弾く。
   // CSV 内での重複も、この Set に登録済み名を足していくことで 2 行目以降をスキップ。

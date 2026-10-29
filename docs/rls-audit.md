@@ -38,3 +38,17 @@
 
 ## 4. 結論
 self-only は `admin_users` 1表のみで、他表は store スコープ型で一貫。**機微データの全開放や `USING(true)` の書込穴は無し**。最大の残リスクは「**service client + コード認可**」への依存で、**authz 契約テストの常設**が恒久対策。本番実ポリシーの突合は staging DB 構築後に実施する。
+
+## 5. 追記: 自主診断 (ASVS 5.0 L2) での見直し (2026-10-28〜30)
+
+上の表の「低（要テスト）」は、実 DB の試験で次のとおり直した。試験は `claude/monitor/tests/schema-meta/`（本番と同じ migration を当てた DB で、利用者のトークンと同じ role・クレームで実際に書いてみる）。
+
+- **20261028120000_rls_write_scope.sql**（reception #407）: `*_modify` の FOR ALL（役割だけを見る）を外し、書き込みを「管理の役割 × 担当の店舗」（`can_manage_store`）に絞った。機器（`edge_devices`）を書けるのは運営だけ。試験 `rls-write-scope.test.ts`
+- **20261030120000_authz_data_scope.sql**: 試験 `authz-data-scope.test.ts`
+  - 関連する列の組み合わせ: カメラ・録画機・検査の記録の列は、行の店舗のものに限る（発報・発報のコマ・BCP のクリップとグリッド・巡回の所見・検査のクリップ。エッジのトークンのポリシーも）
+  - 利用者の接続から書く経路の無い表の書き込みを外した（`metric_events_insert`・`licenses_modify`。書くのはサーバだけ）
+  - `stores_update` は店長を担当の店舗に絞り、有料オプション（`opt_*`）と `tenant_id` は API と同じ規則をトリガ（`trg_stores_privileged_columns`）で守る
+  - SECURITY DEFINER の `start_live_session` は店舗が見えることと RESTRICTIVE の層と同じ条件を関数の中で確かめる。cron とサーバだけが使う関数は anon・authenticated から呼べない
+- RLS の外側の層（すべて RESTRICTIVE・許すポリシーを持つ全部の表）: `first_party_only`（20261029090000_oauth_client_token_scope.sql）・`mfa_aal2_only`（#413）・`tenant_active_only`（#415）・`user_active_only`（#423）
+
+**境界の考え方**: 利用者のトークンで PostgREST を直接呼んだときの守りは RLS（と、RLS を通らない SECURITY DEFINER の関数の中の検査）。テナント・店舗の範囲と役割と、値の組み合わせのうち越境につながるものは DB で守る。入力の形（文字数・書式）は API の zod で見て、外へ出る値は使う時にもう一度確かめる（例: 発報の Webhook の宛先は送る時に `lib/alarms/webhook-url.ts` で確かめる）。

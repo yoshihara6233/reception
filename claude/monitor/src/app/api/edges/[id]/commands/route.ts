@@ -22,6 +22,7 @@
  * **エッジがその値を fetch 先やコマンド引数に使わないか**を必ず確認すること。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { type EdgeCommand } from '@/lib/edge/commands'
@@ -82,7 +83,7 @@ export async function POST(
   const parsed = UserCommand.safeParse(await req.json().catch(() => null))
   if (!parsed.success) {
     // 何が違ったかは返さない（受理する種別と必須項目の形が読み取れてしまう）。
-    return NextResponse.json({ error: 'invalid_command' }, { status: 400 })
+    return invalidInput(req, { error: 'invalid_command' }, user.id)
   }
 
   const command: EdgeCommand = { ...parsed.data, request_id: randomUUID() }

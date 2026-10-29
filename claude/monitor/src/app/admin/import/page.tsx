@@ -34,6 +34,7 @@ export default async function ImportPage() {
               <li><b>任意列:</b> <code>address, area_code, latitude, longitude, timezone, tenant_id, external_id, opt_patrol, opt_alarm, opt_baggage</code></li>
               <li><code>external_id</code>（既存 UUID）一致時は更新、なければ新規作成</li>
               <li>緯度経度を空にすると後でジオコーディング</li>
+              <li>1 回に取り込めるのは 1,000 行まで（超えるときはファイルを分ける）</li>
               <li><code>opt_patrol / opt_alarm / opt_baggage</code>：巡回/発報/検査の ON/OFF（<code>true</code>/<code>false</code>・空=OFF）。列を付けた行だけ反映。ON はテナント契約済み＋上限内が必要（超過行は失敗）</li>
             </ul>
           }
@@ -49,6 +50,7 @@ export default async function ImportPage() {
               <li><b>任意列:</b> <code>name, enabled</code></li>
               <li><code>(recorder_id, channel)</code> でアップサート</li>
               <li><code>grid_pos</code> は 0〜15（16分割の位置）</li>
+              <li>1 回に取り込めるのは 5,000 行まで（超えるときはファイルを分ける）</li>
             </ul>
           }
           example={`recorder_id,channel,name,grid_pos,enabled\n<uuid>,1,入口,0,true\n<uuid>,2,店頭,1,true`}

@@ -38,3 +38,24 @@ export function parseCsv(text: string): Record<string, string>[] {
     return obj
   })
 }
+
+/**
+ * 1 回の取り込みの行数の上限 (2026-10-30・自主診断 ASVS 15.2.2)。
+ *
+ * 以前は行数の上限が無く、本文の 4.5 MB (Vercel の上限) だけが頭打ちだった。
+ * - 拠点: 行ごとに名前の重複・契約の上限を確かめて 1 行ずつ書く (1 行 数十ミリ秒)。
+ *   1,000 行なら関数の上限 (300 秒) に十分収まる。
+ * - カメラ: 検査のあと 1 回の upsert にまとめる。5,000 行 (拠点 300 × 16 台) まで。
+ * 超えたら断り、ファイルを分けてもらう (途中まで書いて止まるより分かりやすい)。
+ */
+export const CSV_MAX_ROWS = { stores: 1_000, cameras: 5_000 } as const
+
+/** 上限を超えたときの応答の本文。画面は message をそのまま出す */
+export function csvTooManyRows(rows: number, limit: number) {
+  return {
+    error:   'too_many_rows',
+    message: `1 回に取り込めるのは ${limit.toLocaleString('en-US')} 行までです (${rows.toLocaleString('en-US')} 行)。ファイルを分けてください`,
+    limit,
+    rows,
+  }
+}

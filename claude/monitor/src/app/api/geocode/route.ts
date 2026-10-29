@@ -9,7 +9,8 @@
  *   { lat: number, lng: number, address: string }
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { createSupabaseServer } from '@/lib/supabase/server'
+import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
+import { heavyAllows, tooManyRequests } from '@/lib/limits/heavy'
 
 interface ZipcloudResult {
   zipcode: string
@@ -47,6 +48,11 @@ export async function GET(req: NextRequest) {
   const supa = await createSupabaseServer()
   const { data: { user } } = await supa.auth.getUser()
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+
+  // 回数の上限（60 秒 10 回・1 時間 100 回・自主診断 ASVS 2.4.1）
+  const svc = createSupabaseService()
+  const allowed = await heavyAllows(svc, 'geocode', { user: user.id })
+  if (!allowed.ok) return tooManyRequests(allowed.retryAfterSec)
 
   const sp = req.nextUrl.searchParams
   const zipcode = sp.get('zipcode')?.replace(/-/g, '') ?? ''
@@ -87,7 +93,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ lat: zipLat, lng: zipLng, address })
   }
 
-  // 3. Nominatim で住所から座標を取得
+  // 3. Nominatim で住所から座標を取得。約款はアプリ全体で 1 秒 1 回なので、全員で 1 つの枠を使う
+  if (!(await heavyAllows(svc, 'nominatim', {})).ok) {
+    return NextResponse.json({ error: '座標の問い合わせが混み合っています。数秒おいてからお試しください' }, { status: 429, headers: { 'Retry-After': '1' } })
+  }
   const query = address || `日本 〒${zipcode.slice(0, 3)}-${zipcode.slice(3)}`
   try {
     const nomRes = await fetch(

@@ -20,6 +20,7 @@
  * **それ以外の Storage のファイル（録画の切り出し・画像・報告書）は消さない**（今回の範囲外。残る）。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { sameTenantName } from '@/lib/admin/tenant-name'
 import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
@@ -66,7 +67,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
   const { id } = await ctx.params
   const parsed = Body.safeParse(await req.json().catch(() => null))
   if (!parsed.success) {
-    return NextResponse.json({ error: 'invalid_body', detail: parsed.error.format() }, { status: 400 })
+    return invalidInput(req, { error: 'invalid_body', detail: parsed.error.format() }, guard.user.id)
   }
 
   const patch: Record<string, unknown> = { ...parsed.data }
@@ -122,7 +123,7 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
   const { id } = await ctx.params
   const parsed = DeleteBody.safeParse(await req.json().catch(() => null))
   if (!parsed.success) {
-    return NextResponse.json({ error: 'invalid_body', detail: parsed.error.format() }, { status: 400 })
+    return invalidInput(req, { error: 'invalid_body', detail: parsed.error.format() }, guard.user.id)
   }
 
   const svc = createSupabaseService()
