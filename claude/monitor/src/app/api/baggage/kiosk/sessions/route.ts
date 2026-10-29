@@ -16,7 +16,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireKioskStore } from '@/lib/baggage/kiosk-guard'
 import { buildClipJobs } from '@/lib/baggage/clip-jobs'
-import { isTempEvent } from '@/lib/baggage/inspection-flow'
+import { isTempEvent, normalizeInspectionWindow } from '@/lib/baggage/inspection-flow'
 import { withTimeout, jstYmd } from '@/lib/baggage/face-auth'
 import { jstDateStr } from '@/lib/baggage/unmatch'
 import { visitorDailyCollectionId, indexFaceInCollection } from '@/lib/aws/rekognition'
@@ -127,9 +127,17 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 退室（検査窓確定・クリップジョブ生成） ──────────────────────────────────
-  const startedAt = body.inspectionStartedAt ?? nowIso
-  const endedAt = body.inspectionEndedAt ?? nowIso
   const exitStatus = body.status ?? 'completed'
+
+  // 検査の窓はキオスクが送る値で、そのまま切り出しのジョブになる。組み合わせを確かめる
+  // （終わりが始まりより前・長すぎる窓は断る。今から大きく離れた窓は長さを保ってサーバの
+  // 今へ置き直す。ASVS 2.2.3 — 何日分もの切り出しを頼ませない）。
+  const win = normalizeInspectionWindow(
+    new Date(body.inspectionStartedAt ?? nowIso), new Date(body.inspectionEndedAt ?? nowIso), now)
+  if (!win.ok) return NextResponse.json({ error: win.error }, { status: 400 })
+  if (win.shifted) console.warn('[baggage] kiosk inspection window shifted to server time', { storeId: store.id })
+  const startedAt = win.startedAt.toISOString()
+  const endedAt = win.endedAt.toISOString()
 
   const open = await findOpenSession(svc, store.id, body.personKind, body.employeeId ?? null, body.entrySessionId ?? null)
 
