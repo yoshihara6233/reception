@@ -10,6 +10,7 @@
 import type { NextRequest } from 'next/server'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { hashDeviceToken } from '@/lib/edge/device-token'
+import { logSecurityEvent, requestIp } from '@/lib/security/events'
 
 export interface AuthedEdge {
   id: string
@@ -29,9 +30,15 @@ export async function authenticateEdge(req: NextRequest): Promise<AuthedEdge | n
     .eq('device_token_hash', hashDeviceToken(token))
     .maybeSingle()
   const edge = (data as AuthedEdge | null) ?? null
-  if (!edge) return null
+  if (!edge) {
+    logSecurityEvent({ kind: 'edge.auth_failed', ip: requestIp(req.headers), path: req.nextUrl?.pathname ?? null, status: 401 })
+    return null
+  }
   // 停止したテナントの拠点からは受けない (2026-10-29・自主診断 ASVS 7.4.2・取扱説明書 第 2 部 9 章)
-  if (await storeTenantSuspended(svc, edge.store_id)) return null
+  if (await storeTenantSuspended(svc, edge.store_id)) {
+    logSecurityEvent({ kind: 'edge.auth_failed', ip: requestIp(req.headers), path: req.nextUrl?.pathname ?? null, status: 401, detail: { edge: edge.id, reason: 'tenant_suspended' } })
+    return null
+  }
   return edge
 }
 

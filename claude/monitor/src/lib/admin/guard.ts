@@ -4,6 +4,8 @@
  * so the route can respond 401/403.
  */
 import { createSupabaseServer } from '@/lib/supabase/server'
+import { headers } from 'next/headers'
+import { logSecurityEvent, requestIp } from '@/lib/security/events'
 
 const ADMIN_ROLES = ['super_admin', 'tenant_admin', 'store_manager'] as const
 
@@ -35,7 +37,10 @@ type AdminProfile = { id: string; role: string; tenant_id: string; store_ids: st
 async function requireRole(allowed: readonly string[]) {
   const supa = await createSupabaseServer()
   const { data: { user } } = await supa.auth.getUser()
-  if (!user) return { ok: false as const, status: 401, error: 'unauthorized' }
+  if (!user) {
+    await noteDenied(null, 401, null, allowed)
+    return { ok: false as const, status: 401, error: 'unauthorized' }
+  }
 
   const { data: profile } = await supa
     .from('admin_users')
@@ -44,6 +49,7 @@ async function requireRole(allowed: readonly string[]) {
     .single()
 
   if (!profile || !allowed.includes(profile.role)) {
+    await noteDenied(user.id, 403, profile?.role ?? null, allowed)
     return { ok: false as const, status: 403, error: 'forbidden' }
   }
 
@@ -75,4 +81,11 @@ export function requireSuperAdmin() {
  */
 export function requireTenantAdmin() {
   return requireRole(['tenant_admin'])
+}
+
+/** 役割の判定で断ったことを記録する (ASVS 16.3.2)。記録の失敗で判定を変えない。 */
+async function noteDenied(actor: string | null, status: number, role: string | null, allowed: readonly string[]) {
+  let ip: string | null = null
+  try { ip = requestIp(await headers()) } catch { /* 要求の外 (試験など) */ }
+  logSecurityEvent({ kind: 'authz.denied', actor, ip, status, detail: { role, allowed: allowed.join('|') } })
 }

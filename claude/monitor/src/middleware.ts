@@ -26,6 +26,7 @@ import { legacyRedirectTarget } from '@/lib/legacy-host'
 import { appBaseUrl } from '@/lib/app-url'
 import { mfaPending } from '@/lib/auth/mfa'
 import { isForeignClientToken } from '@/lib/auth/foreign-client'
+import { logSecurityEvent, requestIp } from '@/lib/security/events'
 
 /** トークンについての判定（手荷物検査店長か・多要素の番号の確認が済んでいないか）。 */
 interface Verdict {
@@ -143,6 +144,7 @@ export async function middleware(req: NextRequest) {
   if (!verdict.isBaggageManager) return res  // 通常ロールは制限しない。
 
   // 手荷物検査店長が非許可パスに来た → API は 403、ページは /baggage へ。
+  logSecurityEvent({ kind: 'auth.boundary', ip: requestIp(req.headers), path, detail: { role: 'baggage_manager' } })
   if (path.startsWith('/api/')) {
     return NextResponse.json({ error: 'forbidden_baggage_manager' }, { status: 403 })
   }
@@ -161,6 +163,7 @@ export async function middleware(req: NextRequest) {
  * Cookie は消さない (正規の手順で入り直せば上書きされる)。
  */
 function foreignClientBlock(req: NextRequest, path: string): NextResponse {
+  logSecurityEvent({ kind: 'auth.foreign_token', ip: requestIp(req.headers), path })
   if (path.startsWith('/api/')) {
     return NextResponse.json({ error: 'foreign_client_token' }, { status: 401 })
   }
@@ -172,6 +175,7 @@ function foreignClientBlock(req: NextRequest, path: string): NextResponse {
 
 /** 停止したテナントの利用者を止める。API は 403、画面は /suspended (理由とサインアウト)。 */
 function suspendedBlock(req: NextRequest, path: string): NextResponse {
+  logSecurityEvent({ kind: 'auth.tenant_suspended', ip: requestIp(req.headers), path })
   if (path.startsWith('/api/')) {
     return NextResponse.json({ error: 'tenant_suspended' }, { status: 403 })
   }
@@ -182,6 +186,7 @@ function suspendedBlock(req: NextRequest, path: string): NextResponse {
 }
 
 function mfaBlock(req: NextRequest, path: string): NextResponse {
+  logSecurityEvent({ kind: 'auth.mfa_required', ip: requestIp(req.headers), path })
   if (path.startsWith('/api/')) {
     return NextResponse.json({ error: 'mfa_required' }, { status: 401 })
   }

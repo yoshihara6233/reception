@@ -1,5 +1,6 @@
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { logSecurityEvent } from '@/lib/security/events'
 
 /**
  * 無認証で叩ける受け口のためのレート制限。
@@ -26,7 +27,12 @@ export async function rateLimitAllows(
     console.warn('[rate-limit] check failed, allowing:', error.message)
     return true
   }
-  return data !== false
+  if (data === false) {
+    // 鍵の後ろ (メールアドレス・IP) は書かず、種類 (コロンの前) だけを書く
+    logSecurityEvent({ kind: 'rate_limited', detail: { key: key.split(':')[0], limit, windowSeconds } })
+    return false
+  }
+  return true
 }
 
 /**
