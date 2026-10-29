@@ -7,6 +7,7 @@
  * キオスクと違いタイムアウトレースはせず、失敗は素直にエラーを返す。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { cookies } from 'next/headers'
 import { z } from 'zod'
 import { requireAdmin, requireBaggageRole } from '@/lib/admin/guard'
@@ -95,7 +96,7 @@ export async function POST(
 ) {
   const { id } = await ctx.params
   const parsed = Body.safeParse(await req.json().catch(() => null))
-  if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
+  if (!parsed.success) return invalidInput(req, { error: 'invalid_body' })
 
   // 認証プレゲート（未認証者への UUID 存在オラクル・認証前の service 読みを作らない）:
   // 正規のキオスクPINセッション or 手荷物検査ロールのログイン。iPad は PIN 経路で

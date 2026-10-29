@@ -88,6 +88,7 @@ const HEALTHY = {
     live_sessions_partition: true, monitor_results_partition: true,
     jalert_poll: true, bcp_report_sweep: true,
     monitor_sweep_edges: true, monitor_sweep_unattended_streams: true,
+    oauth_client_session_purge: true,
   },
   vault: {
     project_url: true, service_role_key: true,

@@ -5,6 +5,7 @@
  * 話題は運営だけが読む（内部メモ・WBS・課題 URL をテナントへ出さない）。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { requireSuperAdmin } from '@/lib/admin/guard'
 import { recordAudit } from '@/lib/admin/audit'
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status })
 
   const parsed = Body.safeParse(await req.json().catch(() => null))
-  if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
+  if (!parsed.success) return invalidInput(req, { error: 'invalid_body' }, guard.user.id)
   const { item_ids, ...fields } = parsed.data
   const status = fields.status ?? 'reviewing'
   if (declinedNeedsReply(status, fields.reply ?? null)) {
