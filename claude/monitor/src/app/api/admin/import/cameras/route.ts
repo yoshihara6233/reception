@@ -8,7 +8,9 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/admin/guard'
-import { parseCsv } from '@/lib/admin/csv'
+import { parseCsv, CSV_MAX_ROWS, csvTooManyRows } from '@/lib/admin/csv'
+import { createSupabaseService } from '@/lib/supabase/server'
+import { heavyAllows, tooManyRequests } from '@/lib/limits/heavy'
 import { recordAudit } from '@/lib/admin/audit'
 
 interface RowResult { row: number; ok: boolean; error?: string }
@@ -17,8 +19,15 @@ export async function POST(req: NextRequest) {
   const guard = await requireAdmin()
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status })
 
+  // 回数の上限 (60 秒 3 回・1 時間 30 回) と行数の上限 (自主診断 ASVS 15.2.2)
+  const allowed = await heavyAllows(createSupabaseService(), 'csv-import', { user: guard.user.id })
+  if (!allowed.ok) return tooManyRequests(allowed.retryAfterSec)
+
   const rows = parseCsv(await req.text())
   if (!rows.length) return NextResponse.json({ error: 'empty_csv' }, { status: 400 })
+  if (rows.length > CSV_MAX_ROWS.cameras) {
+    return NextResponse.json(csvTooManyRows(rows.length, CSV_MAX_ROWS.cameras), { status: 413 })
+  }
 
   const results: RowResult[] = []
   const batch: Record<string, unknown>[] = []

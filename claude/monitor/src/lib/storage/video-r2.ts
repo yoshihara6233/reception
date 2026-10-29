@@ -26,6 +26,10 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { edgeImagesBucket, edgeImagesR2Configured, r2 } from '@/lib/storage/edge-images-r2'
 import { edgeImagesWorkerConfigured, signEdgeImageUrl } from '@/lib/storage/edge-images-sign'
 import { slotCount, type VideoKind } from '@/lib/video/session-logic'
+import { fetchWithHeaderTimeout } from '@/lib/net/fetch-timeout'
+
+/** 置き場の Worker への問い合わせの時間切れ */
+const WORKER_TIMEOUT_MS = 10_000
 
 /** 署名の期限。拠点は期限の 5 分前に /api/edge/video/upload-urls で取り直す（§5.2.3）。 */
 export const VIDEO_UPLOAD_TTL_SEC = 3600
@@ -87,7 +91,8 @@ function workerUrl(method: 'GET' | 'DELETE', key: string): string | null {
 export async function getVideoObject(key: string): Promise<VideoObject | null> {
   const u = workerUrl('GET', key)
   if (u) {
-    const res = await fetch(u, { cache: 'no-store' })
+    // 本文は利用者へ流すので、時間切れは見出しが届くまでだけ (自主診断 ASVS 15.2.2)
+    const res = await fetchWithHeaderTimeout(u, { cache: 'no-store' }, WORKER_TIMEOUT_MS)
     if (res.status === 404) return null
     if (!res.ok || !res.body) throw new Error(`video_get_failed:${res.status}`)
     const len = Number(res.headers.get('Content-Length'))
@@ -106,7 +111,7 @@ export async function getVideoObject(key: string): Promise<VideoObject | null> {
 export async function videoObjectExists(key: string): Promise<boolean> {
   const u = workerUrl('GET', key) // HEAD は GET の署名で通る
   if (u) {
-    const res = await fetch(u, { method: 'HEAD', cache: 'no-store' })
+    const res = await fetch(u, { method: 'HEAD', cache: 'no-store', signal: AbortSignal.timeout(WORKER_TIMEOUT_MS) })
     if (res.status === 404) return false
     if (!res.ok) throw new Error(`video_head_failed:${res.status}`)
     return true
@@ -127,7 +132,7 @@ export async function deleteVideoObjects(sessionId: string, kind: VideoKind): Pr
     const results = await Promise.all(names.map(async (n) => {
       const u = workerUrl('DELETE', videoKey(sessionId, n))
       if (!u) return false
-      const res = await fetch(u, { method: 'DELETE', cache: 'no-store' })
+      const res = await fetch(u, { method: 'DELETE', cache: 'no-store', signal: AbortSignal.timeout(WORKER_TIMEOUT_MS) })
       return res.ok || res.status === 404
     }))
     if (results.some((ok) => !ok)) throw new Error('video_delete_failed:worker')

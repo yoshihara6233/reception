@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { randomBytes } from 'node:crypto'
 import { z } from 'zod'
 import { requireSuperAdmin } from '@/lib/admin/guard'
@@ -16,7 +17,7 @@ export async function POST(req: NextRequest) {
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status })
 
   const parsed = Body.safeParse(await req.json())
-  if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
+  if (!parsed.success) return invalidInput(req, { error: 'invalid_body' }, guard.user.id)
 
   const device_token = randomBytes(32).toString('hex')
 

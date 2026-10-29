@@ -13,6 +13,7 @@
  * 権限は利用者の編集・多要素を外すと同じ (lib/admin/user-access.ts)。操作は監査ログに残す。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
@@ -63,7 +64,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
 export async function POST(req: NextRequest, ctx: Ctx) {
   const { id } = await ctx.params
   const parsed = Body.safeParse(await req.json().catch(() => null))
-  if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
+  if (!parsed.success) return invalidInput(req, { error: 'invalid_body' })
   const action = parsed.data.action
   const t = await loadTarget(id)
   if ('res' in t) return t.res

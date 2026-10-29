@@ -157,7 +157,11 @@ export default function AccountSecurityPage() {
           端末を無くしたときは、管理者に多要素認証の解除を依頼してください（管理者は本人であることを確かめてから外します）。
           予備の端末を登録しておくと、1 台を無くしても入れます。
         </p>
-        <p><Link href="/stores" className="text-xs text-slate-500 hover:text-slate-700 hover:underline">戻る</Link></p>
+        <p className="flex gap-4">
+          {/* 拠点 (G・VMS) へのサインインの許可の一覧と取り消し (2026-10-30・ASVS 10.4.9) */}
+          <Link href="/account/sites" className="text-xs text-slate-500 hover:text-slate-700 hover:underline">拠点へのサインインの許可</Link>
+          <Link href="/stores" className="text-xs text-slate-500 hover:text-slate-700 hover:underline">戻る</Link>
+        </p>
       </div>
     </main>
   )

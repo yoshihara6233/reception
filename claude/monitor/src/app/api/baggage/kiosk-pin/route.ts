@@ -9,6 +9,7 @@
  * 書き込みは service role。平文PINは保存しない。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { requireBaggageAccess } from '@/lib/baggage/kiosk-guard'
 import { hashPin, isValidPinFormat, isLocked } from '@/lib/baggage/kiosk-pin'
@@ -36,7 +37,7 @@ const PutBody = z.object({ storeId: z.string().uuid(), pin: z.string() })
 
 export async function PUT(req: NextRequest) {
   const parsed = PutBody.safeParse(await req.json().catch(() => null))
-  if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
+  if (!parsed.success) return invalidInput(req, { error: 'invalid_body' })
   if (!isValidPinFormat(parsed.data.pin)) return NextResponse.json({ error: 'invalid_pin_format' }, { status: 400 })
 
   const guard = await requireBaggageAccess(parsed.data.storeId)

@@ -87,6 +87,8 @@ export const CORE_JOBS: Record<string, string> = {
   bcp_report_sweep:                 'BCP レポートの自動生成',
   monitor_sweep_edges:              'エッジ死活の掃き出し',
   monitor_sweep_unattended_streams: '見放し配信の停止',
+  // 2026-10-30・ASVS 10.4.8 (20261030093100)。止まると拠点向けのセッションと refresh トークンが 24 時間で切れなくなる
+  oauth_client_session_purge:       '拠点向けのセッションの 24 時間の期限',
 }
 
 export function evaluatePartitionHealth(facts: PartitionHealthFacts): PartitionVerdict {

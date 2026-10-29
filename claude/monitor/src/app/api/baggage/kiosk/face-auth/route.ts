@@ -12,6 +12,7 @@
  * AWS 未設定でも 500 にしない（authSkipped でフロー継続）。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { requireKioskStore } from '@/lib/baggage/kiosk-guard'
 import { lastNameOf, jstYmd } from '@/lib/baggage/face-auth'
@@ -21,6 +22,7 @@ import {
   visitorDailyCollectionId,
   searchFaceInCollection,
 } from '@/lib/aws/rekognition'
+import { heavyAllows } from '@/lib/limits/heavy'
 
 const Body = z.object({
   storeId: z.string().uuid(),
@@ -40,7 +42,7 @@ export const maxDuration = 20
 
 export async function POST(req: NextRequest) {
   const parsed = Body.safeParse(await req.json().catch(() => null))
-  if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
+  if (!parsed.success) return invalidInput(req, { error: 'invalid_body' })
   const body = parsed.data
 
   const guard = await requireKioskStore(body.storeId)
@@ -74,6 +76,16 @@ export async function POST(req: NextRequest) {
     const { error: upErr } = await uploadPromise
     if (upErr) return NextResponse.json({ error: 'photo_upload_failed' }, { status: 500 })
     return NextResponse.json({ matched: false, authSkipped: true, facePath, reason: 'aws_not_configured' })
+  }
+
+  // 回数の上限（1 店 60 秒 30 回・1 時間 600 回・自主診断 ASVS 2.4.1）。照合は 1 回ごとに
+  // Rekognition の課金。超えたら照合だけを省き、写真は残して流れを止めない（タイムアウトと同じ扱い）。
+  // 断ったことは rate_limited として記録される。
+  const allowed = await heavyAllows(svc, 'face-auth', { store: store.id })
+  if (!allowed.ok) {
+    const { error: upErr } = await uploadPromise
+    if (upErr) return NextResponse.json({ error: 'photo_upload_failed' }, { status: 500 })
+    return NextResponse.json({ matched: false, authSkipped: true, facePath, reason: 'rate_limited' })
   }
 
   // 照合レース（アップロードと並行）。withTimeout は理由を潰すため実エラーを保持して診断ログに出す。
