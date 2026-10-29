@@ -272,11 +272,13 @@ max_frequency = "5s"
 # 4152127777 = "123456"
 
 # Configure logged in session timeouts.
-# [auth.sessions]
+# セッションの期限 (2026-10-30・自主診断 ASVS 7.1.1・決めと理由は docs/session-policy.md)。
+# 本番はダッシュボードの Authentication → Sessions (有料のプランの機能)。値を変えるときは両方と文書をそろえる。
+[auth.sessions]
 # Force log out after the specified duration.
-# timebox = "24h"
+timebox = "168h"
 # Force log out if the user has been inactive longer than the specified duration.
-# inactivity_timeout = "8h"
+inactivity_timeout = "24h"
 
 # This hook runs before a new user is created and allows developers to reject the request based on the incoming user object.
 # [auth.hook.before_user_created]
