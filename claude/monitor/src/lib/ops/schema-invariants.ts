@@ -48,6 +48,8 @@ export interface EmbedPair {
  *   （危険度は `!inner` の有無と関係が無い）。file は代表 1 件。
  */
 export const EMBED_PAIRS: EmbedPair[] = [
+  // テナントの停止を見る (2026-10-29・ASVS 7.4.2)。lib/edge/gvms-consent.ts も同じ組を使う (1 組 1 行)
+  { file: 'lib/edge/device-auth.ts', from: 'stores', to: 'tenants' },
   { file: 'app/admin/audit/changes/page.tsx', from: 'admin_audit_log', to: 'stores' },
   { file: 'app/alarms/page.tsx', from: 'alarm_events', to: 'recorder_cameras' },
   { file: 'app/alarms/[id]/page.tsx', from: 'alarm_events', to: 'stores' },

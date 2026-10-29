@@ -28,5 +28,23 @@ export async function authenticateEdge(req: NextRequest): Promise<AuthedEdge | n
     .select('id, store_id')
     .eq('device_token_hash', hashDeviceToken(token))
     .maybeSingle()
-  return (data as AuthedEdge | null) ?? null
+  const edge = (data as AuthedEdge | null) ?? null
+  if (!edge) return null
+  // 停止したテナントの拠点からは受けない (2026-10-29・自主診断 ASVS 7.4.2・取扱説明書 第 2 部 9 章)
+  if (await storeTenantSuspended(svc, edge.store_id)) return null
+  return edge
+}
+
+/**
+ * 店舗のテナントが停止 (suspended) しているか。引けなかったときは停止とみなさない
+ * (瞬断で全拠点の受信を止めないため。DB の側でも tenant_active_only が止めている)。
+ */
+export async function storeTenantSuspended(
+  svc: ReturnType<typeof createSupabaseService>, storeId: string | null | undefined,
+): Promise<boolean> {
+  if (!storeId) return false
+  const { data } = await svc.from('stores').select('tenants(status)').eq('id', storeId).maybeSingle()
+  const rel = (data as { tenants?: unknown } | null)?.tenants
+  const t = (Array.isArray(rel) ? rel[0] : rel) as { status?: string } | undefined
+  return t?.status === 'suspended'
 }

@@ -48,15 +48,18 @@ export async function consentTarget(svc: SupabaseClient, clientId: string, userI
   const { data: c } = await svc.from('gvms_oidc_clients').select('edge_id').eq('client_id', clientId).maybeSingle()
   if (!c) return { known: false, edgeName: null, storeName: null, role: null }
   const { data: e } = await svc.from('edge_devices')
-    .select('name, store_id, stores(name, tenant_id)').eq('id', c.edge_id).maybeSingle()
-  const store = (e?.stores ?? null) as { name?: string; tenant_id?: string } | null
+    .select('name, store_id, stores(name, tenant_id, tenants(status))').eq('id', c.edge_id).maybeSingle()
+  const store = (e?.stores ?? null) as { name?: string; tenant_id?: string; tenants?: { status?: string } | null } | null
   const { data: p } = await svc.from('admin_users')
     .select('role, tenant_id, store_ids').eq('auth_user_id', userId).maybeSingle()
   return {
     known: true,
     edgeName: (e?.name as string | undefined) ?? null,
     storeName: store?.name ?? null,
-    role: gvmsRoleFor(p as Profile | null, (e?.store_id as string | undefined) ?? null, store?.tenant_id ?? null),
+    // 拠点のテナントが停止していたら誰も入れない (2026-10-29・ASVS 7.4.2・トークンのフックと同じ)
+    role: store?.tenants?.status === 'suspended'
+      ? null
+      : gvmsRoleFor(p as Profile | null, (e?.store_id as string | undefined) ?? null, store?.tenant_id ?? null),
   }
 }
 
