@@ -274,3 +274,44 @@ describe('多要素の番号の確認が済んでいない人', () => {
     expect(getUserMock).toHaveBeenCalledTimes(1)
   })
 })
+
+/**
+ * 拠点 (G・VMS) 向けに出したトークン（client_id 付き）は、クラウドの画面と API で使わせない
+ * （2026-10-29・自主診断 ASVS 9.2.3・10.3.1・lib/auth/foreign-client.ts）。
+ */
+describe('拠点向けのトークン', () => {
+  const b64 = (o: unknown) =>
+    btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  function asSiteToken(clientId: string | null) {
+    asRole('tenant_admin')
+    const claims: Record<string, unknown> = { aal: 'aal1', n: ++tokenSeq }
+    if (clientId) claims.client_id = clientId
+    state.token = `${b64({ alg: 'none' })}.${b64(claims)}.sig`
+  }
+
+  it('API は 401', async () => {
+    asSiteToken('site-client-1')
+    const res = await middleware(req('/api/vod'))
+    expect(res.status).toBe(401)
+  })
+
+  it('画面はログインへ', async () => {
+    asSiteToken('site-client-1')
+    const res = await middleware(req('/stores'))
+    expect(new URL(res.headers.get('location')!).pathname).toBe('/login')
+  })
+
+  it('★キャッシュの 2 回目も止める', async () => {
+    asSiteToken('site-client-1')
+    await middleware(req('/api/edges/e1/grid'))
+    const res = await middleware(req('/api/edges/e1/grid'))
+    expect(res.status).toBe(401)
+    expect(getUserMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('クラウド自身のログインのトークンは通す', async () => {
+    asSiteToken(null)
+    const res = await middleware(req('/stores'))
+    expect(res.status).toBe(200)
+  })
+})
