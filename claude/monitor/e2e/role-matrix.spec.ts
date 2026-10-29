@@ -181,6 +181,12 @@ test.describe('A2 検査店長（baggage_manager）', () => {
     expect(res.status(), 'SW がリダイレクトされています').toBe(200)
   })
 
+  test('圏外の画面 /offline は転送しない（SW が控えるのはこの画面だけ）', async ({ page }) => {
+    // 転送すると、SW が install で /baggage の画面 (認証済みの HTML) を控えてしまう (ASVS 14.3.1)
+    const res = await page.request.get('/offline', { maxRedirects: 0 })
+    expect(res.status(), '/offline がリダイレクトされています').toBe(200)
+  })
+
   test.describe('それ以外は middleware が /baggage へ差し戻す', () => {
     // ライブ視聴の時間を増やさないための中央強制。1 本でも漏れると
     // 「検査担当なのに全店のカメラが見える」になる。

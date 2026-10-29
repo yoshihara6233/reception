@@ -64,6 +64,9 @@ const ALLOW_PREFIXES = [
   // **iPad キオスクで使うのがまさにこのロール**で、PWA/オフラインが効かなくなる。
   // 2026-08-09、E2E のログに出た registration failed から判明。
   '/sw.js', '/sw-v2.js',
+  // 圏外のときに SW が出す画面。SW が install で先に取り込むので、ロールや多要素の確認で
+  // 別の画面へ転送すると、その画面 (認証済みの HTML) を控えてしまう (ASVS 14.3.1)。
+  '/offline',
 ]
 
 function isAllowed(path: string): boolean {

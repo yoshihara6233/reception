@@ -4,29 +4,21 @@
  * F24: Logout icon button — sits at the right end of the header.
  *
  * サインアウトはサーバで行う (/api/auth/logout・セッションの Cookie は HttpOnly で画面から消せない)。
- * そのあと /login へ移り、サーバのコンポーネントに空の Cookie を読み直させる。
+ * そのあと端末の控えを消し、読み直しを伴う移動で /login へ (lib/pwa/client-cache.ts・ASVS 14.3.1)。
  */
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { authFetch } from '@/lib/auth/post-json'
+import { signOutAndLeave } from '@/lib/pwa/client-cache'
 import { useLang } from '@/lib/i18n/context'
 
 export function LogoutButton() {
-  const router = useRouter()
   const { t }  = useLang()
   const [busy, setBusy] = useState(false)
 
   async function handleClick() {
     if (busy) return
     setBusy(true)
-    try {
-      await authFetch('/api/auth/logout')
-    } catch {
-      // best-effort — even if signOut fails, push to /login
-    }
-    // Use hard navigation so server components re-read the (now empty) cookie.
-    router.push('/login')
-    router.refresh()
+    // 失効に失敗しても端末の控えは消してログインへ移る
+    await signOutAndLeave()
   }
 
   return (
