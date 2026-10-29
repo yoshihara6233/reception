@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { ACTING_TENANT_COOKIE } from '@/lib/tenant/acting'
 import { getAdminUserRow, getTenantRow } from '@/lib/tenant/session'
+import { readHostCookie } from '@/lib/security/cookie-names'
 
 /**
  * テナントが有効化しているオプション機能。Monitor + BCP は基本パックのため
@@ -37,7 +38,7 @@ export async function resolveTenantFeatures(_supa?: SupabaseClient): Promise<Ten
     // super_admin は「操作中テナント」を選択している間だけ、そのテナントの
     // フラグでメニューを出し分ける（＝テナント視点で設定変更できる）。未選択は全ON。
     const tenantId = me.role === 'super_admin'
-      ? ((await cookies()).get(ACTING_TENANT_COOKIE)?.value ?? null)
+      ? (readHostCookie(await cookies(), ACTING_TENANT_COOKIE) ?? null)
       : (me.tenant_id ?? null)
     if (!tenantId) return ALL_FEATURES_ON
 

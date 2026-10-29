@@ -2,6 +2,7 @@ import 'server-only'
 import { cookies } from 'next/headers'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getAdminUserRow, getTenantRow } from '@/lib/tenant/session'
+import { readHostCookie } from '@/lib/security/cookie-names'
 
 /** 操作中テナント cookie 名（httpOnly・/api/admin/acting-tenant で設定/解除） */
 export const ACTING_TENANT_COOKIE = 'acting_tenant'
@@ -55,7 +56,7 @@ export async function resolveAdminContext(_supa?: SupabaseClient): Promise<Admin
     }
 
     // super_admin: cookie の操作中テナントを検証付きで解決。
-    const cookieVal = (await cookies()).get(ACTING_TENANT_COOKIE)?.value
+    const cookieVal = readHostCookie(await cookies(), ACTING_TENANT_COOKIE)
     if (!cookieVal) return { role: 'super_admin', isSuper: true, tenantId: null, tenantName: null, acting: false, storeIds: null }
     const tn = await getTenantRow(cookieVal)
     if (!tn) return { role: 'super_admin', isSuper: true, tenantId: null, tenantName: null, acting: false, storeIds: null }

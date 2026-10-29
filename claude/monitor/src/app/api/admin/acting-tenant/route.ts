@@ -11,6 +11,7 @@ import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { ACTING_TENANT_COOKIE } from '@/lib/tenant/acting'
+import { hostCookieName } from '@/lib/security/cookie-names'
 
 const Body = z.object({ tenant_id: z.string().uuid() })
 
@@ -30,10 +31,12 @@ export async function POST(req: NextRequest) {
   if (!tn) return NextResponse.json({ error: 'tenant_not_found' }, { status: 404 })
 
   const res = NextResponse.json({ ok: true, id: tn.id, name: tn.name })
-  res.cookies.set(ACTING_TENANT_COOKIE, tn.id, {
+  // 本番は __Host- を付ける (lib/security/cookie-names.ts)。以前の名前は消す
+  res.cookies.set(hostCookieName(ACTING_TENANT_COOKIE), tn.id, {
     httpOnly: true, sameSite: 'lax', path: '/', maxAge: 60 * 60 * 8, // 8時間で自然失効
     secure: process.env.NODE_ENV === 'production',
   })
+  if (hostCookieName(ACTING_TENANT_COOKIE) !== ACTING_TENANT_COOKIE) res.cookies.delete(ACTING_TENANT_COOKIE)
   return res
 }
 
@@ -45,6 +48,9 @@ export async function DELETE() {
     return NextResponse.json({ error: 'super_admin_only' }, { status: 403 })
   }
   const res = NextResponse.json({ ok: true })
-  res.cookies.set(ACTING_TENANT_COOKIE, '', { httpOnly: true, sameSite: 'lax', path: '/', maxAge: 0 })
+  res.cookies.set(hostCookieName(ACTING_TENANT_COOKIE), '', {
+    httpOnly: true, sameSite: 'lax', path: '/', maxAge: 0, secure: process.env.NODE_ENV === 'production',
+  })
+  if (hostCookieName(ACTING_TENANT_COOKIE) !== ACTING_TENANT_COOKIE) res.cookies.delete(ACTING_TENANT_COOKIE)
   return res
 }

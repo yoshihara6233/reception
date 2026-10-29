@@ -17,6 +17,7 @@ import {
   signKioskSession, LOCK_MINUTES,
 } from '@/lib/baggage/kiosk-pin'
 import { logSecurityEvent, requestIp } from '@/lib/security/events'
+import { hostCookieName } from '@/lib/security/cookie-names'
 
 const Body = z.object({ storeId: z.string().uuid(), pin: z.string() })
 
@@ -64,12 +65,14 @@ export async function POST(req: NextRequest) {
 
   const { token, maxAgeSec } = signKioskSession(row.store_id, now)
   const res = NextResponse.json({ ok: true })
-  res.cookies.set(KIOSK_COOKIE, token, {
+  // 本番は __Host- を付ける (lib/security/cookie-names.ts)。以前の名前は読めるが、書くのは新しい名前
+  res.cookies.set(hostCookieName(KIOSK_COOKIE), token, {
     httpOnly: true,
     secure: true,
     sameSite: 'lax',
     path: '/',
     maxAge: maxAgeSec,
   })
+  if (hostCookieName(KIOSK_COOKIE) !== KIOSK_COOKIE) res.cookies.delete(KIOSK_COOKIE)
   return res
 }

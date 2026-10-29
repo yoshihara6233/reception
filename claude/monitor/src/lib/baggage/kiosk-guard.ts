@@ -15,6 +15,7 @@ import { isStoreOptionEnabled } from '@/lib/admin/tenant-quota'
 import { type AnnounceStep, type TerminalMode } from './inspection-flow'
 import { loadTenantSettings } from './tenant-settings'
 import { KIOSK_COOKIE, verifyKioskSession } from './kiosk-pin'
+import { readHostCookie } from '@/lib/security/cookie-names'
 
 export interface KioskSettings {
   cameraIds: string[]
@@ -105,7 +106,7 @@ export async function resolveKioskOrAdmin(storeId: string | null | undefined): P
   if (!storeId) return { ok: false, status: 400, error: 'storeId_required' }
 
   // 1) PIN セッション（署名cookie）を先に見る — キオスクの常用経路。
-  const token = (await cookies()).get(KIOSK_COOKIE)?.value
+  const token = readHostCookie(await cookies(), KIOSK_COOKIE)
   if (verifyKioskSession(token, storeId, new Date())) {
     const svc = createSupabaseService()
     const { data: store } = await svc
