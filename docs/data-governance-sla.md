@@ -21,9 +21,18 @@
 | **監査ログ** | admin_audit_log（管理操作の記録） | △（操作者ID） | Supabase DB（RLS） |
 | **運用メトリクス** | metric_events（稼働率等） | × | Supabase DB |
 | **管理アカウント** | admin_users（メール・ロール）・auth.users | ○ | Supabase Auth/DB |
+| **顔写真・顔の特徴量**（手荷物検査） | 従業員の登録の顔・来訪者の入退の顔・AWS Rekognition のコレクション | ○（個人識別符号） | Supabase Storage `baggage-photos`（非公開）・AWS Rekognition |
+| **名刺の写真・来訪者の氏名と会社**（手荷物検査） | inspection_sessions | ○ | Supabase Storage `baggage-photos`・DB（RLS） |
+| **手荷物検査のクリップ** | 入退の検査の映像 | ○ | Supabase Storage `baggage-clips` か Cloudflare R2（非公開） |
+| **遠隔視聴の HLS** | ライブ・録画の再生の断片 | ○ | Cloudflare R2（視聴の終わりから数分で消す） |
+| **BCP の生画像** | 発令時のクリップ・合成の静止画 | ○ | Supabase Storage `bcp-clips`（非公開）・bcp_grid_shots |
+| **要望の添付・診断の束** | 画面の写し・拠点のログ | △ | Supabase Storage `feedback-attachments`・`diagnostics`（非公開） |
+| **認証情報** | NVR のパスワード・機器のトークン・キオスクの PIN | — | 暗号化かハッシュで DB（詳細は区分の文書） |
 
-> **映像は個人情報**（個人情報保護法上の個人データ）として扱う。取得目的は**防犯・監視の運用**に限定し、目的外利用はしない。**顔認証は行わない**（人物の有無検知まで）。
-> 注: 来店者/従業員PII等の一部テーブルは基盤（reception 由来）に存在するが、本監視サービスの機能では使用しない。
+> **全部のデータの区分（保護の段階 S・A・B・C）・段階ごとの守り方・保持の期限は `claude/monitor/docs/data-classification.md` を正とする**（2026-10-30・自主診断 ASVS 14.1.1・14.1.2）。この表は要約。
+> **映像は個人情報**（個人情報保護法上の個人データ）として扱う。取得目的は**防犯・監視の運用**に限定し、目的外利用はしない。
+> **顔の照合（顔認証）は手荷物検査の機能でだけ行う**（2026-10-30 訂正。以前は「顔認証は行わない」と書いていたが、手荷物検査は AWS Rekognition で従業員の顔を登録し、入退の顔と照合している）。従業員の顔は本人の同意を記録してから登録する。来訪者の顔は当日だけ照合に使い、翌朝に特徴量を消す。監視（発報・巡回・ライブ・録画）の機能では顔の照合をしない（人物の有無の検知まで）。
+> 注: 基盤（reception 由来）の一部の表（visitors など）は使っていない。従業員の名簿（employees）は手荷物検査で使っている。
 
 ### 2. 保持ポリシー（保持31日）
 
@@ -39,13 +48,14 @@
 - **保持31日**: 映像・録画・巡回の生データは **31 日で自動削除**（Storage オブジェクト＋DB 行）。削除は Storage 削除成功後に DB 行を消す方式で、失敗時は次回再試行（消し漏れ・孤児を防ぐ）。
 - **長期に残すのは PDF レポート**（人が確認済みの証跡）。生画像は31日で消える設計＝「長期証跡は PDF」。
 - 実装定数: `DEFAULT_TTL_DAYS=31`（vod cleanup）・`PURGE_DAYS=31`（patrol）。方針変更時はここを更新。
+- 手荷物検査（既定 60 日・テナントで変えられる）・遠隔視聴の HLS（終わりから数分）・要望の添付（365 日）・診断の束（30 日）・BCP の生画像（自動では消えない・案 1 年）など、この表に無いものの保持は `claude/monitor/docs/data-classification.md` §3 による。
 
 ### 3. アクセス制御
 
 - **認証**: Supabase Auth（メール＋パスワード）。パスワードは bcrypt ハッシュ、リセットはメール経由（OTP をブラウザに露出しない設計）。
 - **認可（テナント/店舗スコープ）**: 全テーブルに **RLS** を適用（本番46テーブル全 RLS 有効）。`admin_users.auth_user_id = auth.uid()` を基点に、super_admin=全テナント / tenant_admin=自テナント / 店舗スコープでフィルタ。
 - **映像配信は必ず認証プロキシ経由**: Storage の署名 URL は本部 API がセッション認証＋RLS 判定後に発行。エッジ/カメラを直接インターネット公開しない（リモート視聴は Cloudflare Tunnel＋Access の許可メールのみ）。
-- **鍵管理**: service_role 等の秘密は Vercel env / エッジ `agent.env`（systemd EnvironmentFile）で管理。漏洩時は無停止ローテ手順あり（`dr-runbook.md` §5.4）。レコーダ認証情報は Vault で暗号化。
+- **鍵管理**: service_role 等の秘密は Vercel env / エッジ `agent.env`（systemd EnvironmentFile）で管理。漏洩時は無停止ローテ手順あり（`dr-runbook.md` §5.4）。レコーダの認証情報はアプリで暗号化（AES-256-GCM・`packages/shared/src/secret-codec.ts`）して DB に置く（2026-10-30 訂正。以前は「Vault で暗号化」と書いていた。Vault に置くのは BCP の Webhook の秘密などサーバの鍵）。
 
 ### 4. アクセス記録（監査）
 
@@ -60,8 +70,8 @@
 
 - 保存時暗号化: Supabase（DB/Storage）の保存時暗号化に準拠。通信は TLS。
 - 最小権限: RLS＋ロールで越権参照を防止。エッジは device_token＋（移行中）スコープトークンで最小権限化。
-- データ最小化: 生画像は31日で自動削除。顔認証・個人特定処理は行わない。
-- 第三者提供: 行わない（AI 二次判定を将来オプションで使う場合は店舗単位 opt-in＋本書に追記）。
+- データ最小化: 監視の生画像は31日で自動削除。監視の機能では顔認証・個人特定処理は行わない（手荷物検査の顔の照合は §1 の注のとおり）。
+- 第三者提供: 行わない。手荷物検査の顔の照合は AWS Rekognition へ処理を委託する（第三者提供ではなく委託・使う顧客と合意する）。AI 二次判定を将来オプションで使う場合は店舗単位 opt-in＋本書に追記。
 
 ---
 
