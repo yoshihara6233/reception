@@ -37,7 +37,8 @@ export function checkCriticalEnv(): EnvCheckItem[] {
     // 拠点の https（GVMS_CLOUD_SPEC §10・D-2-20）。拠点の名前の A レコードと証明書の検証用 TXT を書く
     { key: 'CLOUDFLARE_API_TOKEN',          required: false, set: has('CLOUDFLARE_API_TOKEN'),          purpose: '拠点の https: genesis-edge.com のゾーンの DNS 編集だけを許した API トークン。未設定だと拠点の名前を決められず、証明書の自動取得が 503' },
     { key: 'CLOUDFLARE_ZONE_ID',            required: false, set: has('CLOUDFLARE_ZONE_ID'),            purpose: '拠点の https: genesis-edge.com のゾーン ID' },
-    { key: 'GVMS_SFU_ENABLED',              required: false, set: has('GVMS_SFU_ENABLED'),              purpose: 'G・VMS の拠点の SFU（§5.4）。2026-09-29 から保留で既定 OFF。true で再開（LIVEKIT_* も必要）' },
+    // GVMS_SFU_ENABLED (G・VMS の拠点の SFU・§5.4) は載せない。2026-09-29 から保留で、わざと未設定にしている
+    // (載せると毎回「推奨」として出て、本当の設定漏れに気づきにくくなる・2026-10-30)。SFU を再開するときに戻す
     // R2（エグレス無料）。未設定でも静かに Supabase へフォールバックするため、
     // 「気づかないまま課金エグレスが積む」事故になりやすい（2026-08-03: Free 5GB に対し
     // 11.4GB 超過。原因はライブ画像を毎フレーム Supabase から配信していたこと）。
