@@ -7,6 +7,7 @@ import type { EdgeStatus } from '@/lib/types/db'
 import { deriveEdgeStatus } from '@/lib/edge-status'
 // 複数台の拠点は最後に通知が届いたエッジを代表にする (埋め込みの先頭は順不同)
 import { pickPrimaryEdge } from '@/lib/edge/primary-edge'
+import { storePopupHtml } from '@/lib/map/store-popup'
 
 type StoreRow = {
   id: string
@@ -125,16 +126,8 @@ export default function StoreMap({
       // F28: data-store-id 属性を仕込んでおき、popupopen ハンドラ側で
       // クリックを捕まえて router.push に流す（プレーン <a> による
       // フルページリロードを回避）。
-      const popup = L.popup({ minWidth: 180 }).setContent(`
-        <div style="font-size:13px;line-height:1.5">
-          <div style="font-weight:600;margin-bottom:2px">${s.name}</div>
-          ${s.address ? `<div style="font-size:11px;color:#64748b">${s.address}</div>` : ''}
-          <div style="margin:4px 0">
-            <span style="display:inline-block;padding:1px 6px;border-radius:8px;color:white;font-size:11px;background:${disp.color}">${disp.label}</span>
-          </div>
-          <a href="/stores/${s.id}" data-store-id="${s.id}" class="intereco-popup-go-store" style="display:block;text-align:center;margin-top:4px;padding:4px 8px;border-radius:4px;background:#2C4A7E;color:white;font-size:11px;text-decoration:none">16分割で見る</a>
-        </div>
-      `)
+      // 名前と住所は管理者が入れる値なので、HTML を逃がしてから埋め込む (lib/map/store-popup.ts)
+      const popup = L.popup({ minWidth: 180 }).setContent(storePopupHtml(s, disp))
       const m = L.marker([s.latitude, s.longitude], { icon: makeIcon(disp.color, 'normal') })
         .bindPopup(popup)
         .addTo(map)
