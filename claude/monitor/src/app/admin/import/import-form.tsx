@@ -42,7 +42,8 @@ export function ImportForm({
     setBusy(false)
     if (!r.ok) {
       const j = await r.json().catch(() => ({}))
-      return setErr(j.error ?? `投入失敗: ${r.status}`)
+      // 行数・回数の上限（413・429）はサーバの日本語の文（message）をそのまま出す
+      return setErr(j.message ?? j.error ?? `投入失敗: ${r.status}`)
     }
     setRes(await r.json())
   }

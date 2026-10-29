@@ -35,6 +35,8 @@ const pool = new Pool({
 const TENANT = '00000000-0000-0000-0000-0000000000dd'
 const STORE  = '00000000-0000-0000-0000-0000000000de'
 const USER   = '00000000-0000-0000-0000-0000000000df'
+/** 「他人になりすませない」の確認に使う 2 人目（同じテナントの管理者）。 */
+const OTHER  = '00000000-0000-0000-0000-0000000000e0'
 const MAX_CONCURRENT = 5
 
 beforeAll(async () => {
@@ -55,6 +57,12 @@ beforeAll(async () => {
     `insert into public.session_limits (tenant_id, max_concurrent) values ($1, $2)
        on conflict (tenant_id) do update set max_concurrent = excluded.max_concurrent`,
     [TENANT, MAX_CONCURRENT])
+  // start_live_session は店舗が見える利用者にしか作らせない（20261030120000_authz_data_scope.sql）。
+  // 呼ぶ 2 人をこのテナントの管理者にしておく（テナントを消すと cascade で消える）。
+  await pool.query(
+    `insert into public.admin_users (auth_user_id, role, tenant_id) values ($1, 'tenant_admin', $3), ($2, 'tenant_admin', $3)
+       on conflict (auth_user_id) do update set role = excluded.role, tenant_id = excluded.tenant_id`,
+    [USER, OTHER, TENANT])
 })
 
 afterEach(async () => {
@@ -185,7 +193,7 @@ describe('start_live_session（同時視聴上限 F-10）', () => {
   it('★user_id は引数ではなく auth.uid() から取る（他人になりすませない）', async () => {
     // security definer なので、user_id を引数で受けると誰のセッションでも
     // 作れてしまう。関数の中で auth.uid() を読んでいることを固定する。
-    const other = '00000000-0000-0000-0000-0000000000e0'
+    const other = OTHER
     const r = await start('live', other)
     const [{ user_id }] = (await pool.query(
       'select user_id from public.live_sessions where id = $1', [r.session_id])).rows as { user_id: string }[]
@@ -204,6 +212,12 @@ describe('start_live_session（同時視聴上限 F-10）', () => {
 
   it('存在しない店舗では作れない', async () => {
     await expect(start2('00000000-0000-0000-0000-0000000000ff')).rejects.toThrow(/store_not_found/)
+  })
+
+  it('★見えない店舗では作れない（別テナントの同時視聴の枠を使えない）', async () => {
+    // API (/api/sessions) が先に RLS で確かめていたが、関数を直接呼ぶと素通りだった。
+    // 管理者の行が無い利用者 = 見える店舗が無い。
+    await expect(start('live', '00000000-0000-0000-0000-0000000000e1')).rejects.toThrow(/store_not_visible/)
   })
 
   async function start2(storeId: string) {
