@@ -15,7 +15,7 @@ GA前ロードマップの「脆弱性診断（外部）」を、当面 **内部
 |---|---|---|---|
 | **authz 契約テスト** | `.github/workflows/ci.yml` `authz` job（postgres + node-pg） | テナント×ロールの越権（クロステナント漏洩）を実DB+RLSで実証 | **必須**（`ci-passed`） |
 | **SAST（Semgrep）** | `.github/workflows/security.yml` `semgrep` | `p/security-audit` `p/secrets` `p/owasp-top-ten` `p/typescript` `p/react`。インジェクション・危険API・秘密混入・OWASP Top10 | ERROR重大度で fail |
-| **依存脆弱性** | `security.yml` `deps-audit`（`bun audit`） | 既知CVE（HIGH/CRITICAL） | 情報（HIGHは運用で是正） |
+| **依存脆弱性** | `security.yml` `deps-audit`（`bun audit` → `.github/scripts/audit-gate.mjs`） | 既知CVE（HIGH/CRITICAL） | high/critical で fail（受け入れは `.github/security-exceptions.json` に期限つきで書く）。是正の期限は `claude/monitor/docs/security-maintenance.md` |
 | **Action 更新** | `.github/dependabot.yml`（github-actions） | 第三者Actionの更新追従（SHA固定の維持） | PR自動起票 |
 | **ビルド隔離** | `ci.yml` monitor build | 本番秘密を使わず placeholder env でビルド（CIが本番に触れない） | 必須 |
 
@@ -30,7 +30,8 @@ GA前ロードマップの「脆弱性診断（外部）」を、当面 **内部
 |---|---|---|
 | 各機能PR | `/security-review` | 差分のコード脆弱性レビュー（認可・入力・秘密・インジェクション） |
 | 四半期 ＋ リリース前 | `/cso` | 態勢監査（秘密archaeology・依存・CI/CD・インフラ・OWASP・STRIDE） |
-| HIGH依存検出時 | 随時 | `bun update` で是正 → PR |
+| 依存の脆弱性の検出時 | 重さ別の期限まで | `claude/monitor/docs/security-maintenance.md` §1（critical 72 時間・high 7 日 など） |
+| 月 1 回・四半期 | ふだんの更新 | 同 §2（patch・minor は毎月、major は四半期に見直し） |
 
 ## 3. スコープと脅威モデル（重点）
 
