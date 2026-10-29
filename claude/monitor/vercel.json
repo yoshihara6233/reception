@@ -9,6 +9,10 @@
       "schedule": "0 3 * * *"
     },
     {
+      "path": "/api/cron/data-retention",
+      "schedule": "30 3 * * *"
+    },
+    {
       "path": "/api/cron/edge-health",
       "schedule": "*/2 * * * *"
     },

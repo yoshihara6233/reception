@@ -103,6 +103,7 @@ export function createFakeDb(seed: Record<string, Row[]> = {}, opts: FakeDbOptio
     gt(c: string, v: unknown) { this.filters.push((r) => r[c] != null && cmp(r[c], v) > 0); return this }
     gte(c: string, v: unknown) { this.filters.push((r) => r[c] != null && cmp(r[c], v) >= 0); return this }
     lt(c: string, v: unknown) { this.filters.push((r) => r[c] != null && cmp(r[c], v) < 0); return this }
+    lte(c: string, v: unknown) { this.filters.push((r) => r[c] != null && cmp(r[c], v) <= 0); return this }
     order(col: string, o?: { ascending?: boolean }) { this.orders.push({ col, asc: o?.ascending !== false }); return this }
     limit(n: number) { this.lim = n; return this }
     maybeSingle() { this.singleMode = 'maybe'; return this }
@@ -172,7 +173,7 @@ export function createFakeDb(seed: Record<string, Row[]> = {}, opts: FakeDbOptio
 
   const from = (name: string) => new Query(name)
 
-  const objects = new Map<string, { bytes: Uint8Array; contentType?: string }>()
+  const objects = new Map<string, { bytes: Uint8Array; contentType?: string; createdAt?: string }>()
   const storageFail: { upload?: boolean; remove?: boolean; list?: boolean; sign?: boolean } = {}
   const fail = (op: string) => ({ data: null, error: { message: `storage ${op} failed` } })
   const storage = {
@@ -189,13 +190,24 @@ export function createFakeDb(seed: Record<string, Row[]> = {}, opts: FakeDbOptio
         for (const p of paths) objects.delete(`${bucket}/${p}`)
         return { data: paths.map((name) => ({ name })), error: null }
       },
-      async list(prefix: string, o?: { limit?: number }) {
+      /**
+       * 1 階層だけ返す (本物と同じく、下にフォルダがあれば id: null の項目で返す)。
+       * ファイルは id と created_at (置いたときの createdAt・無ければ 1970 年) を持つ。
+       */
+      async list(prefix: string, o?: { limit?: number; offset?: number }) {
         if (storageFail.list) return fail('list')
         const head = `${bucket}/${prefix}/`
-        const names = [...objects.keys()]
-          .filter((k) => k.startsWith(head) && !k.slice(head.length).includes('/'))
-          .map((k) => ({ name: k.slice(head.length) }))
-        return { data: names.slice(0, o?.limit ?? 100), error: null }
+        const folders = new Set<string>()
+        const files: { name: string; id: string; created_at: string }[] = []
+        for (const [k, v] of objects) {
+          if (!k.startsWith(head)) continue
+          const rest = k.slice(head.length)
+          if (rest.includes('/')) folders.add(rest.split('/')[0])
+          else files.push({ name: rest, id: `obj:${k}`, created_at: v.createdAt ?? new Date(0).toISOString() })
+        }
+        const entries = [...[...folders].sort().map((name) => ({ name, id: null as string | null })), ...files]
+        const from = o?.offset ?? 0
+        return { data: entries.slice(from, from + (o?.limit ?? 100)), error: null }
       },
       async createSignedUrl(path: string, ttl: number) {
         if (storageFail.sign) return fail('sign')

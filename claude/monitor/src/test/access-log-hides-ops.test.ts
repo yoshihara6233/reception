@@ -26,7 +26,8 @@ describe('設定変更ログも運営の操作を出さない (2026-10-06)', () 
   const changes = readFileSync(join(__dirname, '..', 'app/admin/audit/changes/page.tsx'), 'utf8')
   it('見ている人の役割で除外するかを変えない', () => {
     expect(changes).not.toMatch(/if \(ctx\.role !== 'super_admin'\) \{\s*const svc/)
-    expect(changes).toMatch(/query\.not\('actor_user_id', 'in'/)
+    // 運営の操作は除く。操作者の無い行 (保持期間による自動の削除・2026-10-30) は残す
+    expect(changes).toMatch(/query\.or\(`actor_user_id\.is\.null,actor_user_id\.not\.in\./)
   })
   it('運営には運営アクセスログへの案内を出す', () => {
     expect(changes).toMatch(/href="\/admin\/ops-audit"/)

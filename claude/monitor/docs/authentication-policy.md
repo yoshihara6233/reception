@@ -161,7 +161,7 @@ G・VMS の一覧（G・VMS のリポジトリの `docs/SECURITY_REVIEW.md` §1.
 | # | 事項 | 案 | 場所 |
 |---|---|---|---|
 | A1 | 拠点へのサインインの許可の期限 | 90 日 | `lib/edge/gvms-grants.ts` の `GRANT_MAX_AGE_DAYS` |
-| A2 | 1 アカウントの同時ログイン | 上限なし（§4）。置くなら 5 で、古いものから切る | — |
+| A2 | 1 アカウントの同時ログイン | **決定（2026-10-30）: 上限なし**（§4・今の実装のまま） | — |
 | A3 | Supabase の「Allow new users to sign up」 | 切る | ダッシュボード › Authentication › Sign In / Providers |
 | A4 | Supabase の「Leaked password protection」 | 入れる（Pro 以上） | ダッシュボード › Authentication › Attack Protection |
 | A5 | Supabase の Rate Limits（ログインと新規登録） | 今の値を確かめ、ログインの集中で 429 が出たら上げる | ダッシュボード › Authentication › Rate Limits |
