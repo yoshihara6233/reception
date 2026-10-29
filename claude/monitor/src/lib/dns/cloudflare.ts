@@ -30,6 +30,8 @@ async function cf(path: string, init?: RequestInit): Promise<{ success: boolean;
     ...init,
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
     cache: 'no-store',
+    // Cloudflare の API が詰まったときに関数の上限まで待たない (自主診断 ASVS 15.2.2)
+    signal: AbortSignal.timeout(10_000),
   })
   const j = (await res.json().catch(() => ({ success: false, result: null, errors: [{ message: `http ${res.status}` }] }))) as
     { success: boolean; result: unknown; errors?: { message: string }[] }

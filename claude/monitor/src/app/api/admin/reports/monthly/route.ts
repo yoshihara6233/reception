@@ -9,6 +9,7 @@ import { z } from 'zod'
 import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { resolveAdminContext } from '@/lib/tenant/acting'
 import { finalizeMonthlyReport } from '@/lib/reports/finalize'
+import { heavyAllows, tooManyRequests } from '@/lib/limits/heavy'
 
 export const runtime = 'nodejs'
 
@@ -31,6 +32,12 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
 
   const svc = createSupabaseService()
+
+  // 全拠点の集計と PDF を同期で作る。回数の上限 (利用者 60 秒 3 回・1 時間 30 回・
+  // 同じテナント 60 秒 3 回・自主診断 ASVS 15.2.2)
+  const allowed = await heavyAllows(svc, 'monthly-finalize', { user: user.id, tenant: ctx.tenantId })
+  if (!allowed.ok) return tooManyRequests(allowed.retryAfterSec)
+
   try {
     const res = await finalizeMonthlyReport(svc, ctx.tenantId, parsed.data.ym, user.id)
     if (!res.ok) return NextResponse.json({ error: res.error ?? 'finalize_failed' }, { status: 500 })

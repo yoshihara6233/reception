@@ -30,6 +30,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { canFetchVod } from '@/lib/types/db'
 import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
+import { heavyAllows, tooManyRequests } from '@/lib/limits/heavy'
+
+/** 拠点への指示 (/api/edges/<id>/commands) の時間切れ */
+const DISPATCH_TIMEOUT_MS = 10_000
 
 interface Body {
   camera_id?: string
@@ -110,6 +114,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     })
   }
 
+  // 回数の上限（60 秒 10 回・1 時間 120 回・自主診断 ASVS 2.4.1）。拠点に録画の切り出しと
+  // 送り出しをさせるので、新しく作るときだけ数える（上の使い回しは数えない）
+  const allowed = await heavyAllows(admin, 'vod-request', { user: user.id })
+  if (!allowed.ok) return tooManyRequests(allowed.retryAfterSec)
+
   // 3. Insert vod_clips row via Service Role (table policy denies authed inserts).
   const { data: row, error: insErr } = await admin
     .from('vod_clips')
@@ -156,6 +165,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       to_iso,
       clip_id:   row.id,   // F77: edge uses this to update the vod_clips row
     }),
+    // 同じアプリの受け口だが、詰まったときに利用者を関数の上限まで待たせない
+    signal: AbortSignal.timeout(DISPATCH_TIMEOUT_MS),
   }).then((r) => r.ok).catch(() => false)
 
   if (!dispatched) {
