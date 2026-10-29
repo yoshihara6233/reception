@@ -14,6 +14,10 @@
  * 判定はロールと同じ getUser の結果から作り、同じキャッシュに載せる（往復を増やさない）。
  * 許可パス（ログイン・パスワード再設定・キオスク）は従来どおり見ない（lib/auth/mfa.ts）。
  *
+ * **仮のパスワード（2026-10-30・ASVS 6.4.1）**: 管理者が決めたパスワードで入った人は、本人の
+ * パスワードに変えるまで非許可パスを使えない。画面は /login/password へ、API は 403
+ * （lib/auth/initial-password.ts）。判定は多要素と同じく getUser の結果から作る。
+ *
  * さらに、ライブ画像（`/api/edges/**` を1〜2秒ごとにポーリング）は非許可パスなので、
  * 1フレームごとに `getUser()`＋`admin_users` 1行引きが走っていた。判定をトークン単位で
  * 30秒メモ化して往復を削る（理由と代償は `lib/auth/token-cache.ts` 冒頭）。
@@ -25,6 +29,7 @@ import { createTokenCache, hashToken, jwtExpiresAtMs } from '@/lib/auth/token-ca
 import { legacyRedirectTarget } from '@/lib/legacy-host'
 import { appBaseUrl } from '@/lib/app-url'
 import { mfaPending } from '@/lib/auth/mfa'
+import { initialPasswordState } from '@/lib/auth/initial-password'
 import { isForeignClientToken } from '@/lib/auth/foreign-client'
 import { logSecurityEvent, requestIp } from '@/lib/security/events'
 import { makeNonce, pageCsp } from '@/lib/security/csp'
@@ -40,6 +45,8 @@ interface Verdict {
   foreignClient?: boolean
   /** 利用者のテナントが停止 (suspended) している。画面も API も使わせない (ASVS 7.4.2) */
   tenantSuspended?: boolean
+  /** 管理者が決めた仮のパスワードのまま (本人のパスワードに変えるまで止める・ASVS 6.4.1) */
+  passwordChangePending?: boolean
 }
 
 /**
@@ -144,6 +151,7 @@ async function route(req: NextRequest, next: () => NextResponse): Promise<NextRe
     } else {
       // getUser が同じトークンの署名と失効を確かめたあとなので、トークンの aal と client_id を信じてよい
       const pending = mfaPending(user, token)
+      const pwPending = initialPasswordState(user) !== 'none'
       if (isForeignClientToken(token)) {
         verdict = { isBaggageManager: false, mfaPending: false, foreignClient: true }
         if (tokenHash && token) roleCache.write(tokenHash, 'role', verdict, jwtExpiresAtMs(token))
@@ -162,8 +170,12 @@ async function route(req: NextRequest, next: () => NextResponse): Promise<NextRe
       // 参照できなかった（瞬断など）ときは従来どおり素通しし、**覚えない**。
       // ここで false を30秒持つと、直後に境界が効かなくなる窓を自分で作ってしまう。
       // ただし多要素の確認が済んでいない人は、ロールが分からなくても止める。
-      if (error) return pending ? mfaBlock(req, path) : res
-      verdict = { isBaggageManager: profile?.role === 'baggage_manager', mfaPending: pending }
+      if (error) return pending ? mfaBlock(req, path) : pwPending ? passwordChangeBlock(req, path) : res
+      verdict = {
+        isBaggageManager: profile?.role === 'baggage_manager',
+        mfaPending: pending,
+        passwordChangePending: pwPending,
+      }
     }
     if (tokenHash && token) {
       roleCache.write(tokenHash, 'role', verdict, jwtExpiresAtMs(token))
@@ -174,6 +186,7 @@ async function route(req: NextRequest, next: () => NextResponse): Promise<NextRe
   if (verdict.foreignClient) return foreignClientBlock(req, path)
   if (verdict.tenantSuspended) return suspendedBlock(req, path)
   if (verdict.mfaPending) return mfaBlock(req, path)
+  if (verdict.passwordChangePending) return passwordChangeBlock(req, path)
   if (!verdict.isBaggageManager) return res  // 通常ロールは制限しない。
 
   // 手荷物検査店長が非許可パスに来た → API は 403、ページは /baggage へ。
@@ -214,6 +227,21 @@ function suspendedBlock(req: NextRequest, path: string): NextResponse {
   }
   const url = req.nextUrl.clone()
   url.pathname = '/suspended'
+  url.search = ''
+  return NextResponse.redirect(url)
+}
+
+/**
+ * 仮のパスワードのままの人を止める (ASVS 6.4.1)。API は 403、画面は /login/password
+ * (本人のパスワードに変える画面。期限が過ぎていればその案内とサインアウト)。
+ */
+function passwordChangeBlock(req: NextRequest, path: string): NextResponse {
+  logSecurityEvent({ kind: 'auth.password_change_required', ip: requestIp(req.headers), path })
+  if (path.startsWith('/api/')) {
+    return NextResponse.json({ error: 'password_change_required' }, { status: 403 })
+  }
+  const url = req.nextUrl.clone()
+  url.pathname = '/login/password'
   url.search = ''
   return NextResponse.redirect(url)
 }

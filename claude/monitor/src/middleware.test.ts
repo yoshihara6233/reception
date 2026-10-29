@@ -276,6 +276,52 @@ describe('多要素の番号の確認が済んでいない人', () => {
   })
 })
 
+describe('管理者が決めた仮のパスワードのままの人 (ASVS 6.4.1)', () => {
+  function asTempPasswordUser(expiresAt: string) {
+    asRole('store_manager')
+    state.user = { id: 'u-1', app_metadata: { initial_password_expires_at: expiresAt } } as unknown as { id: string }
+  }
+  const future = () => new Date(Date.now() + 3600_000).toISOString()
+
+  it('画面は /login/password へ・API は 403', async () => {
+    asTempPasswordUser(future())
+    const page = await middleware(req('/stores'))
+    expect(page.status).toBe(307)
+    expect(new URL(page.headers.get('location')!).pathname).toBe('/login/password')
+    asTempPasswordUser(future())
+    const api = await middleware(req('/api/vod'))
+    expect(api.status).toBe(403)
+  })
+
+  it('期限が過ぎていても止める (画面は案内とサインアウト)', async () => {
+    asTempPasswordUser('2000-01-01T00:00:00Z')
+    const res = await middleware(req('/stores'))
+    expect(new URL(res.headers.get('location')!).pathname).toBe('/login/password')
+  })
+
+  it('拠点の SSO の同意の画面も止める', async () => {
+    asTempPasswordUser(future())
+    const res = await middleware(req('/oauth/consent?authorization_id=abc'))
+    expect(new URL(res.headers.get('location')!).pathname).toBe('/login/password')
+  })
+
+  it('変える画面・ログイン・/api/auth は止めない（許可パス）', async () => {
+    asTempPasswordUser(future())
+    for (const p of ['/login', '/login/password', '/api/auth/initial-password', '/api/auth/logout']) {
+      const res = await middleware(req(p))
+      expect(res.headers.get('location')).toBeNull()
+      expect(res.status).toBe(200)
+    }
+  })
+
+  it('印が無ければ今までどおり', async () => {
+    asRole('store_manager')
+    state.user = { id: 'u-1', app_metadata: { provider: 'email' } } as unknown as { id: string }
+    const res = await middleware(req('/stores'))
+    expect(res.status).toBe(200)
+  })
+})
+
 /**
  * 拠点 (G・VMS) 向けに出したトークン（client_id 付き）は、クラウドの画面と API で使わせない
  * （2026-10-29・自主診断 ASVS 9.2.3・10.3.1・lib/auth/foreign-client.ts）。
