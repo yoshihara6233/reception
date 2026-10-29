@@ -9,6 +9,7 @@ import { ThemeToggle } from '@/components/ThemeToggle'
 import { MonitorMark } from '@/components/MonitorMark'
 import { PRODUCT_NAME } from '@/lib/brand'
 import { safeNext } from '@/lib/auth/safe-next'
+import { clearAuthenticatedCaches } from '@/lib/pwa/client-cache'
 import { Smartphone, TriangleAlert } from 'lucide-react'
 
 export default function LoginPage() {
@@ -36,6 +37,9 @@ export default function LoginPage() {
     setQrUrl(cleanUrl)
     setIsLocal(['localhost', '127.0.0.1', '0.0.0.0'].includes(u.hostname))
     setReady(true)
+    // セッションの期限切れ・管理者による切断でここへ来たときも、端末の控えを片付ける
+    // (ログアウトのボタンを通らない経路・ASVS 14.3.1)。共有してよいものは残る
+    void clearAuthenticatedCaches()
   }, [])
 
   async function onSubmit(e: React.FormEvent) {

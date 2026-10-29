@@ -10,6 +10,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { authFetch } from '@/lib/auth/post-json'
+import { signOutAndLeave } from '@/lib/pwa/client-cache'
 import { MonitorMark } from '@/components/MonitorMark'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { PRODUCT_NAME } from '@/lib/brand'
@@ -60,9 +61,8 @@ export default function LoginMfaPage() {
   }
 
   async function onSignOut() {
-    await authFetch('/api/auth/logout')
-    router.push('/login')
-    router.refresh()
+    // 端末の控えも消してログインへ (ASVS 14.3.1)
+    await signOutAndLeave()
   }
 
   return (
