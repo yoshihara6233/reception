@@ -6,17 +6,14 @@
  * 停止したテナントの利用者は、middleware が画面と API を止めてここへ送る。
  * 理由を出し、サインアウトしてログイン画面へ戻れるようにする。
  */
-import { useRouter } from 'next/navigation'
-import { authFetch } from '@/lib/auth/post-json'
+import { signOutAndLeave } from '@/lib/pwa/client-cache'
 import { MonitorMark } from '@/components/MonitorMark'
 import { PRODUCT_NAME } from '@/lib/brand'
 
 export default function SuspendedPage() {
-  const router = useRouter()
   async function onSignOut() {
-    await authFetch('/api/auth/logout')
-    router.push('/login')
-    router.refresh()
+    // 端末の控えも消してログインへ (ASVS 14.3.1)
+    await signOutAndLeave()
   }
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-900 p-6">
