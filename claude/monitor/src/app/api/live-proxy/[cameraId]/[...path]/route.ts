@@ -41,6 +41,7 @@ import {
   liveProxyCookieName,
   LIVE_PROXY_COOKIE_TTL_SEC,
 } from '@/lib/live-proxy-session'
+import { allowedUpstreamOrigin, fetchUpstream, safeContentType, safeSubPath } from '@/lib/proxy/upstream'
 
 export async function GET(
   req: NextRequest,
@@ -52,10 +53,11 @@ export async function GET(
   //    control API (/api/streams, /api/config) through this proxy, which would
   //    leak other streams' RTSP credentials. hls.js needs only stream.m3u8 +
   //    the hls/ segment & media-playlist paths.
-  const subPathRaw = (path ?? []).join('/')
+  //    部品に `..` などが混じったものも断る (lib/proxy/upstream.ts・ASVS 1.1.1)。
+  const subPathRaw = safeSubPath(path, ['api/stream.m3u8', 'api/hls/'])
+  if (!subPathRaw) return new NextResponse('Forbidden path', { status: 403 })
   const isSessionStart = subPathRaw === 'api/stream.m3u8'
   const isHlsSub       = subPathRaw.startsWith('api/hls/')
-  if (!isSessionStart && !isHlsSub) return new NextResponse('Forbidden path', { status: 403 })
 
   const signingSecret = process.env.LIVE_SIGNING_SECRET
   const cookieName    = liveProxyCookieName(cameraId)
@@ -64,7 +66,8 @@ export async function GET(
   //    ダメなら stream.m3u8 と同じフル認証へフォールバック。
   let origin: string | null = null
   if (isHlsSub && signingSecret) {
-    origin = verifyLiveProxyCookie(req.cookies.get(cookieName)?.value, cameraId, signingSecret, Date.now())
+    origin = allowedUpstreamOrigin(
+      verifyLiveProxyCookie(req.cookies.get(cookieName)?.value, cameraId, signingSecret, Date.now()))
   }
 
   if (!origin) {
@@ -84,7 +87,9 @@ export async function GET(
     } | null
     const originSrc = row?.hls_url ?? row?.recorders?.edge_devices?.go2rtc_host
     if (!originSrc) return new NextResponse('Live not configured for this camera', { status: 404 })
-    try { origin = new URL(originSrc).origin } catch { return new NextResponse('Invalid go2rtc host', { status: 500 }) }
+    // 許した名前のホストだけ (サービストークンを外へ送らない・ASVS 13.2.4)
+    origin = allowedUpstreamOrigin(originSrc)
+    if (!origin) return new NextResponse('go2rtc host is not allowed', { status: 403 })
   }
 
   const clientId     = process.env.GO2RTC_CF_ACCESS_CLIENT_ID
@@ -98,12 +103,9 @@ export async function GET(
 
   let upstream: Response
   try {
-    upstream = await fetch(target, {
-      headers: {
-        'CF-Access-Client-Id':     clientId,
-        'CF-Access-Client-Secret': clientSecret,
-      },
-      cache: 'no-store',
+    upstream = await fetchUpstream(target, {
+      'CF-Access-Client-Id':     clientId,
+      'CF-Access-Client-Secret': clientSecret,
     })
   } catch {
     return new NextResponse('Upstream fetch failed', { status: 502 })
@@ -118,7 +120,7 @@ export async function GET(
   const res = new NextResponse(upstream.body, {
     status: 200,
     headers: {
-      'Content-Type':  upstream.headers.get('content-type') ?? 'application/octet-stream',
+      'Content-Type':  safeContentType(upstream.headers.get('content-type')),
       'Cache-Control': 'no-store, no-cache, must-revalidate',
     },
   })
