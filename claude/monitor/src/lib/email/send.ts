@@ -447,7 +447,12 @@ export function tunnelRecoveredEmail(p: TunnelHealthParams): { subject: string; 
 // Helpers
 // ---------------------------------------------------------------------------
 
-function escapeHtml(str: string): string {
+/**
+ * HTML のメールに差し込む文字を中和する。店舗名・テナント名・エッジが送る種別など、利用者や機器が
+ * 決められる値は必ずこれを通す (2026-10-29・自主診断 ASVS 1.2.1。正規の差出人のメールに
+ * リンクなどを差し込ませない)。
+ */
+export function escapeHtml(str: string): string {
   return str
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
