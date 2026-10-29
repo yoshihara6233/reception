@@ -9,7 +9,7 @@
  * dedup（重複排除）は ingest 側で行い、ここは「通知の可否」だけを判断する。
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { sendEmail, SECURITY_FROM_ADDRESS } from '@/lib/email/send'
+import { escapeHtml, sendEmail, SECURITY_FROM_ADDRESS } from '@/lib/email/send'
 import { postAlarmWebhook } from './webhook-url'
 
 /** now(UTC) が JST の [from,to) 静音窓に入るか。to='HH:MM'。日跨ぎ対応。 */
@@ -57,8 +57,9 @@ export async function notifyAlarm(
   let didSomething = false
 
   if (emails.length) {
-    const html = `<p>${storeName} で発報を検知しました。</p>`
-      + `<p>種別: ${kind} ／ 時刻: ${fmtJst(ev.occurred_at)}</p>`
+    // 店舗名と種別 (エッジが送る値) は中和して差し込む (ASVS 1.2.1)
+    const html = `<p>${escapeHtml(storeName)} で発報を検知しました。</p>`
+      + `<p>種別: ${escapeHtml(String(kind ?? ''))} ／ 時刻: ${escapeHtml(fmtJst(ev.occurred_at))}</p>`
       + `<p>ダッシュボードで内容をご確認ください。</p>`
     const res = await sendEmail(emails, `【発報】${storeName} ${kind}`, html, undefined, SECURITY_FROM_ADDRESS)
     didSomething = didSomething || res.ok

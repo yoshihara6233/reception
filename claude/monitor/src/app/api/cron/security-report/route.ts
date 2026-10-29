@@ -12,7 +12,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseService } from '@/lib/supabase/server'
-import { sendEmail, SECURITY_FROM_ADDRESS } from '@/lib/email/send'
+import { sendEmail, SECURITY_FROM_ADDRESS, escapeHtml } from '@/lib/email/send'
 import { renderReportForRuns, type ReportRun } from '@/lib/security/patrol-report'
 import { dbErrorCode } from '@/lib/api/db-error'
 
@@ -110,7 +110,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     // 3. メール（notify_emails があれば PDF 添付）
     if (notify.length) {
       const dateLabel = new Date(fromISO).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' })
-      const html = `<p>${storeName} の巡回レポート（${dateLabel}）です。</p>`
+      const html = `<p>${escapeHtml(storeName)} の巡回レポート（${escapeHtml(dateLabel)}）です。</p>`
         + `<p>巡回 ${runs.length} 回・撮影 ${findingCount} 枚。詳細は添付 PDF、またはダッシュボードをご確認ください。</p>`
         + `<p><a href="${pdfUrl}">レポート PDF を開く</a></p>`
       const res = await sendEmail(notify, `【巡回レポート】${storeName} ${dateLabel}`, html, [{ filename: `patrol-${dateLabel}.pdf`, content: pdf }], SECURITY_FROM_ADDRESS)

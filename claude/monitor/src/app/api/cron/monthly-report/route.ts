@@ -7,7 +7,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseService } from '@/lib/supabase/server'
-import { sendEmail, SECURITY_FROM_ADDRESS } from '@/lib/email/send'
+import { sendEmail, SECURITY_FROM_ADDRESS, escapeHtml } from '@/lib/email/send'
 import { jstDateStr } from '@/lib/baggage/unmatch'
 import { prevMonth } from '@/lib/reports/usage'
 import { finalizeMonthlyReport } from '@/lib/reports/finalize'
@@ -54,9 +54,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       let mailed = 0
       if (to.length) {
         const appBase = appBaseUrl()
-        const html = `<p>${t.name} 様</p><p>${ymLabel}の利用状況レポートを確定しました。</p>`
-          + `<p><a href="${appBase}/admin/reports/usage?month=${ym}">管理画面で見る</a>`
-          + (fin.pdfUrl ? ` / <a href="${fin.pdfUrl}">PDF</a>` : '') + '</p>'
+        const html = `<p>${escapeHtml(t.name)} 様</p><p>${escapeHtml(ymLabel)}の利用状況レポートを確定しました。</p>`
+          + `<p><a href="${escapeHtml(`${appBase}/admin/reports/usage?month=${ym}`)}">管理画面で見る</a>`
+          + (fin.pdfUrl ? ` / <a href="${escapeHtml(fin.pdfUrl)}">PDF</a>` : '') + '</p>'
         const r = await sendEmail(to, `【月次レポート】${t.name} ${ymLabel}`, html, undefined, SECURITY_FROM_ADDRESS)
         if (r.ok) mailed = to.length
       }
