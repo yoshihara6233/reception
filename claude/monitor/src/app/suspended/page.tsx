@@ -7,14 +7,14 @@
  * 理由を出し、サインアウトしてログイン画面へ戻れるようにする。
  */
 import { useRouter } from 'next/navigation'
-import { createSupabaseBrowser } from '@/lib/supabase/browser'
+import { authFetch } from '@/lib/auth/post-json'
 import { MonitorMark } from '@/components/MonitorMark'
 import { PRODUCT_NAME } from '@/lib/brand'
 
 export default function SuspendedPage() {
   const router = useRouter()
   async function onSignOut() {
-    await createSupabaseBrowser().auth.signOut().catch(() => {})
+    await authFetch('/api/auth/logout')
     router.push('/login')
     router.refresh()
   }

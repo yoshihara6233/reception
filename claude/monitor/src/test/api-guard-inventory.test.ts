@@ -59,6 +59,10 @@ const RULES: [Guard, RegExp][] = [
  *   /api/auth/reset-link : パスワード再設定＝認証の入口そのもので閉じられない。
  *                          回数で縛る（メール 3回/時・IP 10回/時・rate_limit_hit）。
  *
+ *   /api/auth/login      : ログインそのもの (2026-10-29 にブラウザからサーバへ・Cookie を HttpOnly に)。
+ *                          同じサイトの JSON だけ・メール 10 回/15 分・IP 30 回/15 分。
+ *   /api/auth/recovery/verify : 再設定のメールの番号を確かめる入口。メール 5 回/15 分・IP 20 回/時。
+ *
  * /api/geocode は 2026-08-09 にログイン必須へ変更して外した。呼び出し元は
  * 認証必須ページのフォームだけで、開けておくと外部(Nominatim)への無料の
  * 踏み台になり、規約超過でこちらの UA/IP が遮断されるリスクがあった。
@@ -66,6 +70,8 @@ const RULES: [Guard, RegExp][] = [
 const PUBLIC_ALLOWLIST = new Set([
   '/api/server-time',
   '/api/auth/reset-link',
+  '/api/auth/login',
+  '/api/auth/recovery/verify',
 ])
 
 const API_DIR = fileURLToPath(new URL('../app/api', import.meta.url))
@@ -143,6 +149,14 @@ const EXPECTED: Record<string, Guard> = {
   '/api/alarms/ingest': 'device-token',
   '/api/alarms/open-count': 'session-only',
   '/api/auth/reset-link': 'PUBLIC',
+  // ログインまわり (2026-10-29 にサーバへ・セッションの Cookie を HttpOnly に)
+  '/api/auth/login': 'PUBLIC',
+  '/api/auth/recovery/verify': 'PUBLIC',
+  '/api/auth/recovery': 'session-only',
+  '/api/auth/logout': 'session-only',
+  '/api/auth/mfa': 'session-only',
+  '/api/account/mfa': 'session-only',
+  '/api/account/mfa/verify': 'session-only',
   '/api/baggage/clips/[id]': 'session-only',
   '/api/baggage/debug/sessions': 'baggage-store',
   '/api/baggage/edge/clip-upload': 'device-token',
@@ -300,7 +314,10 @@ describe('API ルートの認可ガード棚卸し', () => {
     // 27 = 遠隔視聴の開始 POST /api/video/sessions（GVMS_CLOUD_SPEC §5.1）。
     // RLS 配下でカメラの可視性を引いてから service で行を作る順番を
     // rls-gate-before-service.test.ts で固定している。
+    // 32 = ログインまわりをブラウザからサーバへ移した 5 本 (2026-10-29・セッションの Cookie を HttpOnly に)。
+    // /api/auth/{logout,mfa,recovery}・/api/account/mfa{,/verify}。どれも本人のセッションの操作だけで、
+    // DB の行には触れない (service の接続は回数の制限だけ)。以前は同じ操作をブラウザが直接していた。
     const n = Object.values(actual).filter((g) => g === 'session-only').length
-    expect(n).toBeLessThanOrEqual(27)
+    expect(n).toBeLessThanOrEqual(32)
   })
 })

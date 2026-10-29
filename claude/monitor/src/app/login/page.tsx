@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { QRCodeSVG } from 'qrcode.react'
-import { createSupabaseBrowser } from '@/lib/supabase/browser'
+import { authFetch } from '@/lib/auth/post-json'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { MonitorMark } from '@/components/MonitorMark'
 import { PRODUCT_NAME } from '@/lib/brand'
@@ -13,7 +13,6 @@ import { Smartphone, TriangleAlert } from 'lucide-react'
 
 export default function LoginPage() {
   const router   = useRouter()
-  const supabase = createSupabaseBrowser()
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
   const [error, setError]       = useState<string | null>(null)
@@ -43,17 +42,17 @@ export default function LoginPage() {
     e.preventDefault()
     setError(null)
     setBusy(true)
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) {
+    // ログインはサーバで行い、セッションは HttpOnly の Cookie に置く (2026-10-29・/api/auth/login)
+    const { status, data } = await authFetch('/api/auth/login', 'POST', { email, password })
+    if (status !== 200) {
       setBusy(false)
-      return setError(error.message)
+      return setError(typeof data.error === 'string' ? data.error : 'ログインできませんでした。時間をおいてお試しください。')
     }
     const next = new URL(window.location.href).searchParams.get('next')
     // 多要素を登録している人は、番号を確かめる画面へ（2026-10-28・lib/auth/mfa.ts）。
     // 戻り先 (next) はそのまま渡し、可否は番号の画面で safeNext が決める
-    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
     setBusy(false)
-    if (aal && aal.nextLevel === 'aal2' && aal.currentLevel !== 'aal2') {
+    if (data.mfa === true) {
       router.push(next ? `/login/mfa?next=${encodeURIComponent(next)}` : '/login/mfa')
       return
     }
