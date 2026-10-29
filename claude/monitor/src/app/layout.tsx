@@ -21,6 +21,7 @@ import '@fontsource/ibm-plex-mono/400.css'
 import '@fontsource/ibm-plex-mono/500.css'
 import type { Metadata, Viewport } from 'next'
 import Script from 'next/script'
+import { headers } from 'next/headers'
 import { SwRegister } from '@/components/SwRegister'
 import { PwaInstallPrompt } from '@/components/PwaInstallPrompt'
 import { OfflineIndicator } from '@/components/OfflineIndicator'
@@ -75,13 +76,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // Resolve language from `intereco-lang` cookie so server components and the
   // initial client paint are consistent (no JP→user-lang flicker on first load).
   const lang = await getLang()
+  // middleware が要求ごとに作った nonce (CSP の script-src・lib/security/csp.ts)
+  const nonce = (await headers()).get('x-nonce') ?? undefined
   return (
     <html lang={lang} suppressHydrationWarning>
       <body className="bg-slate-50 text-slate-900 antialiased dark:bg-gedbg dark:text-gedink">
         {/* F72: Anti-FOUC theme init. Uses next/script with beforeInteractive
             so the script runs before React hydrates (avoiding the React 19
             warning about <script> tags rendered inside components). */}
-        <Script id="theme-init" strategy="beforeInteractive">
+        <Script id="theme-init" strategy="beforeInteractive" nonce={nonce}>
           {THEME_INIT}
         </Script>
         <LangProvider initialLang={lang}>

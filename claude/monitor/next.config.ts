@@ -1,5 +1,6 @@
 import type { NextConfig } from 'next'
 import { join } from 'path'
+import { BASE_CSP_DIRECTIVES } from './src/lib/security/csp'
 
 // PDF(pdfkit)ルートに同梱する素材の glob。outputFileTracingRoot=monorepoルート基準
 // を主とし、app(claude/monitor)基準の旧表記も残して root 差異を両取りする。
@@ -52,12 +53,9 @@ const SECURITY_HEADERS = [
   },
   {
     key: 'Content-Security-Policy',
-    value: [
-      "frame-ancestors 'self'",  // クリックジャッキング（X-Frame-Options の後継）
-      "base-uri 'self'",         // <base> 注入で相対 URL を攫われるのを防ぐ
-      "form-action 'self'",      // フォームの送信先を外部に向けられるのを防ぐ
-      "object-src 'none'",       // 旧プラグイン経由の実行を落とす
-    ].join('; '),
+    // 全応答の基本の指令。画面には middleware が script-src (nonce) を足した CSP を付ける
+    // (src/lib/security/csp.ts・2026-10-29・自主診断 ASVS 3.4.3)
+    value: BASE_CSP_DIRECTIVES.join('; '),
   },
 ]
 

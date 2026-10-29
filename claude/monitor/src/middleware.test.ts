@@ -372,3 +372,19 @@ describe('止めたことの記録', () => {
     }
   })
 })
+
+/** 画面の CSP（2026-10-29・自主診断 ASVS 3.4.3）。 */
+describe('CSP の nonce', () => {
+  it('応答に nonce つきの script-src を付け、要求ごとに nonce が違う', async () => {
+    asRole(null)
+    const a = (await middleware(req('/login'))).headers.get('Content-Security-Policy')!
+    const b = (await middleware(req('/login'))).headers.get('Content-Security-Policy')!
+    expect(a).toMatch(/script-src 'self' 'nonce-[A-Za-z0-9+/=]+' 'strict-dynamic'/)
+    expect(a).not.toBe(b)
+  })
+  it('止めた応答 (リダイレクト・API の 401) にも付く', async () => {
+    asRole('baggage_manager')
+    const res = await middleware(req('/stores'))
+    expect(res.headers.get('Content-Security-Policy')).toContain('script-src')
+  })
+})
