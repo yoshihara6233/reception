@@ -25,11 +25,14 @@ import { createTokenCache, hashToken, jwtExpiresAtMs } from '@/lib/auth/token-ca
 import { legacyRedirectTarget } from '@/lib/legacy-host'
 import { appBaseUrl } from '@/lib/app-url'
 import { mfaPending } from '@/lib/auth/mfa'
+import { isForeignClientToken } from '@/lib/auth/foreign-client'
 
 /** トークンについての判定（手荷物検査店長か・多要素の番号の確認が済んでいないか）。 */
 interface Verdict {
   isBaggageManager: boolean
   mfaPending: boolean
+  /** 拠点 (G・VMS) の OAuth クライアント向けに出したトークン。クラウドでは使わせない */
+  foreignClient?: boolean
 }
 
 /**
@@ -103,8 +106,13 @@ export async function middleware(req: NextRequest) {
     if (!user) {
       verdict = null
     } else {
-      // getUser が同じトークンの署名と失効を確かめたあとなので、トークンの aal を信じてよい
+      // getUser が同じトークンの署名と失効を確かめたあとなので、トークンの aal と client_id を信じてよい
       const pending = mfaPending(user, token)
+      if (isForeignClientToken(token)) {
+        verdict = { isBaggageManager: false, mfaPending: false, foreignClient: true }
+        if (tokenHash && token) roleCache.write(tokenHash, 'role', verdict, jwtExpiresAtMs(token))
+        return foreignClientBlock(req, path)
+      }
       const { data: profile, error } = await supa
         .from('admin_users').select('role').eq('auth_user_id', user.id).single()
       // 参照できなかった（瞬断など）ときは従来どおり素通しし、**覚えない**。
@@ -119,6 +127,7 @@ export async function middleware(req: NextRequest) {
   }
 
   if (verdict === null) return res  // 未ログインは各ページの getUser がログインへ誘導。
+  if (verdict.foreignClient) return foreignClientBlock(req, path)
   if (verdict.mfaPending) return mfaBlock(req, path)
   if (!verdict.isBaggageManager) return res  // 通常ロールは制限しない。
 
@@ -136,6 +145,20 @@ export async function middleware(req: NextRequest) {
  * 多要素の番号の確認が済んでいない人を止める。API は 401（画面の fetch がログインへ戻す）、
  * 画面は /login/mfa へ（確かめたら元の画面へ戻れるよう next を付ける。戻り先の可否は safeNext が決める）。
  */
+/**
+ * 拠点向けのトークンで来た要求を止める (lib/auth/foreign-client.ts)。API は 401、画面はログインへ。
+ * Cookie は消さない (正規の手順で入り直せば上書きされる)。
+ */
+function foreignClientBlock(req: NextRequest, path: string): NextResponse {
+  if (path.startsWith('/api/')) {
+    return NextResponse.json({ error: 'foreign_client_token' }, { status: 401 })
+  }
+  const url = req.nextUrl.clone()
+  url.pathname = '/login'
+  url.search = ''
+  return NextResponse.redirect(url)
+}
+
 function mfaBlock(req: NextRequest, path: string): NextResponse {
   if (path.startsWith('/api/')) {
     return NextResponse.json({ error: 'mfa_required' }, { status: 401 })

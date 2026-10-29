@@ -13,6 +13,13 @@ export const GVMS_ROLE_CLAIM = 'gvms_role'
 const MAX_URIS = 10
 
 /**
+ * 拠点のクライアントに許す grant (2026-10-29・自主診断 ASVS 10.1.1)。
+ * 拠点は認可コードで 1 度だけ身元を受け取り、自分のセッションを作る。refresh トークンは使わない。
+ * 以前は refresh_token も許しており、拠点が期限の無い refresh トークンを受け取っていた。
+ */
+const GVMS_GRANT_TYPES: ['authorization_code'] = ['authorization_code']
+
+/**
  * http の戻り先で受けてよいホスト。Supabase の OAuth 2.1 Server は、ループバック以外の http の
  * redirect_uri を受け付けない（登録・更新が validation_failed 400 になる）。
  */
@@ -138,7 +145,7 @@ export async function syncGvmsOidcClient(
   }
   const uris = wants ? sanitizeRedirectUris(rawUris, siteHostname) : []
   const { data: cur, error: readErr } = await svc.from('gvms_oidc_clients')
-    .select('client_id, redirect_uris').eq('edge_id', edgeId).maybeSingle()
+    .select('client_id, redirect_uris, code_grant_only').eq('edge_id', edgeId).maybeSingle()
   if (readErr) return 'skipped'  // 表がまだ無い（migration の前）など
 
   try {
@@ -155,14 +162,24 @@ export async function syncGvmsOidcClient(
         client_name: `G・VMS ${edgeId}`,
         redirect_uris: uris,
         token_endpoint_auth_method: 'none',  // 公開クライアント（PKCE 必須）。拠点へ秘密を配らない
-        grant_types: ['authorization_code', 'refresh_token'],
+        grant_types: GVMS_GRANT_TYPES,
         response_types: ['code'],
         scope: 'openid email profile',
       })
       if (error || !data) { logAuthError('create', edgeId, uris, error); return 'error' }
-      await svc.from('gvms_oidc_clients').insert({ edge_id: edgeId, client_id: data.client_id, redirect_uris: uris })
+      await svc.from('gvms_oidc_clients').insert({
+        edge_id: edgeId, client_id: data.client_id, redirect_uris: uris, code_grant_only: true,
+      })
       await bumpConfigVersion(svc, edgeId)
       return 'created'
+    }
+    // 以前に作ったクライアントは refresh_token を許したまま。次の heartbeat で 1 度だけ直す
+    if (cur.code_grant_only === false) {
+      const { error } = await svc.auth.admin.oauth.updateClient(cur.client_id, { grant_types: GVMS_GRANT_TYPES })
+      if (error) { logAuthError('grant', edgeId, uris, error); return 'error' }
+      await svc.from('gvms_oidc_clients')
+        .update({ code_grant_only: true, updated_at: new Date().toISOString() }).eq('edge_id', edgeId)
+      if (sameList([...(cur.redirect_uris ?? [])].sort(), uris)) return 'updated'
     }
     if (sameList([...(cur.redirect_uris ?? [])].sort(), uris)) return 'unchanged'
     const { error } = await svc.auth.admin.oauth.updateClient(cur.client_id, { redirect_uris: uris })
