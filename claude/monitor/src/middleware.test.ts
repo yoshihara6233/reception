@@ -355,3 +355,20 @@ describe('停止したテナントの利用者', () => {
     expect(res.status).toBe(200)
   })
 })
+
+/** 止めたときは [security] の 1 行をログに書く（2026-10-29・自主診断 ASVS 16.3.2）。 */
+describe('止めたことの記録', () => {
+  it('停止したテナントで止めると auth.tenant_suspended を書く', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    asRole('tenant_admin')
+    state.suspended = true
+    try {
+      await middleware(req('/api/vod'))
+      const lines = warn.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith('[security] '))
+      expect(lines.some((l) => JSON.parse(l.slice(11)).kind === 'auth.tenant_suspended')).toBe(true)
+    } finally {
+      state.suspended = false
+      warn.mockRestore()
+    }
+  })
+})

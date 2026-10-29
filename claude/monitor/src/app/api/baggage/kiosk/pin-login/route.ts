@@ -16,6 +16,7 @@ import {
   KIOSK_COOKIE, isValidPinFormat, verifyPinHash, isLocked,
   signKioskSession, LOCK_MINUTES,
 } from '@/lib/baggage/kiosk-pin'
+import { logSecurityEvent, requestIp } from '@/lib/security/events'
 
 const Body = z.object({ storeId: z.string().uuid(), pin: z.string() })
 
@@ -38,6 +39,7 @@ export async function POST(req: NextRequest) {
   const lockedUntil = row.locked_until ? new Date(row.locked_until) : null
   if (isLocked(lockedUntil, now)) {
     const retryAfterSec = Math.ceil((lockedUntil!.getTime() - now.getTime()) / 1000)
+    logSecurityEvent({ kind: 'kiosk.pin_locked', ip: requestIp(req.headers), status: 429, detail: { store: row.store_id } })
     return NextResponse.json({ error: 'locked', retryAfterSec }, { status: 429 })
   }
 
@@ -47,11 +49,14 @@ export async function POST(req: NextRequest) {
     const { data: newLock } = await svc.rpc('baggage_kiosk_pin_fail', { p_store: row.store_id })
     const lu = newLock ? new Date(newLock as string) : null
     if (isLocked(lu, now)) {
+      logSecurityEvent({ kind: 'kiosk.pin_locked', ip: requestIp(req.headers), status: 429, detail: { store: row.store_id } })
       return NextResponse.json({ error: 'locked', retryAfterSec: LOCK_MINUTES * 60 }, { status: 429 })
     }
+    logSecurityEvent({ kind: 'kiosk.pin_failed', ip: requestIp(req.headers), status: 401, detail: { store: row.store_id } })
     return NextResponse.json({ error: 'invalid_pin' }, { status: 401 })
   }
 
+  logSecurityEvent({ kind: 'kiosk.pin_ok', ip: requestIp(req.headers), detail: { store: row.store_id } })
   // 成功: 失敗カウンタ/ロックを解除。
   await svc.from('baggage_kiosk_pins')
     .update({ failed_attempts: 0, locked_until: null })
