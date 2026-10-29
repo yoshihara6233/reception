@@ -144,7 +144,8 @@ const EXPECTED: Record<string, Guard> = {
   '/api/admin/users/[id]/mfa-reset': 'admin',
   '/api/admin/users/[id]/access': 'admin',
   '/api/admin/users': 'admin',
-  '/api/admin/vod/cleanup': 'cron',
+  // Cron (GET の Bearer・POST の x-cron-secret) か運営。2026-10-29 に tenant_admin を外した
+  '/api/admin/vod/cleanup': 'super-admin',
   '/api/alarms/frames/[frameId]/image': 'session-only',
   '/api/alarms/frames/ingest': 'device-token',
   '/api/alarms/ingest': 'device-token',

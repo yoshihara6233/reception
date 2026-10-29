@@ -1,8 +1,8 @@
 /**
  * F82 / Phase 8.7 — VOD クリップ自動削除
  *
- * POST /api/admin/vod/cleanup
- *   body (任意): { dry_run?: boolean, older_than_days?: number }
+ * GET  /api/admin/vod/cleanup   (Vercel Cron・`Authorization: Bearer $CRON_SECRET`・既定の保持日数で消す)
+ * POST /api/admin/vod/cleanup   body (任意): { dry_run?: boolean, older_than_days?: number }
  *
  * 概要
  *   `vod_clips.created_at` が `older_than_days` 日より古い行を対象に、
@@ -11,9 +11,15 @@
  *   - `older_than_days` 既定値: 31（データガバナンス方針: 保持31日）
  *   - `dry_run`: true なら削除せず、対象件数のみ返す
  *
- * 認証
- *   - 通常の Supabase session で super_admin or tenant_admin のみ実行可
- *   - ヘッダ `x-cron-secret: $CRON_SECRET` で認証バイパス可 (Vercel Cron / pg_cron 用)
+ * 認証 (2026-10-29 に直した)
+ *   - Cron: `Authorization: Bearer $CRON_SECRET` (Vercel Cron の形) か `x-cron-secret: $CRON_SECRET` (pg_cron など)
+ *   - 手で呼ぶのは運営 (super_admin) だけ。全テナントの行を消すので、テナント管理者には開けない
+ *   - `older_than_days` は保持日数 (31 日) より短くできない (保持の決まりより早く消させない)
+ *
+ *   **以前は POST と `x-cron-secret` しか受けず、Vercel Cron (GET・Bearer) からの日次の呼び出しは 405 で、
+ *   一度も動いていなかった** (自主診断の文書づくりで見つけた)。そのため 31 日を過ぎたクリップ・発報の
+ *   静止画、180 日を過ぎた閲覧の記録、古い回数の制限の行が残っていた。直した後の最初の実行で、
+ *   たまった分を MAX_DELETE_PER_RUN ずつ消していく
  *
  * スケジュール (本番)
  *   Vercel Cron で日次起動を想定:
@@ -33,7 +39,8 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { createSupabaseServer } from '@/lib/supabase/server'
+import { timingSafeEqual } from 'node:crypto'
+import { requireSuperAdmin } from '@/lib/admin/guard'
 
 const BUCKET                = 'vod-clips'
 const SNAPSHOT_BUCKET       = 'security-snapshots'
@@ -147,39 +154,43 @@ interface DeleteResult {
   alarms?:        AlarmPruneResult
 }
 
+/** Cron の呼び出しか (Vercel Cron の Bearer か、x-cron-secret)。定数時間で比べる。 */
+function isCronRequest(req: NextRequest): boolean {
+  const secret = process.env.CRON_SECRET
+  if (!secret) return false
+  const same = (a: string | null, b: string) => {
+    if (a === null) return false
+    const x = Buffer.from(a), y = Buffer.from(b)
+    return x.length === y.length && timingSafeEqual(x, y)
+  }
+  return same(req.headers.get('authorization'), `Bearer ${secret}`) || same(req.headers.get('x-cron-secret'), secret)
+}
+
+/** Vercel Cron の日次の呼び出し (GET)。既定の保持日数で消す。 */
+export async function GET(req: NextRequest): Promise<NextResponse> {
+  if (!isCronRequest(req)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  return runCleanup(DEFAULT_TTL_DAYS, false)
+}
+
+/** 手での実行 (運営だけ) と、POST で呼ぶ Cron (pg_cron など)。 */
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const body = (await req.json().catch(() => ({}))) as Body
   const ttlDays = Number(body.older_than_days ?? DEFAULT_TTL_DAYS)
   const dryRun  = Boolean(body.dry_run)
 
-  if (!Number.isFinite(ttlDays) || ttlDays < 1) {
+  // 保持の決まり (31 日) より早くは消させない
+  if (!Number.isFinite(ttlDays) || ttlDays < DEFAULT_TTL_DAYS) {
     return NextResponse.json({ error: 'invalid_ttl' }, { status: 400 })
   }
-
-  // ── Auth ────────────────────────────────────────────────────────────────
-  // Cron 経由は ヘッダ secret で認証バイパス。
-  const cronSecret = process.env.CRON_SECRET
-  const isCron     = !!cronSecret && req.headers.get('x-cron-secret') === cronSecret
-
-  if (!isCron) {
-    // 通常 UI 経由はログイン済 + admin role を要求
-    const supa = await createSupabaseServer()
-    const { data: { user } } = await supa.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-    }
-    // admin_users.role が super_admin or tenant_admin であることを確認
-    const { data: au } = await supa
-      .from('admin_users')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-    const role = au?.role
-    if (role !== 'super_admin' && role !== 'tenant_admin') {
-      return NextResponse.json({ error: 'forbidden' }, { status: 403 })
-    }
+  if (!isCronRequest(req)) {
+    // 全テナントの行を消すので運営だけ (以前は tenant_admin も呼べ、admin_users を id で引いていた)
+    const guard = await requireSuperAdmin()
+    if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status })
   }
+  return runCleanup(ttlDays, dryRun)
+}
 
+async function runCleanup(ttlDays: number, dryRun: boolean): Promise<NextResponse> {
   // ── Service Role client for DB + Storage ────────────────────────────────
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY
