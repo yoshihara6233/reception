@@ -8,7 +8,7 @@
  * Body: multipart/form-data
  *   source      : string  (onvif|frigate|ipro|webhook)  必須
  *   event_type  : string? (motion|tamper|input|...)
- *   camera_id   : string? (recorder_cameras.id)
+ *   camera_id   : string? (recorder_cameras.id・このエッジの店舗のカメラに限る。違えば 400)
  *   occurred_at : string? (ISO8601・省略時 now)
  *   dedup_key   : string? (同一発報の重複判定キー)
  *   image       : File?   (発報時スナップ JPEG/PNG)
@@ -22,6 +22,7 @@ import { notifyAlarm } from '@/lib/alarms/notify'
 import { dispatchAlarmTimeline } from '@/lib/alarms/dispatch'
 import { isStoreOptionEnabled } from '@/lib/admin/tenant-quota'
 import { hashDeviceToken } from '@/lib/edge/device-token'
+import { cameraScope } from '@/lib/alarms/camera-scope'
 
 export const runtime = 'nodejs'
 
@@ -58,6 +59,14 @@ export async function POST(req: NextRequest) {
   const occurredAt = String(form.get('occurred_at') ?? '').trim() || new Date().toISOString()
   const image      = form.get('image')
   if (!source) return NextResponse.json({ error: 'source is required' }, { status: 400 })
+
+  // カメラはこのエッジの店舗のものに限る（別の店舗・別テナントのカメラを付けた発報を作らせない）。
+  // サーバの接続で書くので RLS は効かない。ここで確かめる（ASVS 2.2.3）。
+  if (cameraId) {
+    const scope = await cameraScope(supa, cameraId, edge.store_id)
+    if (scope === 'error') return NextResponse.json({ error: 'camera_check_failed' }, { status: 503 })
+    if (scope !== 'ok') return NextResponse.json({ error: 'camera_not_in_store' }, { status: 400 })
+  }
 
   // 3. dedup（設定の window 内・同一 store+dedup_key）
   const { data: settings } = await supa

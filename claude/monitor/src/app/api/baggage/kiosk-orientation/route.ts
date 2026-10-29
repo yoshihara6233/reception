@@ -10,6 +10,7 @@
  * store_ids 保持者）。変更は admin_audit_log に記録する。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { requireBaggageAccess } from '@/lib/baggage/kiosk-guard'
 import { recordAudit } from '@/lib/admin/audit'
@@ -23,7 +24,7 @@ const Body = z.object({
 
 export async function PUT(req: NextRequest) {
   const parsed = Body.safeParse(await req.json().catch(() => null))
-  if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
+  if (!parsed.success) return invalidInput(req, { error: 'invalid_body' })
   const body = parsed.data
 
   const guard = await requireBaggageAccess(body.storeId)

@@ -8,6 +8,7 @@
  * - status / reply / fixed_version が変わると updated_at が進み、拠点の差分取得（§12.3）で返る。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { requireSuperAdmin } from '@/lib/admin/guard'
 import { recordAudit } from '@/lib/admin/audit'
@@ -32,7 +33,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   const { id } = await ctx.params
   if (!z.string().uuid().safeParse(id).success) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   const parsed = Body.safeParse(await req.json().catch(() => null))
-  if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
+  if (!parsed.success) return invalidInput(req, { error: 'invalid_body' }, guard.user.id)
   const b = parsed.data
 
   const svc = createSupabaseService()

@@ -75,6 +75,8 @@ export async function sendEmail(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
+      // 添付 (PDF) つきでも十分な長さ。詰まったときに呼び出し元を関数の上限まで止めない
+      signal: AbortSignal.timeout(30_000),
     })
 
     if (!res.ok) {

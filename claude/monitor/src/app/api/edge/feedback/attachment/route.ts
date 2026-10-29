@@ -20,6 +20,7 @@
  * 1 年を過ぎて消した要望は受け直さない（204 を返して何もしない — 拠点の送り直しを止めるため）。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { authenticateEdge } from '@/lib/edge/device-auth'
@@ -48,7 +49,7 @@ export async function PUT(req: NextRequest) {
   if (!edge || !edge.store_id) return NextResponse.json({ error: 'invalid device token' }, { status: 401 })
 
   const localId = LocalId.safeParse(req.nextUrl.searchParams.get('local_id'))
-  if (!localId.success) return NextResponse.json({ error: 'invalid_local_id' }, { status: 400 })
+  if (!localId.success) return invalidInput(req, { error: 'invalid_local_id' })
 
   // 大きさを名乗っていれば、読む前に断る
   const len = Number(req.headers.get('content-length') ?? '0')
@@ -73,7 +74,7 @@ export async function PUT(req: NextRequest) {
   if (!body.ok) return NextResponse.json({ error: body.error }, { status: body.status })
 
   const decl = AttachmentDecl.safeParse({ type: item.attachment_type, size: item.attachment_size, sha256: item.attachment_sha256 })
-  if (!decl.success) return NextResponse.json({ error: 'no_declaration' }, { status: 400 })
+  if (!decl.success) return invalidInput(req, { error: 'no_declaration' })
 
   // Content-Type は宣言の type（付いていれば合わせる。中身の判定は先頭の印で行う）
   const ct = (req.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase()

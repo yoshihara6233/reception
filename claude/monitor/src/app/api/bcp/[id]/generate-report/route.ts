@@ -30,6 +30,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { generateBcpReportPdf, type BcpReportProps } from '@/lib/pdf/bcp-report'
 import { fetchGridShotReportClips } from '@/lib/bcp/grid-shots-report'
+import { heavyAllows, tooManyRequests } from '@/lib/limits/heavy'
 
 interface BcpEventRow {
   id:               string
@@ -100,6 +101,11 @@ export async function POST(
 
   // 3. Service role for DB ops (bypass RLS)
   const supa = createSupabaseService()
+
+  // PDF は同期で組み立てる (画像を全部読む)。回数の上限 (60 秒 3 回・1 時間 30 回・
+  // アプリ全体で 60 秒 20 本・自主診断 ASVS 15.2.2)。画面は message をそのまま出す
+  const allowed = await heavyAllows(supa, 'bcp-report', { user: user.id })
+  if (!allowed.ok) return tooManyRequests(allowed.retryAfterSec)
 
   try {
     // Fetch event

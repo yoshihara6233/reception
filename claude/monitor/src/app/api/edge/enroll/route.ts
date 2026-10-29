@@ -13,6 +13,7 @@
  *  - RLS バイパスの service client を使う（公開エンドポイントのため）。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { randomBytes } from 'node:crypto'
 import { z } from 'zod'
 import { encryptSecretForEdge } from '@intereco/shared'
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest) {
   }
 
   const parsed = Body.safeParse(await req.json().catch(() => null))
-  if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
+  if (!parsed.success) return invalidInput(req, { error: 'invalid_body' })
 
   const nowIso = new Date().toISOString()
 

@@ -30,6 +30,7 @@
  *     （拠点の手元の画像が正）。受けた後・1 年で消した後は最初のものを変えない（false を返す）
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { authenticateEdge } from '@/lib/edge/device-auth'
 import { EdgeFeedbackBody, EDGE_DAILY_LIMIT, jstDayStartIso, parseTimestamp, sanitizeContext } from '@/lib/feedback/schema'
@@ -47,7 +48,7 @@ export async function POST(req: NextRequest) {
   const raw = await readJsonBody(req)
   if (!raw.ok) return NextResponse.json({ error: raw.error }, { status: raw.status })
   const parsed = EdgeFeedbackBody.safeParse(raw.value)
-  if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
+  if (!parsed.success) return invalidInput(req, { error: 'invalid_body' })
   const b = parsed.data
   if (b.role !== 'admin') return NextResponse.json({ error: 'role_not_allowed' }, { status: 403 })
   // 画像の宣言の形が違うときは、**宣言だけを捨てて要望は受ける**（page_url と同じ扱い・§2 の

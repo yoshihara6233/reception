@@ -7,6 +7,7 @@
  * super_admin だけ（拠点の詳細画面と同じ）。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { requireSuperAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
@@ -23,7 +24,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status })
   const { id } = await ctx.params
   const parsed = Body.safeParse(await req.json().catch(() => null))
-  if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
+  if (!parsed.success) return invalidInput(req, { error: 'invalid_body' }, guard.user.id)
   const label = normalizeLabel(parsed.data.label)
   if (!label) return NextResponse.json({ error: 'invalid_label' }, { status: 400 })
   if (!isPrivateIPv4(parsed.data.lan_ip)) return NextResponse.json({ error: 'invalid_ip' }, { status: 400 })

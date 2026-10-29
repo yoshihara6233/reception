@@ -19,6 +19,7 @@
  */
 import { randomUUID } from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { requireTenantAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { CloudFeedbackBody, USER_DAILY_LIMIT, jstDayStartIso, sanitizeContext } from '@/lib/feedback/schema'
@@ -76,7 +77,7 @@ export async function POST(req: NextRequest) {
   const raw = await readFeedbackRequest(req)
   if (!raw.ok) return NextResponse.json({ error: raw.error }, { status: raw.status })
   const parsed = CloudFeedbackBody.safeParse(raw.value)
-  if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
+  if (!parsed.success) return invalidInput(req, { error: 'invalid_body' }, guard.user.id)
   const b = parsed.data
   // 画像は先頭の印で形式を決める（ブラウザが付けた種類は信じない）
   let image: { bytes: Uint8Array; type: AttachmentType; sha256: string } | null = null

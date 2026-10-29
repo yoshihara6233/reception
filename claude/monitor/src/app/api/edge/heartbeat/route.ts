@@ -10,6 +10,7 @@
  * （bootstrap・OTA 前提の点検から見分けるため。UPLINK_SPEC §4.1 で必須）。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { authenticateEdge } from '@/lib/edge/device-auth'
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest) {
   if (!edge) return NextResponse.json({ error: 'invalid device token' }, { status: 401 })
 
   const parsed = Body.safeParse(await req.json().catch(() => null))
-  if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
+  if (!parsed.success) return invalidInput(req, { error: 'invalid_body' })
   const { status, agent_version, mac, applied_config_version, pkg_format, pkg_arch } = parsed.data
   const video = VideoStats.safeParse(parsed.data.video)
 

@@ -17,12 +17,14 @@
  * 拠点の同時視聴の枠を二重に食わないため）。
  */
 import { NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { hasCapability } from '@/lib/edge/capabilities'
 import { videoR2Configured } from '@/lib/storage/video-r2'
 import { gvmsSfuEnabled } from '@/lib/livekit'
 import { ACTIVE_STATES, normalizeVodRange } from '@/lib/video/session-logic'
+import { heavyAllows, tooManyRequests } from '@/lib/limits/heavy'
 
 export const dynamic = 'force-dynamic'
 
@@ -48,7 +50,7 @@ export async function POST(req: Request) {
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
   const parsed = Body.safeParse(await req.json().catch(() => null))
-  if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
+  if (!parsed.success) return invalidInput(req, { error: 'invalid_body' }, user.id)
   const { camera_id, kind, stream } = parsed.data
 
   // カメラの可視性（RLS）と表示名は互いに依らないので並べて引く（見始めの待ちを 1 往復減らす）。
@@ -89,6 +91,12 @@ export async function POST(req: Request) {
     || 'クラウド利用者').slice(0, 64)
 
   const svc = createSupabaseService()
+
+  // 回数の上限（60 秒 30 回・1 時間 600 回・自主診断 ASVS 2.4.1）。同時に見られる本数は
+  // 別にテナントの同時視聴数（session_limits）が縛る。ここは開き直しの連打を止める
+  const allowed = await heavyAllows(svc, 'video-session', { user: user.id })
+  if (!allowed.ok) return tooManyRequests(allowed.retryAfterSec)
+
   const nowIso = new Date().toISOString()
   await svc
     .from('video_sessions')
