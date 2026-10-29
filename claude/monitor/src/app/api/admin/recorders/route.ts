@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
 import { recordAudit, storeIdForEdge } from '@/lib/admin/audit'
-import { encryptSecret } from '@intereco/shared'
+import { encryptSecretForEdge } from '@intereco/shared'
 import { dbErrorCode } from '@/lib/api/db-error'
 
 const Body = z.object({
@@ -24,9 +24,9 @@ export async function POST(req: NextRequest) {
   const parsed = Body.safeParse(await req.json())
   if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
 
-  // Vault化: AES-256-GCM 封筒暗号で保存（鍵=env SECRETS_ENC_KEY。未設定時は plain: にフォールバック）。
+  // Vault化: そのエッジの鍵で暗号化 (enc:v2・エッジごとの鍵・packages/shared/src/secret-codec.ts)。
   const { password, ...rest } = parsed.data
-  const password_enc = encryptSecret(password)
+  const password_enc = encryptSecretForEdge(password, rest.edge_id)
 
   const { data, error } = await guard.supa
     .from('recorders')

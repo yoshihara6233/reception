@@ -37,7 +37,7 @@ async function loadNvmsRecorders(): Promise<NvmsRecorder[]> {
   return (data ?? []).map((r) => ({
     id:       r.id as string,
     endpoint: nvmsEndpoint(r.host as string),
-    apiKey:   decryptSecret(r.password_enc as string),
+    apiKey:   decryptSecret(r.password_enc as string, config.EDGE_ID),
   }))
 }
 

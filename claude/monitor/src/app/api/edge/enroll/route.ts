@@ -15,7 +15,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { randomBytes } from 'node:crypto'
 import { z } from 'zod'
-import { encryptSecret } from '@intereco/shared'
+import { encryptSecretForEdge } from '@intereco/shared'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { hashEnrollToken, hashShortCode } from '@/lib/admin/enrollment'
 import { clientIp, rateLimitAllows } from '@/lib/rate-limit'
@@ -118,7 +118,7 @@ export async function POST(req: NextRequest) {
       model:        tok.name,
       host:         'uplink',            // 暫定（uplink 型は接続先を持たない）
       username:     '',
-      password_enc: encryptSecret(''),
+      password_enc: encryptSecretForEdge('', edge.id),
     })
     if (recErr) console.warn(`enroll: nvms recorder autocreate failed (edge ${edge.id}): ${recErr.message}`)
   }

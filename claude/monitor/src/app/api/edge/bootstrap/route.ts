@@ -29,6 +29,7 @@ import { createSupabaseService } from '@/lib/supabase/server'
 import { edgeAuthEmail, ensureEdgeAuthPassword, isGvmsUplinkEdge, mayWithholdServiceRole } from '@/lib/edge/auth-provision'
 import { hashDeviceToken } from '@/lib/edge/device-token'
 import { storeTenantSuspended } from '@/lib/edge/device-auth'
+import { edgeSecretKeysFor } from '@intereco/shared'
 
 /**
  * 手持ちトークンの残り寿命がこれ以上あれば再発行しない（秒）。
@@ -83,6 +84,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     // shouldUpdateAgent 判断のうえ self-update する（docs/edge-ota-design.md）。
     desired_agent_version?: string | null
     desired_cloudflared_version?: string | null
+    // このエッジの録画機の秘密を解く鍵 ({鍵の ID: base64})。マスタ鍵は渡さない (enc:v2・ASVS 13.3.2)
+    secret_keys?: Record<string, string>
   } = {
     edge_id: data.id,
     supabase_url: url,
@@ -138,6 +141,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     gvmsUplink: await isGvmsUplinkEdge(supa, { id: data.id, agent_version: data.agent_version as string | null }),
   })
   if (!withhold) body.supabase_service_role_key = key
+
+  // エッジごとの鍵 (packages/shared/src/secret-codec.ts)。マスタ鍵が無ければ付けない
+  const sk = edgeSecretKeysFor(data.id as string)
+  if (sk) body.secret_keys = sk
 
   return NextResponse.json(body, { headers: { 'Cache-Control': 'no-store' } })
 }

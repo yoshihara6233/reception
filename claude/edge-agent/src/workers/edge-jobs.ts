@@ -35,7 +35,7 @@ interface EdgeJob {
 
 /** 保存値(enc:v1 / plain: / 生)を平文に復号。 */
 function decodePassword(stored: string): string {
-  return decryptSecret(stored)
+  return decryptSecret(stored, config.EDGE_ID)   // enc:v2 は自分の ID で解く
 }
 
 async function resolveRecorder(recorderId: string): Promise<RecorderRow | null> {
