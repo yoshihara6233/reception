@@ -94,7 +94,7 @@ function alertHtml(v: PartitionVerdict): string {
       証跡として使えない水準です。
     </p>
     <p>まず現状を確認（SQL エディタ）:</p>
-    <pre>select jobname, schedule, active from cron.job order by jobname;   -- 6 本あるはず
+    <pre>select jobname, schedule, active from cron.job order by jobname;   -- 7 本あるはず
 select name from vault.secrets order by name;                     -- 4 本あるはず</pre>
     <p>パーティションが足りないとき:</p>
     <pre>select public.create_live_sessions_partition(date_trunc('month', now() + interval '1 month')::date);
