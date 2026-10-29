@@ -6,7 +6,7 @@ import { createFakeDb } from '@/test/fake-supabase'
  * 要望ボードの受け口（super_admin 専用）。
  *
  *   ★話題の状態を変えると、束ねた要望の状態・返事・対応の版も変わる（基本設計 §3.5）
- *   ★変更は feedback_events と運営アクセスログ（admin_audit_log）に残る
+ *   ★変更は feedback_events と運営アクセスログ（admin_audit_log・サービスの接続で書く）に残る
  *   ★見送り（declined）は返事が必須
  *   ★ファイルの取り込みは local_id で重複を除き、伏せ字にしてから入れる
  *   ★super_admin 以外は使えない
@@ -15,7 +15,6 @@ import { createFakeDb } from '@/test/fake-supabase'
 const h = vi.hoisted(() => ({
   role: 'super_admin' as string | null,
   db: null as unknown as ReturnType<typeof import('@/test/fake-supabase').createFakeDb>,
-  audits: [] as Record<string, unknown>[],
 }))
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -24,9 +23,6 @@ vi.mock('@/lib/supabase/server', () => ({
     from: (table: string) => {
       if (table === 'admin_users') {
         return { select: () => ({ eq: () => ({ single: async () => ({ data: h.role ? { id: 'p', role: h.role, tenant_id: null, store_ids: [] } : null }) }) }) }
-      }
-      if (table === 'admin_audit_log') {
-        return { insert: async (row: Record<string, unknown>) => { h.audits.push(row); return { error: null } } }
       }
       throw new Error(`unexpected session table ${table}`)
     },
@@ -75,7 +71,6 @@ function seed() {
 
 beforeEach(() => {
   h.role = 'super_admin'
-  h.audits = []
   seed()
 })
 
@@ -101,15 +96,15 @@ describe('話題の状態の波及（PATCH /api/admin/feedback/topics/[id]）', 
     expect(ev.filter((e) => e.action === 'topic.update')).toHaveLength(1)
     expect(ev.filter((e) => e.action === 'topic.cascade').map((e) => e.item_id).sort()).toEqual([I1, I2])
     expect(ev.find((e) => e.item_id === I1)).toMatchObject({ actor_user_id: 'ops-1', before: { status: 'received' }, after: { status: 'planned' } })
-    expect(h.audits).toHaveLength(1)
-    expect(h.audits[0]).toMatchObject({ action: 'feedback.topic.update', target_type: 'feedback_topic', target_id: T1 })
+    expect(h.db.rows('admin_audit_log')).toHaveLength(1)
+    expect(h.db.rows('admin_audit_log')[0]).toMatchObject({ action: 'feedback.topic.update', target_type: 'feedback_topic', target_id: T1 })
   })
 
   it('内部メモ・WBS・課題 URL は要望へ写さない（運営アクセスログにも中身を残さない）', async () => {
     await patchTopic(req(`/api/admin/feedback/topics/${T1}`, 'PATCH', { internal_note: '新しい社内メモ', wbs_ref: 'D-2-21' }), params(T1))
     expect(Object.keys(item(I1))).not.toContain('internal_note')
     expect(h.db.rows('feedback_events').filter((e) => e.action === 'topic.cascade')).toHaveLength(0)
-    expect(JSON.stringify(h.audits[0].changes)).not.toContain('新しい社内メモ')
+    expect(JSON.stringify(h.db.rows('admin_audit_log')[0].changes)).not.toContain('新しい社内メモ')
   })
 
   it('★見送りは返事が必須（400）。返事を付ければ要望にも返事ごと写る', async () => {
@@ -140,7 +135,7 @@ describe('要望 1 件（PATCH /api/admin/feedback/items/[id]）', () => {
     expect(res.status).toBe(200)
     expect(item(I3)).toMatchObject({ status: 'answered', reply: '設定 → 表示 で変えられます' })
     expect(h.db.rows('feedback_events')[0]).toMatchObject({ item_id: I3, action: 'item.update' })
-    expect(h.audits[0]).toMatchObject({ action: 'feedback.item.update', target_id: I3, store_id: 's1' })
+    expect(h.db.rows('admin_audit_log')[0]).toMatchObject({ action: 'feedback.item.update', target_id: I3, store_id: 's1' })
   })
 
   it('★見送りは返事が必須', async () => {
@@ -169,7 +164,7 @@ describe('話題を作る（POST /api/admin/feedback/topics）', () => {
     expect(res.status).toBe(201)
     const { id } = await res.json()
     expect(item(I3)).toMatchObject({ topic_id: id, status: 'reviewing' })
-    expect(h.audits[0]).toMatchObject({ action: 'feedback.topic.create' })
+    expect(h.db.rows('admin_audit_log')[0]).toMatchObject({ action: 'feedback.topic.create' })
   })
 })
 

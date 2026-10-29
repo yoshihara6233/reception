@@ -19,6 +19,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { authenticateEdge } from '@/lib/edge/device-auth'
 import { nextVideoCommand } from '@/lib/video/dispatch'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,7 +33,7 @@ export async function GET(req: NextRequest) {
     .select('pending_command')
     .eq('id', edge.id)
     .single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/edge/commands/next') }, { status: 500 })
 
   const cmd = data?.pending_command as { action?: string; request_id?: string } | null
   if (!cmd || typeof cmd.request_id !== 'string' || typeof cmd.action !== 'string') {

@@ -17,6 +17,7 @@ import { recordAudit } from '@/lib/admin/audit'
 import {
   deleteFaceInCollection, employeeCollectionId, indexFaceInCollection,
 } from '@/lib/aws/rekognition'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 /**
  * DELETE /api/baggage/employees/[id]/face — 顔データのみ削除（再登録用）
@@ -62,7 +63,7 @@ export async function DELETE(
     .from('employees')
     .update({ face_photo_path: null, rekognition_face_id: null })
     .eq('id', id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/baggage/employees/[id]/face') }, { status: 500 })
 
   await recordAudit(guard.supa, {
     actorUserId: guard.user.id, action: 'baggage.employee.face_delete', targetType: 'employee',
@@ -165,7 +166,7 @@ export async function POST(
         : {}),
     })
     .eq('id', id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/baggage/employees/[id]/face') }, { status: 500 })
 
   // 監査は admin 経路のみ（PIN セルフ登録は auth.uid() が無く RLS INSERT 不可）。
   if (guard.via === 'admin' && guard.supa && guard.actorUserId) {

@@ -25,6 +25,7 @@ import {
 import { deleteCollectionById, visitorDailyCollectionId } from '@/lib/aws/rekognition'
 import { loadTenantSettings } from '@/lib/baggage/tenant-settings'
 import { isR2Path, r2Key, r2Configured, deleteClipObjects } from '@/lib/baggage/r2'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 export const maxDuration = 300   // 店舗数×Storage削除で伸びるため上限を確保
 
@@ -57,7 +58,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     .select('store_id, tenant_id, notify_emails, stores!inner ( name, opt_baggage )')
     .eq('enabled', true)
     .eq('stores.opt_baggage', true)
-  if (sErr) return NextResponse.json({ error: sErr.message }, { status: 500 })
+  if (sErr) return NextResponse.json({ error: dbErrorCode(sErr, '/api/cron/baggage-daily') }, { status: 500 })
 
   // 保持日数はテナント共通設定（baggage_tenant_settings）から。テナント毎に一度だけ読む。
   const tenantRetention = new Map<string, number>()

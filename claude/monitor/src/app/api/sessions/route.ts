@@ -19,6 +19,7 @@
 import { NextResponse } from 'next/server'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { recordMetric } from '@/lib/metrics'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 /**
  * start_live_session() の戻り。**既定値・対象モード・孤児セッションの窓は
@@ -153,7 +154,7 @@ export async function POST(req: Request) {
       .eq('id', body.id)
     if (error) {
       console.error('[sessions/end] update failed:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: dbErrorCode(error, '/api/sessions') }, { status: 500 })
     }
     return NextResponse.json({ ok: true, duration_sec: duration })
   }
@@ -182,7 +183,7 @@ export async function POST(req: Request) {
       .eq('id', body.id)
     if (error) {
       console.error('[sessions/mark_sfu] update failed:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: dbErrorCode(error, '/api/sessions') }, { status: 500 })
     }
     return NextResponse.json({ ok: true })
   }

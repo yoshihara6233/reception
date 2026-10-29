@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { authenticateEdge } from '@/lib/edge/device-auth'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 export const dynamic = 'force-dynamic'
 
@@ -53,7 +54,7 @@ export async function POST(req: NextRequest) {
     : { status: 'failed', error: errMsg ?? 'upload failed' }
 
   const { error } = await svc.from('vod_clips').update(update).eq('id', clip.id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/edge/clip-complete') }, { status: 500 })
 
   return new NextResponse(null, { status: 204 })
 }

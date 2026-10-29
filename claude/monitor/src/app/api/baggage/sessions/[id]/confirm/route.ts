@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 export async function POST(
   _req: NextRequest,
@@ -32,6 +33,6 @@ export async function POST(
     .from('inspection_sessions')
     .update({ confirmed_by: guard.profile.id, confirmed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
     .eq('id', id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/baggage/sessions/[id]/confirm') }, { status: 500 })
   return NextResponse.json({ ok: true })
 }

@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
 import { recordAudit, storeIdForEdge } from '@/lib/admin/audit'
 import { encryptSecret } from '@intereco/shared'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 const Body = z.object({
   edge_id:     z.string().uuid(),
@@ -32,7 +33,7 @@ export async function POST(req: NextRequest) {
     .insert({ ...rest, password_enc })
     .select('id')
     .single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/admin/recorders') }, { status: 500 })
 
   await recordAudit(guard.supa, {
     actorUserId: guard.user.id,

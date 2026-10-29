@@ -25,6 +25,7 @@ import { z } from 'zod'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { authenticateEdge } from '@/lib/edge/device-auth'
 import { planCameraRows, computeGoneIds } from '@/lib/edge/nvms-sync-plan'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 export const dynamic = 'force-dynamic'
 
@@ -73,7 +74,7 @@ export async function POST(req: NextRequest) {
     .select('id, channel, grid_pos, removed_at')
     .eq('recorder_id', recorderId)
     .limit(200_000)
-  if (exErr) return NextResponse.json({ error: exErr.message }, { status: 500 })
+  if (exErr) return NextResponse.json({ error: dbErrorCode(exErr, '/api/edge/nvms-sync') }, { status: 500 })
 
   const existingCams = (existing ?? []).map((c) => ({
     id: c.id as string, channel: c.channel as number, grid_pos: c.grid_pos as number,
@@ -87,7 +88,7 @@ export async function POST(req: NextRequest) {
     const { error } = await svc
       .from('recorder_cameras')
       .upsert(rows, { onConflict: 'recorder_id,channel' })
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/edge/nvms-sync') }, { status: 500 })
     upserted = rows.length
   }
 
@@ -100,7 +101,7 @@ export async function POST(req: NextRequest) {
         .from('recorder_cameras')
         .update({ enabled: false, removed_at: new Date().toISOString() })
         .in('id', gone)
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/edge/nvms-sync') }, { status: 500 })
       disabled = gone.length
     }
   }

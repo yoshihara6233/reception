@@ -18,6 +18,7 @@ import {
   PKG_FORMATS,
   nvmsdReleasePath,
 } from '@/lib/admin/nvmsd-releases'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 export const dynamic = 'force-dynamic'
 // 実体（〜数十 MB）を読み戻してハッシュするため、既定より長めに。
@@ -33,7 +34,7 @@ export async function GET() {
     .select('id, version, pkg_format, pkg_arch, sha256, bytes, notes, created_at')
     .order('created_at', { ascending: false })
     .limit(100)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/admin/nvmsd-releases') }, { status: 500 })
   return NextResponse.json({ releases: data ?? [] })
 }
 

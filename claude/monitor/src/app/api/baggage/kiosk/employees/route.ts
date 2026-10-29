@@ -7,6 +7,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { requireKioskStore } from '@/lib/baggage/kiosk-guard'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 export async function GET(req: NextRequest) {
   const storeId = req.nextUrl.searchParams.get('storeId')
@@ -20,7 +21,7 @@ export async function GET(req: NextRequest) {
     .eq('status', 'active')
     .is('rekognition_face_id', null)
     .order('name')
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/baggage/kiosk/employees') }, { status: 500 })
 
   return NextResponse.json({ employees: data ?? [] })
 }

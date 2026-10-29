@@ -76,12 +76,12 @@ describe('DELETE /api/admin/recorders/[id]', () => {
     expect(h.audits).toEqual([])
   })
 
-  it('レコーダの削除が失敗したら、DB の文言を message で返す', async () => {
+  it('レコーダの削除が失敗したら、DB の文言は返さず db_error を返す (中身はサーバのログ・ASVS 16.5.1)', async () => {
     fake.state.failOn = 'recorders'
     const res = await del('r-old')
     expect(res.status).toBe(500)
     // 配下のカメラの一覧は recorder_cameras から読むので、発報の記録は先に消えている
-    expect(await res.json()).toEqual({ error: 'delete_failed', message: 'recorders down' })
+    expect(await res.json()).toEqual({ error: 'delete_failed', message: 'db_error' })
   })
 })
 

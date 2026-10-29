@@ -9,6 +9,7 @@ import { requireAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { recordAudit, storeIdForRecorder } from '@/lib/admin/audit'
 import { EdgeConfigSchema } from '@/lib/edge/edge-config'
+import { dbErrorCode } from '@/lib/api/db-error'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,7 +36,7 @@ export async function PUT(
     .from('recorders')
     .update({ desired_config: config, config_version: nextVersion, updated_at: new Date().toISOString() })
     .eq('id', id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/admin/recorders/[id]/config') }, { status: 500 })
 
   await recordAudit(guard.supa, {
     actorUserId: guard.user.id,
