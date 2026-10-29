@@ -3,8 +3,9 @@
  * (2026-10-30・自主診断 ASVS 10.4.9・10.7.2・lib/edge/gvms-grants.ts)。
  *
  * 「組織アカウントでサインイン」で拠点の G・VMS に入るとき、最初に同意の画面で承認した拠点を
- * Supabase が覚えている。ここでは本人の許可を一覧にし、許可した日時・期限を出し、拠点ごとに
- * 取り消せるようにする。期限の過ぎた許可は、この画面を開いたときにも取り消す。
+ * Supabase が覚えている。ここでは本人の許可を一覧にし、許可した日時・最後に使った日時・期限を出し、
+ * 拠点ごとに取り消せるようにする。許可は最後に使ってから GRANT_MAX_AGE_DAYS 日使わなければ切れる
+ * (発注者の決定 案 B)。期限の過ぎた許可は、この画面を開いたときにも取り消す。
  *
  * 取り消すと、次にその拠点でサインインするときに同意の画面がもう一度出る。拠点の画面に
  * すでに入っている分は、拠点のセッションの決まり (ログアウトか拠点の期限) で終わる
@@ -16,7 +17,7 @@ import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/serv
 import { MonitorMark } from '@/components/MonitorMark'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { PRODUCT_NAME } from '@/lib/brand'
-import { activeGrants, formatJst, GRANT_MAX_AGE_DAYS, grantExpiresAt, grantSites } from '@/lib/edge/gvms-grants'
+import { activeGrants, formatJst, GRANT_MAX_AGE_DAYS, grantSites, readLastUsed } from '@/lib/edge/gvms-grants'
 import { revokeSiteGrant } from './actions'
 
 export const dynamic = 'force-dynamic'
@@ -29,7 +30,8 @@ export default async function AccountSitesPage(
   const { data: { user } } = await supa.auth.getUser()
   if (!user) redirect(`/login?next=${encodeURIComponent('/account/sites')}`)
 
-  const grants = await activeGrants(supa.auth.oauth)
+  const lastUsed = await readLastUsed(supa, user.id)
+  const grants = lastUsed ? await activeGrants(supa.auth.oauth, lastUsed) : null
   const sites = grants ? await grantSites(createSupabaseService(), grants.map((g) => g.grant.client.id)) : new Map()
 
   return (
@@ -43,8 +45,9 @@ export default async function AccountSitesPage(
         <h1 className="text-base font-bold text-slate-900">拠点へのサインインの許可</h1>
         <p className="text-xs leading-relaxed text-slate-600">
           拠点の G・VMS に「組織アカウントでサインイン」で入るとき、確認の画面で承認した拠点の一覧です。
-          承認した拠点には、期限まで確認を省いてサインインします。渡すのはメールアドレスと拠点での役割だけです。
-          許可の期限は承認から {GRANT_MAX_AGE_DAYS} 日で、過ぎると次のサインインで確認の画面がもう一度出ます。
+          承認した拠点には、確認を省いてサインインします。渡すのはメールアドレスと拠点での役割だけです。
+          許可は、最後に使ってから {GRANT_MAX_AGE_DAYS} 日使わなければ切れ、次のサインインで確認の画面がもう一度出ます。
+          使っている間は切れません。
         </p>
 
         {grants === null && (
@@ -55,7 +58,7 @@ export default async function AccountSitesPage(
         )}
         {grants && grants.length > 0 && (
           <ul className="divide-y divide-slate-200 rounded-md border border-slate-200">
-            {grants.map(({ grant, expired }) => {
+            {grants.map(({ grant, expired, lastUsedAt, expiresAt }) => {
               const site = sites.get(grant.client.id)
               return (
                 <li key={grant.client.id} className="space-y-2 px-3 py-3 text-sm text-slate-800">
@@ -69,12 +72,16 @@ export default async function AccountSitesPage(
                       </button>
                     </form>
                   </div>
-                  <dl className="grid grid-cols-[6rem_1fr] gap-x-2 gap-y-1 text-xs">
+                  <dl className="grid grid-cols-[7rem_1fr] gap-x-2 gap-y-1 text-xs">
                     <dt className="text-slate-500">許可した日時</dt>
                     <dd className="font-mono tabular-nums text-slate-700">{formatJst(grant.granted_at)}</dd>
+                    <dt className="text-slate-500">最後に使った日時</dt>
+                    <dd className="font-mono tabular-nums text-slate-700">
+                      {lastUsedAt ? formatJst(lastUsedAt) : <span className="font-sans text-slate-500">記録なし（承認の日時から数えます）</span>}
+                    </dd>
                     <dt className="text-slate-500">期限</dt>
                     <dd className="font-mono tabular-nums text-slate-700">
-                      {formatJst(grantExpiresAt(grant.granted_at))}
+                      {formatJst(expiresAt)}
                       {expired && <span className="ml-2 font-sans text-red-600">期限切れ（取り消してください）</span>}
                     </dd>
                   </dl>
