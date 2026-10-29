@@ -18,6 +18,10 @@ export type SecurityEventKind =
   | 'auth.foreign_token'    // 拠点向けのトークンでクラウドに来た (middleware)
   | 'auth.tenant_suspended' // 停止したテナントの利用者 (middleware)
   | 'auth.boundary'         // 手荷物検査店長が許可パスの外へ (middleware)
+  | 'auth.login_failed'     // ログインのパスワードの誤り (/api/auth/login)
+  | 'auth.mfa_failed'       // 多要素の番号の誤り (/api/auth/mfa・/api/account/mfa/verify)
+  | 'auth.recovery_failed'  // 再設定の番号の誤り・期限切れ (/api/auth/recovery/verify)
+  | 'auth.cross_site'       // 別のサイトからのログインまわりの要求
   | 'edge.auth_failed'      // エッジのトークンが合わない・停止したテナント
   | 'kiosk.pin_failed'      // キオスクの PIN の誤り
   | 'kiosk.pin_locked'      // キオスクの PIN のロック

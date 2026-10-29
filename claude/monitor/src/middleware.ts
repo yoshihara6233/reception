@@ -28,6 +28,7 @@ import { mfaPending } from '@/lib/auth/mfa'
 import { isForeignClientToken } from '@/lib/auth/foreign-client'
 import { logSecurityEvent, requestIp } from '@/lib/security/events'
 import { makeNonce, pageCsp } from '@/lib/security/csp'
+import { SESSION_COOKIE_OPTIONS } from '@/lib/supabase/cookie-options'
 
 /** トークンについての判定（手荷物検査店長か・多要素の番号の確認が済んでいないか）。 */
 interface Verdict {
@@ -104,6 +105,8 @@ async function route(req: NextRequest, next: () => NextResponse): Promise<NextRe
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      // 更新したトークンを書き戻すときも HttpOnly (lib/supabase/cookie-options.ts)
+      cookieOptions: SESSION_COOKIE_OPTIONS,
       cookies: {
         getAll: () => req.cookies.getAll(),
         setAll: (list) => list.forEach(({ name, value, options }) => res.cookies.set(name, value, options)),

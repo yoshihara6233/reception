@@ -9,7 +9,7 @@
  */
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createSupabaseBrowser } from '@/lib/supabase/browser'
+import { authFetch } from '@/lib/auth/post-json'
 import { MonitorMark } from '@/components/MonitorMark'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { PRODUCT_NAME } from '@/lib/brand'
@@ -19,7 +19,6 @@ interface Factor { id: string; friendly_name?: string | null }
 
 export default function LoginMfaPage() {
   const router   = useRouter()
-  const supabase = createSupabaseBrowser()
   const [factors, setFactors] = useState<Factor[] | null>(null)
   const [factorId, setFactorId] = useState('')
   const [code, setCode]     = useState('')
@@ -31,12 +30,11 @@ export default function LoginMfaPage() {
   useEffect(() => {
     let alive = true
     ;(async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.replace('/login'); return }
-      const { data, error } = await supabase.auth.mfa.listFactors()
+      const { status, data } = await authFetch('/api/auth/mfa', 'GET')
       if (!alive) return
-      if (error) { setError(error.message); setFactors([]); return }
-      const totp = (data?.totp ?? []) as Factor[]
+      if (status === 401) { router.replace('/login'); return }
+      if (status !== 200) { setError('認証アプリの一覧を読めませんでした。'); setFactors([]); return }
+      const totp = (data.factors ?? []) as Factor[]
       // 多要素を登録していない人がここへ来たら、そのまま戻り先へ
       if (totp.length === 0) { router.replace(next()); return }
       setFactors(totp)
@@ -50,9 +48,10 @@ export default function LoginMfaPage() {
     e.preventDefault()
     setError(null)
     setBusy(true)
-    const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId, code: code.replace(/\s/g, '') })
+    const { status } = await authFetch('/api/auth/mfa', 'POST', { factorId, code })
     setBusy(false)
-    if (error) {
+    if (status === 429) { setError('番号の試行が多すぎます。しばらく待ってからお試しください。'); return }
+    if (status !== 200) {
       setError('番号が違います。認証アプリに今出ている番号を入れてください（端末の時刻がずれていると合いません）。')
       return
     }
@@ -61,7 +60,7 @@ export default function LoginMfaPage() {
   }
 
   async function onSignOut() {
-    await supabase.auth.signOut().catch(() => {})
+    await authFetch('/api/auth/logout')
     router.push('/login')
     router.refresh()
   }

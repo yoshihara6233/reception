@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { SESSION_COOKIE_OPTIONS } from './cookie-options'
 
 export async function createSupabaseServer() {
   const cookieStore = await cookies()
@@ -7,6 +8,8 @@ export async function createSupabaseServer() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      // セッションの Cookie は HttpOnly (JavaScript から読めない・cookie-options.ts)
+      cookieOptions: SESSION_COOKIE_OPTIONS,
       cookies: {
         getAll: () => cookieStore.getAll(),
         setAll: (list) => {

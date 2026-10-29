@@ -3,13 +3,12 @@
 /**
  * F24: Logout icon button — sits at the right end of the header.
  *
- * Calls supabase.auth.signOut() in the browser to clear local session
- * (also clears cookies via @supabase/ssr), then hard-reloads to /login
- * so server components re-evaluate auth state cleanly.
+ * サインアウトはサーバで行う (/api/auth/logout・セッションの Cookie は HttpOnly で画面から消せない)。
+ * そのあと /login へ移り、サーバのコンポーネントに空の Cookie を読み直させる。
  */
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createSupabaseBrowser } from '@/lib/supabase/browser'
+import { authFetch } from '@/lib/auth/post-json'
 import { useLang } from '@/lib/i18n/context'
 
 export function LogoutButton() {
@@ -21,8 +20,7 @@ export function LogoutButton() {
     if (busy) return
     setBusy(true)
     try {
-      const supa = createSupabaseBrowser()
-      await supa.auth.signOut()
+      await authFetch('/api/auth/logout')
     } catch {
       // best-effort — even if signOut fails, push to /login
     }

@@ -15,7 +15,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { QRCodeSVG } from 'qrcode.react'
-import { createSupabaseBrowser } from '@/lib/supabase/browser'
+import { authFetch } from '@/lib/auth/post-json'
 import { MonitorMark } from '@/components/MonitorMark'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { PRODUCT_NAME } from '@/lib/brand'
@@ -24,7 +24,6 @@ interface Factor { id: string; friendly_name?: string | null; created_at?: strin
 interface Enrolling { id: string; uri: string; secret: string }
 
 export default function AccountSecurityPage() {
-  const supabase = createSupabaseBrowser()
   const [factors, setFactors] = useState<Factor[] | null>(null)
   const [enrolling, setEnrolling] = useState<Enrolling | null>(null)
   const [code, setCode] = useState('')
@@ -33,27 +32,20 @@ export default function AccountSecurityPage() {
   const [busy, setBusy] = useState(false)
 
   const load = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { window.location.href = '/login'; return }
-    const { data, error } = await supabase.auth.mfa.listFactors()
-    if (error) { setError(error.message); setFactors([]); return }
-    setFactors(((data?.totp ?? []) as Factor[]))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const { status, data } = await authFetch('/api/account/mfa', 'GET')
+    if (status === 401) { window.location.href = '/login'; return }
+    if (status !== 200) { setError('認証アプリの一覧を読めませんでした。'); setFactors([]); return }
+    setFactors((data.factors ?? []) as Factor[])
   }, [])
   useEffect(() => { void load() }, [load])
 
   async function startEnroll() {
     setError(null); setNotice(null); setBusy(true)
     try {
-      // 途中でやめた登録が残っていると、同じ名前で作れないことがあるので先に消す
-      const { data: all } = await supabase.auth.mfa.listFactors()
-      for (const f of (all?.all ?? []) as Factor[]) {
-        if (f.status === 'unverified') await supabase.auth.mfa.unenroll({ factorId: f.id })
-      }
-      const stamp = new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
-      const { data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp', friendlyName: `認証アプリ ${stamp}` })
-      if (error || !data) { setError(error?.message ?? '登録を始められません'); return }
-      setEnrolling({ id: data.id, uri: data.totp.uri, secret: data.totp.secret })
+      // 途中でやめた登録の片付けと登録の開始はサーバで (/api/account/mfa)
+      const { status, data } = await authFetch('/api/account/mfa', 'POST')
+      if (status !== 200) { setError(typeof data.error === 'string' ? data.error : '登録を始められません'); return }
+      setEnrolling({ id: String(data.id), uri: String(data.uri), secret: String(data.secret) })
       setCode('')
     } finally {
       setBusy(false)
@@ -63,16 +55,17 @@ export default function AccountSecurityPage() {
   async function confirmEnroll() {
     if (!enrolling) return
     setError(null); setBusy(true)
-    const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId: enrolling.id, code: code.replace(/\s/g, '') })
+    const { status } = await authFetch('/api/account/mfa/verify', 'POST', { factorId: enrolling.id, code })
     setBusy(false)
-    if (error) { setError('番号が違います。認証アプリに今出ている番号を入れてください。'); return }
+    if (status === 429) { setError('番号の試行が多すぎます。しばらく待ってからお試しください。'); return }
+    if (status !== 200) { setError('番号が違います。認証アプリに今出ている番号を入れてください。'); return }
     setEnrolling(null)
     setNotice('登録しました。次からログインのたびに、認証アプリの番号を求めます。')
     await load()
   }
 
   async function cancelEnroll() {
-    if (enrolling) await supabase.auth.mfa.unenroll({ factorId: enrolling.id }).catch(() => {})
+    if (enrolling) await authFetch(`/api/account/mfa?factorId=${encodeURIComponent(enrolling.id)}`, 'DELETE')
     setEnrolling(null)
   }
 
@@ -83,9 +76,9 @@ export default function AccountSecurityPage() {
       : 'この認証アプリを外しますか？'
     if (!confirm(msg)) return
     setError(null); setNotice(null); setBusy(true)
-    const { error } = await supabase.auth.mfa.unenroll({ factorId: f.id })
+    const { status, data } = await authFetch(`/api/account/mfa?factorId=${encodeURIComponent(f.id)}`, 'DELETE')
     setBusy(false)
-    if (error) { setError(error.message); return }
+    if (status !== 200) { setError(typeof data.error === 'string' ? data.error : '外せませんでした。'); return }
     setNotice('外しました。')
     await load()
   }
