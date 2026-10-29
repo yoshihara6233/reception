@@ -166,11 +166,12 @@ describe('ops_check_runs の権限', () => {
   it('RLS が有効で、読めるのは super_admin だけ', async () => {
     const { rows: [t] } = await pool.query(
       `select c.relrowsecurity as rls,
-              (select count(*)::int from pg_policy p where p.polrelid = c.oid) as policies
+              (select count(*)::int from pg_policy p where p.polrelid = c.oid and p.polpermissive) as policies
          from pg_class c join pg_namespace n on n.oid = c.relnamespace
         where n.nspname = 'public' and c.relname = 'ops_check_runs'`)
     expect(t.rls, 'RLS が無効です').toBe(true)
-    // SELECT の 1 本だけ。書き込みは service_role（SECURITY DEFINER 関数）経由のみ。
+    // 許すポリシーは SELECT の 1 本だけ。書き込みは service_role（SECURITY DEFINER 関数）経由のみ。
+    // （拠点向けのトークンを断る RESTRICTIVE の first_party_only は数えない）
     expect(t.policies).toBe(1)
   })
 
