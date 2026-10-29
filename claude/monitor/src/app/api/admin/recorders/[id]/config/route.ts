@@ -5,6 +5,7 @@
  * nvmsd は版が変わった時だけ取り込む。空オブジェクト（{}）で「設定なし」に戻せる。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { requireAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { recordAudit, storeIdForRecorder } from '@/lib/admin/audit'
@@ -22,7 +23,7 @@ export async function PUT(
 
   const { id } = await ctx.params
   const parsed = EdgeConfigSchema.safeParse(await req.json().catch(() => null))
-  if (!parsed.success) return NextResponse.json({ error: 'invalid_config' }, { status: 400 })
+  if (!parsed.success) return invalidInput(req, { error: 'invalid_config' }, guard.user.id)
   const config = parsed.data
 
   // 認可: そのレコーダが呼び出し管理者から見えるか（RLS セッション）＋現在の版を得る。

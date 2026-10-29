@@ -29,6 +29,7 @@ export type SecurityEventKind =
   | 'kiosk.pin_locked'      // キオスクの PIN のロック
   | 'kiosk.pin_ok'          // キオスクの PIN のサインイン
   | 'rate_limited'          // 回数の制限を超えた
+  | 'input.invalid'         // 入力の検査 (zod) に通らなかった 400 (lib/api/invalid-input.ts・ASVS 16.3.3)
 
 export interface SecurityEvent {
   kind: SecurityEventKind
@@ -49,6 +50,46 @@ export function logSecurityEvent(e: SecurityEvent): void {
   } catch {
     /* 記録の失敗で本処理を止めない */
   }
+}
+
+/**
+ * 同じ出来事が続くときに、記録を間引く (2026-10-30・ASVS 16.3.3)。
+ *
+ * 入力の検査の失敗は、壊れた端末や画面の不具合でも続けて起きる。1 件ずつ書くとログが
+ * 埋まり、本当に見たい出来事が流れる。そこで「種類・道・接続元 (無ければ利用者)」が
+ * 同じものは THROTTLE_WINDOW_MS に 1 行だけ書き、間に捨てた件数を次の行の
+ * `detail.suppressed` に載せる (件数は失わない)。
+ *
+ * 数えるのは関数のインスタンスの中だけ (Vercel はインスタンスが分かれる)。
+ * 目的はログの洪水を止めることで、正確な数は rate_limit_hit の側が持つ。
+ */
+export const THROTTLE_WINDOW_MS = 60_000
+const THROTTLE_MAX_KEYS = 1_000
+const throttle = new Map<string, { at: number; suppressed: number }>()
+
+/** 間引いて記録する。書いたら true。`now` は試験用 */
+export function logSecurityEventThrottled(e: SecurityEvent, now = Date.now()): boolean {
+  const key = `${e.kind}|${e.path ?? ''}|${e.ip ?? e.actor ?? ''}`
+  const prev = throttle.get(key)
+  if (prev && now - prev.at < THROTTLE_WINDOW_MS) {
+    prev.suppressed++
+    return false
+  }
+  const suppressed = prev?.suppressed ?? 0
+  if (!prev && throttle.size >= THROTTLE_MAX_KEYS) {
+    // 古いものから捨てる (Map は入れた順)。鍵を無制限に増やしてメモリを食わない
+    const oldest = throttle.keys().next().value
+    if (oldest !== undefined) throttle.delete(oldest)
+  }
+  throttle.delete(key)
+  throttle.set(key, { at: now, suppressed: 0 })
+  logSecurityEvent(suppressed > 0 ? { ...e, detail: { ...(e.detail ?? {}), suppressed } } : e)
+  return true
+}
+
+/** 試験用: 間引きの記憶を消す */
+export function resetSecurityEventThrottle(): void {
+  throttle.clear()
 }
 
 /** 要求の接続元 (Vercel は x-forwarded-for の先頭に実クライアントを置く)。 */

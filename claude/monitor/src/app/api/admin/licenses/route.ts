@@ -7,6 +7,7 @@
  *        無ければ新規。クラウドは blob を解釈しない（OTA の sig と同じ透過）。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
@@ -47,7 +48,7 @@ export async function POST(req: NextRequest) {
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status })
 
   const parsed = Body.safeParse(await req.json().catch(() => null))
-  if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
+  if (!parsed.success) return invalidInput(req, { error: 'invalid_body' }, guard.user.id)
   const { edge_id, license_blob, org_name, max_cameras, expires_at, bound_mac, notes } = parsed.data
 
   // 認可: 呼び出し管理者からそのエッジ（＝店舗）が見えるか（RLS セッション）→ tenant を得る。

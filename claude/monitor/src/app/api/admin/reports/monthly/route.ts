@@ -5,6 +5,7 @@
  * スナップショット＋PDF を作る。store_manager 等は不可。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { resolveAdminContext } from '@/lib/tenant/acting'
@@ -28,7 +29,7 @@ export async function POST(req: NextRequest) {
   }
 
   const parsed = Body.safeParse(await req.json().catch(() => null))
-  if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
+  if (!parsed.success) return invalidInput(req, { error: 'invalid_body' }, user.id)
 
   const svc = createSupabaseService()
   try {

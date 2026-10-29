@@ -17,6 +17,7 @@
  * 拠点の同時視聴の枠を二重に食わないため）。
  */
 import { NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { hasCapability } from '@/lib/edge/capabilities'
@@ -48,7 +49,7 @@ export async function POST(req: Request) {
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
   const parsed = Body.safeParse(await req.json().catch(() => null))
-  if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
+  if (!parsed.success) return invalidInput(req, { error: 'invalid_body' }, user.id)
   const { camera_id, kind, stream } = parsed.data
 
   // カメラの可視性（RLS）と表示名は互いに依らないので並べて引く（見始めの待ちを 1 往復減らす）。

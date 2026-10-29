@@ -8,6 +8,7 @@
  *    desired を設定するのは可視（=書込可）エッジのみ。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { requireSuperAdmin } from '@/lib/admin/guard'
 import { recordAudit } from '@/lib/admin/audit'
@@ -24,7 +25,7 @@ export async function POST(req: NextRequest) {
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status })
 
   const parsed = Body.safeParse(await req.json().catch(() => null))
-  if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
+  if (!parsed.success) return invalidInput(req, { error: 'invalid_body' }, guard.user.id)
   const { kind, version } = parsed.data
 
   const currentCol = kind === 'agent' ? 'agent_version' : 'cloudflared_version'

@@ -11,6 +11,7 @@
  * トークン保持エッジでも任意キーへは書けない。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { r2Configured, presignClipPut, toR2Path } from '@/lib/baggage/r2'
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest) {
 
   // ── 2. 入力 ──
   const parsed = Body.safeParse(await req.json().catch(() => null))
-  if (!parsed.success) return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
+  if (!parsed.success) return invalidInput(req, { error: 'invalid_body' })
   const { sessionId, cameraId } = parsed.data
 
   // ── 3. R2 未設定 → 従来どおり Supabase へ ──

@@ -9,6 +9,7 @@
  * (store_isolation) 経由だと INSERT が弾かれるため（#192 と同方針）。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
 import { recordAudit } from '@/lib/admin/audit'
@@ -43,7 +44,7 @@ export async function POST(req: NextRequest) {
 
   const parsed = Body.safeParse(await req.json().catch(() => null))
   if (!parsed.success) {
-    return NextResponse.json({ error: 'invalid_body', detail: parsed.error.format() }, { status: 400 })
+    return invalidInput(req, { error: 'invalid_body', detail: parsed.error.format() }, guard.user.id)
   }
   const body = parsed.data
 

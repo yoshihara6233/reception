@@ -7,6 +7,7 @@
  * opt_* 変更は無視する（既存の店舗編集フローは壊さない）。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
@@ -39,7 +40,7 @@ export async function PUT(
 
   const { id } = await ctx.params
   const parsed = Body.safeParse(await req.json())
-  if (!parsed.success) return NextResponse.json({ error: 'invalid_body', detail: parsed.error.format() }, { status: 400 })
+  if (!parsed.success) return invalidInput(req, { error: 'invalid_body', detail: parsed.error.format() }, guard.user.id)
 
   const patch: Record<string, unknown> = { ...parsed.data }
   if (patch.latitude != null && patch.longitude != null) patch.geocoded_at = new Date().toISOString()
