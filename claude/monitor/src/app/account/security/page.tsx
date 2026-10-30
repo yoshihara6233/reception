@@ -159,6 +159,7 @@ export default function AccountSecurityPage() {
         </p>
         <p className="flex gap-4">
           {/* 拠点 (G・VMS) へのサインインの許可の一覧と取り消し (2026-10-30・ASVS 10.4.9) */}
+          <Link href="/account/sessions" className="text-xs text-slate-500 hover:text-slate-700 hover:underline">サインイン中の端末</Link>
           <Link href="/account/sites" className="text-xs text-slate-500 hover:text-slate-700 hover:underline">拠点へのサインインの許可</Link>
           <Link href="/stores" className="text-xs text-slate-500 hover:text-slate-700 hover:underline">戻る</Link>
         </p>

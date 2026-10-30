@@ -15,6 +15,7 @@
  *   - others: 403
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { passwordProblem } from '@/lib/auth/password-policy'
 import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
@@ -72,6 +73,10 @@ export async function POST(req: NextRequest) {
   if (!(await storeIdsBelongToTenant(svc, effStoreIds, effTenantId))) {
     return NextResponse.json({ error: 'store_ids_cross_tenant' }, { status: 400 })
   }
+
+  // 製品の名前・語に数字を足しただけ・メールの名前の部分を含む仮のパスワードを断る (ASVS 6.2.11)
+  const problem = passwordProblem(body.password, body.email)
+  if (problem) return NextResponse.json({ error: 'password_policy', message: problem }, { status: 400 })
 
   // 1. Create auth user
   const { data: createData, error: authErr } = await svc.auth.admin.createUser({

@@ -82,7 +82,8 @@ export function UserForm({ mode, id, initial, tenants, stores, canCreateSuperAdm
 
     if (!res.ok) {
       const j = await res.json().catch(() => ({}))
-      setErr(`${j.error ?? `保存失敗: ${res.status}`}${j.message ? ` (${j.message})` : ''}`)
+      // パスワードの決まりに合わないときは、理由の文だけを出す (ASVS 6.2.11)
+      setErr(j.error === 'password_policy' && j.message ? j.message : `${j.error ?? `保存失敗: ${res.status}`}${j.message ? ` (${j.message})` : ''}`)
       return
     }
     setDone(true)

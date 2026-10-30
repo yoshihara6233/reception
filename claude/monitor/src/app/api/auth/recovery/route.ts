@@ -7,6 +7,7 @@
  * 普通のログインのセッションでは書き換えさせない (今のパスワードを聞かずに乗っ取れるため)。
  */
 import { NextRequest } from 'next/server'
+import { passwordProblem } from '@/lib/auth/password-policy'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { isRecentRecoverySession } from '@/lib/auth/recovery-session'
 import { authJson, readJson, rejectCrossSite } from '@/lib/auth/server-auth'
@@ -39,6 +40,10 @@ export async function POST(req: NextRequest) {
   if (!(await recoveryToken(supa))) {
     return authJson({ error: '再設定のリンクの有効時間を過ぎました。お手数ですが、もう一度メールを送ってください。' }, 401)
   }
+  // 製品の名前・語に数字を足しただけ・メールの名前の部分を含むものを断る (ASVS 6.2.11)
+  const { data: { user: me } } = await supa.auth.getUser()
+  const problem = passwordProblem(password, me?.email)
+  if (problem) return authJson({ error: problem }, 400)
   const { error } = await supa.auth.updateUser({ password })
   if (error) {
     const msg = error.code === 'same_password'

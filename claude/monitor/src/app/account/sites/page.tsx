@@ -100,6 +100,7 @@ export default async function AccountSitesPage(
         </p>
         <p className="flex gap-4">
           <Link href="/account/security" className="text-xs text-slate-500 hover:text-slate-700 hover:underline">多要素認証</Link>
+          <Link href="/account/sessions" className="text-xs text-slate-500 hover:text-slate-700 hover:underline">サインイン中の端末</Link>
           <Link href="/stores" className="text-xs text-slate-500 hover:text-slate-700 hover:underline">戻る</Link>
         </p>
       </div>
