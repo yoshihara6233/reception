@@ -38,7 +38,8 @@ export function buildRemoteMjpegUrl(
   if (!/^https?:\/\//.test(liveHost)) return null // bare host は LAN 用（WebRTC）＝対象外
   const fps    = opts?.fps ?? 5
   const height = opts?.height ?? 720
-  return `${liveHost.replace(/\/+$/, '')}/api/${frigateCamera}?fps=${fps}&height=${height}`
+  // カメラ名は経路に入るので符号化する (`/` や `?` で別の経路・引数にさせない・ASVS 1.2.2)
+  return `${liveHost.replace(/\/+$/, '')}/api/${encodeURIComponent(frigateCamera)}?fps=${fps}&height=${height}`
 }
 
 /**

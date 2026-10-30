@@ -18,6 +18,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { ALARM_TIMELINE_OFFSETS_SEC, offsetKeySec } from '@/lib/alarms/timeline'
 import { hashDeviceToken } from '@/lib/edge/device-token'
+import { cameraScope } from '@/lib/alarms/camera-scope'
+import { sniffImage } from '@/lib/security/input'
 import { dbErrorCode } from '@/lib/api/db-error'
 
 export const runtime = 'nodejs'
@@ -53,6 +55,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'invalid offset_sec' }, { status: 400 })
   }
   if (!(image instanceof Blob)) return NextResponse.json({ error: 'image is required' }, { status: 400 })
+  // camera_id は保存先の経路に入るので UUID だけを受ける (`../` で別の場所を指させない・ASVS 1.3.3)
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cameraId)) {
+    return NextResponse.json({ error: 'invalid camera_id' }, { status: 400 })
+  }
 
   // 3. 認可: この発報がエッジの store のものか
   const { data: ev } = await supa
@@ -64,9 +70,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'alarm not found for this edge' }, { status: 404 })
   }
 
-  // 4. Storage 保存
+  // カメラもこのエッジの店舗のものに限る (別の店舗のカメラの画を混ぜさせない・ASVS 2.2.3)
+  const scope = await cameraScope(supa, cameraId, edge.store_id)
+  if (scope === 'error') return NextResponse.json({ error: 'camera_check_failed' }, { status: 503 })
+  if (scope !== 'ok') return NextResponse.json({ error: 'camera_not_in_store' }, { status: 400 })
+
+  // 4. Storage 保存。中身が JPEG のときだけ (申告ではなく先頭の印で見る・ASVS 5.2.2)
   const path = `alarms/${alarmId}/frames/${cameraId}/${offsetKeySec(offsetSec)}.jpg`
   const bytes = Buffer.from(await image.arrayBuffer())
+  if (sniffImage(bytes) !== 'image/jpeg') return NextResponse.json({ error: 'image must be jpeg' }, { status: 400 })
   const { error: upErr } = await supa.storage
     .from(BUCKET)
     .upload(path, bytes, { contentType: 'image/jpeg', upsert: true })

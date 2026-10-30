@@ -17,12 +17,30 @@
  * 通知（メール等）は別（PB3）。ここは「全記録」に徹する。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { notifyAlarm } from '@/lib/alarms/notify'
 import { dispatchAlarmTimeline } from '@/lib/alarms/dispatch'
 import { isStoreOptionEnabled } from '@/lib/admin/tenant-quota'
 import { hashDeviceToken } from '@/lib/edge/device-token'
 import { cameraScope } from '@/lib/alarms/camera-scope'
+import { z } from 'zod'
+import { sniffImage } from '@/lib/security/input'
+import { dbErrorCode } from '@/lib/api/db-error'
+
+// 項目の形と長さ (ASVS 2.2.1)。以前は自由な文字列のまま DB と通知へ流していた。
+// occurred_at は過去 7 日〜未来 1 日に限る (時計の狂ったエッジが一覧の並びを壊さないように)
+const Fields = z.object({
+  source: z.string().trim().min(1).max(64).regex(/^[\x20-\x7E]+$/),
+  event_type: z.string().trim().max(64).regex(/^[\x20-\x7E]*$/).transform((v) => v || null),
+  camera_id: z.string().trim().uuid().nullable(),
+  dedup_key: z.string().trim().max(200).transform((v) => v || null),
+  occurred_at: z.string().datetime({ offset: true }).nullable().refine((v) => {
+    if (!v) return true
+    const t = Date.parse(v), now = Date.now()
+    return t > now - 7 * 86_400_000 && t < now + 86_400_000
+  }),
+})
 
 export const runtime = 'nodejs'
 
@@ -52,13 +70,18 @@ export async function POST(req: NextRequest) {
   try { form = await req.formData() } catch {
     return NextResponse.json({ error: 'expected multipart/form-data' }, { status: 400 })
   }
-  const source     = String(form.get('source') ?? '').trim()
-  const eventType  = String(form.get('event_type') ?? '').trim() || null
-  const cameraId   = String(form.get('camera_id') ?? '').trim() || null
-  const dedupKey   = String(form.get('dedup_key') ?? '').trim() || null
-  const occurredAt = String(form.get('occurred_at') ?? '').trim() || new Date().toISOString()
+  const str = (k: string) => String(form.get(k) ?? '').trim()
+  const fields = Fields.safeParse({
+    source: str('source'),
+    event_type: str('event_type'),
+    camera_id: str('camera_id') || null,
+    dedup_key: str('dedup_key'),
+    occurred_at: str('occurred_at') || null,
+  })
+  if (!fields.success) return invalidInput(req, { error: 'invalid_fields', fields: fields.error.issues.map((i) => i.path.join('.')) })
+  const { source, event_type: eventType, camera_id: cameraId, dedup_key: dedupKey } = fields.data
+  const occurredAt = fields.data.occurred_at ?? new Date().toISOString()
   const image      = form.get('image')
-  if (!source) return NextResponse.json({ error: 'source is required' }, { status: 400 })
 
   // カメラはこのエッジの店舗のものに限る（別の店舗・別テナントのカメラを付けた発報を作らせない）。
   // サーバの接続で書くので RLS は効かない。ここで確かめる（ASVS 2.2.3）。
@@ -102,17 +125,18 @@ export async function POST(req: NextRequest) {
     })
     .select('id')
     .single()
-  if (insErr || !ev) return NextResponse.json({ error: insErr?.message ?? 'insert failed' }, { status: 500 })
+  if (insErr || !ev) return NextResponse.json({ error: dbErrorCode(insErr, '/api/alarms/ingest') }, { status: 500 })
 
   // 5. スナップ保存（あれば）→ snapshot_url を認証プロキシパスで記録
   let snapshotUrl: string | null = null
-  if (image instanceof Blob) {
-    const ext = image.type === 'image/png' ? 'png' : 'jpg'
-    const path = `alarms/${ev.id}.${ext}`
-    const bytes = Buffer.from(await image.arrayBuffer())
+  // 形式は送り手の申告ではなく中身の先頭の印で決める。JPEG と PNG 以外は保存しない (ASVS 5.2.2)
+  const bytes = image instanceof Blob ? Buffer.from(await image.arrayBuffer()) : null
+  const kind = bytes ? sniffImage(bytes) : null
+  if (bytes && (kind === 'image/jpeg' || kind === 'image/png')) {
+    const path = `alarms/${ev.id}.${kind === 'image/png' ? 'png' : 'jpg'}`
     const { error: upErr } = await supa.storage
       .from('security-snapshots')
-      .upload(path, bytes, { contentType: image.type || 'image/jpeg', upsert: true })
+      .upload(path, bytes, { contentType: kind, upsert: true })
     if (!upErr) {
       snapshotUrl = `/api/security/alarms/${ev.id}/snapshot`
       await supa.from('alarm_events').update({ snapshot_url: snapshotUrl }).eq('id', ev.id)
