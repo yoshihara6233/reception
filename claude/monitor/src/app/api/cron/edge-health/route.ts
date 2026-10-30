@@ -16,6 +16,7 @@
  * 通知先: ALERT_EMAILS（カンマ区切り）。未設定ならメールはスキップ（ログのみ）。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { allowedUpstreamOrigin } from '@/lib/proxy/upstream'
 import { createSupabaseService } from '@/lib/supabase/server'
 import {
   sendEmail, edgeOfflineAlertEmail, edgeRecoveredEmail,
@@ -52,7 +53,10 @@ async function probeTunnel(originSrc: string, timeoutMs = 6_000): Promise<boolea
   const headers: Record<string, string> = {}
   // Cloudflare Access 越え（live-proxy と同じサービストークン）。未設定でも
   // Access が 403 を返せば「トンネル自体は生きている」ので判定には支障なし。
-  if (process.env.GO2RTC_CF_ACCESS_CLIENT_ID && process.env.GO2RTC_CF_ACCESS_CLIENT_SECRET) {
+  // 鍵は許した名前の宛先 (lib/proxy/upstream.ts・既定 *.genesis-edge.com) にだけ付ける。
+  // go2rtc_host は管理の画面で書けるので、任意の宛先へ全体の鍵を送らない (ASVS 1.3.6・13.3.2)
+  if (allowedUpstreamOrigin(originSrc) &&
+      process.env.GO2RTC_CF_ACCESS_CLIENT_ID && process.env.GO2RTC_CF_ACCESS_CLIENT_SECRET) {
     headers['CF-Access-Client-Id'] = process.env.GO2RTC_CF_ACCESS_CLIENT_ID
     headers['CF-Access-Client-Secret'] = process.env.GO2RTC_CF_ACCESS_CLIENT_SECRET
   }

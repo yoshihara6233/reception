@@ -26,6 +26,7 @@
  *   without leaving the URL useful for screenshot-and-share leaks.
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { isOwnStorageUrl } from '@/lib/storage/own-storage-url'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
 
@@ -104,15 +105,4 @@ export async function GET(
     status: 302,
     headers: { 'Cache-Control': 'no-store' },
   })
-}
-
-/** https で、この Supabase のプロジェクトのホストの URL か (古い公開の保存先の URL だけを転送する) */
-function isOwnStorageUrl(raw: string): boolean {
-  try {
-    const u = new URL(raw)
-    const own = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? '')
-    return u.protocol === 'https:' && u.host === own.host && u.pathname.startsWith('/storage/v1/object/')
-  } catch {
-    return false
-  }
 }

@@ -23,6 +23,7 @@
  *   - 古い行の公開 URL を取るときの時間切れ (LEGACY_FETCH_TIMEOUT_MS)
  */
 import { NextResponse } from 'next/server'
+import { isOwnStorageUrl } from '@/lib/storage/own-storage-url'
 import { safeZipSegment } from '@/lib/security/input'
 import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { recordFootageAccess } from '@/lib/audit/footage-access'
@@ -130,7 +131,9 @@ export async function GET(
         if (error || !data) return null
         return new Uint8Array(await data.arrayBuffer())
       }
-      if (c.clip_url) {
+      // 古い行の公開の URL は、自分の Supabase の保存先のものだけ取りに行く。clip_url は
+      // エッジの鍵でも書けるので、任意の宛先へ取りに行かせない (SSRF・ASVS 1.3.6)
+      if (c.clip_url && isOwnStorageUrl(c.clip_url)) {
         // Legacy fallback: row predates F76 and only has a public URL.
         // Works while the bucket is still Public; quietly skipped after flip.
         const r = await fetch(c.clip_url, { cache: 'no-store', signal: AbortSignal.timeout(LEGACY_FETCH_TIMEOUT_MS) })
