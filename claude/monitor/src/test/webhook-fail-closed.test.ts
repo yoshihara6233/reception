@@ -58,6 +58,28 @@ describe('secret 未設定のときに webhook が開かない', () => {
     expect(res.status).toBe(401)
   })
 
+  it('/api/webhooks/onvif/[storeId] は共通の秘密そのものと別の店舗の鍵を受けない (ASVS 2.2.3)', async () => {
+    process.env.ONVIF_WEBHOOK_SECRET = 'master'
+    const { POST } = await import('@/app/api/webhooks/onvif/[storeId]/route')
+    const { onvifWebhookToken } = await import('@/lib/webhooks/onvif-token')
+    const A = '11111111-2222-3333-4444-555555555555'
+    const B = '99999999-2222-3333-4444-555555555555'
+    const call = (storeId: string, token: string, body: unknown) => POST(
+      new Request(`http://localhost/api/webhooks/onvif/${storeId}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      }),
+      { params: Promise.resolve({ storeId }) },
+    )
+    // 共通の秘密そのもの (以前はこれでどの店舗にも書けた)
+    expect((await call(A, 'master', { topic: 'x' })).status).toBe(401)
+    // 別の店舗の鍵
+    expect((await call(A, onvifWebhookToken(B)!, { topic: 'x' })).status).toBe(401)
+    // その店舗の鍵なら認証を通る (形の誤りで 400 になる所まで進む＝DB に触れずに確かめる)
+    expect((await call(A, onvifWebhookToken(A)!, { topic: '' })).status).toBe(400)
+  })
+
   it('/api/webhooks/onvif/[storeId] の GET は認証の設定状態を漏らさない', async () => {
     // 旧 GET は未設定のとき 'open (no secret set)' と返し、開いている受け口の
     // 場所を教えていた。

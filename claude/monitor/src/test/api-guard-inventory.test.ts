@@ -136,6 +136,7 @@ const EXPECTED: Record<string, Guard> = {
   '/api/admin/secrets/rewrap': 'super-admin',
   '/api/admin/reports/monthly': 'tenant-scope',
   '/api/admin/stores/[id]/nvr/test-connection': 'admin',
+  '/api/admin/stores/[id]/onvif-webhook': 'admin',
   '/api/admin/stores/[id]': 'admin',
   '/api/admin/stores': 'admin',
   '/api/admin/tenants/[id]': 'admin',

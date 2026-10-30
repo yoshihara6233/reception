@@ -7,8 +7,10 @@
  *
  * URL: POST /api/webhooks/onvif/[storeId]
  *
- * 認証: 共有 secret を Authorization ヘッダで照合 (Phase 2)
- *   ONVIF_WEBHOOK_SECRET 環境変数または stores.nvr_options.webhook_secret
+ * 認証: 店舗ごとの鍵を Authorization: Bearer で照合 (2026-10-31・ASVS 2.2.3)。
+ *   鍵は ONVIF_WEBHOOK_SECRET を元の鍵にして店舗 ID を混ぜて作る (lib/webhooks/onvif-token.ts)。
+ *   管理者は GET /api/admin/stores/[id]/onvif-webhook で自分の店舗の URL と鍵を受け取る。
+ *   以前は全店舗共通の秘密 1 本で、どの店舗 ID にも書き込めた
  *
  * 受信ペイロード (ONVIF SOAP の簡略 JSON 化):
  *   {
@@ -27,14 +29,22 @@
  * 実 NVR を繋ぐまでは mock リクエストで挙動確認可能。
  */
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { createSupabaseService } from '@/lib/supabase/server'
+import { verifyOnvifWebhookToken } from '@/lib/webhooks/onvif-token'
+import { invalidInput } from '@/lib/api/invalid-input'
 
-interface OnvifEventPayload {
-  topic:       string
-  source?:     { channel?: number; camera_id?: string }
-  value?:      Record<string, unknown>
-  occurred_at?: string
-}
+// 届く値の形と長さ (ASVS 2.2.1)。value は機器ごとに違うので中身は問わず、大きさだけ抑える
+const Payload = z.object({
+  topic: z.string().min(1).max(256),
+  source: z.object({
+    channel: z.number().int().min(0).max(10_000).optional(),
+    camera_id: z.string().max(128).optional(),
+  }).optional(),
+  value: z.record(z.string(), z.unknown()).optional()
+    .refine((v) => v === undefined || JSON.stringify(v).length <= 4096, { message: 'value_too_large' }),
+  occurred_at: z.string().datetime({ offset: true }).optional(),
+})
 
 // ONVIF topic → 内部 event type マッピング
 const TOPIC_MAP: Array<{ pattern: RegExp; type: string }> = [
@@ -70,21 +80,16 @@ export async function POST(
     console.error('[onvif-webhook] ONVIF_WEBHOOK_SECRET is not configured')
     return NextResponse.json({ ok: false, message: 'server_misconfiguration' }, { status: 500 })
   }
+  // 店舗ごとの鍵だけを受ける。共通の秘密そのものや、別の店舗の鍵では通らない (ASVS 2.2.3)
   const provided = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '')
-  if (provided !== expectedSecret) {
+  if (!verifyOnvifWebhookToken(storeId, provided, expectedSecret)) {
     return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 })
   }
 
   // ── 2. ペイロードパース ──
-  let body: OnvifEventPayload
-  try {
-    body = await req.json() as OnvifEventPayload
-  } catch {
-    return NextResponse.json({ ok: false, message: 'Invalid JSON' }, { status: 400 })
-  }
-  if (!body.topic) {
-    return NextResponse.json({ ok: false, message: 'topic is required' }, { status: 400 })
-  }
+  const parsed = Payload.safeParse(await req.json().catch(() => null))
+  if (!parsed.success) return invalidInput(req, { ok: false, message: 'invalid_payload' })
+  const body = parsed.data
 
   const type        = normalizeTopic(body.topic)
   const channel     = body.source?.channel ?? null
