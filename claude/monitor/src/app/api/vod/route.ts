@@ -28,28 +28,40 @@
  *   only Service Role can create rows).
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidInput } from '@/lib/api/invalid-input'
 import { canFetchVod } from '@/lib/types/db'
 import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { heavyAllows, tooManyRequests } from '@/lib/limits/heavy'
+import { z } from 'zod'
 
 /** 拠点への指示 (/api/edges/<id>/commands) の時間切れ */
 const DISPATCH_TIMEOUT_MS = 10_000
 
-interface Body {
-  camera_id?: string
-  from_iso?:  string
-  to_iso?:    string
-}
+/**
+ * 1 回に切り出せる長さの上限。新しい経路 (/api/video/sessions) と同じ 4 時間。
+ * 以前は幅も日時の形も見ず、長い範囲で拠点に重い切り出しをさせられた (ASVS 2.2.1・2.3.2)
+ */
+const VOD_MAX_SPAN_MS = 4 * 60 * 60 * 1000
+
+// 日時は拠点への指示 (/api/edges/[id]/commands の IsoLike) と同じく「読めること」と長さだけを見る
+// (画面のリンクは toISOString だが、+09:00 付きを弾かないため)
+const IsoLike = z.string().min(1).max(64).refine((s) => Number.isFinite(Date.parse(s)))
+const Body = z.object({
+  camera_id: z.string().uuid(),
+  from_iso: IsoLike,
+  to_iso: IsoLike,
+})
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const body = (await req.json().catch(() => ({}))) as Body
-  const { camera_id, from_iso, to_iso } = body
-
-  if (!camera_id || !from_iso || !to_iso) {
-    return NextResponse.json({ error: 'missing_fields' }, { status: 400 })
-  }
-  if (Date.parse(from_iso) >= Date.parse(to_iso)) {
+  const parsed = Body.safeParse(await req.json().catch(() => null))
+  if (!parsed.success) return invalidInput(req, { error: 'missing_fields' })
+  const { camera_id, from_iso, to_iso } = parsed.data
+  const span = Date.parse(to_iso) - Date.parse(from_iso)
+  if (span <= 0) {
     return NextResponse.json({ error: 'from_must_be_before_to' }, { status: 400 })
+  }
+  if (span > VOD_MAX_SPAN_MS) {
+    return NextResponse.json({ error: 'range_too_long', max_hours: 4 }, { status: 400 })
   }
 
   // 1. Auth + camera visibility check (RLS).
