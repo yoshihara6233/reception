@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { invalidInput } from '@/lib/api/invalid-input'
+import { isUpstreamAddress } from '@/lib/security/input'
 import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
 import { recordAudit, storeIdForRecorder } from '@/lib/admin/audit'
@@ -17,8 +18,10 @@ const PatchBody = z.object({
   password:   z.string().optional(),              // 空欄=現状維持。非空のみ更新
   notes:      z.string().nullable().optional(),
   // ライブ/VOD/go2rtc 系（従来は SQL Editor 直編集だったフィールドを UI 化）。
-  live_host:    z.string().nullable().optional(),   // Frigate iframe 用 LAN host:port
-  vod_host:     z.string().nullable().optional(),   // VOD元 NVR の HTTPS endpoint
+  live_host:    z.string().nullable().optional()    // Frigate iframe 用 LAN host:port か http(s) の URL (ASVS 2.2.1)
+                  .refine((v) => v == null || v.trim() === '' || isUpstreamAddress(v, { allowBareHost: true }), { message: 'invalid_live_host' }),
+  vod_host:     z.string().nullable().optional()    // VOD元 NVR の HTTPS endpoint (ASVS 2.2.1)
+                  .refine((v) => v == null || v.trim() === '' || isUpstreamAddress(v, { allowBareHost: true }), { message: 'invalid_vod_host' }),
   vod_username: z.string().nullable().optional(),
   vod_password: z.string().optional(),              // 空欄=現状維持。非空のみ更新
   vod_channel:  z.coerce.number().int().min(1).max(64).nullable().optional(),

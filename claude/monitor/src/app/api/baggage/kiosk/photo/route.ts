@@ -6,6 +6,7 @@
  * （パスは自店舗プレフィックスのみ受理される）。認可は requireKioskStore（PIN or ログイン）。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { decodeImageDataUrl } from '@/lib/security/input'
 import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { requireKioskStore } from '@/lib/baggage/kiosk-guard'
@@ -16,13 +17,6 @@ const Body = z.object({
   image: z.string().min(32),   // dataURL（data:image/...;base64,...）
 })
 
-function dataUrlToBuffer(dataUrl: string): { buf: Buffer; ext: string; mime: string } | null {
-  const m = /^data:image\/(jpeg|png|webp);base64,(.+)$/.exec(dataUrl)
-  if (!m) return null
-  try {
-    return { buf: Buffer.from(m[2], 'base64'), ext: m[1] === 'jpeg' ? 'jpg' : m[1], mime: `image/${m[1]}` }
-  } catch { return null }
-}
 
 export async function POST(req: NextRequest) {
   const parsed = Body.safeParse(await req.json().catch(() => null))
@@ -32,7 +26,8 @@ export async function POST(req: NextRequest) {
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status })
   const { svc, store } = guard
 
-  const img = dataUrlToBuffer(parsed.data.image)
+  // 宣言と中身の先頭の印が一致する画像だけ (ASVS 5.2.2)
+  const img = decodeImageDataUrl(parsed.data.image)
   if (!img) return NextResponse.json({ error: 'invalid_image' }, { status: 400 })
 
   const path = `${store.id}/${jstYmd(new Date())}/card-${crypto.randomUUID()}.${img.ext}`

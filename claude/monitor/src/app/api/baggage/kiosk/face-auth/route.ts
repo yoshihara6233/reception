@@ -12,6 +12,7 @@
  * AWS 未設定でも 500 にしない（authSkipped でフロー継続）。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { decodeImageDataUrl } from '@/lib/security/input'
 import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { requireKioskStore } from '@/lib/baggage/kiosk-guard'
@@ -31,11 +32,6 @@ const Body = z.object({
   image: z.string().min(32),   // JPEG dataURL（data:image/jpeg;base64,...）
 })
 
-function dataUrlToBuffer(dataUrl: string): Buffer | null {
-  const m = /^data:image\/(jpeg|png|webp);base64,(.+)$/.exec(dataUrl)
-  if (!m) return null
-  try { return Buffer.from(m[2], 'base64') } catch { return null }
-}
 
 // 照合(最大8秒)＋コールドスタートが関数上限で切られないよう余裕を確保。
 export const maxDuration = 20
@@ -49,15 +45,17 @@ export async function POST(req: NextRequest) {
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status })
   const { svc, store } = guard
 
-  const buf = dataUrlToBuffer(body.image)
-  if (!buf) return NextResponse.json({ error: 'invalid_image' }, { status: 400 })
+  // 宣言と中身の先頭の印が一致する JPEG・PNG だけ (照合に渡せる形式・ASVS 5.2.2)
+  const img = decodeImageDataUrl(body.image, ['image/jpeg', 'image/png'])
+  if (!img) return NextResponse.json({ error: 'invalid_image' }, { status: 400 })
+  const { buf } = img
 
   // 1) 顔写真の保存は「並行」で開始（照合と同時に走らせて体感を短縮）。
   const now = new Date()
-  const facePath = `${store.id}/${jstYmd(now)}/${crypto.randomUUID()}.jpg`
+  const facePath = `${store.id}/${jstYmd(now)}/${crypto.randomUUID()}.${img.ext}`
   const uploadPromise = svc.storage
     .from('baggage-photos')
-    .upload(facePath, buf, { contentType: 'image/jpeg', upsert: false })
+    .upload(facePath, buf, { contentType: img.mime, upsert: false })
 
   // 2) 照合（visitor entry は登録のみなので照合スキップ）— アップロード完了を待って返す。
   if (body.personKind === 'visitor' && body.action === 'entry') {

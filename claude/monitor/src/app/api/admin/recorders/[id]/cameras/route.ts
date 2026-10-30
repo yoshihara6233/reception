@@ -4,6 +4,7 @@
  *   { upsert: Camera[], delete: string[] }
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { isUpstreamAddress } from '@/lib/security/input'
 import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
@@ -19,7 +20,8 @@ const Camera = z.object({
   enabled:        z.boolean().default(true),
   frigate_camera: z.string().nullable().optional(),
   // go2rtc 高画質ライブ系（従来は SQL Editor 直編集）。空文字は NULL 化。
-  hls_url:        z.string().nullable().optional(),   // go2rtc stream URL 上書き
+  hls_url:        z.string().nullable().optional()    // go2rtc stream URL 上書き。http(s) の URL だけ (ASVS 2.2.1)
+                    .refine((v) => v == null || v.trim() === '' || isUpstreamAddress(v), { message: 'invalid_hls_url' }),
   live_rtsp:      z.string().nullable().optional(),   // go2rtc 自動登録用 RTSP ソース
 })
 
