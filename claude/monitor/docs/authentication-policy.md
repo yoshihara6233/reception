@@ -37,7 +37,7 @@ G・VMS-Cloud に入る経路は次のとおりです。**利用者（人）の�
 |---|---|---|---|
 | エッジ（edge-agent・G・VMS の nvmsd） | `/api/edge/*` の `Authorization: Bearer <device token>` | 機器ごとのランダムなトークン | DB には要約（ハッシュ）だけを置く。届く範囲はその機器の店舗だけ。設置コードによる登録（`/api/edge/enroll`）は IP ごとの回数の制限 |
 | 定期の処理（Vercel Cron） | `/api/cron/*` | 共有の秘密（`CRON_SECRET`） | 未設定なら 503（だれも通さない） |
-| 外からの通知（Webhook） | `/api/bcp-webhook`・`/api/webhooks/onvif/[storeId]` | 共有の秘密 | 未設定なら断る（フェイルクローズ・試験で固定） |
+| 外からの通知（Webhook） | `/api/bcp-webhook`・`/api/webhooks/onvif/[storeId]` | `/api/bcp-webhook` は共有の秘密。ONVIF は**店舗ごとの鍵**（`ONVIF_WEBHOOK_SECRET` に店舗 ID を混ぜて作る・`lib/webhooks/onvif-token.ts`・2026-10-31）。管理者は `GET /api/admin/stores/[id]/onvif-webhook` で自分の店舗の URL と鍵を受け取る（監査ログに残る） | 未設定なら断る（フェイルクローズ・試験で固定）。ONVIF は共通の秘密そのものや別の店舗の鍵では通らない |
 | Supabase の REST（PostgREST）を直接 | `https://<project>.supabase.co/rest/v1/*` | 利用者のアクセストークン | すべての表に RLS。拠点向けのトークン・切ったセッション・止めた利用者のトークンは RESTRICTIVE のポリシーで断る |
 | 運営（Supabase のダッシュボード・service_role の鍵） | Supabase のダッシュボード・Vercel の環境変数 | 各サービスのアカウント（多要素） | 鍵の作り直しの手順は `docs/dr-runbook.md` |
 

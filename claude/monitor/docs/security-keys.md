@@ -22,7 +22,8 @@ G・VMS（拠点）の側の一覧は NVMS の `docs/security/鍵と暗号.md` �
 | `EDGE_IMAGES_SIGNING_SECRET` | HMAC-SHA256（`${method}\n${key}\n${exp}`） | 置き場の Worker（R2）への GET・PUT・DELETE の URL の署名（ライブ画像・映像の受け渡し） | ほかの署名 | Worker（画像） | Vercel と Worker を同じ値に |
 | `SECRETS_ENC_KEY`・`SECRETS_ENC_KEYS` | AES-256-GCM（タグ 16 バイト・IV 12 バイト）。v2 はエッジごとの鍵を HKDF-SHA256（salt=エッジの ID） | 録画機・VOD の資格情報の暗号化（`packages/shared/src/secret-codec.ts`） | 署名・ほかのデータの暗号化 | エッジには自分の鍵だけ（bootstrap） | ID つきで並べて `POST /api/admin/secrets/rewrap` |
 | `CRON_SECRET` | 共有の Bearer | Vercel の cron の受け口だけ | ほかの受け口 | Vercel | Vercel の画面 |
-| `BCP_WEBHOOK_SECRET`・`ONVIF_WEBHOOK_SECRET` | 共有の Bearer（未設定はフェイルクローズ） | それぞれの webhook の受け口だけ | ほかの受け口 | 送り手 | 送り手と同時に |
+| `BCP_WEBHOOK_SECRET` | 共有の Bearer（未設定はフェイルクローズ） | BCP の webhook の受け口だけ | ほかの受け口 | 送り手 | 送り手と同時に |
+| `ONVIF_WEBHOOK_SECRET` | 店舗ごとの鍵の元の鍵（そのものは Bearer として受けない・2026-10-31） | 店舗ごとの鍵を作る（HMAC-SHA256・店舗 ID を混ぜる）。ONVIF の webhook はその店舗の鍵だけを受ける | ほかの店舗の受け口・ほかの受け口 | 各店舗の NVR（店舗の鍵だけ） | 作り直すと全店舗の鍵が変わる（NVR の設定をやり直す） |
 | `LIVEKIT_API_KEY`・`LIVEKIT_API_SECRET` | LiveKit のトークン（JWT・HS256） | SFU の部屋のトークン（2026-09-29 から保留） | ほか | LiveKit Cloud | LiveKit の画面 |
 | `GO2RTC_CF_ACCESS_CLIENT_ID`・`_SECRET` | Cloudflare Access のサービストークン | 許した名前の拠点の go2rtc への中継だけ（`lib/proxy/upstream.ts`） | ほかのホスト | Cloudflare Access | Cloudflare の画面 |
 | `AWS_ACCESS_KEY_ID`・`AWS_SECRET_ACCESS_KEY` | AWS の IAM キー | Rekognition（手荷物検査の顔の照合） | ほかの AWS の操作 | AWS | IAM の画面 |
