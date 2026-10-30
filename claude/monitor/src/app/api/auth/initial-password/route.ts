@@ -9,6 +9,7 @@
  * 印 (app_metadata) は本人には書けないので、外すのはサービスの接続で行う。
  */
 import { NextRequest } from 'next/server'
+import { passwordProblem } from '@/lib/auth/password-policy'
 import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { authJson, readJson, rejectCrossSite } from '@/lib/auth/server-auth'
 import { mfaPending } from '@/lib/auth/mfa'
@@ -47,6 +48,10 @@ export async function POST(req: NextRequest) {
   if (password.length < 8 || password.length > 1024) {
     return authJson({ error: 'パスワードは8文字以上で入力してください。' }, 400)
   }
+
+  // 製品の名前・語に数字を足しただけ・メールの名前の部分を含むものを断る (ASVS 6.2.11)
+  const problem = passwordProblem(password, user.email)
+  if (problem) return authJson({ error: problem }, 400)
 
   const { error } = await supa.auth.updateUser({ password })
   if (error) {

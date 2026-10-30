@@ -7,6 +7,7 @@
  *   - tenant_admin: only same-tenant users, cannot promote to super_admin
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { passwordProblem } from '@/lib/auth/password-policy'
 import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
@@ -47,7 +48,7 @@ export async function PUT(
   // Load target row to enforce tenant scope and to know the auth_user_id
   const { data: target, error: loadErr } = await svc
     .from('admin_users')
-    .select('id, auth_user_id, tenant_id, role')
+    .select('id, auth_user_id, tenant_id, role, email')
     .eq('id', id)
     .single()
   if (loadErr || !target) {
@@ -112,6 +113,9 @@ export async function PUT(
   // 自分のパスワードを変えたときは仮にしない。
   const isSelf = target.auth_user_id === guard.user.id
   if (body.password && target.auth_user_id) {
+    // 製品の名前・語に数字を足しただけ・メールの名前の部分を含むものを断る (ASVS 6.2.11)
+    const problem = passwordProblem(body.password, target.email)
+    if (problem) return NextResponse.json({ error: 'password_policy', message: problem }, { status: 400 })
     const { error: pwErr } = await svc.auth.admin.updateUserById(target.auth_user_id, {
       password: body.password,
       ...(isSelf ? {} : { app_metadata: initialPasswordMetadata() }),
