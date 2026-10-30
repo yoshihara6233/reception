@@ -13,6 +13,7 @@
  * （ログイン済み admin_users ＋店舗スコープ＋enabled 店舗のみ）を通過したものに限る。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { isKioskPhotoPath } from '@/lib/security/input'
 import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { requireKioskStore } from '@/lib/baggage/kiosk-guard'
@@ -48,12 +49,13 @@ export async function POST(req: NextRequest) {
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status })
   const { svc, store, settings } = guard
 
-  // facePath は face-auth が生成した自店舗プレフィックスのみ受理
-  // （他店舗パスの持ち込み＝写真プロキシ経由の越権閲覧・visitor登録の混入を防ぐ）
-  if (body.facePath && !body.facePath.startsWith(`${store.id}/`)) {
+  // facePath は face-auth が生成した自店舗の経路の形そのものだけ受理
+  // （他店舗パスの持ち込み＝写真プロキシ経由の越権閲覧・visitor登録の混入を防ぐ）。
+  // 以前は先頭一致だけで `<自店舗>/../<他店舗>/…` を通した (ASVS 1.3.3)
+  if (body.facePath && !isKioskPhotoPath(body.facePath, store.id)) {
     return NextResponse.json({ error: 'invalid_face_path' }, { status: 400 })
   }
-  if (body.cardPhotoPath && !body.cardPhotoPath.startsWith(`${store.id}/`)) {
+  if (body.cardPhotoPath && !isKioskPhotoPath(body.cardPhotoPath, store.id)) {
     return NextResponse.json({ error: 'invalid_card_path' }, { status: 400 })
   }
   // employeeId も自店舗の従業員のみ受理（face-auth の一致結果以外の任意UUIDを弾く）

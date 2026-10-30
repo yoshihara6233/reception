@@ -7,6 +7,7 @@
  * 新規作成 / 編集 / 削除 アクション付き (super_admin / tenant_admin のみ)。
  */
 import Link from 'next/link'
+import { postgrestSearchTerm } from '@/lib/security/input'
 import { redirect } from 'next/navigation'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
@@ -97,8 +98,11 @@ export default async function UsersAdmin({
     const ctx = await resolveAdminContext(guard.supa)
     if (ctx.tenantId) query = query.eq('tenant_id', ctx.tenantId)
   }
-  if (q) {
-    query = query.or(`display_name.ilike.%${q}%,email.ilike.%${q}%`)
+  // 検索語から PostgREST の絞り込みの書式の記号を外してから入れる。そのまま入れると
+  // `,` や `(` で条件を足せた (自テナントの外には出ないが・ASVS 1.2.4)
+  const term = postgrestSearchTerm(q)
+  if (term) {
+    query = query.or(`display_name.ilike.%${term}%,email.ilike.%${term}%`)
   }
   if (role && ['tenant_admin', 'store_manager', 'baggage_manager', 'viewer'].includes(role)) {
     query = query.eq('role', role)

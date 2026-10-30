@@ -24,6 +24,7 @@
  */
 import { NextResponse } from 'next/server'
 import { isOwnStorageUrl } from '@/lib/storage/own-storage-url'
+import { safeZipSegment } from '@/lib/security/input'
 import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { recordFootageAccess } from '@/lib/audit/footage-access'
 import { zipStream, type ZipEntrySource } from '@/lib/bcp/zip-stream'
@@ -63,10 +64,8 @@ function offsetSlug(min: number): string {
 }
 
 /** Sanitize a name fragment so it works as a path component on Windows/macOS. */
-function safeName(s: string | null | undefined, fallback: string): string {
-  const v = (s ?? fallback).replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').trim()
-  return v.length > 0 ? v : fallback
-}
+// ZIP の中の名前の 1 区切り。`..` のような . だけの名前も使わない (ASVS 5.3.2)
+const safeName = safeZipSegment
 
 export async function GET(
   _req: Request,

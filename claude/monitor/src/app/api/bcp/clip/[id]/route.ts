@@ -26,6 +26,7 @@
  *   without leaving the URL useful for screenshot-and-share leaks.
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { isOwnStorageUrl } from '@/lib/storage/own-storage-url'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
 
@@ -64,7 +65,9 @@ export async function GET(
   //     rows whose URL contained '/bcp-clips/'. Anything left here is
   //     truly orphan and we serve a 404 once the bucket is private.
   if (!clip.storage_path) {
-    if (clip.clip_url) {
+    // 転送先は https でこの Supabase のホストのものだけ。clip_url はエッジの鍵でも書けるので、
+    // 任意の URL を置かれると、ここの 302 が外のサイトへ飛ばす口になる (ASVS 1.2.2・1.3.6)
+    if (clip.clip_url && isOwnStorageUrl(clip.clip_url)) {
       return NextResponse.redirect(clip.clip_url, { status: 302 })
     }
     return new NextResponse('Clip has no storage_path or clip_url', { status: 410 })

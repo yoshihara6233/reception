@@ -7,6 +7,7 @@
  * キオスクと違いタイムアウトレースはせず、失敗は素直にエラーを返す。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { decodeImageDataUrl } from '@/lib/security/input'
 import { invalidInput } from '@/lib/api/invalid-input'
 import { cookies } from 'next/headers'
 import { z } from 'zod'
@@ -82,13 +83,6 @@ const Body = z.object({
   consentVersion: z.number().int().nullish(),   // 顔登録時の同意版（同意画面を通った場合）
 })
 
-function dataUrlToBuffer(dataUrl: string): { buf: Buffer; mime: string; ext: string } | null {
-  const m = /^data:image\/(jpeg|png|webp);base64,(.+)$/.exec(dataUrl)
-  if (!m) return null
-  try {
-    return { buf: Buffer.from(m[2], 'base64'), mime: `image/${m[1]}`, ext: m[1] === 'jpeg' ? 'jpg' : m[1] }
-  } catch { return null }
-}
 
 export async function POST(
   req: NextRequest,
@@ -126,7 +120,8 @@ export async function POST(
     return NextResponse.json({ error: 'already_registered' }, { status: 409 })
   }
 
-  const img = dataUrlToBuffer(parsed.data.image)
+  // 宣言と中身の先頭の印が一致する JPEG・PNG だけ (顔の登録に渡せる形式・ASVS 5.2.2)
+  const img = decodeImageDataUrl(parsed.data.image, ['image/jpeg', 'image/png'])
   if (!img) return NextResponse.json({ error: 'invalid_image' }, { status: 400 })
   const { buf } = img
 
