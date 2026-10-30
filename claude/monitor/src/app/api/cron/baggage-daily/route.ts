@@ -10,7 +10,8 @@
  *      削除（掲示「来訪者=当日中に自動削除」の実装。AWS 未設定・不存在は握って続行）
  *   4. 保持期間 purge — retention_days 超過セッションのクリップ/顔・名刺写真を Storage
  *      から削除し、セッション行を削除（clips/events/jobs は ON DELETE CASCADE）。
- *      従業員マスタの顔（employees.face_photo_path）は登録抹消まで保持＝purge 対象外
+ *      従業員マスタの顔（employees.face_photo_path）はここでは消さない（登録を外したとき・
+ *      1 年照合に使わなかったときに消す＝/api/cron/data-retention）
  *
  * 店舗単位で try/catch — 1店舗の失敗（AWSダウン等）で他店舗を巻き込まない。
  * 認証: Vercel Cron の Bearer CRON_SECRET / x-cron-secret（edge-health と同形）。

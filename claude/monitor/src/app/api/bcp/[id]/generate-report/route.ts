@@ -41,6 +41,8 @@ interface BcpEventRow {
   max_intensity:    string | null
   status:           string
   is_test:          boolean
+  /** 生画像を保持期間 (90 日) で消した時刻。消した後は作り直さない (確認済みの PDF を画像の無いもので上書きしない) */
+  raw_purged_at:    string | null
   stores: {
     name:    string
     address: string | null
@@ -120,6 +122,7 @@ export async function POST(
         max_intensity,
         status,
         is_test,
+        raw_purged_at,
         stores ( name, address )
       `)
       .eq('id', eventId)
@@ -129,6 +132,13 @@ export async function POST(
       return NextResponse.json({ error: 'event_not_found' }, { status: 404 })
     }
     const event = eventRow as unknown as BcpEventRow
+
+    if (event.raw_purged_at) {
+      return NextResponse.json(
+        { error: 'raw_images_purged', message: '生画像は保存期間 (90 日) を過ぎて消しました。PDF は作り直せません。' },
+        { status: 409 },
+      )
+    }
 
     // 3. Fetch clips with camera name
     //    Skip placeholder rows (offset_min IS NULL) — those are from test API

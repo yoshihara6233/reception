@@ -2,7 +2,9 @@
  * DELETE /api/baggage/employees/[id] — 従業員の登録抹消（M4）
  *
  * status=inactive にし、常設コレクションから顔を削除・顔列をクリアする
- * （キオスク画面の掲示「従業員=登録抹消まで」の実装）。行は履歴参照のため残す。
+ * （キオスク画面の掲示「従業員=登録を外すまで」の実装）。行は履歴参照のため残し、
+ * 登録を外してから 1 年で /api/cron/data-retention が行ごと消す（氏名の保持・2026-10-30 決定）。
+ * 登録を外した時刻 deactivated_at はトリガが書く（migration 20261030150000）。
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/admin/guard'

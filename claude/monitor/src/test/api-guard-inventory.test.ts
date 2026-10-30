@@ -207,6 +207,8 @@ const EXPECTED: Record<string, Guard> = {
   '/api/bcp/test/stores': 'session-only',
   '/api/cron/alarm-dispatch-retry': 'cron',
   '/api/cron/baggage-daily': 'cron',
+  // 保持期間の削除 (2026-10-30)。GET (Vercel Cron の Bearer) だけ・dry_run も同じ認証
+  '/api/cron/data-retention': 'cron',
   '/api/cron/edge-health': 'cron',
   '/api/cron/monthly-report': 'cron',
   '/api/cron/partition-health': 'cron',

@@ -48,7 +48,7 @@ export async function POST(
   // 1. イベント取得（発令時刻・店舗・状態）
   const { data: event, error: evErr } = await svc
     .from('bcp_events')
-    .select('id, store_id, alert_issued_at, status')
+    .select('id, store_id, alert_issued_at, status, raw_purged_at')
     .eq('id', eventId)
     .single()
   if (evErr || !event) {
@@ -56,6 +56,10 @@ export async function POST(
   }
   if (!event.store_id) {
     return NextResponse.json({ error: 'event_has_no_store' }, { status: 400 })
+  }
+  // 生画像を保持期間 (90 日) で消した発令は取り直さない (期限を過ぎた映像を戻さない)
+  if (event.raw_purged_at) {
+    return NextResponse.json({ error: 'raw_images_purged', message: '生画像は保存期間 (90 日) を過ぎて消しました。' }, { status: 409 })
   }
   if (event.status === 'recording') {
     return NextResponse.json({ error: 'already_retrieving', message: '録画を取得中です。完了までお待ちください。' }, { status: 409 })

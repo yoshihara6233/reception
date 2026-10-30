@@ -4,7 +4,7 @@
 自主診断（ASVS 5.0 L2）の **14.1.1**（扱う機密のデータを洗い出し、保護の段階に分ける）と **14.1.2**（段階ごとの守り方を決める）の文書です。
 顧客と合意する方針は `docs/data-governance-sla.md`（リポジトリの直下）にあり、この文書はその分類の表を細かくしたものです。両方が食い違ったら、この文書を実装に合わせて直し、方針の文書を追って直します。
 
-**「案」と書いた保持期間などは発注者の確認が要ります**（§4 にまとめ）。確認までは「今」の欄の動きのままです。
+**保持期間は 2026-10-30 に発注者が決めました**（§4）。決めた期間は日次の cron `/api/cron/data-retention`（UTC 03:30・`src/lib/retention/data-retention.ts`）と `/api/admin/vod/cleanup`（UTC 03:00）などで自動で消します。まだ決まっていない事項（拠点へのサインインの許可の期限など）は §4 に残しています。
 
 ---
 
@@ -44,7 +44,7 @@ JWT（アクセストークン）と Base64 の Cookie は**誰でも中身を�
 
 ## 3. データの一覧（14.1.1）
 
-保持の「今」は 2026-10-30 の実装、「案」は発注者の確認待ちです。
+「保持（決定）」は 2026-10-30 に発注者が決めた期間、「消し方」はそれを実装した処理です。
 
 ### 3.1 段階 S（秘密）
 
@@ -61,37 +61,39 @@ JWT（アクセストークン）と Base64 の Cookie は**誰でも中身を�
 
 ### 3.2 段階 A（顔と身元）
 
-| データ | 置き場所 | 保持（今） | 保持（案） |
+| データ | 置き場所 | 保持（決定） | 消し方 |
 |---|---|---|---|
-| 来訪者の顔写真 | Storage `baggage-photos`（`<store>/<日付>/`） | テナントの `retention_days`（既定 60 日）で日付ごと消す（`/api/cron/baggage-daily`） | 今のまま（既定 60 日・テナントで短くできる） |
-| 来訪者の顔の特徴量 | AWS Rekognition の当日のコレクション `baggage-<store>-<日付>` | 翌朝に消す（直近 7 日分を見直す） | 今のまま |
-| 名刺の写真・来訪者の氏名と会社 | `baggage-photos`（`card-…`）・`inspection_sessions` | 来訪者の顔写真と同じ | 今のまま |
-| 従業員の顔写真 | `baggage-photos`（`employees/<store>/`）・`employees.face_photo_path` | 顔を消す・登録を外すときに消す。**自動では消えない** | 登録を外したら即時（今どおり）。加えて **1 年照合に使っていなければ消す** |
-| 従業員の顔の特徴量 | AWS Rekognition の常設のコレクション `baggage-emp-<store>`・`employees.rekognition_face_id` | 同上 | 同上 |
-| 従業員の氏名・社員番号 | `employees` | 登録を外しても行と名前は残る | 登録を外してから 1 年で消す |
+| 来訪者の顔写真 | Storage `baggage-photos`（`<store>/<日付>/`） | テナントの `retention_days`（既定 60 日・テナントで短くできる） | 日付ごと消す（`/api/cron/baggage-daily`） |
+| 来訪者の顔の特徴量 | AWS Rekognition の当日のコレクション `baggage-<store>-<日付>` | 当日だけ | 翌朝にコレクションごと消す（直近 7 日分を見直す・`/api/cron/baggage-daily`） |
+| 名刺の写真・来訪者の氏名と会社 | `baggage-photos`（`card-…`）・`inspection_sessions` | 来訪者の顔写真と同じ | 同上 |
+| 従業員の顔写真 | `baggage-photos`（`employees/<store>/`）・`employees.face_photo_path` | **登録を外したら即時。加えて 1 年照合に使っていなければ消す**（決定 2026-10-30） | 登録を外す・顔を消す操作で即時に消す。消し残しと、`employees.face_last_matched_at`（登録した時刻か最後に照合で一致した時刻）が 1 年を過ぎた顔は `/api/cron/data-retention` が消す（従業員は登録のまま・キオスクで撮り直せば戻る）。どの従業員にも結び付いていない写真も、置いてから 1 日たてば消す |
+| 従業員の顔の特徴量 | AWS Rekognition の常設のコレクション `baggage-emp-<store>`・`employees.rekognition_face_id` | 同上 | 同上（コレクションから DeleteFaces。消せなかった顔は列を残して次の日にやり直す） |
+| 従業員の氏名・社員番号 | `employees` | **登録を外してから 1 年**（決定 2026-10-30） | `employees.deactivated_at`（登録を外した時刻・トリガで書く）が 1 年を過ぎた行を `/api/cron/data-retention` が行ごと消す。検査の記録（`inspection_sessions`）の従業員の欄は空になる |
 
 ### 3.3 段階 B（映像と個人のデータ）
 
-| データ | 置き場所 | 保持（今） | 保持（案） |
+| データ | 置き場所 | 保持（決定） | 消し方 |
 |---|---|---|---|
-| 発報のスナップ・前後のフレーム | Storage `security-snapshots`・`alarm_frames` | 31 日（`/api/admin/vod/cleanup`）※ | 31 日 |
-| 録画のクリップ（VOD） | Storage `vod-clips` | 31 日（同上）※ | 31 日 |
-| 巡回のスナップ | `security-snapshots`・`patrol_runs`・`patrol_findings` | 31 日（`/api/cron/security-patrol`） | 31 日 |
-| 手荷物検査のクリップ | Storage `baggage-clips` か R2 | `retention_days`（既定 60 日） | 今のまま |
-| 遠隔視聴の HLS（ライブ・録画の再生） | R2 `video/<session_id>/`（輪番で上書き） | 視聴の終わりから 2 分を過ぎたら消す（5 分ごと・最長 7 分・`/api/cron/video-sessions`） | 今のまま |
-| 遠隔視聴の記録 | `video_sessions`（利用者・視聴者の名前） | 消さない（消した印だけ付ける） | 180 日 |
-| BCP の生画像 | Storage `bcp-clips`・`bcp_grid_shots` | **自動では消えない**（テストの発令だけ手で消せる） | **1 年**（長く残すのは BCP の PDF） |
-| BCP・巡回・月次のレポート（PDF） | Storage `bcp-reports`・`reports` | 消さない | 契約の終わりまで |
-| 要望の添付 | Storage `feedback-attachments` | 365 日（`/api/cron/feedback-attachments`・種類と大きさと sha256 は残す） | 今のまま |
-| 診断の束 | Storage `diagnostics` | 30 日。ただし同じ機器で次の束を頼んだときにだけ消す | 30 日を定期の処理で確実に消す |
-| 利用者の情報 | `auth.users`・`admin_users`（メール・表示名・役割） | アカウントを消すまで | 今のまま |
-| 管理操作の記録 | `admin_audit_log` | 消さない（当面） | 5 年 |
-| 証跡の静止画の閲覧の記録 | `footage_access_log` | 180 日（`/api/admin/vod/cleanup`）※ | 180 日 |
-| 映像の閲覧の記録 | `live_sessions`（月ごとのパーティション） | 消さない | 1 年（古いパーティションを落とす） |
-| 回数の制限の記録 | `rate_limits`（鍵にメールアドレスと IP が入る） | 1 日（`/api/admin/vod/cleanup`）※ | 1 日 |
-| 安全の出来事 | Vercel のログ（`[security]`・利用者の ID・IP・パス・種類） | Vercel のログの保持（プランによる） | 90 日（ログの転送先を決めてから） |
+| 発報のスナップ・前後のフレーム | Storage `security-snapshots`・`alarm_frames` | 31 日 | `/api/admin/vod/cleanup`※ |
+| 録画のクリップ（VOD） | Storage `vod-clips` | 31 日 | 同上※ |
+| 巡回のスナップ | `security-snapshots`・`patrol_runs`・`patrol_findings` | 31 日 | `/api/cron/security-patrol` |
+| 手荷物検査のクリップ | Storage `baggage-clips` か R2 | `retention_days`（既定 60 日） | `/api/cron/baggage-daily` |
+| 遠隔視聴の HLS（ライブ・録画の再生） | R2 `video/<session_id>/`（輪番で上書き） | 視聴の終わりから 2 分 | 5 分ごと・最長 7 分（`/api/cron/video-sessions`） |
+| 遠隔視聴の記録 | `video_sessions`（利用者・視聴者の名前） | **180 日**（決定 2026-10-30） | 作ってから 180 日を過ぎ、置き場（R2）を消し終えた行（`purged_at` あり）を `/api/cron/data-retention` が消す |
+| BCP の生画像 | Storage `bcp-clips`（`<発令の id>/` 以下）・`bcp_clips`・`bcp_grid_shots` | **90 日**（決定 2026-10-30。案の 1 年から短くした） | 発令（`bcp_events.created_at`）から 90 日を過ぎたら `/api/cron/data-retention` が置き場のファイルと行を消し、`bcp_events.raw_purged_at` に印を付ける。発令の行・レポートは残る。消した後は PDF の作り直しと録画の取り直しを断る（確認済みの PDF を画像の無いもので上書きしない） |
+| BCP・巡回・月次のレポート（PDF） | Storage `bcp-reports`・`reports` | **契約の終わりまで**（決定 2026-10-30） | 自動では消さない。契約の終わりにテナントの削除（運営・`DELETE /api/admin/tenants/[id]`）で配下ごと消す |
+| 要望の添付 | Storage `feedback-attachments` | 365 日 | `/api/cron/feedback-attachments`（種類と大きさと sha256 は残す） |
+| 診断の束 | Storage `diagnostics` | 30 日 | 同じ機器で次の束を頼んだときにだけ消す（定期の処理で確実に消すのは §5 の残） |
+| 利用者の情報 | `auth.users`・`admin_users`（メール・表示名・役割） | アカウントを消すまで | 管理の画面で消す |
+| 管理操作の記録 | `admin_audit_log` | **5 年**（決定 2026-10-30） | `ts` が 5 年を過ぎた行を `/api/cron/data-retention` が消す |
+| 証跡の静止画の閲覧の記録 | `footage_access_log` | 180 日 | `/api/admin/vod/cleanup`※ |
+| 映像の閲覧の記録 | `live_sessions`（月ごとのパーティション） | **1 年**（決定 2026-10-30） | `started_at` が 1 年を過ぎた行を `/api/cron/data-retention` が消す（空になった古いパーティションは残る。落とすのは §5 の残） |
+| 回数の制限の記録 | `rate_limits`（鍵にメールアドレスと IP が入る） | 1 日 | `/api/admin/vod/cleanup`※ |
+| 安全の出来事 | Vercel のログ（`[security]`・利用者の ID・IP・パス・種類） | **90 日**（決定 2026-10-30） | **未実装**。Vercel のログの転送先（Log Drain）を決めてから、転送先の保持を 90 日にする。それまでは Vercel のログの保持（プランによる）のまま |
 
-※ `/api/admin/vod/cleanup` は Vercel Cron に登録していますが、受け口は POST と `x-cron-secret` だけを受け、Vercel Cron（GET・`Authorization: Bearer`）では動いていない疑いがあります。本番の Cron の記録で確かめ、動いていなければ直します（§5 の残）。
+※ `/api/admin/vod/cleanup` は以前 POST と `x-cron-secret` しか受けず、Vercel Cron（GET・`Authorization: Bearer`）からは動いていませんでした。2026-10-29 に GET を受けるよう直しました（#432）。
+
+`/api/cron/data-retention` は 1 回に消す数に上限があり（従業員 500 行・BCP 50 発令かつ 5,000 ファイル・記録の表は 1 万行ほど）、残りは次の日に回ります。置き場（と Rekognition）を先に消し、消せた分だけ行を消すので、失敗した分は次の日にやり直します。`?dry_run=1`（同じ認証）で数えるだけの実行ができます。消した従業員の顔と行は `admin_audit_log` に `retention.employee.*`（操作者なし・氏名は書かない）として残ります。
 
 ### 3.4 段階 C（運用）
 
@@ -101,27 +103,30 @@ JWT（アクセストークン）と Base64 の Cookie は**誰でも中身を�
 
 基盤（reception）から引き継いだ `visitors`（名刺・顔の URL・電話・メール・住所）・`users`・`inspections`・`entry_exit_logs`・`unmatch_logs` は、G・VMS-Cloud のコードから使っていません。中身を確かめ、要らなければ消します（§5 の残）。
 
-## 4. 発注者の確認が要る事項
+## 4. 発注者の決定と、確認が要る事項
 
-| # | 事項 | 案 |
-|---|---|---|
-| D1 | 従業員の顔（写真と特徴量）の保持 | 登録を外したら即時。加えて 1 年照合に使っていなければ消す |
-| D2 | 従業員の氏名・社員番号の保持 | 登録を外してから 1 年 |
-| D3 | BCP の生画像の保持 | 1 年 |
-| D4 | レポート（PDF）の保持 | 契約の終わりまで |
-| D5 | 管理操作の記録の保持 | 5 年 |
-| D6 | 映像の閲覧の記録（`live_sessions`）・遠隔視聴の記録（`video_sessions`）の保持 | 1 年・180 日 |
-| D7 | 安全の出来事のログの保持と置き場所 | 90 日（Vercel のログの転送先を決める） |
-| D8 | 使っていない古い表（§3.5） | 中身を確かめて消す |
-| D9 | AWS Rekognition の置き場所と、AWS の改善への利用を断る設定 | 東京リージョン（`ap-northeast-1`）・AWS Organizations の AI サービスのオプトアウトのポリシーを入れる |
-| D10 | 顔の照合を AWS へ委託することの、顧客への説明（`docs/data-governance-sla.md` の第三者提供の欄） | 委託として明記し、手荷物検査を使う顧客と合意する |
+| # | 事項 | 決定・案 | 状態 |
+|---|---|---|---|
+| D1 | 従業員の顔（写真と特徴量）の保持 | 登録を外したら即時。加えて 1 年照合に使っていなければ消す | **決定（2026-10-30）**・実装済み（`/api/cron/data-retention`） |
+| D2 | 従業員の氏名・社員番号の保持 | 登録を外してから 1 年 | **決定（2026-10-30）**・実装済み（同上） |
+| D3 | BCP の生画像の保持 | **90 日**（案の 1 年から短くした） | **決定（2026-10-30）**・実装済み（同上） |
+| D4 | レポート（PDF）の保持 | 契約の終わりまで | **決定（2026-10-30）**（消さない） |
+| D5 | 管理操作の記録の保持 | 5 年 | **決定（2026-10-30）**・実装済み（同上） |
+| D6 | 映像の閲覧の記録（`live_sessions`）・遠隔視聴の記録（`video_sessions`）の保持 | 1 年・180 日 | **決定（2026-10-30）**・実装済み（同上） |
+| D7 | 安全の出来事のログの保持と置き場所 | 90 日 | **決定（2026-10-30）**・未実装（Vercel のログの転送先を決めてから） |
+| D8 | 使っていない古い表（§3.5） | 中身を確かめて消す | 案 |
+| D9 | AWS Rekognition の置き場所と、AWS の改善への利用を断る設定 | 東京リージョン（`ap-northeast-1`）・AWS Organizations の AI サービスのオプトアウトのポリシーを入れる | 案 |
+| D10 | 顔の照合を AWS へ委託することの、顧客への説明（`docs/data-governance-sla.md` の第三者提供の欄） | 委託として明記し、手荷物検査を使う顧客と合意する | 案 |
 
-決まったら、この文書・`docs/data-governance-sla.md` の保持の表・実装の定数を同じ日にそろえます。
+保持の期間を変えるときは、この文書・`docs/data-governance-sla.md` の保持の表・実装の定数（`src/lib/retention/data-retention.ts` の `RETENTION` など）を同じ日にそろえます。
+同時ログインの数（上限なし）と拠点へのサインインの許可の期限は `docs/authentication-policy.md` §6 にあります（同時ログインは 2026-10-30 に上限なしで決定・許可の期限は未定）。
 
 ## 5. 残（この文書を書いて見つけたもの）
 
-- `/api/admin/vod/cleanup` が Vercel Cron から動いているかの確認（31 日・180 日・1 日の削除がこれに頼っている）
-- 段階 A・B の自動の削除が無いもの（従業員の顔・BCP の生画像・診断の束・閲覧の記録）に、§4 の決めに合わせた削除を入れる
+- `/api/admin/vod/cleanup` は 2026-10-29 に Vercel Cron の GET を受けるよう直した（#432）。本番の Cron の記録で毎日 200 になっていることを確かめる
+- 従業員の顔・氏名・BCP の生画像・閲覧の記録・管理操作の記録の削除は 2026-10-30 に入れた（`/api/cron/data-retention`）。残りは診断の束を定期の処理で確実に消すこと・`live_sessions` の空になった古いパーティションを落とすこと
+- 安全の出来事のログ（90 日）: Vercel のログの転送先（Log Drain）を決め、転送先の保持を 90 日にする
+- 旧世代（QR）の従業員の `employees.photo_url` の中身と置き場所を確かめる（`/api/cron/data-retention` は `face_photo_path` の写真だけを消す）
 - NVR のパスワードの暗号化の鍵（`SECRETS_ENC_KEY`）が無いと平文（`plain:`）で置く作りを、本番では断る形にする
 - 通知の Webhook の URL（`alarm_settings.notify_webhook_url`）を段階 S として扱う（店舗の担当の利用者が読める）
 - レポート（PDF）を `/storage/v1/object/public/reports/…` の URL で渡している。`reports` バケットが公開なら、非公開にして署名 URL へ替える

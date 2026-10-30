@@ -182,3 +182,43 @@ export async function deleteCollectionById(collectionId: string): Promise<void> 
     if (name !== 'ResourceNotFoundException') throw err
   }
 }
+
+/** 1 回の DeleteFaces に渡せる FaceId の上限 (AWS の制約は 4,096)。 */
+const DELETE_FACES_MAX = 4096
+
+/**
+ * 指定コレクションから顔をまとめて消す (保持期間の削除・/api/cron/data-retention)。
+ *
+ * 消えたものとして返す: DeletedFaces に入った顔・もう無い顔 (FACE_NOT_FOUND・コレクションが無い)。
+ * 消せなかったもの (それ以外の理由・呼び出しの失敗) は failed に入れ、呼び出し側は DB の列を
+ * 残して次の実行でやり直す (FaceId を失うと顔がコレクションに残り続けるため)。
+ */
+export async function deleteFacesInCollection(
+  collectionId: string,
+  faceIds: string[],
+): Promise<{ deleted: string[]; failed: string[]; error?: string }> {
+  if (faceIds.length === 0) return { deleted: [], failed: [] }
+  const client = getClient()
+  const deleted: string[] = []
+  const failed: string[] = []
+  let error: string | undefined
+  for (let i = 0; i < faceIds.length; i += DELETE_FACES_MAX) {
+    const part = faceIds.slice(i, i + DELETE_FACES_MAX)
+    try {
+      const resp = await client.send(new DeleteFacesCommand({ CollectionId: collectionId, FaceIds: part }))
+      const bad = new Set(
+        (resp.UnsuccessfulFaceDeletions ?? [])
+          .filter((u) => !(u.Reasons ?? []).every((r) => r === 'FACE_NOT_FOUND'))
+          .map((u) => u.FaceId)
+          .filter((f): f is string => !!f),
+      )
+      for (const f of part) (bad.has(f) ? failed : deleted).push(f)
+    } catch (err: unknown) {
+      const name = (err as { name?: string }).name
+      if (name === 'ResourceNotFoundException') { deleted.push(...part); continue }
+      error = (err as Error).message ?? String(err)
+      failed.push(...part)
+    }
+  }
+  return { deleted, failed, error }
+}

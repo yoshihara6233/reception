@@ -584,7 +584,7 @@ export function KioskClient(props: Props) {
             </div>
           ))}
           <div style={{ fontSize: 14, color: COL.ink3 }}>
-            顔データ: 従業員=登録抹消まで / 来訪者=当日中に自動削除
+            顔データ: 従業員=登録を外すまで（1 年照合に使わなければ削除） / 来訪者=当日中に自動削除
           </div>
           <button onClick={openRegList} style={{ ...ghostBtn, width: 'auto', minWidth: 260, height: 48, fontSize: 15 }}>
             はじめての方の顔登録（従業員）

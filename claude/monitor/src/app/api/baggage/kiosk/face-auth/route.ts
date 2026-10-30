@@ -126,6 +126,13 @@ export async function POST(req: NextRequest) {
       .eq('status', 'active')   // 登録抹消済みの従業員は認証させない
       .maybeSingle()
     if (!emp) return NextResponse.json({ matched: false, authSkipped: false, facePath, reason: 'employee_inactive_or_missing' })
+    // 最後に照合に使った時刻 (1 年使わなければ顔を消す・/api/cron/data-retention)。
+    // 書けなくても照合は止めない (次の一致で書く・期限は 1 年あるので 1 回の失敗では消えない)
+    const { error: stampErr } = await svc
+      .from('employees')
+      .update({ face_last_matched_at: new Date().toISOString() })
+      .eq('id', emp.id)
+    if (stampErr) console.warn('[baggage face-auth] face_last_matched_at の更新に失敗', { store: store.id, err: stampErr.message })
     return NextResponse.json({
       matched: true,
       authSkipped: false,

@@ -30,6 +30,8 @@ interface BcpEvent {
   status: string
   is_test: boolean
   created_at: string
+  /** 生画像を保持期間 (90 日) で消した時刻 (/api/cron/data-retention)。PDF は残る */
+  raw_purged_at: string | null
   stores: { id: string; name: string } | null
 }
 
@@ -134,7 +136,7 @@ export default async function BcpEventDetailPage({
   // Fetch event
   const { data: eventData, error: eventError } = await supa
     .from('bcp_events')
-    .select('id, alert_type, alert_issued_at, area_code, max_intensity, status, is_test, created_at, stores ( id, name )')
+    .select('id, alert_type, alert_issued_at, area_code, max_intensity, status, is_test, created_at, raw_purged_at, stores ( id, name )')
     .eq('id', id)
     .single()
 
@@ -387,7 +389,11 @@ export default async function BcpEventDetailPage({
             </a>
           </div>
 
-          {cameraGroups.length === 0 ? (
+          {event.raw_purged_at ? (
+            <div className="px-4 py-8 text-center text-xs text-slate-600 dark:text-gedink2">
+              生画像は保存期間（90 日）を過ぎたため {fmtDateTime(event.raw_purged_at)} に消しました。この発令の記録は下の BCP レポート（PDF）です。
+            </div>
+          ) : cameraGroups.length === 0 ? (
             <div className="px-4 py-8 text-center text-xs text-slate-400">
               スナップショットはまだありません。発令時に自動取得されますが、表示されない場合はページ下部の「現地レコーダの録画を再取得」で手動取得できます。
             </div>
@@ -575,7 +581,9 @@ export default async function BcpEventDetailPage({
               </p>
             )}
 
-            {/* Always-available generate / re-generate button */}
+            {/* 生成・再生成のボタン。生画像を保持期間で消した後は出さない
+                (画像の無い PDF で確認済みの PDF を上書きしない・API も 409 で断る) */}
+            {!event.raw_purged_at && (
             <div className="border-t border-slate-100 pt-3">
               <GenerateReportButton
                 eventId={event.id}
@@ -591,11 +599,14 @@ export default async function BcpEventDetailPage({
                 }
               />
             </div>
+            )}
           </div>
         </div>
 
         {/* 現地レコーダ 録画取得（発令時に自動・このボタンは手動再取得用）。
-            通常操作では使わないため最下部に置く（誤タップ防止・2026-08-03 要望）。 */}
+            通常操作では使わないため最下部に置く（誤タップ防止・2026-08-03 要望）。
+            生画像を保持期間で消した発令では出さない (取り直すと期限を過ぎた画像が戻る・API も 409) */}
+        {!event.raw_purged_at && (
         <div className="overflow-hidden rounded-lg border border-red-200 bg-red-50/40">
           <div className="border-b border-red-100 px-4 py-3">
             <h2 className="text-sm font-bold text-slate-900">現地レコーダ 録画取得（手動・再取得用）</h2>
@@ -604,6 +615,7 @@ export default async function BcpEventDetailPage({
             <RetrieveRecordingButton eventId={event.id} alreadyHasClips={clips.length > 0} offsets={snapshotOffsets} />
           </div>
         </div>
+        )}
       </div>
     </AdminShell>
   )

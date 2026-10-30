@@ -93,7 +93,9 @@ export default async function AuditChangesPage({
   {
     const { data: supers } = await svc.from('admin_users').select('auth_user_id').eq('role', 'super_admin')
     const superIds = (supers ?? []).map((s) => s.auth_user_id as string)
-    if (superIds.length) query = query.not('actor_user_id', 'in', `(${superIds.join(',')})`)
+    // 操作者の無い行 (保持期間による自動の削除 retention.*・/api/cron/data-retention) は出す。
+    // not in だけだと NULL が落ちて、誰の画面にも出なくなる
+    if (superIds.length) query = query.or(`actor_user_id.is.null,actor_user_id.not.in.(${superIds.join(',')})`)
   }
   // 操作中テナントの拠点に絞る (2026-10-06 の利用者の指示・アクセスログと揃える)。
   // tenant_admin は RLS で自テナントの拠点の行だけになるが、super_admin は全件が読めるため、
@@ -165,7 +167,7 @@ export default async function AuditChangesPage({
                 {rows.map((row) => (
                   <tr key={row.id} className="border-t border-slate-100 align-top hover:bg-slate-50">
                     <td className="whitespace-nowrap px-3 py-2 font-mono text-[11px] text-slate-600">{fmtJST(row.ts)}</td>
-                    <td className="px-3 py-2 font-mono text-slate-400" title={row.actor_user_id ?? ''}>{shortUuid(row.actor_user_id)}</td>
+                    <td className="px-3 py-2 font-mono text-slate-400" title={row.actor_user_id ?? '保持期間による自動の処理'}>{row.actor_user_id ? shortUuid(row.actor_user_id) : '自動'}</td>
                     <td className="px-3 py-2">
                       <span className={'inline-block rounded px-2 py-0.5 text-[11px] font-semibold ' + (ACTION_STYLE[row.action] ?? 'bg-slate-100 text-slate-600')}>
                         {row.action}
