@@ -7,6 +7,8 @@
  * （env 設定だけで切替でき、エッジ更新とデプロイの順序に依存しない）。
  *
  * 認証: Authorization: Bearer <device_token>（巡回 ingest と同形）。
+ * このエッジの店舗の作業 (inspection_clip_jobs) にある組だけに発行する (2026-10-31・ASVS 2.2.3。
+ * 以前は ID の形しか見ず、ほかのエッジの分のアップロード先も発行できた)。
  * 発行するキーはジョブと同じ決定的パス <sessionId>/<cameraId>.mp4 のみ＝
  * トークン保持エッジでも任意キーへは書けない。
  */
@@ -31,7 +33,7 @@ export async function POST(req: NextRequest) {
   const svc = createSupabaseService()
   const { data: edge } = await svc
     .from('edge_devices')
-    .select('id')
+    .select('id, store_id')
     .eq('device_token_hash', hashDeviceToken(token))
     .maybeSingle()
   if (!edge) return NextResponse.json({ error: 'invalid device token' }, { status: 401 })
@@ -40,6 +42,19 @@ export async function POST(req: NextRequest) {
   const parsed = Body.safeParse(await req.json().catch(() => null))
   if (!parsed.success) return invalidInput(req, { error: 'invalid_body' })
   const { sessionId, cameraId } = parsed.data
+
+  // このエッジの店舗の作業か (確かめられないときは発行しない)
+  if (!edge.store_id) return NextResponse.json({ error: 'job_not_found' }, { status: 403 })
+  const { data: job, error: jobErr } = await svc
+    .from('inspection_clip_jobs')
+    .select('id')
+    .eq('session_id', sessionId)
+    .eq('camera_id', cameraId)
+    .eq('store_id', edge.store_id)
+    .limit(1)
+    .maybeSingle()
+  if (jobErr) return NextResponse.json({ error: 'job_check_failed' }, { status: 503 })
+  if (!job) return NextResponse.json({ error: 'job_not_found' }, { status: 403 })
 
   // ── 3. R2 未設定 → 従来どおり Supabase へ ──
   if (!r2Configured()) return NextResponse.json({ mode: 'supabase' })

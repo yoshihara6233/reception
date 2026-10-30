@@ -15,6 +15,8 @@
  *     しきい値判定: diff_score >= sensitivity → anomaly、< → normal、無し → review。
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { cameraScope } from '@/lib/alarms/camera-scope'
+import { sniffImage } from '@/lib/security/input'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { hashDeviceToken } from '@/lib/edge/device-token'
 import { dbErrorCode } from '@/lib/api/db-error'
@@ -64,14 +66,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'run not found for this device' }, { status: 404 })
   }
 
-  // ── 3. Upload snapshot to Storage
-  const ext  = (image.type === 'image/png') ? 'png' : 'jpg'
-  const path = `${runId}/${cameraId}.${ext}`
+  // カメラは UUID で、このエッジの店舗のものに限る。camera_id は保存先の経路に入る
+  // (別の場所を指させない・別の店舗のカメラを混ぜさせない・ASVS 1.3.3・2.2.3)
+  const scope = edge.store_id ? await cameraScope(supa, cameraId, edge.store_id) : 'other_store'
+  if (scope === 'error') return NextResponse.json({ error: 'camera_check_failed' }, { status: 503 })
+  if (scope !== 'ok') return NextResponse.json({ error: 'camera_not_in_store' }, { status: 400 })
+
+  // ── 3. Upload snapshot to Storage。形式は申告ではなく中身の先頭の印で決める (ASVS 5.2.2)
   const bytes = Buffer.from(await image.arrayBuffer())
+  const kind = sniffImage(bytes)
+  if (kind !== 'image/jpeg' && kind !== 'image/png') {
+    return NextResponse.json({ error: 'image must be jpeg or png' }, { status: 400 })
+  }
+  const ext  = kind === 'image/png' ? 'png' : 'jpg'
+  const path = `${runId}/${cameraId}.${ext}`
 
   const { error: upErr } = await supa
     .storage.from('security-snapshots')
-    .upload(path, bytes, { contentType: image.type || 'image/jpeg', upsert: true })
+    .upload(path, bytes, { contentType: kind, upsert: true })
   if (upErr) return NextResponse.json({ error: `storage: ${dbErrorCode(upErr, '/api/security/patrol/ingest')}` }, { status: 500 })
 
   // The security-snapshots bucket is Private (by design). Store the auth-gated
