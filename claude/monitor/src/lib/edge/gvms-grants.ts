@@ -5,31 +5,50 @@
  * Supabase の OAuth 2.1 Server は、利用者が一度承認した拠点 (クライアント) を覚え、次からは
  * 同意の画面を出さずに戻す。その許可には**期限が無く**、利用者が取り消す画面も無かった。
  * ここで次の 2 つを足す:
- *   1. 許可の期限: 承認から GRANT_MAX_AGE_DAYS 日。過ぎた許可は、同意の画面とアカウントの画面を
- *      開いたときに本人の接続で取り消す (revokeGrant)。次のサインインで同意の画面がもう一度出る。
- *      Supabase には許可の期限の設定が無いため、アプリで行う。拠点へのサインインは必ず同意の画面
- *      (/oauth/consent) を通るので、そこで確かめれば漏れない。
+ *   1. 許可の期限: **最後に使ってから** GRANT_MAX_AGE_DAYS 日 (2026-10-30 発注者の決定 案 B)。
+ *      使っている間は切れず、最後に使ってから 90 日使わなかった許可だけが切れる。
+ *      期限 = max(承認の時刻, 最後に使った時刻) + GRANT_MAX_AGE_DAYS 日。
+ *      「最後に使った時刻」は、拠点で SSO のサインインをするたびにできる拠点向けのセッションを、
+ *      DB の定期の処理 (record_oauth_client_use・15 分ごと・migration 20261030153000) が
+ *      oauth_client_last_used に写したもの。まだ写していない許可 (#428 より前からの許可を含む) は
+ *      承認の時刻から数える。
+ *      過ぎた許可は、同意の画面とアカウントの画面を開いたときに本人の接続で取り消す (revokeGrant)。
+ *      次のサインインで同意の画面がもう一度出る。Supabase には許可の期限の設定が無いため、
+ *      アプリで行う。拠点へのサインインは必ず同意の画面 (/oauth/consent) を通るので、そこで
+ *      確かめれば漏れない。
  *   2. 一覧と取り消し: /account/sites が listGrants と revokeGrant を使う。取り消すと Supabase が
  *      その拠点向けのセッション (と refresh トークン) を消す。
- *
- * 期限の日数は案 (発注者の確認待ち・docs/authentication-policy.md §6)。
  */
 import type { OAuthGrant, SupabaseClient } from '@supabase/supabase-js'
 
-/** 許可の期限 (日)。案: 90 日 (発注者の確認待ち)。 */
+/** 許可の期限 (日)。最後に使ってから (使っていなければ承認から) この日数で切れる。 */
 export const GRANT_MAX_AGE_DAYS = 90
 const DAY_MS = 24 * 60 * 60 * 1000
 
-/** 許可の期限。granted_at が読めなければ null (期限切れとして扱う)。 */
-export function grantExpiresAt(grantedAt: string | null | undefined): Date | null {
-  const t = grantedAt ? Date.parse(grantedAt) : NaN
-  if (!Number.isFinite(t)) return null
-  return new Date(t + GRANT_MAX_AGE_DAYS * DAY_MS)
+function parseTime(v: string | null | undefined): number {
+  return v ? Date.parse(v) : NaN
+}
+
+/**
+ * 許可の期限 = max(承認の時刻, 最後に使った時刻) + GRANT_MAX_AGE_DAYS 日。
+ * 承認の時刻が読めなければ null (期限切れとして扱う)。最後に使った時刻が読めなければ、
+ * 承認の時刻だけで数える (期限が早まる側に倒す)。
+ */
+export function grantExpiresAt(
+  grantedAt: string | null | undefined, lastUsedAt?: string | null,
+): Date | null {
+  const granted = parseTime(grantedAt)
+  if (!Number.isFinite(granted)) return null
+  const used = parseTime(lastUsedAt)
+  const base = Number.isFinite(used) ? Math.max(granted, used) : granted
+  return new Date(base + GRANT_MAX_AGE_DAYS * DAY_MS)
 }
 
 /** 期限が過ぎたか。日時の読めない許可も過ぎたものとして扱う (取り消して確かめ直す)。 */
-export function grantExpired(grantedAt: string | null | undefined, now: Date = new Date()): boolean {
-  const exp = grantExpiresAt(grantedAt)
+export function grantExpired(
+  grantedAt: string | null | undefined, lastUsedAt: string | null | undefined, now: Date = new Date(),
+): boolean {
+  const exp = grantExpiresAt(grantedAt, lastUsedAt)
   return exp === null || exp.getTime() <= now.getTime()
 }
 
@@ -40,21 +59,56 @@ export function validClientId(id: unknown): id is string {
 
 type GrantApi = Pick<SupabaseClient['auth']['oauth'], 'listGrants' | 'revokeGrant'>
 
+/** 表が無い (migration 20261030153000 を当てる前) ときの PostgREST・Postgres のエラーの番号 */
+const TABLE_MISSING = new Set(['PGRST205', '42P01'])
+
+/**
+ * 本人の「最後に使った時刻」をクライアント ID ごとに読む (表 oauth_client_last_used・本人の接続で読む。
+ * RLS も本人の行だけを通す)。読めなければ null (呼び出し側は取り消しへ進まずに止める。
+ * 一時の読み損ないで、使っている許可を取り消さないため)。
+ * 表がまだ無いときだけは空 (= 承認から数える・#428 と同じ) にする。migration より先に画面が
+ * 出ても、拠点へのサインインを全部止めないため。
+ */
+export async function readLastUsed(
+  db: Pick<SupabaseClient, 'from'>, userId: string,
+): Promise<Map<string, string> | null> {
+  const { data, error } = await db.from('oauth_client_last_used')
+    .select('client_id, last_used_at').eq('user_id', userId)
+  if (error && TABLE_MISSING.has((error as { code?: string }).code ?? '')) return new Map()
+  if (error || !data) return null
+  const out = new Map<string, string>()
+  for (const r of data as { client_id: string; last_used_at: string }[]) out.set(r.client_id, r.last_used_at)
+  return out
+}
+
+export interface ActiveGrant {
+  grant: OAuthGrant
+  /** 期限が過ぎたのに取り消せなかった */
+  expired: boolean
+  /** 最後に使った時刻 (記録が無ければ null) */
+  lastUsedAt: string | null
+  /** 期限 (承認の時刻が読めなければ null) */
+  expiresAt: Date | null
+}
+
 /**
  * 本人の許可を読み、期限の過ぎたものを取り消して、残りを返す。
+ * lastUsed は readLastUsed の結果 (クライアント ID → 最後に使った時刻)。
  * 読めなければ null (OAuth 2.1 Server が無効なプロジェクトなど)。取り消しに失敗した許可は、
  * 期限切れのまま残さないよう一覧から外さずに返す (呼び出し側は expired で見分ける)。
  */
 export async function activeGrants(
-  oauth: GrantApi, now: Date = new Date(),
-): Promise<{ grant: OAuthGrant; expired: boolean }[] | null> {
+  oauth: GrantApi, lastUsed: ReadonlyMap<string, string>, now: Date = new Date(),
+): Promise<ActiveGrant[] | null> {
   const { data, error } = await oauth.listGrants()
   if (error || !data) return null
-  const out: { grant: OAuthGrant; expired: boolean }[] = []
+  const out: ActiveGrant[] = []
   for (const g of data) {
-    if (!grantExpired(g.granted_at, now)) { out.push({ grant: g, expired: false }); continue }
+    const lastUsedAt = lastUsed.get(g.client.id) ?? null
+    const expiresAt = grantExpiresAt(g.granted_at, lastUsedAt)
+    if (!grantExpired(g.granted_at, lastUsedAt, now)) { out.push({ grant: g, expired: false, lastUsedAt, expiresAt }); continue }
     const { error: revokeErr } = await oauth.revokeGrant({ clientId: g.client.id })
-    if (revokeErr) out.push({ grant: g, expired: true })
+    if (revokeErr) out.push({ grant: g, expired: true, lastUsedAt, expiresAt })
   }
   return out
 }
