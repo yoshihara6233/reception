@@ -62,7 +62,14 @@ const SECURITY_HEADERS = [
 const config: NextConfig = {
   reactStrictMode: true,
   async headers() {
-    return [{ source: '/:path*', headers: SECURITY_HEADERS }]
+    return [
+      { source: '/:path*', headers: SECURITY_HEADERS },
+      // API の応答は既定で保存させない (2026-10-31・自主診断 ASVS 14.3.2)。以前は受け口が
+      // 自分で付けないと `public, max-age=0, must-revalidate` になり、個人の情報を含む JSON を
+      // 中継や共用の端末のキャッシュに残しうる形だった。受け口が自分で付けている値はほぼ
+      // no-store なので、一律にしても困らない (HLS の区切りの 5 秒のキャッシュが効かなくなる程度)
+      { source: '/api/:path*', headers: [{ key: 'Cache-Control', value: 'no-store' }] },
+    ]
   },
   // F46.1: モノレポ化に伴い workspace root を明示。
   // ルート (= 2 つ上) を turbopack の探索ルートに固定し、
