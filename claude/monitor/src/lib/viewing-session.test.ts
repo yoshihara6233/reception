@@ -11,8 +11,8 @@ describe('acceptStartedSession', () => {
   it('画面が開いていればセッションを返し、終了は送らない', async () => {
     const fetchMock = vi.fn(async () => new Response(null, { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
-    const s = await acceptStartedSession(startRes({ id: 's1', maxSessionMin: 120 }), () => false)
-    expect(s).toEqual({ id: 's1', maxSessionMin: 120 })
+    const s = await acceptStartedSession(startRes({ id: 's1' }), () => false)
+    expect(s).toEqual({ id: 's1' })
     expect(fetchMock).not.toHaveBeenCalled()
   })
 

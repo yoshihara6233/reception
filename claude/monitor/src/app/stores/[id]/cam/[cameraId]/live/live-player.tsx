@@ -32,8 +32,6 @@ import dynamic from 'next/dynamic'
 import Hls from 'hls.js'
 import { cancelPendingStop, scheduleStop } from '@/lib/edge-stop-registry'
 import { SaveJpegButton } from '@/components/SaveJpegButton'
-import { useSessionCountdown } from '@/lib/useSessionCountdown'
-import { RemainingBadge, SessionCapOverlay } from '@/components/SessionCap'
 import { TriangleAlert } from 'lucide-react'
 import { describeVideoError } from '@/lib/video/session-logic'
 import { acceptStartedSession, endOnPageHide, endViewingSession } from '@/lib/viewing-session'
@@ -169,9 +167,6 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
   // モード切替(hq/iframe/jpeg)を跨いで1セッション。429=同時上限で視聴をブロック。
   const sessionId = useRef<string | null>(null)
   const [limitReached, setLimitReached]   = useState(false)
-  // R1: サーバが返す max_session_min と開始時刻からカウントダウンし、上限到達で視聴停止。
-  const [maxSessionMin, setMaxSessionMin] = useState<number | null>(null)
-  const [startedAtMs, setStartedAtMs]     = useState<number | null>(null)
 
   // S4: SFU 視聴のマーキング（egress 概算の母数）。mode は非同期クロージャから
   // 参照するため ref で最新値を持つ。
@@ -213,8 +208,6 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
         const j = await acceptStartedSession(res, () => cancelled)
         if (j) {
           sessionId.current = j.id
-          setMaxSessionMin(j.maxSessionMin ?? null)
-          setStartedAtMs(Date.now())
           // セッション開始前に SFU モードへ入っていた場合（保存設定が sfu）はここで拾う。
           if (modeRef.current === 'sfu') markSfu(j.id)
         }
@@ -227,14 +220,6 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storeId, cameraId])
-
-  // R1: 時間上限のカウントダウン。到達したらセッションを終了し、映像を停止（下の描画で
-  // SessionCapOverlay に差し替える＝各モードが unmount → stop_stream を送る）。
-  const { remainingSec, expired } = useSessionCountdown(startedAtMs, maxSessionMin)
-  useEffect(() => {
-    if (expired) endSession()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expired])
 
   function switchMode(next: Mode): void {
     setIframeFailed(false)
@@ -257,7 +242,6 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
         remoteFallback={remoteFallback}
         unavailableNote={unavailableNote ?? null}
         onSwitch={switchMode}
-        remainingSec={expired ? null : remainingSec}
       />
       {playback && <LivePlaybackBar storeId={storeId} cameraId={cameraId} rangeMin={playback.rangeMin} />}
       {/* min-h-0: flex 子の既定 min-height:auto を外す。無いと中の <img h-full object-contain>
@@ -266,8 +250,6 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
       <div className="relative min-h-0 flex-1">
         {limitReached ? (
           <LiveLimitOverlay />
-        ) : expired ? (
-          <SessionCapOverlay maxSessionMin={maxSessionMin} />
         ) : mode === 'sfu' && sfuEnabled && remoteSfu ? (
           <RemoteSfuLiveMode
             cameraId={cameraId}
@@ -386,7 +368,7 @@ function ModeButton({ active, onClick, title, children }: {
 
 function ModeToolbar({
   mode, sfuSupported, hqSupported, iframeSupported, remoteSupported, iframeFailed, sfuFailed, remoteFallback,
-  unavailableNote, onSwitch, remainingSec,
+  unavailableNote, onSwitch,
 }: {
   mode:            Mode
   sfuSupported:    boolean
@@ -398,7 +380,6 @@ function ModeToolbar({
   remoteFallback:  string | null
   unavailableNote: string | null
   onSwitch:        (m: Mode) => void
-  remainingSec:    number | null
 }) {
   const label =
     mode === 'sfu'    ? '高画質ライブ (SFU / LiveKit・H.264サブ秒)'
@@ -439,7 +420,6 @@ function ModeToolbar({
         </ModeButton>
       </div>
       <div className="flex items-center gap-2 text-[11px] text-slate-400">
-        <RemainingBadge remainingSec={remainingSec} />
         <span>{label}</span>
         {warning && (
           <span className="inline-flex items-center gap-1 text-ge-warning">

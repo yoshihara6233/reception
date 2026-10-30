@@ -125,8 +125,8 @@ export async function POST(req: Request) {
       )
     }
 
-    // session_max_min は live/vod のみ非 null（grid は上限対象外）。
-    return NextResponse.json({ id: started.session_id, maxSessionMin: started.session_max_min })
+    // 連続視聴の時間の上限は 2026-10-31 に廃止した (発注者の判断・同時視聴の上限だけ残す)
+    return NextResponse.json({ id: started.session_id })
   }
 
   if (body.action === 'end') {

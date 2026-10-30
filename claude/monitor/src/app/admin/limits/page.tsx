@@ -14,7 +14,6 @@ import { createSupabaseService } from '@/lib/supabase/server'
 import { getT } from '@/lib/i18n/server'
 import { LimitsEditor, type LimitRowVM } from './LimitsEditor'
 
-const DEFAULT_MAX_SESSION_MIN = 120
 const DEFAULT_MAX_CONCURRENT = 5
 
 export default async function LimitsAdmin() {
@@ -34,10 +33,10 @@ export default async function LimitsAdmin() {
 
   const ids = tlist.map((tn) => tn.id)
   const { data: limits } = ids.length
-    ? await svc.from('session_limits').select('tenant_id, max_concurrent, max_session_min').in('tenant_id', ids)
-    : { data: [] as { tenant_id: string; max_concurrent: number; max_session_min: number }[] }
+    ? await svc.from('session_limits').select('tenant_id, max_concurrent').in('tenant_id', ids)
+    : { data: [] as { tenant_id: string; max_concurrent: number }[] }
   const limBy = new Map(
-    (limits ?? []).map((l) => [l.tenant_id as string, l as { max_concurrent: number; max_session_min: number }]),
+    (limits ?? []).map((l) => [l.tenant_id as string, l as { max_concurrent: number }]),
   )
 
   const rows: LimitRowVM[] = tlist.map((tn) => {
@@ -45,7 +44,6 @@ export default async function LimitsAdmin() {
     return {
       tenantId:      tn.id,
       name:          tn.name,
-      maxSessionMin: lim?.max_session_min ?? DEFAULT_MAX_SESSION_MIN,
       maxConcurrent: lim?.max_concurrent ?? DEFAULT_MAX_CONCURRENT,
       hasRow:        !!lim,
     }
