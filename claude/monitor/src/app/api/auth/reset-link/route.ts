@@ -79,7 +79,9 @@ export async function POST(req: NextRequest) {
       return generic
     }
 
-    const resetUrl = `${origin}/reset-password?email=${encodeURIComponent(email)}&token=${encodeURIComponent(otp)}`
+    // 番号とメールアドレスは `#` の後ろに載せる。`#` の後ろはブラウザがサーバへ送らないので、
+    // アクセスログ・中継のログに番号が残らない (2026-10-31・自主診断 ASVS 14.2.1)
+    const resetUrl = `${origin}/reset-password#email=${encodeURIComponent(email)}&token=${encodeURIComponent(otp)}`
     const { subject, html } = passwordResetEmail(resetUrl)
     await sendEmail(email, subject, html, undefined, SECURITY_FROM_ADDRESS)
   } catch (err) {

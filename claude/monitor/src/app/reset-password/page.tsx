@@ -21,13 +21,17 @@ function ResetPasswordInner() {
 
   // Verify the one-time recovery token from the emailed link. This establishes
   // a short-lived recovery session WITHOUT touching Supabase's redirect
-  // allowlist (the token + email travel as query params).
+  // allowlist. 番号は `#` の後ろで届く (サーバへ送られずログに残らない・ASVS 14.2.1)。
+  // 直しの前に送ったメールのリンクはクエリで届くので、そちらも読む。読んだらすぐ URL から消す
+  // (閲覧の履歴・画面の共有に番号を残さない)
   useEffect(() => {
     let cancelled = false
     async function bootstrap() {
       const url   = new URL(window.location.href)
-      const token = url.searchParams.get('token')
-      const email = url.searchParams.get('email')
+      const frag  = new URLSearchParams(url.hash.replace(/^#/, ''))
+      const token = frag.get('token') ?? url.searchParams.get('token')
+      const email = frag.get('email') ?? url.searchParams.get('email')
+      if (token || email) window.history.replaceState(null, '', url.pathname)
 
       if (token && email) {
         // 番号はサーバで確かめ、再設定のセッションを HttpOnly の Cookie に置く (/api/auth/recovery/verify)

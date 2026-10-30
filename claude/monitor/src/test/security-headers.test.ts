@@ -15,11 +15,21 @@ import config from '../../next.config'
 
 async function headerMap(): Promise<Map<string, string>> {
   const rules = await config.headers!()
-  // 現状は全パス 1 ルール。増えたらこの前提を見直すこと。
-  expect(rules).toHaveLength(1)
-  expect(rules[0].source).toBe('/:path*')
-  return new Map(rules[0].headers.map((h) => [h.key, h.value]))
+  // 全パスの 1 ルールと、API の保存の禁止の 1 ルール (2026-10-31)。増えたらこの前提を見直すこと。
+  expect(rules).toHaveLength(2)
+  const all = rules.find((r) => r.source === '/:path*')!
+  expect(all).toBeTruthy()
+  return new Map(all.headers.map((h) => [h.key, h.value]))
 }
+
+describe('API の応答を保存させない (ASVS 14.3.2)', () => {
+  it('/api の応答に Cache-Control: no-store を付ける', async () => {
+    const rules = await config.headers!()
+    const api = rules.find((r) => r.source === '/api/:path*')
+    expect(api, '/api の規則が無い').toBeTruthy()
+    expect(api!.headers).toContainEqual({ key: 'Cache-Control', value: 'no-store' })
+  })
+})
 
 describe('セキュリティヘッダー', () => {
   it('必要なヘッダーが揃っている', async () => {
