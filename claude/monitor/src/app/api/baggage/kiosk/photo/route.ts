@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
   const path = `${store.id}/${jstYmd(new Date())}/card-${crypto.randomUUID()}.${img.ext}`
   const { error } = await svc.storage
     .from('baggage-photos')
-    .upload(path, img.buf, { contentType: img.mime, upsert: false })
+    .upload(path, img.buf, { contentType: img.mime, upsert: false, cacheControl: '0' })
   if (error) return NextResponse.json({ error: 'upload_failed' }, { status: 500 })
 
   return NextResponse.json({ path })

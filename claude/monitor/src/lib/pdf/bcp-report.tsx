@@ -44,15 +44,16 @@ function ensureFontRegistered() {
     register: (config: { family: string; fonts: Array<{ src: string; fontWeight?: string }> }) => void
     registerHyphenationCallback: (cb: (word: string) => string[]) => void
   }
+  // 版を固定する (@main のままだと、取りに行く中身が予告なく変わる・ASVS 15.2.4)
   FontAny.register({
     family: 'NotoSansJP',
     fonts: [
       {
-        src: 'https://cdn.jsdelivr.net/gh/notofonts/noto-cjk@main/Sans/SubsetOTF/JP/NotoSansJP-Regular.otf',
+        src: 'https://cdn.jsdelivr.net/gh/notofonts/noto-cjk@Sans2.004/Sans/SubsetOTF/JP/NotoSansJP-Regular.otf',
         fontWeight: 'normal',
       },
       {
-        src: 'https://cdn.jsdelivr.net/gh/notofonts/noto-cjk@main/Sans/SubsetOTF/JP/NotoSansJP-Bold.otf',
+        src: 'https://cdn.jsdelivr.net/gh/notofonts/noto-cjk@Sans2.004/Sans/SubsetOTF/JP/NotoSansJP-Bold.otf',
         fontWeight: 'bold',
       },
     ],

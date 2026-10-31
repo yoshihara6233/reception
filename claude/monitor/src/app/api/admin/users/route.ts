@@ -27,7 +27,7 @@ import { initialPasswordMetadata } from '@/lib/auth/initial-password'
 const Body = z.object({
   email:        z.string().email(),
   password:     z.string().min(8),
-  display_name: z.string().min(1),
+  display_name: z.string().min(1).max(160),
   role:         z.enum(['super_admin', 'tenant_admin', 'store_manager', 'baggage_manager', 'viewer']),
   tenant_id:    z.string().uuid().nullable().optional(),
   store_ids:    z.array(z.string().uuid()).default([]),

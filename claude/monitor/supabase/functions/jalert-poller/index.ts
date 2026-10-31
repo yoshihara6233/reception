@@ -421,11 +421,25 @@ const EMPTY_DETAIL: AlertDetail = {
   ok: false, xml: '', areaCodes: [], maxIntensity: null, affectedPrefs: new Map(), eventId: null,
 }
 
+function isJmaUrl(raw: string): boolean {
+  try {
+    const u = new URL(raw)
+    return u.protocol === 'https:' && (u.hostname === 'jma.go.jp' || u.hostname.endsWith('.jma.go.jp'))
+  } catch {
+    return false
+  }
+}
+
 async function fetchDetail(linkHref: string): Promise<AlertDetail> {
   if (!linkHref) return EMPTY_DETAIL
+  // リンクは取得したフィードの中身なので、気象庁の https の宛先だけを取りに行く (ASVS 1.3.6)
+  if (!isJmaUrl(linkHref)) {
+    console.error('[jalert-poller] Detail link is not a JMA url; skipped')
+    return EMPTY_DETAIL
+  }
 
   try {
-    const res = await fetch(linkHref)
+    const res = await fetch(linkHref, { redirect: 'error' })
     if (!res.ok) {
       console.error(`[jalert-poller] Detail fetch failed: HTTP ${res.status}`)
       return EMPTY_DETAIL

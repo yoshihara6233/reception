@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { invalidInput } from '@/lib/api/invalid-input'
+import { isUpstreamAddress } from '@/lib/security/input'
 import { z } from 'zod'
 import { requireSuperAdmin } from '@/lib/admin/guard'
 import { recordAudit, storeIdForEdge } from '@/lib/admin/audit'
@@ -15,7 +16,8 @@ const PatchBody = z.object({
   agent_version: trimmedNullable,
   // go2rtc 公開オリジン（Cloudflare Tunnel）。このエッジ配下の onvif-generic
   // カメラが継承。従来は SQL Editor 直編集だった。空文字は NULL 化。
-  go2rtc_host:   z.string().nullable().optional(),
+  go2rtc_host:   z.string().nullable().optional()  // http(s) の URL だけ (ASVS 2.2.1)
+                   .refine((v) => v == null || v.trim() === '' || isUpstreamAddress(v), { message: 'invalid_go2rtc_host' }),
   // 自律OTA: 本部が宣言する目標版（per-device＝カナリア）。空文字/NULL=更新指示なし。
   // エッジは /api/edge/bootstrap の pull で受信して self-update する。
   desired_agent_version:       trimmedNullable,

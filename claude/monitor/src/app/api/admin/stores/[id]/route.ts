@@ -19,8 +19,8 @@ import { recordAudit } from '@/lib/admin/audit'
 import { dbErrorCode } from '@/lib/api/db-error'
 
 const Body = z.object({
-  name:       z.string().min(1).optional(),
-  address:    z.string().nullable().optional(),
+  name:       z.string().min(1).max(160).optional(),
+  address:    z.string().max(500).nullable().optional(),
   area_code:  z.string().nullable().optional(),
   latitude:   z.number().min(-90).max(90).nullable().optional(),
   longitude:  z.number().min(-180).max(180).nullable().optional(),

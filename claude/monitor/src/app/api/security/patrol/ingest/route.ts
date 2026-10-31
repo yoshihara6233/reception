@@ -18,24 +18,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import { cameraScope } from '@/lib/alarms/camera-scope'
 import { sniffImage } from '@/lib/security/input'
 import { createSupabaseService } from '@/lib/supabase/server'
-import { hashDeviceToken } from '@/lib/edge/device-token'
+import { authenticateEdge } from '@/lib/edge/device-auth'
 import { dbErrorCode } from '@/lib/api/db-error'
 
 export const runtime = 'nodejs'
 
 export async function POST(req: NextRequest) {
   // ── 1. Edge authentication via device_token
-  const auth = req.headers.get('authorization') ?? ''
-  const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : ''
-  if (!token) return NextResponse.json({ error: 'missing device token' }, { status: 401 })
-
+  // authenticateEdge: 失敗を edge.auth_failed に記録し、止めたテナントの拠点も断る (ASVS 16.3.1・7.4.2)
+  const edge = await authenticateEdge(req)
   const supa = createSupabaseService()
-
-  const { data: edge } = await supa
-    .from('edge_devices')
-    .select('id, store_id')
-    .eq('device_token_hash', hashDeviceToken(token))
-    .maybeSingle()
   if (!edge) return NextResponse.json({ error: 'invalid device token' }, { status: 401 })
 
   // ── 2. Parse multipart body
@@ -83,7 +75,7 @@ export async function POST(req: NextRequest) {
 
   const { error: upErr } = await supa
     .storage.from('security-snapshots')
-    .upload(path, bytes, { contentType: kind, upsert: true })
+    .upload(path, bytes, { contentType: kind, upsert: true, cacheControl: '0' })
   if (upErr) return NextResponse.json({ error: `storage: ${dbErrorCode(upErr, '/api/security/patrol/ingest')}` }, { status: 500 })
 
   // The security-snapshots bucket is Private (by design). Store the auth-gated

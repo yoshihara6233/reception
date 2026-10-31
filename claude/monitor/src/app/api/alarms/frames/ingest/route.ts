@@ -17,7 +17,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { ALARM_TIMELINE_OFFSETS_SEC, offsetKeySec } from '@/lib/alarms/timeline'
-import { hashDeviceToken } from '@/lib/edge/device-token'
+import { authenticateEdge } from '@/lib/edge/device-auth'
 import { cameraScope } from '@/lib/alarms/camera-scope'
 import { sniffImage } from '@/lib/security/input'
 import { dbErrorCode } from '@/lib/api/db-error'
@@ -28,16 +28,9 @@ const BUCKET = 'security-snapshots'
 
 export async function POST(req: NextRequest) {
   // 1. Edge 認証
-  const auth = req.headers.get('authorization') ?? ''
-  const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : ''
-  if (!token) return NextResponse.json({ error: 'missing device token' }, { status: 401 })
-
+  // authenticateEdge: 失敗を edge.auth_failed に記録し、止めたテナントの拠点も断る (ASVS 16.3.1・7.4.2)
+  const edge = await authenticateEdge(req)
   const supa = createSupabaseService()
-  const { data: edge } = await supa
-    .from('edge_devices')
-    .select('id, store_id')
-    .eq('device_token_hash', hashDeviceToken(token))
-    .maybeSingle()
   if (!edge || !edge.store_id) return NextResponse.json({ error: 'invalid device token' }, { status: 401 })
 
   // 2. multipart 解釈
@@ -81,7 +74,7 @@ export async function POST(req: NextRequest) {
   if (sniffImage(bytes) !== 'image/jpeg') return NextResponse.json({ error: 'image must be jpeg' }, { status: 400 })
   const { error: upErr } = await supa.storage
     .from(BUCKET)
-    .upload(path, bytes, { contentType: 'image/jpeg', upsert: true })
+    .upload(path, bytes, { contentType: 'image/jpeg', upsert: true, cacheControl: '0' })
   if (upErr) return NextResponse.json({ error: dbErrorCode(upErr, '/api/alarms/frames/ingest') }, { status: 500 })
 
   // 5. alarm_frames upsert（(alarm_event_id, camera_id, offset_sec) 一意）

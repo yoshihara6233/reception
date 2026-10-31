@@ -22,7 +22,7 @@ import { createSupabaseService } from '@/lib/supabase/server'
 import { notifyAlarm } from '@/lib/alarms/notify'
 import { dispatchAlarmTimeline } from '@/lib/alarms/dispatch'
 import { isStoreOptionEnabled } from '@/lib/admin/tenant-quota'
-import { hashDeviceToken } from '@/lib/edge/device-token'
+import { authenticateEdge } from '@/lib/edge/device-auth'
 import { cameraScope } from '@/lib/alarms/camera-scope'
 import { z } from 'zod'
 import { sniffImage } from '@/lib/security/input'
@@ -46,16 +46,9 @@ export const runtime = 'nodejs'
 
 export async function POST(req: NextRequest) {
   // 1. Edge 認証
-  const auth = req.headers.get('authorization') ?? ''
-  const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : ''
-  if (!token) return NextResponse.json({ error: 'missing device token' }, { status: 401 })
-
+  // authenticateEdge: 失敗を edge.auth_failed に記録し、止めたテナントの拠点も断る (ASVS 16.3.1・7.4.2)
+  const edge = await authenticateEdge(req)
   const supa = createSupabaseService()
-  const { data: edge } = await supa
-    .from('edge_devices')
-    .select('id, store_id')
-    .eq('device_token_hash', hashDeviceToken(token))
-    .maybeSingle()
   if (!edge || !edge.store_id) return NextResponse.json({ error: 'invalid device token' }, { status: 401 })
 
   // Phase2: 店舗別オプション（発報）ゲート。opt_alarm=false の店舗は発報を
@@ -136,7 +129,7 @@ export async function POST(req: NextRequest) {
     const path = `alarms/${ev.id}.${kind === 'image/png' ? 'png' : 'jpg'}`
     const { error: upErr } = await supa.storage
       .from('security-snapshots')
-      .upload(path, bytes, { contentType: kind, upsert: true })
+      .upload(path, bytes, { contentType: kind, upsert: true, cacheControl: '0' })
     if (!upErr) {
       snapshotUrl = `/api/security/alarms/${ev.id}/snapshot`
       await supa.from('alarm_events').update({ snapshot_url: snapshotUrl }).eq('id', ev.id)

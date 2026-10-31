@@ -49,7 +49,7 @@
 
 | サービス | 状態 |
 |---|---|
-| LiveKit Cloud（SFU） | **発注者の判断で使わない方向（2026-10-31）。環境変数を削除して止めます。** コードは `LIVEKIT_ENABLED='true'` と `LIVEKIT_URL`・`LIVEKIT_API_KEY`・`LIVEKIT_API_SECRET` が揃うときだけ動き、それ以外では `/api/livekit/*` は使えず、`/api/cron/sfu-reaper` は何もしません（`src/lib/livekit.ts`・`src/app/api/cron/sfu-reaper/route.ts`）。G・VMS の拠点の SFU（`GVMS_SFU_ENABLED`）は 2026-09-29 から保留で既定 OFF です。本番の環境変数の削除が済んだかは要確認です |
+| LiveKit Cloud（SFU） | **使いません（2026-10-31 発注者の判断）。本番の環境変数を削除して止めました（`/api/livekit/token` が 404 を返すことを確認）。** コードは `LIVEKIT_ENABLED='true'` と `LIVEKIT_URL`・`LIVEKIT_API_KEY`・`LIVEKIT_API_SECRET` が揃うときだけ動き、それ以外では `/api/livekit/*` は使えず、`/api/cron/sfu-reaper` は何もしません（`src/lib/livekit.ts`・`src/app/api/cron/sfu-reaper/route.ts`）。G・VMS の拠点の SFU（`GVMS_SFU_ENABLED`）は 2026-09-29 から保留で既定 OFF です。本番の環境変数の削除が済んだかは要確認です |
 
 ### 1.6 Supabase から出る通信
 
@@ -68,7 +68,7 @@
 | エッジ → クラウド | bootstrap など（`MONITOR_URL`）・デバイストークン | `EDGE_DEVICE_TOKEN` | 同上 |
 | エッジ → R2・Worker | 署名付きの URL で置く | 署名 | `claude/edge-agent/src/upload/` |
 | エッジ → 店舗の LAN のカメラ・録画機 | RTSP・ONVIF・各社の API（§2 の宛先） | 機器の資格情報（暗号化して DB に置く） | `claude/edge-agent/src/adapters/` |
-| エッジ → LiveKit | `LIVEKIT_URL`（任意）。§1.5 のとおり使わない方向 | — | `claude/edge-agent/src/config.ts` |
+| エッジ → LiveKit | `LIVEKIT_URL`（任意）。§1.5 のとおり使わない | — | `claude/edge-agent/src/config.ts` |
 | 拠点 → クラウドの中継（入り） | Cloudflare Tunnel（クラウドから拠点へ入るのはこれだけ） | §1.2 | `src/lib/proxy/upstream.ts` |
 
 ## 2. 利用者が外への宛先を指定できる箇所（13.1.1）
@@ -118,8 +118,7 @@
 | C-4 | BCP の報告書の字形を `cdn.jsdelivr.net` の `@main`（版を固定しない）から取っている。巡回と月次の PDF は同梱の `fonts/` を使っている（`src/lib/security/patrol-report.ts`・`src/lib/reports/monthly-pdf.ts`）ので、そろえるか検討する | 13.1.1 |
 | C-5 | `jalert-poller` の `fetchDetail` は、フィードの `<link>` のホストを確かめない。気象庁のホストに絞れるか検討する | 13.2.5 |
 | C-6 | `go2rtc_host`・`live_rtsp`・`nvr_endpoint` の保存のときの形の検査が弱い（`input-validation.md` §7 の R-4） | 2.2.1 |
-| C-7 | `.env.example` と `.env.local.example` に LiveKit の項目と、コードで使っていない `EDGE_COMMAND_CHANNEL_PREFIX` が残っている。`src/lib/ops/env-check.ts` にも LiveKit の項目がある。止めるときに合わせて外す | 13.1.1 |
-| C-8 | 本番で LiveKit の環境変数を消したか、Cloudflare Access のサービストークンがどのホストに効くかは、コードからは分からない（要確認） | 13.1.1 |
+| C-8 | Cloudflare Access のサービストークンがどのホストに効くかは、コードからは分からない（要確認） | 13.1.1 |
 
 ## 5. 見直し
 

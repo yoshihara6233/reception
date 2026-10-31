@@ -19,7 +19,7 @@ import { dbErrorCode } from '@/lib/api/db-error'
 import { initialPasswordMetadata } from '@/lib/auth/initial-password'
 
 const UpdateBody = z.object({
-  display_name: z.string().min(1).optional(),
+  display_name: z.string().min(1).max(160).optional(),
   role:         z.enum(['super_admin', 'tenant_admin', 'store_manager', 'baggage_manager', 'viewer']).optional(),
   tenant_id:    z.string().uuid().nullable().optional(),
   store_ids:    z.array(z.string().uuid()).optional(),

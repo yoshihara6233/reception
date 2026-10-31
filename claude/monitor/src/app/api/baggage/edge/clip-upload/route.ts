@@ -17,7 +17,7 @@ import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { r2Configured, presignClipPut, toR2Path } from '@/lib/baggage/r2'
-import { hashDeviceToken } from '@/lib/edge/device-token'
+import { authenticateEdge } from '@/lib/edge/device-auth'
 
 const Body = z.object({
   sessionId: z.string().uuid(),
@@ -26,16 +26,9 @@ const Body = z.object({
 
 export async function POST(req: NextRequest) {
   // ── 1. device_token 認証 ──
-  const auth = req.headers.get('authorization') ?? ''
-  const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : ''
-  if (!token) return NextResponse.json({ error: 'missing device token' }, { status: 401 })
-
+  // authenticateEdge: 失敗を edge.auth_failed に記録し、止めたテナントの拠点も断る (ASVS 16.3.1・7.4.2)
+  const edge = await authenticateEdge(req)
   const svc = createSupabaseService()
-  const { data: edge } = await svc
-    .from('edge_devices')
-    .select('id, store_id')
-    .eq('device_token_hash', hashDeviceToken(token))
-    .maybeSingle()
   if (!edge) return NextResponse.json({ error: 'invalid device token' }, { status: 401 })
 
   // ── 2. 入力 ──
