@@ -3,7 +3,8 @@
  *
  * ノード離脱・録画停止・容量逼迫を、5 分の死活報告を待たず**発生時点で** push する。
  * 「検知・連絡 = Intereco」の分担どおり、運用アラート経路（ALERT_EMAILS / ALERT_WEBHOOK_URL）
- * で即通知し、監査＆一覧のため alarm_events にも記録する（source='nvms'・カメラ非依存）。
+ * で即通知し、監査のため alarm_events にも記録する（source='nvms'・カメラ非依存）。
+ * 機械の状態で現場の発報ではないので、ALARM の一覧・未完了の数・月次の発報の数には含めない。
  * 案B（死活へのエラー要約同乗）が定期サマリ、A2 が「待たずに上げる割り込み」。
  *
  * 202 = 受領。重複（event_type+node が短時間に連続）はサーバが抑制する。
@@ -88,7 +89,7 @@ export async function POST(req: NextRequest) {
     .maybeSingle()
   if (dup) return NextResponse.json({ ok: true, deduped: true }, { status: 202 })
 
-  // 監査＆一覧のため記録（source='nvms'・カメラ非依存なので camera_id は null）。
+  // 監査のため記録（source='nvms'・カメラ非依存なので camera_id は null）。
   const { data: ev } = await svc
     .from('alarm_events')
     .insert({
