@@ -44,6 +44,8 @@ export default async function AlarmsPage() {
     .from('alarm_events')
     .select('id, store_id, source, event_type, occurred_at, snapshot_url, status, notified_at, stores ( name ), recorder_cameras ( name )')
     .in('store_id', scope.storeIds)
+    // G・VMS の機械の状態 (source='nvms') は現場の発報ではないので出さない。通知は /api/edge/events が行う
+    .neq('source', 'nvms')
     .order('occurred_at', { ascending: false })
     .limit(300)
 

@@ -18,6 +18,8 @@ export async function GET() {
     .from('alarm_events')
     .select('id', { count: 'exact', head: true })
     .neq('status', 'closed')
+    // 一覧に出さない G・VMS の機械の状態 (source='nvms') は数えない
+    .neq('source', 'nvms')
 
   return NextResponse.json({ count: count ?? 0 }, { headers: { 'Cache-Control': 'no-store' } })
 }
