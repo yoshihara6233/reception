@@ -16,8 +16,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Hls from 'hls.js'
-import { useSessionCountdown } from '@/lib/useSessionCountdown'
-import { RemainingBadge, SessionCapOverlay } from '@/components/SessionCap'
 import { acceptStartedSession, endOnPageHide, endViewingSession } from '@/lib/viewing-session'
 
 export interface MultiVodCam {
@@ -150,8 +148,6 @@ function SyncGrid({
   // セッション（1ページ=1 vod・R1/同時上限）。
   const sessionId = useRef<string | null>(null)
   const [limitReached, setLimitReached]   = useState(false)
-  const [maxSessionMin, setMaxSessionMin] = useState<number | null>(null)
-  const [startedAtMs, setStartedAtMs]     = useState<number | null>(null)
 
   function endSession() {
     const sid = sessionId.current
@@ -170,19 +166,17 @@ function SyncGrid({
         })
         if (res.status === 429) { if (!cancelled) setLimitReached(true); return }
         const j = await acceptStartedSession(res, () => cancelled)
-        if (j) { sessionId.current = j.id; setMaxSessionMin(j.maxSessionMin ?? null); setStartedAtMs(Date.now()) }
+        if (j) { sessionId.current = j.id }
       } catch { /* 可用性優先 */ }
     })()
     return () => { cancelled = true; offHide(); endSession() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storeId])
 
-  const { remainingSec, expired } = useSessionCountdown(startedAtMs, maxSessionMin)
-  useEffect(() => { if (expired) endSession() /* eslint-disable-next-line */ }, [expired])
 
   // base / cams 変更で全 ch のソースを（再）読込＋初期シーク。
   useEffect(() => {
-    if (limitReached || expired) return
+    if (limitReached) return
     const seek = base.getUTCMinutes() * 60 + base.getUTCSeconds()
     cams.forEach((cam, i) => {
       const v = videoRefs.current[i]
@@ -206,7 +200,7 @@ function SyncGrid({
     setPlaying(false)
     const hlsList = hlsRefs.current
     return () => { hlsList.forEach((h) => h?.destroy()); hlsRefs.current = [] }
-  }, [base, cams, limitReached, expired])
+  }, [base, cams, limitReached])
 
   // 同期: master(先頭)の currentTime に他 ch を追従。
   useEffect(() => {
@@ -279,7 +273,6 @@ function SyncGrid({
           </button>
         )}
         <span className="ml-auto flex items-center gap-2">
-          <RemainingBadge remainingSec={expired ? null : remainingSec} />
           <span className="font-mono tabular-nums text-slate-400">{fmtOffset(pos)} / 60:00</span>
         </span>
       </div>
@@ -299,9 +292,6 @@ function SyncGrid({
 
       {/* 同期グリッド */}
       <div className="relative flex-1 overflow-hidden p-1">
-        {expired ? (
-          <SessionCapOverlay maxSessionMin={maxSessionMin} />
-        ) : (
           <div className={`grid h-full w-full gap-1 ${cols}`}>
             {cams.map((cam, i) => (
               <div key={cam.cameraId} className="relative min-h-0 bg-black">
@@ -316,7 +306,6 @@ function SyncGrid({
               </div>
             ))}
           </div>
-        )}
       </div>
     </div>
   )

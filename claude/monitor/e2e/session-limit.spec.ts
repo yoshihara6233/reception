@@ -133,7 +133,8 @@ test.describe('同時視聴上限（A1 店長）', () => {
       .toHaveLength(0)
     expect(codes.filter((c) => c === 200), `全部通るはずです: ${tally(codes)}`).toHaveLength(BURST)
     // grid は継続分数の対象外なので null が返る契約。
-    expect((await res[0].json()).maxSessionMin).toBeNull()
+    // 応答に時間の上限は含めない (連続視聴の時間の上限は 2026-10-31 に廃止)
+    expect((await res[0].json()).maxSessionMin).toBeUndefined()
   })
 
   test('他テナントの店舗では作れない（枠を消費させない）', async ({ request }) => {

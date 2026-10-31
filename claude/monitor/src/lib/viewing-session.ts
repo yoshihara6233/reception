@@ -16,7 +16,6 @@
 /** 開始の応答の本文（/api/sessions action=start）。 */
 export interface StartedSession {
   id: string
-  maxSessionMin?: number | null
 }
 
 /** 終了を送る。ページを離れる途中でも届くよう keepalive で送る。 */

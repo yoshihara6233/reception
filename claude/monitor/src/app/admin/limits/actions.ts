@@ -1,7 +1,7 @@
 'use server'
 
 /**
- * R1: セッション上限（視聴時間上限 max_session_min ＋ 同時視聴上限 max_concurrent）を
+ * R1: セッション上限（同時視聴上限 max_concurrent）を
  * テナント毎に保存する。認可: super_admin のみ（②運営管理プレーン）。
  * 書き込みは service client（session_limits の RLS は modify=admin ロール）。
  */
@@ -12,7 +12,6 @@ import { recordAudit } from '@/lib/admin/audit'
 
 export interface SessionLimitInput {
   tenantId:      string
-  maxSessionMin: number
   maxConcurrent: number
 }
 
@@ -25,11 +24,7 @@ export async function upsertSessionLimit(
     return { ok: false, error: '権限がありません' }
   }
 
-  const sessionMin = Math.round(Number(input.maxSessionMin))
   const concurrent = Math.round(Number(input.maxConcurrent))
-  if (!Number.isFinite(sessionMin) || sessionMin < 1 || sessionMin > 1440) {
-    return { ok: false, error: '視聴時間上限は 1〜1440 分で入力してください' }
-  }
   if (!Number.isFinite(concurrent) || concurrent < 1 || concurrent > 1000) {
     return { ok: false, error: '同時視聴上限は 1〜1000 で入力してください' }
   }
@@ -38,7 +33,6 @@ export async function upsertSessionLimit(
   const { error } = await svc.from('session_limits').upsert(
     {
       tenant_id:       input.tenantId,
-      max_session_min: sessionMin,
       max_concurrent:  concurrent,
       updated_at:      new Date().toISOString(),
     },
@@ -52,7 +46,7 @@ export async function upsertSessionLimit(
     targetType:  'session_limit',
     targetId:    input.tenantId,
     storeId:     null,
-    changes:     { tenant_id: input.tenantId, max_session_min: sessionMin, max_concurrent: concurrent },
+    changes:     { tenant_id: input.tenantId, max_concurrent: concurrent },
   })
 
   revalidatePath('/admin/limits')

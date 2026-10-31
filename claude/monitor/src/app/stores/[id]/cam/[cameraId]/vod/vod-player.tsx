@@ -27,9 +27,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { useSessionCountdown } from '@/lib/useSessionCountdown'
 import { acceptStartedSession, endOnPageHide, endViewingSession } from '@/lib/viewing-session'
-import { RemainingBadge, SessionCapOverlay } from '@/components/SessionCap'
 
 const POLL_INTERVAL_MS  = 1_000
 const UPLOAD_TIMEOUT_MS = 90_000   // Frigate can take 30-60s to assemble a 5-min clip
@@ -92,9 +90,6 @@ export default function VodPlayer({
   // F81: surface reuse so the user sees "再利用" instead of "アップロード中" on cache hit.
   const [reused, setReused] = useState(false)
   const sessionIdRef = useRef<string | null>(null)
-  // R1: 視聴セッション時間上限（デフォルト120分・テナント毎）。
-  const [maxSessionMin, setMaxSessionMin] = useState<number | null>(null)
-  const [startedAtMs, setStartedAtMs]     = useState<number | null>(null)
 
   function endSession() {
     const sid = sessionIdRef.current
@@ -133,8 +128,6 @@ export default function VodPlayer({
           const sj = await acceptStartedSession(sres, () => cancelled)
           if (sj) {
             sessionIdRef.current = sj.id
-            setMaxSessionMin(sj.maxSessionMin ?? null)
-            setStartedAtMs(Date.now())
           }
         } catch { /* 上限チェック一時失敗は無視して続行 */ }
         if (cancelled) return
@@ -176,13 +169,6 @@ export default function VodPlayer({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cameraId, storeId, fromIso, toIso])
-
-  // R1: 視聴セッション時間上限のカウントダウン。到達でセッション終了＋再生停止。
-  const { remainingSec, expired } = useSessionCountdown(startedAtMs, maxSessionMin)
-  useEffect(() => {
-    if (expired) endSession()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expired])
 
   // 2. Poll status until ready/failed/timeout.
   useEffect(() => {
@@ -239,7 +225,6 @@ export default function VodPlayer({
           <div className="text-slate-400">{rangeLabel}</div>
         </div>
         <div className="flex items-center gap-2 text-slate-400">
-          <RemainingBadge remainingSec={expired ? null : remainingSec} />
           {/* F81: reuse badge — surfaced when /api/vod returned an existing clip
               instead of triggering a fresh Frigate generation + upload. */}
           {reused && (
@@ -257,9 +242,7 @@ export default function VodPlayer({
       </div>
 
       <div className="relative flex-1 overflow-hidden">
-        {expired ? (
-          <SessionCapOverlay maxSessionMin={maxSessionMin} />
-        ) : status === 'ready' && clipId ? (
+        {status === 'ready' && clipId ? (
           <video
             key={clipId}
             src={`/api/vod/${clipId}`}

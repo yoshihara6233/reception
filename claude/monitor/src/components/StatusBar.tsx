@@ -41,7 +41,7 @@ export async function StatusBar() {
       <span className="text-slate-500">|</span>
       <span>{online ?? 0} / {total ?? 0} 拠点オンライン</span>
       <span className="text-slate-500">|</span>
-      <span>本日のモニタ時間: {dailyMin} 分 / 120 分</span>
+      <span>本日のモニタ時間: {dailyMin} 分</span>
 
       {/* Right-aligned: user identity + version */}
       <span className="ml-auto flex items-center gap-2">

@@ -13,8 +13,6 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import Hls from 'hls.js'
-import { useSessionCountdown } from '@/lib/useSessionCountdown'
-import { RemainingBadge, SessionCapOverlay } from '@/components/SessionCap'
 import { acceptStartedSession, endOnPageHide, endViewingSession } from '@/lib/viewing-session'
 
 interface Props {
@@ -51,8 +49,6 @@ export default function FrigateHlsPlayer({ cameraId, storeId, frigateCamera, fro
   // ログ/上限をバイパスしてしまう）。時単位ナビゲーションを跨いでも 1 セッション。
   const sessionId = useRef<string | null>(null)
   const [limitReached, setLimitReached]   = useState(false)
-  const [maxSessionMin, setMaxSessionMin] = useState<number | null>(null)
-  const [startedAtMs, setStartedAtMs]     = useState<number | null>(null)
 
   function endSession() {
     const sid = sessionId.current
@@ -75,21 +71,12 @@ export default function FrigateHlsPlayer({ cameraId, storeId, frigateCamera, fro
         const j = await acceptStartedSession(res, () => cancelled)
         if (j) {
           sessionId.current = j.id
-          setMaxSessionMin(j.maxSessionMin ?? null)
-          setStartedAtMs(Date.now())
         }
       } catch { /* 上限チェックの一時失敗では再生を止めない(可用性優先) */ }
     })()
     return () => { cancelled = true; offHide(); endSession() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storeId, cameraId])
-
-  // R1: 時間上限到達でセッション終了＋再生停止（video を SessionCapOverlay に差し替え）。
-  const { remainingSec, expired } = useSessionCountdown(startedAtMs, maxSessionMin)
-  useEffect(() => {
-    if (expired) endSession()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expired])
 
   useEffect(() => {
     const video = videoRef.current
@@ -127,9 +114,7 @@ export default function FrigateHlsPlayer({ cameraId, storeId, frigateCamera, fro
       video.removeEventListener('playing', onPlaying)
       if (hls) hls.destroy()
     }
-    // expired を deps に含める: 上限到達で video が unmount された際に cleanup で
-    // hls を destroy し、バッファリングを確実に止める（次回実行は video=null で早期 return）。
-  }, [cameraId, frigateCamera, base, expired])
+  }, [cameraId, frigateCamera, base])
 
   const shiftHour = (delta: number) =>
     setBase((prev) => new Date(prev.getTime() + delta * 3_600_000))
@@ -150,7 +135,6 @@ export default function FrigateHlsPlayer({ cameraId, storeId, frigateCamera, fro
           録画再生(HLS) — ch{String(channel).padStart(2, '0')} {name}
         </span>
         <span className="ml-auto flex items-center gap-2">
-          <RemainingBadge remainingSec={expired ? null : remainingSec} />
           <span className="text-[10px] text-slate-400">Frigate ネイティブHLS・シーク可</span>
         </span>
       </div>
@@ -166,8 +150,6 @@ export default function FrigateHlsPlayer({ cameraId, storeId, frigateCamera, fro
               </p>
             </div>
           </div>
-        ) : expired ? (
-          <SessionCapOverlay maxSessionMin={maxSessionMin} />
         ) : (
           <>
             <video ref={videoRef} controls playsInline className="h-full w-full bg-black object-contain" />
