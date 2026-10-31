@@ -27,7 +27,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { acceptStartedSession, endOnPageHide, endViewingSession } from '@/lib/viewing-session'
+import { acceptStartedSession, endOnPageHide, endViewingSession, startViewingHeartbeat } from '@/lib/viewing-session'
 
 const POLL_INTERVAL_MS  = 1_000
 const UPLOAD_TIMEOUT_MS = 90_000   // Frigate can take 30-60s to assemble a 5-min clip
@@ -103,6 +103,7 @@ export default function VodPlayer({
     let cancelled = false
     const ac = new AbortController()
     const offHide = endOnPageHide(endSession)
+    const offBeat = startViewingHeartbeat(() => sessionIdRef.current)
 
     ;(async () => {
       try {
@@ -160,6 +161,7 @@ export default function VodPlayer({
     return () => {
       cancelled = true
       offHide()
+      offBeat()
       ac.abort()
       // Close the audit session even if the upload is still in flight on the
       // edge — the user is leaving the page. The edge finishes the upload

@@ -2,7 +2,7 @@
  * 視聴セッション（/api/sessions・live_sessions）の開始と終了を、取りこぼさずに行う部品。
  *
  * 同時視聴の上限（start_live_session）は「終了の記録が無いライブ・録画再生」を
- * 開始から 6 時間まで数える。終了を送り損ねると、閉じた画面がその間ずっと枠を使い、
+ * 生存の合図が 5 分途切れるまで数える（直しの前は開始から 6 時間まで）。終了を送り損ねると、閉じた画面がその間ずっと枠を使い、
  * 上限に届いて誰も見られなくなる（2026-09-25 本番で発生: 試験で開き直した 5 件が残り、
  * 上限 5 で「同時視聴の上限に達しました」）。取りこぼしは 2 通りあった:
  *
@@ -26,6 +26,26 @@ export function endViewingSession(id: string): void {
     body: JSON.stringify({ action: 'end', id }),
     keepalive: true,
   }).catch(() => {})
+}
+
+/** 生存の合図の間隔。DB は 5 分途切れた行を数えない (live_session_is_fresh)。裏のタブの間引き (1 分) でも足りる */
+export const VIEWING_HEARTBEAT_MS = 60_000
+
+/**
+ * 見ている間、1 分ごとに生存を知らせる (2026-10-31)。閉じ損ねた画面が同時視聴の枠を 6 時間ふさがず、
+ * 長く見ている人も数え続けるため。解除する関数を返す — 効果の後始末で必ず呼ぶ。
+ */
+export function startViewingHeartbeat(getId: () => string | null): () => void {
+  const t = setInterval(() => {
+    const id = getId()
+    if (!id) return
+    void fetch('/api/sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'heartbeat', id }),
+    }).catch(() => {})
+  }, VIEWING_HEARTBEAT_MS)
+  return () => clearInterval(t)
 }
 
 /**

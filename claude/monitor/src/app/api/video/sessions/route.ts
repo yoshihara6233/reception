@@ -13,17 +13,19 @@
  *   3. 拠点がその機能を名乗っているか（名乗りに無い操作は受けない・§2）
  *   4. ここで初めて service role で行を作る
  *
+ * 同時視聴の上限はここでも確かめる（open_video_session・上限なら 429 session_limit_reached）。
  * 同じ人が同じカメラで開いていた前のセッションは止める（再読み込み・画面の開き直しで
  * 拠点の同時視聴の枠を二重に食わないため）。
  */
 import { NextResponse } from 'next/server'
+import { recordMetric } from '@/lib/metrics'
 import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { hasCapability } from '@/lib/edge/capabilities'
 import { videoR2Configured } from '@/lib/storage/video-r2'
 import { gvmsSfuEnabled } from '@/lib/livekit'
-import { ACTIVE_STATES, normalizeVodRange } from '@/lib/video/session-logic'
+import { normalizeVodRange } from '@/lib/video/session-logic'
 import { heavyAllows, tooManyRequests } from '@/lib/limits/heavy'
 
 export const dynamic = 'force-dynamic'
@@ -97,33 +99,34 @@ export async function POST(req: Request) {
   const allowed = await heavyAllows(svc, 'video-session', { user: user.id })
   if (!allowed.ok) return tooManyRequests(allowed.retryAfterSec)
 
-  const nowIso = new Date().toISOString()
-  await svc
-    .from('video_sessions')
-    .update({ stop_requested_at: nowIso })
-    .eq('user_id', user.id)
-    .eq('camera_id', camera_id)
-    .in('state', ACTIVE_STATES as string[])
-    .is('stop_requested_at', null)
-
-  const { data: row, error } = await svc
-    .from('video_sessions')
-    .insert({
-      edge_id: c.recorders.edge_id,
-      camera_id,
-      store_id: edge.store_id,
-      user_id: user.id,
-      viewer_name: viewerName,
-      kind,
-      stream: stream ?? 'sub',
-      vod_from: vod?.from.toISOString() ?? null,
-      vod_to: vod?.to.toISOString() ?? null,
+  // 前のセッションを止める・同時視聴の上限を確かめる・行を作るまでを DB で 1 トランザクションで行う
+  // (2026-10-31・発注者の判断 A・20261031120000_viewing_limit_server.sql)。上限の判定に失敗したら通さない
+  const { data: opened, error } = await svc
+    .rpc('open_video_session', {
+      p_user: user.id,
+      p_store_id: edge.store_id,
+      p_edge_id: c.recorders.edge_id,
+      p_camera_id: camera_id,
+      p_viewer_name: viewerName,
+      p_kind: kind,
+      p_stream: stream ?? 'sub',
+      p_vod_from: vod?.from.toISOString() ?? null,
+      p_vod_to: vod?.to.toISOString() ?? null,
     })
-    .select('id')
-    .single()
-  if (error || !row) {
-    console.error('[video/sessions] insert failed:', error?.message)
+    .single<{ session_id: string | null; active_count: number; limit_max: number; rejected: boolean }>()
+  if (error || !opened) {
+    console.error('[video/sessions] open failed:', error?.message)
     return NextResponse.json({ error: 'session_create_failed' }, { status: 500 })
   }
-  return NextResponse.json({ id: (row as { id: string }).id }, { status: 201 })
+  if (opened.rejected || !opened.session_id) {
+    await recordMetric({
+      kind: 'session_rejected', storeId: edge.store_id, userId: user.id,
+      value: opened.active_count, meta: { limit: opened.limit_max, mode: kind },
+    })
+    return NextResponse.json(
+      { error: 'session_limit_reached', limit: opened.limit_max, active: opened.active_count },
+      { status: 429 },
+    )
+  }
+  return NextResponse.json({ id: opened.session_id }, { status: 201 })
 }
