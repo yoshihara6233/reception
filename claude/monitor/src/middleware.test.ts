@@ -13,7 +13,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 
 // ── @supabase/ssr モック（ロールとログイン状態をテスト側から注入） ──────────
-const state: { user: { id: string } | null; role: string | null; token: string | null; suspended?: boolean } =
+const state: { user: { id: string; factors?: Array<{ status: string }> } | null; role: string | null; token: string | null; suspended?: boolean } =
   { user: null, role: null, token: null }
 const getUserMock = vi.fn(async () => ({ data: { user: state.user } }))
 // access_token は cookie から読むだけの想定なので、往復カウントの対象外。
@@ -24,7 +24,7 @@ const getSessionMock = vi.fn(async () => ({
 vi.mock('@supabase/ssr', () => ({
   createServerClient: () => ({
     auth: { getUser: getUserMock, getSession: getSessionMock },
-    rpc: async (name: string) => ({ data: name === 'auth_tenant_suspended' ? state.suspended === true : null, error: null }),
+    rpc: async (name: string) => ({ data: name === 'auth_tenant_suspended' ? state.suspended === true : name === 'auth_user_role' ? state.role : null, error: null }),
     from: () => ({
       select: () => ({
         eq: () => ({
@@ -40,6 +40,14 @@ import { middleware, resetMiddlewareRoleCache } from './middleware'
 const req = (path: string) => new NextRequest(`https://monitor.test${path}`)
 
 let tokenSeq = 0
+/** 多要素を登録して番号を確かめた管理者 (super_admin・tenant_admin は登録が必須) */
+function asEnrolledAdmin(role: string) {
+  asRole(role)
+  state.user = { id: 'u-1', factors: [{ status: 'verified' }] }
+  const b64 = (o: unknown) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  state.token = `${b64({ alg: 'none' })}.${b64({ aal: 'aal2', n: ++tokenSeq })}.sig`
+}
+
 function asRole(role: string | null) {
   state.user = role === null ? null : { id: 'u-1' }
   state.role = role
@@ -118,7 +126,8 @@ describe('通常ロール — 制限なく到達', () => {
     ['store_manager', '/api/vod'],
     ['viewer', '/map'],
   ])('%s: %s → 素通し', async (role, path) => {
-    asRole(role)
+    if (role === 'super_admin' || role === 'tenant_admin') asEnrolledAdmin(role)
+    else asRole(role)
     const res = await middleware(req(path))
     expect(res.status).toBe(200)
     expect(res.headers.get('location')).toBeNull()
@@ -357,7 +366,7 @@ describe('拠点向けのトークン', () => {
   })
 
   it('クラウド自身のログインのトークンは通す', async () => {
-    asSiteToken(null)
+    asEnrolledAdmin('tenant_admin')
     const res = await middleware(req('/stores'))
     expect(res.status).toBe(200)
   })
@@ -396,7 +405,7 @@ describe('停止したテナントの利用者', () => {
   })
 
   it('停止していなければ今までどおり', async () => {
-    asRole('tenant_admin')
+    asEnrolledAdmin('tenant_admin')
     const res = await middleware(req('/stores'))
     expect(res.status).toBe(200)
   })
@@ -432,5 +441,48 @@ describe('CSP の nonce', () => {
     asRole('baggage_manager')
     const res = await middleware(req('/stores'))
     expect(res.headers.get('Content-Security-Policy')).toContain('script-src')
+  })
+})
+
+/** 管理者の多要素認証は必須（2026-10-31・発注者の判断・ASVS 6.3.3・lib/auth/mfa.ts）。 */
+describe('管理者の多要素認証の登録', () => {
+  for (const role of ['super_admin', 'tenant_admin']) {
+    it(`${role} で未登録: 画面は登録の画面へ・元の画面を next に`, async () => {
+      asRole(role)
+      const res = await middleware(req('/admin/users?x=1'))
+      expect(res.status).toBe(307)
+      const to = new URL(res.headers.get('location')!)
+      expect(to.pathname).toBe('/account/security')
+      expect(to.searchParams.get('required')).toBe('1')
+      expect(to.searchParams.get('next')).toBe('/admin/users?x=1')
+    })
+    it(`${role} で未登録: API は 403`, async () => {
+      asRole(role)
+      const res = await middleware(req('/api/vod'))
+      expect(res.status).toBe(403)
+      expect((await res.json()).error).toBe('mfa_enrollment_required')
+    })
+    it(`${role} で未登録: 登録の画面と受け口は通す`, async () => {
+      for (const path of ['/account/security', '/api/account/mfa', '/api/account/mfa/verify']) {
+        asRole(role)
+        expect((await middleware(req(path))).status, path).toBe(200)
+      }
+    })
+    it(`${role} で登録済み・番号も確認済みなら通す`, async () => {
+      asEnrolledAdmin(role)
+      expect((await middleware(req('/stores'))).status).toBe(200)
+    })
+  }
+  it('似た経路は登録の経路として扱わない', async () => {
+    asRole('tenant_admin')
+    expect((await middleware(req('/account/sessions'))).status).toBe(307)
+    asRole('tenant_admin')
+    expect((await middleware(req('/api/account/mfa-x'))).status).toBe(403)
+  })
+  it('それ以外の役割は未登録でも通す', async () => {
+    for (const role of ['store_manager', 'viewer']) {
+      asRole(role)
+      expect((await middleware(req('/stores'))).status, role).toBe(200)
+    }
   })
 })
