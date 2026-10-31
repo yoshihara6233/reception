@@ -129,8 +129,9 @@ export async function POST(req: NextRequest) {
       name:       r.name,
       address:    r.address    || null,
       area_code:  r.area_code  || null,
-      latitude:   Number.isFinite(lat as number) ? lat : null,
-      longitude:  Number.isFinite(lng as number) ? lng : null,
+      // 範囲の外の値は入れない (ASVS 2.2.1)
+      latitude:   Number.isFinite(lat as number) && Math.abs(lat as number) <= 90 ? lat : null,
+      longitude:  Number.isFinite(lng as number) && Math.abs(lng as number) <= 180 ? lng : null,
       timezone:   r.timezone   || 'Asia/Tokyo',
       tenant_id:  tenantId,
       geocoded_at: (lat != null && lng != null) ? new Date().toISOString() : null,

@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
   const facePath = `${store.id}/${jstYmd(now)}/${crypto.randomUUID()}.${img.ext}`
   const uploadPromise = svc.storage
     .from('baggage-photos')
-    .upload(facePath, buf, { contentType: img.mime, upsert: false })
+    .upload(facePath, buf, { contentType: img.mime, upsert: false, cacheControl: '0' })
 
   // 2) 照合（visitor entry は登録のみなので照合スキップ）— アップロード完了を待って返す。
   if (body.personKind === 'visitor' && body.action === 'entry') {

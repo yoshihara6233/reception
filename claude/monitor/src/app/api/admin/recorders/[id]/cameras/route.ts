@@ -15,7 +15,7 @@ import { dbErrorCode } from '@/lib/api/db-error'
 const Camera = z.object({
   id:             z.string().uuid().optional(),
   channel:        z.coerce.number().int().min(1).max(64),
-  name:           z.string().min(1),
+  name:           z.string().min(1).max(160),
   grid_pos:       z.coerce.number().int().min(0).max(15),
   enabled:        z.boolean().default(true),
   frigate_camera: z.string().nullable().optional(),

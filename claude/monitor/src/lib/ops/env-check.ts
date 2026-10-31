@@ -30,10 +30,6 @@ export function checkCriticalEnv(): EnvCheckItem[] {
     { key: 'RESEND_API_KEY',                required: true,  set: has('RESEND_API_KEY'),                purpose: '未設定だと発報通知・死活アラート・パスワード再設定のメールが送れない' },
     { key: 'ALERT_EMAILS',                  required: false, set: has('ALERT_EMAILS'),                  purpose: '未設定だとエッジ死活アラートがログのみ（誰にも届かない）' },
     { key: 'NEXT_PUBLIC_SITE_URL',          required: false, set: has('NEXT_PUBLIC_SITE_URL'),          purpose: '通知メール内リンク・エッジ ingest URL の基点（未設定は既定URLで動作）' },
-    // SFU（LiveKit Cloud）ベータ。LIVEKIT_ENABLED='true'＋以下3点が揃うと高画質SFUライブが有効。
-    { key: 'LIVEKIT_URL',                   required: false, set: has('LIVEKIT_URL'),                   purpose: 'SFUベータ: LiveKit プロジェクトURL（wss://…）。LIVEKIT_ENABLED=true 時に必須' },
-    { key: 'LIVEKIT_API_KEY',               required: false, set: has('LIVEKIT_API_KEY'),               purpose: 'SFUベータ: LiveKit APIキー。token/ingress 発行に必須' },
-    { key: 'LIVEKIT_API_SECRET',            required: false, set: has('LIVEKIT_API_SECRET'),            purpose: 'SFUベータ: LiveKit APIシークレット。token/ingress 発行に必須' },
     // 拠点の https（GVMS_CLOUD_SPEC §10・D-2-20）。拠点の名前の A レコードと証明書の検証用 TXT を書く
     { key: 'CLOUDFLARE_API_TOKEN',          required: false, set: has('CLOUDFLARE_API_TOKEN'),          purpose: '拠点の https: genesis-edge.com のゾーンの DNS 編集だけを許した API トークン。未設定だと拠点の名前を決められず、証明書の自動取得が 503' },
     { key: 'CLOUDFLARE_ZONE_ID',            required: false, set: has('CLOUDFLARE_ZONE_ID'),            purpose: '拠点の https: genesis-edge.com のゾーン ID' },

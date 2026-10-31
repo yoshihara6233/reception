@@ -129,7 +129,7 @@ export async function POST(
   const path = `employees/${store.id}/${id}-${Date.now()}.${img.ext}`
   const { error: upErr } = await svc.storage
     .from('baggage-photos')
-    .upload(path, buf, { contentType: img.mime, upsert: false })
+    .upload(path, buf, { contentType: img.mime, upsert: false, cacheControl: '0' })
   if (upErr) return NextResponse.json({ error: 'photo_upload_failed' }, { status: 500 })
 
   // 2) Rekognition へ登録（顔が検出できない画像はここで 422）

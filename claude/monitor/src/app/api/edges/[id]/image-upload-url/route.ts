@@ -20,7 +20,7 @@ import {
 import {
   edgeImagesWorkerConfigured, signEdgeImageUrl, EDGE_IMAGES_PUT_TTL_SEC,
 } from '@/lib/storage/edge-images-sign'
-import { hashDeviceToken } from '@/lib/edge/device-token'
+import { authenticateEdge } from '@/lib/edge/device-auth'
 
 const Body = z.object({
   // 省略時は grid のみ。カメラ ID を渡すとその分の snapshot URL も返す。
@@ -33,16 +33,9 @@ const TTL_SEC = 3600
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id: edgeId } = await ctx.params
 
-  const auth = req.headers.get('authorization') ?? ''
-  const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : ''
-  if (!token) return NextResponse.json({ error: 'missing device token' }, { status: 401 })
-
+  // authenticateEdge: 失敗を edge.auth_failed に記録し、止めたテナントの拠点も断る (ASVS 16.3.1・7.4.2)
+  const edge = await authenticateEdge(req)
   const svc = createSupabaseService()
-  const { data: edge } = await svc
-    .from('edge_devices')
-    .select('id')
-    .eq('device_token_hash', hashDeviceToken(token))
-    .maybeSingle()
   // 自分自身の分しか発行しない（他エッジのキーを要求しても弾く）。
   if (!edge || edge.id !== edgeId) {
     return NextResponse.json({ error: 'invalid device token' }, { status: 401 })

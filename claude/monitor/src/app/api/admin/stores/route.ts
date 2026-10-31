@@ -23,7 +23,7 @@ import { dbErrorCode } from '@/lib/api/db-error'
 const Body = z.object({
   name:      z.string().trim().min(1).max(160),
   tenant_id: z.string().uuid().nullable().optional(),
-  address:   z.string().trim().nullable().optional(),
+  address:   z.string().trim().max(500).nullable().optional(),
   area_code: z.string().trim().nullable().optional(),
   latitude:  z.number().min(-90).max(90).nullable().optional(),
   longitude: z.number().min(-180).max(180).nullable().optional(),
