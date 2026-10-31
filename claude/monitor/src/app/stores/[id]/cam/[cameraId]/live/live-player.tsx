@@ -34,7 +34,7 @@ import { cancelPendingStop, scheduleStop } from '@/lib/edge-stop-registry'
 import { SaveJpegButton } from '@/components/SaveJpegButton'
 import { TriangleAlert } from 'lucide-react'
 import { describeVideoError } from '@/lib/video/session-logic'
-import { acceptStartedSession, endOnPageHide, endViewingSession } from '@/lib/viewing-session'
+import { acceptStartedSession, endOnPageHide, endViewingSession, startViewingHeartbeat } from '@/lib/viewing-session'
 import LivePlaybackBar from './live-playback-bar'
 
 // SFU(LiveKit)購読モードは遅延読込（未使用時 livekit-client をバンドルに載せない・SSR不可）。
@@ -196,6 +196,7 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
     let cancelled = false
     // タブを閉じた・再読み込みでも終了を送る（送り損ねると 6 時間枠を使い続ける）
     const offHide = endOnPageHide(endSession)
+    const offBeat = startViewingHeartbeat(() => sessionId.current)
     void (async () => {
       try {
         const res = await fetch('/api/sessions', {
@@ -216,6 +217,7 @@ export default function LivePlayer({ edgeId, cameraId, storeId, liveIframeUrl, l
     return () => {
       cancelled = true
       offHide()
+      offBeat()
       endSession()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

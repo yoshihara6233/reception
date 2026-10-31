@@ -176,7 +176,7 @@ zod を通していない本文の受け口は 14 本です（2026-10-31 時点�
 | 店舗数・巡回・発報・手荷物検査の店舗数 | `tenants.max_stores`・`max_patrol`・`max_alarm`・`max_baggage`（NULL は無制限）。読めないときは止めない（契約の枠で、守りの境界ではないため） | `src/lib/admin/tenant-quota.ts` |
 | 月次の確定 | 同じテナントで 60 秒 3 回 | `src/lib/limits/heavy.ts` |
 
-同時視聴は `POST /api/sessions`（`start_live_session`）で判定し、画面がそれに従います。中継の受け口と `POST /api/video/sessions` 自身は数えません（§7 の R-2）。
+同時視聴は `POST /api/sessions`（`start_live_session`）と `POST /api/video/sessions`（`open_video_session`）で、DB の関数が 1 か所で数えて判定します（`tenant_active_viewings`・生存の合図が途切れた視聴は数えません）。古い中継の受け口は数えません（§7 の R-2）。
 
 ### 4.4 全体
 
@@ -268,7 +268,7 @@ zod を通していない本文の受け口は 14 本です（2026-10-31 時点�
 | # | 中身 | 要件 |
 |---|---|---|
 | R-1 | `POST /api/security/patrol/ingest` は `camera_id` の形と店舗の対応、画像の中身を確かめていない。発報の 2 本（`src/lib/alarms/camera-scope.ts`・`sniffImage`）と同じ確かめがまだ無い | 2.2.3・5.2.2 |
-| R-2 | 同時視聴の上限は `/api/sessions` と画面で効く（連続視聴の時間の上限は 2026-10-31 に廃止）。`POST /api/video/sessions`・`/api/live-proxy`・`/api/vod-hls` は `session_limits` を見ない。`src/app/api/video/sessions/route.ts` のコメントと [security-maintenance.md](security-maintenance.md) §3.2 は「縛る」と書いている。連続視聴の 120 分は画面の時間切れ（`src/lib/useSessionCountdown.ts`）で、サーバは切らない | 2.1.3・2.4.1 |
+| R-2 | 同時視聴の上限は `POST /api/sessions` と `POST /api/video/sessions` の両方で DB の関数が確かめる（`tenant_active_viewings`・2026-10-31）。古い中継（`/api/live-proxy`・`/api/vod-hls`・Frigate 系のカメラ）は `session_limits` を見ない。連続視聴の時間の上限は 2026-10-31 に廃止 | 2.1.3・2.4.1 |
 | R-3 | `POST /api/baggage/edge/clip-upload` は `sessionId`・`cameraId` がそのエッジのものかを確かめていない。R2 への署名に大きさが入らない | 2.2.3・5.2.1 |
 | R-4 | 長さの上限が無い文字列の項目がある（§2 の末尾）。`go2rtc_host` は形を見ず、送るときだけ確かめる。`live_rtsp` は形を見ない | 2.2.1 |
 | R-5 | 手書きの検査の 400 は `input.invalid` に記録されない（§1） | 16.3.3 |

@@ -194,6 +194,7 @@ export function shouldFallbackToJpeg(error: string | null | undefined): boolean 
 export function describeVideoError(error: string | null | undefined): string {
   switch (error) {
     case 'busy': return '拠点の同時視聴の上限に達しています'
+    case 'session_limit': return '契約の同時視聴の上限に達しています。ほかの視聴が終わってから、開き直してください'
     case 'bandwidth': return '拠点の上り回線の上限に達しています'
     case 'codec_unsupported': return 'このカメラの映像はブラウザで再生できる形式で送れません'
     case 'unknown_camera': return '拠点にこのカメラが見つかりません'

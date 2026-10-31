@@ -16,7 +16,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Hls from 'hls.js'
-import { acceptStartedSession, endOnPageHide, endViewingSession } from '@/lib/viewing-session'
+import { acceptStartedSession, endOnPageHide, endViewingSession, startViewingHeartbeat } from '@/lib/viewing-session'
 
 export interface MultiVodCam {
   cameraId:      string
@@ -158,6 +158,7 @@ function SyncGrid({
   useEffect(() => {
     let cancelled = false
     const offHide = endOnPageHide(endSession)
+    const offBeat = startViewingHeartbeat(() => sessionId.current)
     void (async () => {
       try {
         const res = await fetch('/api/sessions', {
@@ -169,7 +170,7 @@ function SyncGrid({
         if (j) { sessionId.current = j.id }
       } catch { /* 可用性優先 */ }
     })()
-    return () => { cancelled = true; offHide(); endSession() }
+    return () => { cancelled = true; offHide(); offBeat(); endSession() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storeId])
 

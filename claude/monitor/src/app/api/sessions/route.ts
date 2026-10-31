@@ -55,7 +55,12 @@ interface MarkSfuBody {
   action: 'mark_sfu'
   id:     string
 }
-type Body = StartBody | EndBody | MarkSfuBody
+/** 見ている間の生存の合図 (1 分ごと)。5 分途切れた行は同時視聴に数えない (2026-10-31) */
+interface HeartbeatBody {
+  action: 'heartbeat'
+  id:     string
+}
+type Body = StartBody | EndBody | MarkSfuBody | HeartbeatBody
 
 export async function POST(req: Request) {
   const supa = await createSupabaseServer()
@@ -157,6 +162,23 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: dbErrorCode(error, '/api/sessions') }, { status: 500 })
     }
     return NextResponse.json({ ok: true, duration_sec: duration })
+  }
+
+  if (body.action === 'heartbeat') {
+    if (!body.id) {
+      return NextResponse.json({ error: 'missing_id' }, { status: 400 })
+    }
+    // RLS セッションクライアント: 自分の行しか更新できない (sessions_update)。終わった行は延ばさない
+    const { error } = await supa
+      .from('live_sessions')
+      .update({ last_seen_at: new Date().toISOString() })
+      .eq('id', body.id)
+      .is('ended_at', null)
+    if (error) {
+      console.error('[sessions/heartbeat] update failed:', error)
+      return NextResponse.json({ error: dbErrorCode(error, '/api/sessions') }, { status: 500 })
+    }
+    return NextResponse.json({ ok: true })
   }
 
   if (body.action === 'mark_sfu') {

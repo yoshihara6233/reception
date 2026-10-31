@@ -13,7 +13,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import Hls from 'hls.js'
-import { acceptStartedSession, endOnPageHide, endViewingSession } from '@/lib/viewing-session'
+import { acceptStartedSession, endOnPageHide, endViewingSession, startViewingHeartbeat } from '@/lib/viewing-session'
 
 interface Props {
   cameraId:      string
@@ -60,6 +60,7 @@ export default function FrigateHlsPlayer({ cameraId, storeId, frigateCamera, fro
   useEffect(() => {
     let cancelled = false
     const offHide = endOnPageHide(endSession)
+    const offBeat = startViewingHeartbeat(() => sessionId.current)
     void (async () => {
       try {
         const res = await fetch('/api/sessions', {
@@ -74,7 +75,7 @@ export default function FrigateHlsPlayer({ cameraId, storeId, frigateCamera, fro
         }
       } catch { /* 上限チェックの一時失敗では再生を止めない(可用性優先) */ }
     })()
-    return () => { cancelled = true; offHide(); endSession() }
+    return () => { cancelled = true; offHide(); offBeat(); endSession() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storeId, cameraId])
 

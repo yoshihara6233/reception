@@ -166,6 +166,8 @@ export function useRemoteVideoSession(req: RemoteVideoRequest, attempt: number):
           if (j?.error === 'not_supported' || j?.error === 'storage_unavailable' || j?.error === 'sfu_unavailable') {
             return fail(j.error, true)
           }
+          // 契約の同時視聴の上限 (429)。やり直しても同じなので、文を出して止める
+          if (j?.error === 'session_limit_reached') return fail('session_limit', false)
           // 5xx（クラウドの一時的な失敗・中継の 502/504）は自動の再接続でやり直す。
           // 4xx（ログイン切れ・カメラが無い・範囲の誤り）はやり直しても変わらない
           return fail(r.status >= 500 ? 'internal' : 'request_rejected', false)
