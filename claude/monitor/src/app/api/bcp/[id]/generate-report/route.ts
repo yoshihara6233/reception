@@ -285,6 +285,7 @@ export async function POST(
       .from('bcp-reports')
       .upload(storageKey, pdfBuffer, {
         contentType: 'application/pdf',
+        cacheControl: '0',
         upsert:      true,
       })
 

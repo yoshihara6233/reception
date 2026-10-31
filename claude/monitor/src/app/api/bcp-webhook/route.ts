@@ -281,6 +281,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       .from('bcp-reports')
       .upload(storageKey, pdfBuffer, {
         contentType: 'application/pdf',
+        cacheControl: '0',
         upsert: true,
       })
 

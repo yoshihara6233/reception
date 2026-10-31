@@ -102,7 +102,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       continue
     }
     const key = `security/${report.id}.pdf`
-    await supa.storage.from(BUCKET).upload(key, pdf, { contentType: 'application/pdf', upsert: true })
+    await supa.storage.from(BUCKET).upload(key, pdf, { contentType: 'application/pdf', cacheControl: '0', upsert: true })
     const pdfUrl = `${supaUrl}/storage/v1/object/public/${BUCKET}/${key}`
     await supa.from('security_reports').update({ pdf_url: pdfUrl }).eq('id', report.id)
     generated++

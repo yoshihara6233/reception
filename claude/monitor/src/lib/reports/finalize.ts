@@ -82,7 +82,7 @@ export async function finalizeMonthlyReport(
     return { ok: false, error: `pdf build: ${String((e as Error)?.message ?? e)}`, ym }
   }
   const key = `monthly/${tenantId}/${ym}.pdf`
-  const { error: upErr } = await svc.storage.from(BUCKET).upload(key, pdf, { contentType: 'application/pdf', upsert: true })
+  const { error: upErr } = await svc.storage.from(BUCKET).upload(key, pdf, { contentType: 'application/pdf', cacheControl: '0', upsert: true })
   if (upErr) return { ok: false, error: `pdf upload: ${upErr.message}`, ym }
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
   const pdfUrl = `${base}/storage/v1/object/public/${BUCKET}/${key}`

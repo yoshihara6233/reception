@@ -124,7 +124,7 @@ export async function generateAndStoreRunReport(
   })
 
   const key = `security/run-${runId}.pdf`
-  const { error: upErr } = await service.storage.from('reports').upload(key, pdf, { contentType: 'application/pdf', upsert: true })
+  const { error: upErr } = await service.storage.from('reports').upload(key, pdf, { contentType: 'application/pdf', cacheControl: '0', upsert: true })
   if (upErr) throw new Error(`upload: ${upErr.message}`)
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
   const url = `${base}/storage/v1/object/public/reports/${key}`
