@@ -38,7 +38,7 @@ describe('停止したテナント (7.4.2)', () => {
       await c.query(`insert into public.admin_users(auth_user_id, role, tenant_id) values ($1, 'tenant_admin', $2)`, [U, T])
       const asUser = async () => {
         await c.query('savepoint s')
-        await c.query(`select set_config('request.jwt.claims', $1, true)`, [JSON.stringify({ sub: U, role: 'authenticated' })])
+        await c.query(`select set_config('request.jwt.claims', $1, true)`, [JSON.stringify({ sub: U, role: 'authenticated', aal: 'aal2' })])
         await c.query('set local role authenticated')
         const n = (await c.query(`select count(*)::int as n from public.admin_users where auth_user_id = $1`, [U])).rows[0].n
         const s = (await c.query(`select public.auth_tenant_suspended() as s`)).rows[0].s

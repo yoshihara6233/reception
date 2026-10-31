@@ -53,8 +53,9 @@ test('仮のパスワードで入った人は、変えるまで画面を使え�
     await p.locator('#confirm-password').fill(mine)
     await p.getByRole('button', { name: '変更して始める' }).click()
     await expect(p).not.toHaveURL(/\/login/)
+    // この利用者は super_admin なので、次は多要素の登録の画面へ進む (2026-10-31 から必須)
     await p.goto('/stores')
-    await expect(p).toHaveURL(/\/stores/)
+    await expect(p).toHaveURL(/\/account\/security\?required=1/)
   } finally {
     await ctx.close()
     await page.request.delete(`/api/admin/users/${id}`)

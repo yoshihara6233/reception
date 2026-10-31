@@ -57,6 +57,31 @@ describe('多要素を登録した利用者は aal2 でなければ DB を使え
   })
 })
 
+describe('管理者は多要素が必須 (6.3.3)', () => {
+  it('未登録の管理者の aal1 は DB を使えず、未登録の閲覧者の aal1 は使える', async () => {
+    const c = await pool.connect()
+    const ids = { super_admin: '7f000000-0000-0000-0000-000000000b01', tenant_admin: '7f000000-0000-0000-0000-000000000b02', viewer: '7f000000-0000-0000-0000-000000000b03' }
+    try {
+      await c.query('begin')
+      for (const [role, id] of Object.entries(ids)) {
+        await c.query(`insert into auth.users(id) values ($1)`, [id])
+        await c.query(`insert into public.admin_users(auth_user_id, role) values ($1, $2)`, [id, role])
+      }
+      const satisfied = async (sub: string, aal: string) => {
+        await c.query(`select set_config('request.jwt.claims', $1, true)`, [JSON.stringify({ sub, role: 'authenticated', aal })])
+        return (await c.query(`select public.jwt_mfa_satisfied() as ok`)).rows[0].ok
+      }
+      expect(await satisfied(ids.super_admin, 'aal1')).toBe(false)
+      expect(await satisfied(ids.tenant_admin, 'aal1')).toBe(false)
+      expect(await satisfied(ids.tenant_admin, 'aal2')).toBe(true)
+      expect(await satisfied(ids.viewer, 'aal1')).toBe(true)
+    } finally {
+      await c.query('rollback')
+      c.release()
+    }
+  })
+})
+
 describe('監査の行はサーバだけが書く (16.4.2)', () => {
   it('admin_audit_log に利用者向けの INSERT のポリシーが無い', async () => {
     const { rows } = await pool.query<{ polname: string }>(

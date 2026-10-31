@@ -32,7 +32,7 @@ async function asUser(sql: string, params: unknown[] = []): Promise<void> {
   await c.query(`savepoint ${name}`)
   try {
     // employees の許可のポリシー (employee_isolation) は JWT の raw_app_meta_data.tenant_id を見る
-    await c.query(`select set_config('request.jwt.claims', $1, true)`, [JSON.stringify({ sub: U, role: 'authenticated', raw_app_meta_data: { tenant_id: T } })])
+    await c.query(`select set_config('request.jwt.claims', $1, true)`, [JSON.stringify({ sub: U, role: 'authenticated', aal: 'aal2', raw_app_meta_data: { tenant_id: T } })])
     await c.query('set local role authenticated')
     await c.query(sql, params)
     await c.query('reset role')

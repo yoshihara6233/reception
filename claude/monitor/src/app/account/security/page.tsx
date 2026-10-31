@@ -10,6 +10,7 @@
  * - 登録の途中でやめた（確かめていない）ものは、次に登録を始めるときに消す。
  * - 外すのは、番号を確かめたあとのセッション（aal2）でだけできる（Supabase の決まり）。
  *   多要素を登録した人は middleware が aal2 でないと通さないので、ここに来られた時点で満たす。
+ * - super_admin と tenant_admin は登録が必須。未登録のあいだは middleware がここへ送る (required=1・next=元の画面)
  * - 端末を無くしたら、管理者が本人を確かめてから外す（/api/admin/users/[id]/mfa-reset）。
  */
 import { useCallback, useEffect, useState } from 'react'
@@ -19,6 +20,8 @@ import { authFetch } from '@/lib/auth/post-json'
 import { MonitorMark } from '@/components/MonitorMark'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { PRODUCT_NAME } from '@/lib/brand'
+import { safeNext } from '@/lib/auth/safe-next'
+import { signOutAndLeave } from '@/lib/pwa/client-cache'
 
 interface Factor { id: string; friendly_name?: string | null; created_at?: string; status?: string }
 interface Enrolling { id: string; uri: string; secret: string }
@@ -30,6 +33,14 @@ export default function AccountSecurityPage() {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // middleware から送られてきたとき (登録が必須の管理者で未登録)
+  const [required, setRequired] = useState(false)
+  const [nextPath, setNextPath] = useState('/stores')
+  useEffect(() => {
+    const q = new URL(window.location.href).searchParams
+    setRequired(q.get('required') === '1')
+    if (q.get('next')) setNextPath(safeNext(q.get('next')))
+  }, [])
 
   const load = useCallback(async () => {
     const { status, data } = await authFetch('/api/account/mfa', 'GET')
@@ -94,10 +105,15 @@ export default function AccountSecurityPage() {
         <h1 className="text-base font-bold text-slate-900">多要素認証</h1>
         <p className="text-xs leading-relaxed text-slate-600">
           ログインのときに、パスワードに加えて認証アプリ（Google Authenticator・Microsoft Authenticator など）の
-          6 桁の番号を入れるようにします。使うかどうかは選べます。拠点の G・VMS に「組織アカウントでサインイン」で入るときも、
+          6 桁の番号を入れるようにします。システム管理者とテナント管理者は必須で、それ以外の役割は使うかどうかを選べます。拠点の G・VMS に「組織アカウントでサインイン」で入るときも、
           ここで登録していれば番号を確かめてから入ります。
         </p>
 
+        {required && !factors?.length && (
+          <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            管理者のアカウントは多要素認証の登録が必須です。登録すると使い始められます。
+          </p>
+        )}
         {factors && factors.length > 0 && (
           <div className="space-y-2">
             <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">登録した認証アプリ</div>
@@ -161,7 +177,10 @@ export default function AccountSecurityPage() {
           {/* 拠点 (G・VMS) へのサインインの許可の一覧と取り消し (2026-10-30・ASVS 10.4.9) */}
           <Link href="/account/sessions" className="text-xs text-slate-500 hover:text-slate-700 hover:underline">サインイン中の端末</Link>
           <Link href="/account/sites" className="text-xs text-slate-500 hover:text-slate-700 hover:underline">拠点へのサインインの許可</Link>
-          <Link href="/stores" className="text-xs text-slate-500 hover:text-slate-700 hover:underline">戻る</Link>
+          {required && !factors?.length && (
+            <button type="button" onClick={() => void signOutAndLeave()} className="text-xs text-slate-500 hover:text-slate-700 hover:underline">ログアウト</button>
+          )}
+          <Link href={nextPath} className="text-xs text-slate-500 hover:text-slate-700 hover:underline">戻る</Link>
         </p>
       </div>
     </main>

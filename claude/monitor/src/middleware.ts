@@ -28,7 +28,7 @@ import { createServerClient } from '@supabase/ssr'
 import { createTokenCache, hashToken, jwtExpiresAtMs } from '@/lib/auth/token-cache'
 import { legacyRedirectTarget } from '@/lib/legacy-host'
 import { appBaseUrl } from '@/lib/app-url'
-import { mfaPending } from '@/lib/auth/mfa'
+import { isMfaEnrollmentPath, mfaEnrollmentRequired, mfaPending } from '@/lib/auth/mfa'
 import { initialPasswordState } from '@/lib/auth/initial-password'
 import { isForeignClientToken } from '@/lib/auth/foreign-client'
 import { logSecurityEvent, requestIp } from '@/lib/security/events'
@@ -41,6 +41,8 @@ import { isCrossSiteWrite } from '@/lib/security/fetch-metadata'
 interface Verdict {
   isBaggageManager: boolean
   mfaPending: boolean
+  /** 登録が必須の役割なのに多要素を登録していない (lib/auth/mfa.ts) */
+  mfaEnrollRequired?: boolean
   /** 拠点 (G・VMS) の OAuth クライアント向けに出したトークン。クラウドでは使わせない */
   foreignClient?: boolean
   /** 利用者のテナントが停止 (suspended) している。画面も API も使わせない (ASVS 7.4.2) */
@@ -168,15 +170,18 @@ async function route(req: NextRequest, next: () => NextResponse): Promise<NextRe
         if (tokenHash && token) roleCache.write(tokenHash, 'role', verdict, jwtExpiresAtMs(token))
         return suspendedBlock(req, path)
       }
-      const { data: profile, error } = await supa
-        .from('admin_users').select('role').eq('auth_user_id', user.id).single()
+      // admin_users の表ではなく関数で読む。多要素が必須の人が未登録のあいだは、DB の層が表を
+      // 読ませないので (20261031150000_mfa_required_admins.sql)、表を読むと「引けない」に落ちる
+      const { data: role, error: roleError } = await supa.rpc('auth_user_role')
+      const error = roleError || role == null
       // 参照できなかった（瞬断など）ときは従来どおり素通しし、**覚えない**。
       // ここで false を30秒持つと、直後に境界が効かなくなる窓を自分で作ってしまう。
       // ただし多要素の確認が済んでいない人は、ロールが分からなくても止める。
       if (error) return pending ? mfaBlock(req, path) : pwPending ? passwordChangeBlock(req, path) : res
       verdict = {
-        isBaggageManager: profile?.role === 'baggage_manager',
+        isBaggageManager: role === 'baggage_manager',
         mfaPending: pending,
+        mfaEnrollRequired: mfaEnrollmentRequired(role, user),
         passwordChangePending: pwPending,
       }
     }
@@ -190,6 +195,7 @@ async function route(req: NextRequest, next: () => NextResponse): Promise<NextRe
   if (verdict.tenantSuspended) return suspendedBlock(req, path)
   if (verdict.mfaPending) return mfaBlock(req, path)
   if (verdict.passwordChangePending) return passwordChangeBlock(req, path)
+  if (verdict.mfaEnrollRequired && !isMfaEnrollmentPath(path)) return mfaEnrollBlock(req, path)
   if (!verdict.isBaggageManager) return res  // 通常ロールは制限しない。
 
   // 手荷物検査店長が非許可パスに来た → API は 403、ページは /baggage へ。
@@ -257,6 +263,20 @@ function mfaBlock(req: NextRequest, path: string): NextResponse {
   const url = req.nextUrl.clone()
   url.pathname = '/login/mfa'
   url.search = ''
+  url.searchParams.set('next', path + req.nextUrl.search)
+  return NextResponse.redirect(url)
+}
+
+/** 多要素が必須の役割で未登録の人を止める。API は 403、画面は /account/security (登録の画面)。 */
+function mfaEnrollBlock(req: NextRequest, path: string): NextResponse {
+  logSecurityEvent({ kind: 'auth.mfa_enrollment_required', ip: requestIp(req.headers), path })
+  if (path.startsWith('/api/')) {
+    return NextResponse.json({ error: 'mfa_enrollment_required' }, { status: 403 })
+  }
+  const url = req.nextUrl.clone()
+  url.pathname = '/account/security'
+  url.search = ''
+  url.searchParams.set('required', '1')
   url.searchParams.set('next', path + req.nextUrl.search)
   return NextResponse.redirect(url)
 }

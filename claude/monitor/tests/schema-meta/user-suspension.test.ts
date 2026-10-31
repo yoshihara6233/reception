@@ -51,7 +51,7 @@ describe('利用者の停止とセッションの切断 (7.4.2・7.4.5)', () => 
       await c.query(`insert into public.admin_users(auth_user_id, role, tenant_id) values ($1, 'tenant_admin', $2)`, [U, T])
       await c.query(`insert into auth.sessions(id, user_id) values ($1, $2)`, [S, U])
       await c.query(`insert into auth.refresh_tokens(token, user_id, session_id, revoked) values ('t-7e3', $1, $2, false)`, [U, S])
-      const claims = { sub: U, role: 'authenticated', session_id: S }
+      const claims = { sub: U, role: 'authenticated', aal: 'aal2', session_id: S }
 
       expect(await ownRows(c, claims)).toBe(1)
       const st = (await c.query(`select * from public.user_suspension_states(array[$1::uuid])`, [U])).rows[0]
@@ -63,7 +63,7 @@ describe('利用者の停止とセッションの切断 (7.4.2・7.4.5)', () => 
       expect((await c.query(`select count(*)::int as n from auth.refresh_tokens where user_id = $1`, [U])).rows[0].n).toBe(0)
       expect(await ownRows(c, claims)).toBe(0)
       // 形の壊れた session_id も通さない
-      expect(await ownRows(c, { sub: U, role: 'authenticated', session_id: 'x' })).toBe(0)
+      expect(await ownRows(c, { sub: U, role: 'authenticated', aal: 'aal2', session_id: 'x' })).toBe(0)
     } finally {
       await c.query('rollback').catch(() => {})
       c.release()
@@ -77,7 +77,7 @@ describe('利用者の停止とセッションの切断 (7.4.2・7.4.5)', () => 
       await c.query(`insert into public.tenants(id, name, plan, status) values ($1, 'T', 'standard', 'active')`, [T])
       await c.query(`insert into auth.users(id) values ($1)`, [U])
       await c.query(`insert into public.admin_users(auth_user_id, role, tenant_id) values ($1, 'tenant_admin', $2)`, [U, T])
-      const claims = { sub: U, role: 'authenticated' }
+      const claims = { sub: U, role: 'authenticated', aal: 'aal2' }
 
       expect(await ownRows(c, claims)).toBe(1)
       await c.query(`update auth.users set banned_until = now() + interval '100 years' where id = $1`, [U])

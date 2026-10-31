@@ -15,6 +15,7 @@
 export type SecurityEventKind =
   | 'authz.denied'          // 役割・範囲の外 (guard の 401/403)
   | 'auth.mfa_required'     // 多要素の番号が済んでいない (middleware)
+  | 'auth.mfa_enrollment_required' // 多要素が必須の役割で未登録 (middleware)
   | 'auth.foreign_token'    // 拠点向けのトークンでクラウドに来た (middleware)
   | 'auth.tenant_suspended' // 停止したテナントの利用者 (middleware)
   | 'auth.password_change_required' // 仮のパスワードのまま (middleware・ASVS 6.4.1)

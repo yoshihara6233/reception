@@ -131,7 +131,7 @@ describe('start_live_session（同時視聴上限 F-10）', () => {
     const client = await pool.connect()
     try {
       await client.query('select set_config($1, $2, false)',
-        ['request.jwt.claims', JSON.stringify({ sub: asUser, role: 'authenticated' })])
+        ['request.jwt.claims', JSON.stringify({ sub: asUser, role: 'authenticated', aal: 'aal2' })])
       const { rows } = await client.query(
         'select * from public.start_live_session($1, $2)', [STORE, mode])
       return rows[0] as { session_id: string | null; active_count: number; limit_max: number; rejected: boolean }
@@ -224,7 +224,7 @@ describe('start_live_session（同時視聴上限 F-10）', () => {
     const client = await pool.connect()
     try {
       await client.query('select set_config($1, $2, false)',
-        ['request.jwt.claims', JSON.stringify({ sub: USER, role: 'authenticated' })])
+        ['request.jwt.claims', JSON.stringify({ sub: USER, role: 'authenticated', aal: 'aal2' })])
       return await client.query('select * from public.start_live_session($1, $2)', [storeId, 'live'])
     } finally { client.release() }
   }

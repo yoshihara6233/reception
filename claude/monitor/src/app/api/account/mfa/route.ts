@@ -11,6 +11,7 @@
 import { NextRequest } from 'next/server'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { authJson, rejectCrossSite } from '@/lib/auth/server-auth'
+import { MFA_REQUIRED_ROLES } from '@/lib/auth/mfa'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,6 +51,14 @@ export async function DELETE(req: NextRequest) {
   if (!user) return authJson({ error: 'unauthenticated' }, 401)
   const factorId = req.nextUrl.searchParams.get('factorId') ?? ''
   if (!factorId) return authJson({ error: 'bad_request' }, 400)
+  // 必須の役割は、確認済みの最後の 1 つを外せない (途中でやめた登録の取り消しは通す)
+  const verified = (user.factors ?? []).filter((f) => f.status === 'verified')
+  if (verified.length === 1 && verified[0].id === factorId) {
+    const { data: role } = await supa.rpc('auth_user_role')
+    if (typeof role === 'string' && MFA_REQUIRED_ROLES.includes(role)) {
+      return authJson({ error: '管理者は多要素認証が必須のため、最後の認証アプリは外せません。先に別の認証アプリを登録してください。' }, 400)
+    }
+  }
   const { error } = await supa.auth.mfa.unenroll({ factorId })
   if (error) return authJson({ error: '外せませんでした。もう一度ログインしてからお試しください。' }, 400)
   return authJson({ ok: true })

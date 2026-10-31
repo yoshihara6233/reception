@@ -49,7 +49,7 @@ async function asUser(who: Who, sql: string): Promise<number | 'denied'> {
   await client.query(`savepoint ${name}`)
   try {
     await client.query(`select set_config('request.jwt.claims', $1, true)`,
-      [JSON.stringify({ sub: U[who], role: 'authenticated' })])
+      [JSON.stringify({ sub: U[who], role: 'authenticated', aal: 'aal2' })])
     await client.query('set local role authenticated')
     const res = await client.query(sql)
     return res.rowCount ?? 0
