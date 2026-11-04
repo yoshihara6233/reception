@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { clearAuthenticatedCaches, isShareableCachePath, type CacheStorageLike } from './client-cache'
+import { clearAuthenticatedCaches, isShareableCachePath, signOutAndLeave, type CacheStorageLike } from './client-cache'
 
 describe('isShareableCachePath', () => {
   it('ビルドの静的ファイル・アイコン・/offline は控えてよい', () => {
@@ -52,5 +52,31 @@ describe('clearAuthenticatedCaches', () => {
     expect(await clearAuthenticatedCaches(null)).toBe(0)
     const broken: CacheStorageLike = { keys: async () => { throw new Error('denied') }, open: async () => { throw new Error('x') } }
     expect(await clearAuthenticatedCaches(broken)).toBe(0)
+  })
+})
+
+describe('signOutAndLeave', () => {
+  const never = () => new Promise<never>(() => {})
+
+  it('ログアウトの応答が返らなくても、待つ上限でログインの画面へ移る', async () => {
+    const went: string[] = []
+    await signOutAndLeave({ logout: never, clear: async () => 0, go: (p) => went.push(p), logoutWaitMs: 20, cacheWaitMs: 20 })
+    expect(went).toEqual(['/login'])
+  })
+
+  it('控えの片付けが終わらなくても移る', async () => {
+    const went: string[] = []
+    await signOutAndLeave({ logout: async () => ({}), clear: never, go: (p) => went.push(p), logoutWaitMs: 20, cacheWaitMs: 20 })
+    expect(went).toEqual(['/login'])
+  })
+
+  it('失効に失敗しても片付けてから移る', async () => {
+    const order: string[] = []
+    await signOutAndLeave({
+      logout: async () => { order.push('logout'); throw new Error('net') },
+      clear: async () => { order.push('clear'); return 0 },
+      go: (p) => order.push(p),
+    })
+    expect(order).toEqual(['logout', 'clear', '/login'])
   })
 })
