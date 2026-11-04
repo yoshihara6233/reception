@@ -11,6 +11,8 @@ import Link from 'next/link'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { resolveMonitorScope } from '@/lib/tenant/monitor-scope'
 import { TenantGate } from '@/components/TenantGate'
+import { canManage } from '@/lib/auth/role-menu'
+import { bcpListStatus } from '@/lib/bcp/collecting'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader, LinkBtn } from '@/components/admin/PageHeader'
 import { getT } from '@/lib/i18n/server'
@@ -86,7 +88,9 @@ export default async function BcpPage() {
       <PageHeader
         title={tBcp.title}
         crumb={[{ href: '/bcp', label: t.breadcrumb.bcp }]}
-        actions={<LinkBtn href="/bcp/test">{tBcp.testIssueBtn}</LinkBtn>}
+        // テスト発令は書き込みの担当を持つ役割だけ (受け口の TRIGGER_ROLES と同じ)。閲覧者には出さない
+        // (2026-11-04・シナリオ試験の所見)
+        actions={canManage(scope.ctx.role) ? <LinkBtn href="/bcp/test">{tBcp.testIssueBtn}</LinkBtn> : undefined}
       />
 
       <div className="px-5 py-4 space-y-4">
@@ -132,7 +136,9 @@ export default async function BcpPage() {
         <EventsTreeTable
           rows={eventRows.map<BcpEventChild>((r) => ({
             id:               r.id,
-            status:           r.status,
+            // 期限 (24 時間) を過ぎたテスト発令は、収集の途中でも「終了」と出す。表示だけで DB は
+            // 変えない (2026-11-04・シナリオ試験の所見・10/05・9/30 のテスト発令が進行中に残っていた)
+            status:           bcpListStatus(r),
             is_test:          r.is_test,
             alert_issued_at:  r.alert_issued_at,
             alert_type:       r.alert_type,

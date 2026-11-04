@@ -21,6 +21,7 @@ import { AdminShellClient } from './AdminShellClient'
 import { getT } from '@/lib/i18n/server'
 import type { Msg } from '@/lib/i18n/messages'
 import { readHostCookie } from '@/lib/security/cookie-names'
+import { filterNavForRole } from '@/lib/auth/role-menu'
 
 export type AdminSection = 'admin' | 'security' | 'bcp'
 
@@ -207,6 +208,9 @@ export async function AdminShell({
   if (!features.baggage) {
     effectiveNav = effectiveNav.filter((n) => n.href !== '/admin/baggage')
   }
+  // 押すと断られる項目は、その役割には出さない (2026-11-04・シナリオ試験の所見)。
+  // 閲覧者に設定の項目・拠点管理者に手荷物検査設定が出ていた。守りはサーバ側のまま。
+  effectiveNav = filterNavForRole(effectiveNav, ctx.role)
   const effectiveTitle: string =
     navTitle
       ?? (section && t
@@ -218,7 +222,7 @@ export async function AdminShell({
 
   return (
     <div className="flex h-screen flex-col">
-      <AppHeader userName={userName} tenantName={ctx.tenantName} isSuper={ctx.isSuper} features={features} feedbackEntry={feedbackEntry} />
+      <AppHeader userName={userName} tenantName={ctx.tenantName} isSuper={ctx.isSuper} role={ctx.role} features={features} feedbackEntry={feedbackEntry} />
       <AdminShellClient nav={effectiveNav} title={effectiveTitle} pathname={pathname} initialCollapsed={collapsed}>
         {/* super_admin のみ: ①設定プレーンがどのテナントに固定されているかを常時明示 */}
         {ctx.isSuper && section === 'admin' && (

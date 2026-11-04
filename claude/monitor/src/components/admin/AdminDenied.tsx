@@ -9,7 +9,9 @@ import { PageHeader } from '@/components/admin/PageHeader'
 export function AdminDenied({
   pathname,
   title = 'アクセス権限がありません',
-  message = 'この画面を表示する権限がありません。必要な場合は運営管理者（super_admin）にお問い合わせください。',
+  // 内部名 (super_admin) を出さず、案内先はテナントの管理者にする。権限を付けるのは
+  // テナントの管理者で、運営ではない (2026-11-04・シナリオ試験の所見)
+  message = 'この画面を表示する権限がありません。必要な場合はテナントの管理者にお問い合わせください。',
 }: {
   pathname: string
   title?: string

@@ -31,6 +31,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import dynamic from 'next/dynamic'
 import Hls from 'hls.js'
 import { cancelPendingStop, scheduleStop } from '@/lib/edge-stop-registry'
+import { FrameAgeBadge, useFrameAge } from '@/components/video/FrameAgeBadge'
 import { SaveJpegButton } from '@/components/SaveJpegButton'
 import { TriangleAlert } from 'lucide-react'
 import { describeVideoError } from '@/lib/video/session-logic'
@@ -705,6 +706,9 @@ function JpegMode({
   }, [edgeId, cameraId])
 
   const showError   = failStreak >= ERROR_THRESHOLD && loaded === 0
+  // 画像の経過。開いた直後に前回の画像が出ているときに「約 ○ 秒前の映像」と出す
+  // (2026-11-04・シナリオ試験の所見)
+  const frameAgeMs = useFrameAge(`/api/edges/${edgeId}/cam/${cameraId}/snapshot`)
   const showWaiting = loaded === 0 && !showError
 
   return (
@@ -751,6 +755,8 @@ function JpegMode({
           </div>
         </div>
       )}
+
+      {loaded > 0 && <FrameAgeBadge ageMs={frameAgeMs} className="absolute left-2 top-2" />}
 
       {loaded > 0 && (
         <div className="absolute bottom-2 left-2 rounded bg-black/60 px-2 py-0.5 font-mono text-[10px] tabular-nums text-slate-300">

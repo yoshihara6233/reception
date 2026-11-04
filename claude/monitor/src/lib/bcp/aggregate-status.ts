@@ -10,13 +10,16 @@
  * (G・VMS 未設置など) を発令の時点で失敗にするので、そのままだと大きな地震で取れた拠点が
  * 何百あっても、未設置の 1 拠点のせいで行全体が「失敗」と出てしまう。
  */
-export type AggregatedBcpStatus = 'in_progress' | 'failed' | 'completed' | 'partial'
+export type AggregatedBcpStatus = 'in_progress' | 'failed' | 'completed' | 'partial' | 'expired'
 
 const DONE = new Set(['completed', 'report_generated', 'clips_uploaded'])
 
 export function aggregateBcpStatus(statuses: readonly string[]): AggregatedBcpStatus {
   if (statuses.some((s) => s === 'pending' || s === 'recording')) return 'in_progress'
   if (statuses.length > 0 && statuses.every((s) => s === 'failed')) return 'failed'
+  // 期限を過ぎたテスト発令 (lib/bcp/collecting.ts の bcpListStatus)。全部がそうなら「終了」。
+  // 完了・失敗と混ざれば下の partial (一部) になる (2026-11-04・シナリオ試験の所見)
+  if (statuses.length > 0 && statuses.every((s) => s === 'expired')) return 'expired'
   if (statuses.every((s) => DONE.has(s))) return 'completed'
   return 'partial'
 }

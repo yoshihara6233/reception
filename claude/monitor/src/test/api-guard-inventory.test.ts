@@ -150,7 +150,8 @@ const EXPECTED: Record<string, Guard> = {
   '/api/alarms/frames/[frameId]/image': 'session-only',
   '/api/alarms/frames/ingest': 'device-token',
   '/api/alarms/ingest': 'device-token',
-  '/api/alarms/open-count': 'session-only',
+  // 発報タイムラインと同じ店舗の範囲で数える (2026-11-04・シナリオ試験の所見・強化)
+  '/api/alarms/open-count': 'tenant-scope',
   '/api/auth/reset-link': 'PUBLIC',
   // ログインまわり (2026-10-29 にサーバへ・セッションの Cookie を HttpOnly に)
   '/api/auth/login': 'PUBLIC',

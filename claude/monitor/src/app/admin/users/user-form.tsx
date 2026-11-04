@@ -27,12 +27,13 @@ interface Props {
   canCreateSuperAdmin: boolean    // false for tenant_admin
 }
 
+// 画面には内部名を出さない (2026-11-04・シナリオ試験 S-4 の所見)
 const ROLE_LABELS: Record<Role, string> = {
-  super_admin:     '全体管理者 (super_admin)',
-  tenant_admin:    'テナント管理者 (tenant_admin)',
-  store_manager:   '拠点管理者 (store_manager)',
-  baggage_manager: '手荷物検査店長 (baggage_manager)',
-  viewer:          '閲覧者 (viewer)',
+  super_admin:     '全体管理者',
+  tenant_admin:    'テナント管理者',
+  store_manager:   '拠点管理者',
+  baggage_manager: '手荷物検査店長',
+  viewer:          '閲覧者',
 }
 
 export function UserForm({ mode, id, initial, tenants, stores, canCreateSuperAdmin }: Props) {
@@ -195,6 +196,11 @@ export function UserForm({ mode, id, initial, tenants, stores, canCreateSuperAdm
             {tenants.map((t) => (
               <option key={t.id} value={t.id}>{t.name}</option>
             ))}
+            {/* 保存されている値が選択肢に無いときも、その値を出す。以前は「指定なし」と表示され、
+                テナントが外れたように見えた (2026-11-04・シナリオ試験の所見) */}
+            {form.tenant_id && !tenants.some((t) => t.id === form.tenant_id) && (
+              <option value={form.tenant_id}>現在のテナント（一覧に無い）</option>
+            )}
           </select>
         </Field>
       </div>

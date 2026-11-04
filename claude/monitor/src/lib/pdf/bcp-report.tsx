@@ -20,6 +20,7 @@ import {
 } from '@react-pdf/renderer'
 import { PRODUCT_NAME } from '@/lib/brand'
 import { jmaIntensityLabel } from '@/lib/bcp/intensity'
+import { bcpAlertTypeLabel, bcpStatusLabel } from '@/lib/bcp/labels'
 
 // ---------------------------------------------------------------------------
 // Font registration (Japanese support)
@@ -435,7 +436,8 @@ export function BcpReport({ event, store, clips, generatedAt }: BcpReportProps) 
             ) : null}
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>アラート種別 / Alert Type</Text>
-              <Text style={styles.infoValue}>{event.alertType}</Text>
+              {/* 内部名 (earthquake など) を出さない (2026-11-04・シナリオ試験の所見) */}
+              <Text style={styles.infoValue}>{bcpAlertTypeLabel(event.alertType)}</Text>
             </View>
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>震度 / Seismic Intensity</Text>
@@ -451,7 +453,8 @@ export function BcpReport({ event, store, clips, generatedAt }: BcpReportProps) 
             </View>
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>ステータス / Status</Text>
-              <Text style={styles.infoValue}>{event.status}</Text>
+              {/* 内部名 (recording など) を出さない (2026-11-04・シナリオ試験の所見) */}
+              <Text style={styles.infoValue}>{bcpStatusLabel(event.status)}</Text>
             </View>
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>イベントID / Event ID</Text>

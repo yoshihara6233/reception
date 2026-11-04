@@ -1,7 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
-import { createSupabaseServer } from '@/lib/supabase/server'
+import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { resolveAdminContext } from '@/lib/tenant/acting'
 import { UserForm, type Role, type TenantOpt, type StoreOpt } from '../user-form'
 
@@ -29,8 +29,12 @@ export default async function NewUserPage() {
   // （従来は全テナントの店舗名・IDをクライアントへ送っていた＝他テナント漏洩）。
   let storesQuery = supa.from('stores').select('id, name, tenant_id').order('name')
   if (acting && ctx.tenantId) storesQuery = storesQuery.eq('tenant_id', ctx.tenantId)
+  // テナントの選択肢はサービスの接続で読む (2026-11-04・シナリオ試験の所見)。編集画面と同じ理由で、
+  // 利用者の接続では tenants の RLS が 1 行も返さず、選択肢が空だった。範囲はここで絞る。
+  let tenantsQuery = createSupabaseService().from('tenants').select('id, name').order('name')
+  if (me.role === 'tenant_admin') tenantsQuery = tenantsQuery.eq('id', me.tenant_id)
   const [{ data: tenantsAll }, { data: stores }] = await Promise.all([
-    supa.from('tenants').select('id, name').order('name'),
+    tenantsQuery,
     storesQuery,
   ])
 

@@ -7,6 +7,7 @@
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { AdminShell, ALARM_NAV } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
+import { canManage } from '@/lib/auth/role-menu'
 import { AlarmTimeline, type AlarmEventVM } from './AlarmTimeline'
 import { resolveMonitorScope } from '@/lib/tenant/monitor-scope'
 import { TenantGate } from '@/components/TenantGate'
@@ -65,7 +66,7 @@ export default async function AlarmsPage() {
     <AdminShell pathname="/alarms" nav={ALARM_NAV} navTitle="ALARM">
       <PageHeader title="発報タイムライン" crumb={[{ href: '/alarms', label: 'ALARM' }]} />
       <div className="px-5 py-4">
-        <AlarmTimeline events={events} />
+        <AlarmTimeline events={events} canEditSettings={canManage(scope.ctx.role)} />
       </div>
     </AdminShell>
   )

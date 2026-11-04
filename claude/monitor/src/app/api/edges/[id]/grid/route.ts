@@ -14,6 +14,7 @@ import {
 import {
   wantsImageBytes, imageRedirectOrBytes, staleFallbackForbidden, imageUnavailable,
 } from '@/lib/storage/edge-image-response'
+import { wantsFrameMeta, frameMetaResponse } from '@/lib/storage/edge-image-age'
 
 export async function GET(
   req: NextRequest,
@@ -34,6 +35,8 @@ export async function GET(
   // 経路1: 自社ドメインの Worker。eo光のように `*.r2.cloudflarestorage.com` を
   // SNI 遮断する回線でも視聴できるため、S3 presigned より優先する。
   const key = gridKey(edgeId)
+  // 画面が「何秒前の画像か」を尋ねる (2026-11-04・シナリオ試験の所見)。画像は返さない
+  if (wantsFrameMeta(req.nextUrl)) return frameMetaResponse(key, `edges/${edgeId}/grid.jpg`)
   if (edgeImagesWorkerConfigured() && (await workerImageExists(key))) {
     const url = signEdgeImageUrl('GET', key)
     if (url) return imageRedirectOrBytes(url, wantsImageBytes(req))

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { PLAN_LABELS as PLAN_LABELS_ALL, TENANT_STATUS_LABELS } from '@/lib/tenant/labels'
 
 export type Plan   = 'starter' | 'standard' | 'enterprise'
 export type Status = 'active' | 'suspended' | 'trial'
@@ -34,16 +35,9 @@ export interface TenantUsage {
   baggage: number
 }
 
-const PLAN_LABELS: Record<Plan, string> = {
-  starter:    'スターター (starter)',
-  standard:   'スタンダード (standard)',
-  enterprise: 'エンタープライズ (enterprise)',
-}
-const STATUS_LABELS: Record<Status, string> = {
-  trial:     'トライアル (trial)',
-  active:    '稼働 (active)',
-  suspended: '停止 (suspended)',
-}
+// 表示名は一覧と同じ表から引く。内部名 (starter など) は画面に出さない (2026-11-04・シナリオ試験の所見)
+const PLAN_LABELS: Record<Plan, string> = PLAN_LABELS_ALL as Record<Plan, string>
+const STATUS_LABELS: Record<Status, string> = TENANT_STATUS_LABELS as Record<Status, string>
 const ERR_LABELS: Record<string, string> = {
   slug_taken:      'そのスラッグは既に使われています',
   super_admin_only: 'テナント操作は全体管理者のみ可能です',

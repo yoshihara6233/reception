@@ -8,6 +8,7 @@ import { resolveAdminContext } from '@/lib/tenant/acting'
 import { requireAdmin } from '@/lib/admin/guard'
 import { getT } from '@/lib/i18n/server'
 import { pickPrimaryEdge } from '@/lib/edge/primary-edge'
+import { isTenantAdminOrSuper } from '@/lib/auth/role-menu'
 
 interface Row {
   id: string
@@ -68,9 +69,11 @@ export default async function StoresAdmin({
         crumb={[{ href: '/admin', label: t.breadcrumb.admin }, { href: '/admin/stores', label: t.adminNav.stores }]}
         actions={
           <>
-            {/* 新規作成はテナント確定時のみ（super_admin は操作中テナント選択が前提） */}
-            {ctx.tenantId && <LinkBtn href="/admin/stores/new">＋ 新規拠点</LinkBtn>}
-            <LinkBtn href="/admin/import">{ts.csvImportBtn}</LinkBtn>
+            {/* 新規作成はテナント確定時のみ（super_admin は操作中テナント選択が前提）。
+                拠点管理者には出さない: /admin/stores/new はテナント管理者以上で、押すと断られていた。
+                CSV 一括投入も拠点を作る入口なので同じ条件にする (2026-11-04・シナリオ試験の所見) */}
+            {ctx.tenantId && isTenantAdminOrSuper(ctx.role) && <LinkBtn href="/admin/stores/new">＋ 新規拠点</LinkBtn>}
+            {isTenantAdminOrSuper(ctx.role) && <LinkBtn href="/admin/import">{ts.csvImportBtn}</LinkBtn>}
           </>
         }
       />

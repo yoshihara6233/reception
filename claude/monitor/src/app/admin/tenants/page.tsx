@@ -4,6 +4,7 @@ import { AdminShell } from '@/components/AdminShell'
 import { PageHeader, LinkBtn } from '@/components/admin/PageHeader'
 import { createSupabaseServer, createSupabaseService } from '@/lib/supabase/server'
 import { ActAsTenantButton } from './ActAsTenantButton'
+import { planLabel, tenantStatusLabel } from '@/lib/tenant/labels'
 
 interface Row {
   id: string
@@ -68,10 +69,11 @@ export default async function TenantsAdmin() {
               {rows.map((t) => (
                 <tr key={t.id} className="border-t border-slate-100">
                   <td className="px-3 py-2 font-medium">{t.name}</td>
-                  <td className="px-3 py-2">{t.plan}</td>
+                  {/* 内部名 (starter・trial など) ではなく表示名を出す (2026-11-04・シナリオ試験の所見) */}
+                  <td className="px-3 py-2">{planLabel(t.plan)}</td>
                   <td className="px-3 py-2">
                     <span className={`rounded px-2 py-0.5 text-[11px] ${STATUS_BADGE[t.status] ?? 'bg-slate-100 text-slate-600'}`}>
-                      {t.status}
+                      {tenantStatusLabel(t.status)}
                     </span>
                   </td>
                   <td className="px-3 py-2 font-mono text-[11px] text-slate-500">{t.slug ?? '—'}</td>

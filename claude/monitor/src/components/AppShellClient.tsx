@@ -28,6 +28,7 @@ export function AppShellClient({
   features,
   tenantName,
   isSuper,
+  role,
   feedbackEntry,
 }: {
   userName: string
@@ -37,6 +38,8 @@ export function AppShellClient({
   features?: { patrol: boolean; alarm: boolean; baggage: boolean }
   tenantName?: string | null
   isSuper?: boolean
+  /** 自分の役割 (入口の出し分け用・2026-11-04・シナリオ試験の所見) */
+  role?: string | null
   feedbackEntry?: boolean
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -50,7 +53,7 @@ export function AppShellClient({
       }}
     >
       {/* Top header */}
-      <AppHeader userName={userName} onMenuClick={() => setDrawerOpen(true)} features={features} tenantName={tenantName} isSuper={isSuper} feedbackEntry={feedbackEntry} />
+      <AppHeader userName={userName} onMenuClick={() => setDrawerOpen(true)} features={features} tenantName={tenantName} isSuper={isSuper} role={role} feedbackEntry={feedbackEntry} />
 
       {/* Scrollable middle area; on mobile adds bottom padding for nav bar */}
       <div className="flex flex-1 flex-col overflow-hidden pb-0 md:pb-0">

@@ -18,6 +18,8 @@ import { recordFootageAccess } from '@/lib/audit/footage-access'
 import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
 import { GenerateReportButton } from './GenerateReportButton'
+import { AutoRefresh } from './AutoRefresh'
+import { shouldAutoRefreshBcp } from '@/lib/bcp/collecting'
 import { RetrieveRecordingButton } from './RetrieveRecordingButton'
 import { Camera, FileText, LayoutGrid } from 'lucide-react'
 
@@ -287,6 +289,14 @@ export default async function BcpEventDetailPage({
 
   const alertTypeLabel = ALERT_TYPE_LABEL[event.alert_type] ?? event.alert_type
 
+  // 収集中は 20 秒ごとに読み直す (2026-11-04・シナリオ試験の所見)。開いたままでも、
+  // 自動でできた PDF・届いたコマが出る。決着していないコマが残る間も続ける
+  // (途中で手で PDF を作ると状態は report_generated になるが、収集は続いているため)。
+  const hasUnsettledShots =
+    clips.some((c) => !['completed', 'failed', 'skipped_ipro'].includes(c.upload_status))
+    || gridShots.some((g) => g.upload_status === 'pending')
+  const autoRefresh = shouldAutoRefreshBcp(event, hasUnsettledShots)
+
   return (
     <AdminShell pathname="/bcp" section="bcp">
       <PageHeader
@@ -537,8 +547,9 @@ export default async function BcpEventDetailPage({
 
         {/* Report section */}
         <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div className="border-b border-slate-100 px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
             <h2 className="text-sm font-bold text-slate-900">BCPレポート</h2>
+            <AutoRefresh enabled={autoRefresh} />
           </div>
 
           <div className="space-y-4 px-4 py-4">

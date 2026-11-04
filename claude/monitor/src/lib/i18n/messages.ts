@@ -99,6 +99,9 @@ export interface Msg {
     gridUnavailable:     string   // grid composite fetch failed (404/502/edge offline)
     gridUnavailableHint: string   // reassure: auto-retrying + per-camera still works
     gridRetry:           string   // manual retry button
+    // 「約 ○ 秒前の映像」の印 (2026-11-04・シナリオ試験の所見)
+    frameAge:            (n: number, unit: 'sec' | 'min' | 'hour' | 'day') => string
+    frameAgeHint:        string
   }
   vod: {
     // ── Range picker modal (C4) ──
@@ -273,6 +276,8 @@ export interface Msg {
     colStoreCount: string
     storeCountValue: (n: number) => string
     statusPartial: string
+    /** 期限を過ぎたテスト発令 (2026-11-04・シナリオ試験の所見) */
+    statusExpired: string
     expandAria: string
     collapseAria: string
   }
@@ -349,6 +354,7 @@ export interface Msg {
     roleSuperAdmin: string
     roleTenantAdmin: string
     roleStoreManager: string
+    roleBaggageManager: string
     roleViewer: string
     empty: string
   }
@@ -462,6 +468,8 @@ const ja: Msg = {
     gridUnavailable:     'グリッド映像を取得できません',
     gridUnavailableHint: '自動で再試行中です。各カメラはタップで個別表示できます。',
     gridRetry:           '再試行',
+    frameAge:            (n, u) => `約 ${n.toLocaleString()} ${u === 'sec' ? '秒' : u === 'min' ? '分' : u === 'hour' ? '時間' : '日'}前の映像`,
+    frameAgeHint:        'エッジから新しい画像が届いていません。届くと自動で消えます',
   },
   vod: {
     modalTitle:  '録画を再生',
@@ -622,6 +630,7 @@ const ja: Msg = {
     colStoreCount: '対象拠点',
     storeCountValue: (n) => `${n} 拠点`,
     statusPartial: '一部完了',
+    statusExpired: '終了',
     expandAria: '対象拠点を展開',
     collapseAria: '対象拠点を折りたたむ',
   },
@@ -696,6 +705,7 @@ const ja: Msg = {
     roleSuperAdmin: 'スーパー管理者',
     roleTenantAdmin: 'テナント管理者',
     roleStoreManager: '拠点管理者',
+    roleBaggageManager: '手荷物検査店長',
     roleViewer: '閲覧のみ',
     empty: 'ユーザーが見つかりません',
   },
@@ -809,6 +819,8 @@ const en: Msg = {
     gridUnavailable:     'Grid view unavailable',
     gridUnavailableHint: 'Retrying automatically. Tap any camera to view it individually.',
     gridRetry:           'Retry',
+    frameAge:            (n, u) => `Image from about ${n.toLocaleString()} ${u === 'sec' ? 'sec' : u === 'min' ? 'min' : u === 'hour' ? (n === 1 ? 'hour' : 'hours') : (n === 1 ? 'day' : 'days')} ago`,
+    frameAgeHint:        'No new image has arrived from the edge. This disappears automatically when one arrives.',
   },
   vod: {
     modalTitle:  'Play Recording',
@@ -969,6 +981,7 @@ const en: Msg = {
     colStoreCount: 'Sites',
     storeCountValue: (n) => `${n} ${n === 1 ? 'site' : 'sites'}`,
     statusPartial: 'Partial',
+    statusExpired: 'Ended',
     expandAria: 'Expand sites',
     collapseAria: 'Collapse sites',
   },
@@ -1043,6 +1056,7 @@ const en: Msg = {
     roleSuperAdmin: 'Super Admin',
     roleTenantAdmin: 'Tenant Admin',
     roleStoreManager: 'Site Manager',
+    roleBaggageManager: 'Baggage Inspection Manager',
     roleViewer: 'Viewer',
     empty: 'No users found',
   },
@@ -1156,6 +1170,8 @@ const zh: Msg = {
     gridUnavailable:     '无法获取分屏画面',
     gridUnavailableHint: '正在自动重试。点击任意摄像头可单独查看。',
     gridRetry:           '重试',
+    frameAge:            (n, u) => `约 ${n.toLocaleString()} ${u === 'sec' ? '秒' : u === 'min' ? '分钟' : u === 'hour' ? '小时' : '天'}前的画面`,
+    frameAgeHint:        '尚未收到边缘设备的新图像。收到后此提示会自动消失',
   },
   vod: {
     modalTitle:  '回放录像',
@@ -1316,6 +1332,7 @@ const zh: Msg = {
     colStoreCount: '对象站点',
     storeCountValue: (n) => `${n} 站点`,
     statusPartial: '部分完成',
+    statusExpired: '已结束',
     expandAria: '展开对象站点',
     collapseAria: '折叠对象站点',
   },
@@ -1390,6 +1407,7 @@ const zh: Msg = {
     roleSuperAdmin: '超级管理员',
     roleTenantAdmin: '租户管理员',
     roleStoreManager: '站点经理',
+    roleBaggageManager: '行李检查店长',
     roleViewer: '仅查看',
     empty: '未找到用户',
   },
@@ -1503,6 +1521,8 @@ const ko: Msg = {
     gridUnavailable:     '그리드 영상을 가져올 수 없습니다',
     gridUnavailableHint: '자동으로 재시도 중입니다. 카메라를 탭하면 개별 표시됩니다.',
     gridRetry:           '재시도',
+    frameAge:            (n, u) => `약 ${n.toLocaleString()}${u === 'sec' ? '초' : u === 'min' ? '분' : u === 'hour' ? '시간' : '일'} 전 영상`,
+    frameAgeHint:        '엣지에서 새 이미지가 도착하지 않았습니다. 도착하면 자동으로 사라집니다',
   },
   vod: {
     modalTitle:  '녹화 재생',
@@ -1663,6 +1683,7 @@ const ko: Msg = {
     colStoreCount: '대상 거점',
     storeCountValue: (n) => `${n} 거점`,
     statusPartial: '일부 완료',
+    statusExpired: '종료',
     expandAria: '대상 거점 펼치기',
     collapseAria: '대상 거점 접기',
   },
@@ -1737,6 +1758,7 @@ const ko: Msg = {
     roleSuperAdmin: '슈퍼 관리자',
     roleTenantAdmin: '테넌트 관리자',
     roleStoreManager: '거점 매니저',
+    roleBaggageManager: '수하물 검사 점장',
     roleViewer: '열람 전용',
     empty: '사용자를 찾을 수 없습니다',
   },

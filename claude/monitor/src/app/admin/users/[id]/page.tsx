@@ -47,8 +47,15 @@ export default async function EditUserPage(
   // （store_ids はそのテナント店舗に属す必要があり、他テナント店舗名の送信も防ぐ）。
   let storesQuery = supa.from('stores').select('id, name, tenant_id').order('name')
   if (target.tenant_id) storesQuery = storesQuery.eq('tenant_id', target.tenant_id)
+  // テナントの選択肢はサービスの接続で読む (2026-11-04・シナリオ試験の所見)。
+  // tenants の RLS (tenant_isolation) は JWT の raw_app_meta_data を見ていて、利用者の
+  // 接続では 1 行も返らない。選択肢が空になり、保存されている値があっても「指定なし」と
+  // 表示されていた。他の管理画面 (limits・feedback・ops-audit) と同じく service で読み、
+  // 範囲はここで絞る: 全体管理者は全テナント・テナント管理者は自テナントだけ。
+  let tenantsQuery = createSupabaseService().from('tenants').select('id, name').order('name')
+  if (me.role === 'tenant_admin') tenantsQuery = tenantsQuery.eq('id', me.tenant_id)
   const [{ data: tenants }, { data: stores }] = await Promise.all([
-    supa.from('tenants').select('id, name').order('name'),
+    tenantsQuery,
     storesQuery,
   ])
 
