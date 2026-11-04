@@ -3,6 +3,8 @@
 import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Globe2, CloudRain, MapPin, Search, Siren } from 'lucide-react'
+import { defaultIssuedInput, issuedInputToIso } from '@/lib/bcp/issued-at'
+
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -34,10 +36,11 @@ function fmtKm(km: number) {
   return km < 1 ? `${Math.round(km * 1000)}m` : `${km.toFixed(1)}km`
 }
 
-function nowLocalStr() {
-  const d = new Date()
-  d.setSeconds(0, 0)
-  return d.toISOString().slice(0, 16)
+
+/** 確認の欄に出す発令日時 (JST)。読めなければ入力のまま */
+function fmtIssued(v: string): string {
+  const iso = issuedInputToIso(v)
+  return iso ? new Date(iso).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : v
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -66,7 +69,7 @@ export function TestForm() {
 
   // Alert
   const [alertType,   setAlertType]   = useState<string>('earthquake')
-  const [alertIssued, setAlertIssued] = useState(nowLocalStr)
+  const [alertIssued, setAlertIssued] = useState(() => defaultIssuedInput())
 
   // Submit
   const [confirming, setConfirming] = useState(false)
@@ -146,7 +149,7 @@ export function TestForm() {
           lng:          parseFloat(lngStr),
           radiusKm,
           alertType,
-          alertIssuedAt: new Date(alertIssued).toISOString(),
+          alertIssuedAt: issuedInputToIso(alertIssued) ?? new Date().toISOString(),
         }),
       })
       const json = await res.json() as {
@@ -404,7 +407,7 @@ export function TestForm() {
               )}
             </div>
             <div>種別: <span className="inline-flex items-center gap-1 font-bold">{selectedAlert?.Icon && <selectedAlert.Icon size={13} strokeWidth={1.5} aria-hidden />} {selectedAlert?.label}</span></div>
-            <div>発令: <span className="font-bold">{new Date(alertIssued).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}</span></div>
+            <div>発令: <span className="font-bold">{fmtIssued(alertIssued)}</span></div>
           </div>
           <div className="flex gap-2">
             <button
