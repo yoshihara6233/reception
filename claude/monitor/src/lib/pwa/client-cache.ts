@@ -61,12 +61,47 @@ export async function clearAuthenticatedCaches(storage?: CacheStorageLike | null
  * 3. 読み直しを伴う移動でログインへ。画面の中の状態 (Next のルーターの控え) も捨て、
  *    戻るの履歴にも今の画面を残さない (replace)
  */
-export async function signOutAndLeave(): Promise<void> {
+export async function signOutAndLeave(deps: SignOutDeps = {}): Promise<void> {
+  const logout = deps.logout ?? (() => authFetch('/api/auth/logout'))
+  const clear = deps.clear ?? (() => clearAuthenticatedCaches())
+  const go = deps.go ?? ((path: string) => window.location.replace(path))
+  // **どちらも待つ上限を決める** (2026-11-04・シナリオ試験 S-4)。パソコンの Chrome で
+  // ログアウトを押すとボタンが処理中のまま止まり、ログインの画面へ移らなかった
+  // (読み直すとログインの画面が出る = セッションは消えていた)。応答の Clear-Site-Data: "cache" で
+  // Chrome が控えを消し終わるまで応答を返さないか、Cache Storage の片付けが終わらないと、
+  // 3. の移動まで進まない。失効はサーバで先に済み、控えはログインの画面でも消すので、
+  // 待ちきれなくても移ってよい
   try {
-    await authFetch('/api/auth/logout')
+    await withTimeout(logout(), deps.logoutWaitMs ?? LOGOUT_WAIT_MS)
   } catch {
     // 失効に失敗しても端末の側は片付けてログインへ移る
   }
-  await clearAuthenticatedCaches()
-  window.location.replace('/login')
+  try {
+    await withTimeout(clear(), deps.cacheWaitMs ?? CACHE_WAIT_MS)
+  } catch {
+    // 片付けられなくてもログインへ移る
+  }
+  go('/login')
+}
+
+/** ログアウトの応答を待つ上限。サーバの失効はふつう 1 秒かからない */
+export const LOGOUT_WAIT_MS = 3_000
+/** 端末の控えの片付けを待つ上限。ログインの画面を開いたときにも片付ける */
+export const CACHE_WAIT_MS = 2_000
+
+/** signOutAndLeave の差し替え口 (試験用)。 */
+export interface SignOutDeps {
+  logout?: () => Promise<unknown>
+  clear?: () => Promise<unknown>
+  go?: (path: string) => void
+  logoutWaitMs?: number
+  cacheWaitMs?: number
+}
+
+/** p が ms 以内に終われば待ち、終わらなければ待たずに進む (p は止めない)。 */
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | undefined> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => resolve(undefined), ms)
+    p.then((v) => { clearTimeout(t); resolve(v) }, (e) => { clearTimeout(t); reject(e) })
+  })
 }
