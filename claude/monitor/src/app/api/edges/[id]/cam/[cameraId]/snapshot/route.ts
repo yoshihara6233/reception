@@ -17,6 +17,7 @@ import {
 import {
   wantsImageBytes, imageRedirectOrBytes, staleFallbackForbidden, imageUnavailable,
 } from '@/lib/storage/edge-image-response'
+import { wantsFrameMeta, frameMetaResponse } from '@/lib/storage/edge-image-age'
 
 export async function GET(
   req: NextRequest,
@@ -34,6 +35,8 @@ export async function GET(
   // R2 優先（エグレス無料）。未移行エッジは Supabase へフォールバック。
   // 経路1: 自社ドメインの Worker（SNI 遮断回線でも通る）。経路2: R2 の S3 API 直。
   const key = snapshotKey(edgeId, cameraId)
+  // 画面が「何秒前の画像か」を尋ねる (2026-11-04・シナリオ試験の所見)。画像は返さない
+  if (wantsFrameMeta(req.nextUrl)) return frameMetaResponse(key, `edges/${edgeId}/cam/${cameraId}/snapshot.jpg`)
   if (edgeImagesWorkerConfigured() && (await workerImageExists(key))) {
     const url = signEdgeImageUrl('GET', key)
     if (url) return imageRedirectOrBytes(url, wantsImageBytes(req))

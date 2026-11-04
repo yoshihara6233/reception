@@ -12,6 +12,7 @@ import { ServerClock } from './ServerClock'
 import { MonitorMark } from './MonitorMark'
 import { PRODUCT_NAME } from '@/lib/brand'
 import { FeedbackEntry } from './feedback/FeedbackEntry'
+import { canOpenModule, isBaggageOnly } from '@/lib/auth/role-menu'
 
 // F25: userName / avatar はフッターの StatusBar に移動したので、ここでは表示しない。
 // プロップは互換性のためそのまま受領（残置）するが、UI には出さない。
@@ -21,6 +22,7 @@ export function AppHeader({
   features,
   tenantName,
   isSuper,
+  role,
   feedbackEntry = false,
 }: {
   userName?: string
@@ -30,6 +32,9 @@ export function AppHeader({
   // 操作中/所属テナント名。super_admin 未選択時は null。
   tenantName?: string | null
   isSuper?: boolean
+  // 自分の役割。押すと断られるタブ・アイコンを出さないために使う (2026-11-04・シナリオ試験の所見)。
+  // 未指定 (null) は従来どおり全部出す。守りは middleware とサーバ側のまま。
+  role?: string | null
   // 「要望・困りごと」を出すか（テナント管理者だけ・テナントが止めていないとき）。
   // 判定はサーバ（lib/feedback/entry.ts の resolveFeedbackEntry）。既定は出さない。
   feedbackEntry?: boolean
@@ -56,7 +61,10 @@ export function AppHeader({
   // 未完了（未対応/対応中）の発報があれば ALARM タブを赤字にする。軽量ポーリング（45秒）＋
   // 画面遷移時に再取得。RLS 越しなので閲覧可能店舗の発報のみ数える。
   const [openAlarms, setOpenAlarms] = useState(0)
+  // 手荷物検査店長は ALARM を開けない (middleware が API も 403 にする) ので数えに行かない
+  const countAlarms = !isBaggageOnly(role) && features?.alarm !== false
   useEffect(() => {
+    if (!countAlarms) return
     let active = true
     const load = async () => {
       try {
@@ -69,12 +77,12 @@ export function AppHeader({
     load()
     const timer = setInterval(load, 45_000)
     return () => { active = false; clearInterval(timer) }
-  }, [pathname])
+  }, [pathname, countAlarms])
 
   // オプション機能フラグで出し分け。未指定(=undefined)は全表示（フェイルオープン）。
   // 巡回=/security・発報=/alarms・検査=/baggage は有料オプションのため、
   // テナントで無効なら中央タブから隠す。/stores・/bcp は基本パック＝常時表示。
-  const TABS: Array<{ href: string; label: string; base?: string }> = [
+  const ALL_TABS: Array<{ href: string; label: string; base?: string }> = [
     { href: '/stores',   label: t.nav.monitor  },
     { href: '/bcp',      label: t.nav.bcp      },
     // PATROL の着地は巡回レポート（利用頻度が最も高い）。ハイライトは /security 配下全体。
@@ -89,6 +97,12 @@ export function AppHeader({
     // F23: /logs タブは削除（マスタ内の監査ログと重複していたため）
     // F24: /admin（設定）は中央タブから外し、右側のアイコンに移動
   ]
+  // 手荷物検査店長には /baggage 以外のタブを出さない (2026-11-04・シナリオ試験の所見)。
+  // 以前は MONITOR などを押すと middleware に /baggage へ戻されていた。
+  const TABS = ALL_TABS.filter((tab) => canOpenModule(tab.href, role))
+  // 設定 (/admin) と多要素の設定 (/account/security) も、手荷物検査店長は middleware が
+  // /baggage へ戻すので出さない (2026-11-04・シナリオ試験の所見)。
+  const baggageOnly = isBaggageOnly(role)
 
   // F24: settings tab is now an icon — active highlight when the user is
   // anywhere under /admin.
@@ -181,7 +195,7 @@ export function AppHeader({
         {feedbackEntry && <FeedbackEntry />}
         {/* F24: settings (旧 マスタ) は中央タブから右側のアイコンへ移動。
             PWA(スタンドアロン)では非表示。 */}
-        {!standalone && (
+        {!standalone && !baggageOnly && (
           <Link
             href="/admin"
             aria-label={t.nav.admin}
@@ -205,14 +219,14 @@ export function AppHeader({
           </Link>
         )}
         {/* 多要素認証の設定（2026-10-28・利用者が自分で登録・解除する） */}
-        <Link
+        {!baggageOnly && <Link
           href="/account/security"
           aria-label={t.nav.mfa}
           title={t.nav.mfa}
           className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
         >
           <ShieldCheck size={18} strokeWidth={1.5} aria-hidden />
-        </Link>
+        </Link>}
         {/* F25: userName + avatar は StatusBar に移行 */}
         {/* F24: logout — rightmost */}
         <LogoutButton />

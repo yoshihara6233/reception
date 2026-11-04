@@ -21,6 +21,7 @@ import { createSupabaseService } from '@/lib/supabase/server'
 import { authenticateEdge } from '@/lib/edge/device-auth'
 import { sendOpsWebhook } from '@/lib/ops/webhook'
 import { sendEmail } from '@/lib/email/send'
+import { edgeEventMailHtml } from '@/lib/edge/event-mail'
 
 export const dynamic = 'force-dynamic'
 
@@ -116,9 +117,15 @@ export async function POST(req: NextRequest) {
   const recipients = (process.env.ALERT_EMAILS ?? '').split(',').map((s) => s.trim()).filter(Boolean)
   await Promise.allSettled([
     sendOpsWebhook(text),
-    recipients.length ? sendEmail(recipients, text, `<p>${text.replace(/</g, '&lt;')}</p>`) : Promise.resolve(),
+    recipients.length
+      ? sendEmail(recipients, text, edgeEventMailHtml({
+        storeName, edgeName, label: LABEL[event_type] ?? event_type, eventType: event_type,
+        node: node ?? null, occurredAt, message: message ?? null,
+      }))
+      : Promise.resolve(),
   ])
   if (ev) await svc.from('alarm_events').update({ notified_at: new Date().toISOString() }).eq('id', ev.id)
 
   return NextResponse.json({ ok: true, id: ev?.id ?? null }, { status: 202 })
 }
+

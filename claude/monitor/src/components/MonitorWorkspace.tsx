@@ -21,6 +21,7 @@ import {
 import { cancelPendingStop, scheduleStop } from '@/lib/edge-stop-registry'
 import { buildGridGroups, GRID_PAGE_SIZE } from '@/lib/grid-groups'
 import { SaveJpegButton } from '@/components/SaveJpegButton'
+import { FrameAgeBadge, useFrameAge } from '@/components/video/FrameAgeBadge'
 import { acceptStartedSession, endOnPageHide, endViewingSession } from '@/lib/viewing-session'
 
 /** ファイル名に使えない文字をアンダースコアに（日本語は保持）。 */
@@ -153,6 +154,9 @@ export function MonitorWorkspace({
   // enough consecutive misses to surface the retry overlay.
   const gridHealthy = gridErrStreak === 0
   const gridFailed  = gridErrStreak >= GRID_FAIL_THRESHOLD
+  // 合成画像の経過。開いた直後に前回の画像が出ているときに「約 ○ 秒前の映像」と出す
+  // (2026-11-04・シナリオ試験の所見)
+  const frameAgeMs = useFrameAge(edgeId && active ? `/api/edges/${edgeId}/grid` : null)
   const timer               = useRef<NodeJS.Timeout | null>(null)
   // Pending stop_grid timer — see grid effect below. Refs persist across
   // effect re-runs, so a fresh mount can cancel a stop scheduled by the
@@ -472,6 +476,9 @@ export function MonitorWorkspace({
               <SaveJpegButton endpoint={`/api/edges/${edgeId}/grid`} name={`grid_${safeName(storeName)}`} />
             </div>
           )}
+          {edgeId && active && gridHealthy && (
+            <FrameAgeBadge ageMs={frameAgeMs} className="absolute left-1.5 top-1.5 z-10" />
+          )}
           <StatusOverlay edgeId={edgeId} active={active} />
         </div>
 
@@ -552,6 +559,9 @@ export function MonitorWorkspace({
                   </div>
                 )}
               </>
+            )}
+            {edgeId && active && gridHealthy && (
+              <FrameAgeBadge ageMs={frameAgeMs} className="absolute left-1 top-1 z-10" />
             )}
             {active && gridFailed && <GridFailOverlay onRetry={refreshGridUrl} />}
             <StatusOverlay edgeId={edgeId} active={active} />

@@ -146,6 +146,7 @@ export async function AppShell({
       features={features}
       tenantName={ctx.tenantName}
       isSuper={ctx.isSuper}
+      role={ctx.role}
       feedbackEntry={feedbackEntry}
     >
       {/* Desktop 3-col layout with a collapsible detail panel (ShellBody) */}

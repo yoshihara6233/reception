@@ -43,6 +43,7 @@ function roleLabel(r: string, u: Msg['adminUsers']): string {
     case 'super_admin':   return u.roleSuperAdmin
     case 'tenant_admin':  return u.roleTenantAdmin
     case 'store_manager': return u.roleStoreManager
+    case 'baggage_manager': return u.roleBaggageManager
     case 'viewer':        return u.roleViewer
     default:              return r
   }

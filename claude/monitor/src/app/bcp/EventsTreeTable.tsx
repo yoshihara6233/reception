@@ -49,6 +49,8 @@ const STATUS_STYLE: Record<string, string> = {
   // F37: aggregated parent-row statuses
   in_progress:      'bg-orange-100 text-orange-700',
   partial:          'bg-amber-100 text-amber-700',
+  // 期限を過ぎたテスト発令 (2026-11-04・シナリオ試験の所見)
+  expired:          'bg-slate-100 text-slate-600',
 }
 
 function statusLabel(s: string, b: Msg['bcpDashboard']): string {
@@ -61,6 +63,7 @@ function statusLabel(s: string, b: Msg['bcpDashboard']): string {
     case 'failed':           return b.statusFailed
     case 'in_progress':      return b.statusInProgress
     case 'partial':          return b.statusPartial
+    case 'expired':          return b.statusExpired
     default:                 return s
   }
 }
@@ -197,6 +200,7 @@ export function EventsTreeTable({
     ...(tBcpRaw as Msg['bcpDashboard']),
     colStoreCount:    dStr(tBcpRaw.colStoreCount,    '対象拠点'),
     statusPartial:    dStr(tBcpRaw.statusPartial,    '一部完了'),
+    statusExpired:    dStr(tBcpRaw.statusExpired,    '終了'),
     expandAria:       dStr(tBcpRaw.expandAria,       '展開'),
     collapseAria:     dStr(tBcpRaw.collapseAria,     '折りたたみ'),
   }

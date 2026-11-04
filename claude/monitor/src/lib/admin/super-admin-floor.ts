@@ -52,7 +52,8 @@ export async function checkSuperAdminFloor(
       ok: false,
       error: 'last_super_admin',
       message:
-        'システム管理者（super_admin）が 0 人になるため実行できません。'
+        // 画面に出す文に内部名を書かない (2026-11-04・シナリオ試験の所見)
+        'システム管理者が 0 人になるため実行できません。'
         + '先に別のユーザーをシステム管理者にしてから、この操作をやり直してください。',
     }
   }

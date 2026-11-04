@@ -52,11 +52,18 @@ async function maybeFinalizeEvent(svc: Svc, eventId: string): Promise<void> {
       .eq('event_id', eventId).eq('upload_status', 'completed'),
   ])
   const anySuccess = (gridOk ?? 0) + (clipOk ?? 0) > 0
+  // 収集の途中で「PDF を作る」(/api/bcp/[id]/generate-report) を押すと、状態が
+  // report_generated へ進む。以前はここが pending・recording からしか進めなかったため、
+  // 収集が終わっても clips_uploaded にならず、途中の PDF が作り直されなかった
+  // (2026-11-04・シナリオ試験の所見)。1 枚でも取れていれば report_generated からも進め、
+  // 自動の PDF (bcp_report_sweep → /api/bcp-webhook) で全部のコマを入れて作り直す。
+  // bcp_clips の側のトリガ (bcp_check_clips_complete) は以前から report_generated を進めている。
+  // 全滅のときは途中の PDF を残す (failed にすると、作った PDF のある行を失敗と見せてしまう)。
   await svc
     .from('bcp_events')
     .update({ status: anySuccess ? 'clips_uploaded' : 'failed' })
     .eq('id', eventId)
-    .in('status', ['pending', 'recording'])
+    .in('status', anySuccess ? ['pending', 'recording', 'report_generated'] : ['pending', 'recording'])
 }
 
 export async function POST(req: NextRequest) {
@@ -79,14 +86,17 @@ export async function POST(req: NextRequest) {
     if (!(await recorderOwnedByEdge(svc, grid.recorder_id, edge.id))) {
       return NextResponse.json({ error: 'not owned by this edge' }, { status: 403 })
     }
-    await svc.from('bcp_grid_shots').update({
+    const { data: changed } = await svc.from('bcp_grid_shots').update({
       upload_status: ok ? 'completed' : 'failed',
       bytes:         bytes ?? null,
       dark_channels: dark_channels ?? [],
       error:         ok ? null : (errMsg ?? null),
       uploaded_at:   new Date().toISOString(),
-    }).eq('id', grid.id)
-    await maybeFinalizeEvent(svc, grid.event_id)
+    }).eq('id', grid.id).in('upload_status', ok ? ['pending', 'failed'] : ['pending']).select('id')
+    // **待ち (成功の報告なら失敗の後の取り直しも) をこの呼び出しで変えたときだけ完了を判定する** (2026-11-04)。
+    // report_generated からも進めるようにしたので、エッジの再送 (終わったショットの 2 度目の
+    // 完了) で判定すると、最終の PDF の後に状態が戻り、PDF と完了のメールが作り直される
+    if (changed && changed.length > 0) await maybeFinalizeEvent(svc, grid.event_id)
     return new NextResponse(null, { status: 204 })
   }
 

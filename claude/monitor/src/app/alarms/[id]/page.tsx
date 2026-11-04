@@ -19,6 +19,8 @@ import { PageHeader } from '@/components/admin/PageHeader'
 import { isVodVendor, type RecorderVendor } from '@/lib/types/db'
 import { ALARM_TIMELINE_OFFSETS_SEC, offsetLabel } from '@/lib/alarms/timeline'
 import { AlarmDetailActions } from './AlarmDetailActions'
+// 種別・源は内部名 (motion・onvif など) ではなく表示名で出す (2026-11-04・シナリオ試験の所見)
+import { alarmKindLabel, alarmSourceLabel } from '@/lib/alarms/event-label'
 
 const nameOf = (s: { name: string } | { name: string }[] | null | undefined) =>
   (Array.isArray(s) ? s[0]?.name : s?.name) ?? null
@@ -132,7 +134,7 @@ export default async function AlarmDetailPage({ params }: { params: Promise<{ id
             </div>
             <div className="py-3 md:px-4">
               <dt className="mb-0.5 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-gedink3">種別</dt>
-              <dd className="font-medium text-slate-800 dark:text-gedink">{ev.event_type || ev.source}</dd>
+              <dd className="font-medium text-slate-800 dark:text-gedink">{alarmKindLabel(ev.event_type as string | null, ev.source as string)}</dd>
             </div>
             <div className="py-3 md:px-4">
               <dt className="mb-0.5 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-gedink3">発報日時</dt>
@@ -140,7 +142,7 @@ export default async function AlarmDetailPage({ params }: { params: Promise<{ id
             </div>
             <div className="py-3 md:px-4">
               <dt className="mb-0.5 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-gedink3">源</dt>
-              <dd className="text-slate-700 dark:text-gedink2">{ev.source}</dd>
+              <dd className="text-slate-700 dark:text-gedink2">{alarmSourceLabel(ev.source as string)}</dd>
             </div>
           </dl>
           <div className="border-t border-slate-100 px-4 py-3 dark:border-gedline">

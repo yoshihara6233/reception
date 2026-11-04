@@ -9,6 +9,8 @@ import { useState, useMemo, useTransition } from 'react'
 import Link from 'next/link'
 import { Bell, Copy, Settings } from 'lucide-react'
 import { updateAlarmStatus } from './actions'
+// 種類は内部名 (motion など) ではなく表示名で出す (2026-11-04・シナリオ試験の所見)
+import { alarmKindLabel } from '@/lib/alarms/event-label'
 
 export interface AlarmEventVM {
   id: string
@@ -33,7 +35,9 @@ const STATUS = {
 /** 発報受け口（現地エッジのローカルHTTP）を直接叩く参考URL。<IP>/<カメラID>/<共有トークン> は置換して使用。 */
 const RECEIVER_URL = 'http://<BeelinkのLAN_IP>:9080/alarm?cam=<カメラID>&src=ipro&type=input&token=<共有トークン>'
 
-export function AlarmTimeline({ events }: { events: AlarmEventVM[] }) {
+// canEditSettings: 発報設定を保存できる役割か。閲覧者には「発報設定」の入口を出さない
+// (保存は RLS の can_manage_store で断られる・2026-11-04・シナリオ試験の所見)
+export function AlarmTimeline({ events, canEditSettings = true }: { events: AlarmEventVM[]; canEditSettings?: boolean }) {
   const [rows, setRows] = useState(events)
   const [store, setStore] = useState('')
   const [status, setStatus] = useState<'all' | 'new' | 'ack' | 'closed'>('all')
@@ -90,9 +94,11 @@ export function AlarmTimeline({ events }: { events: AlarmEventVM[] }) {
             className="inline-flex items-center gap-1 rounded border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 disabled:opacity-50 dark:border-gedline dark:text-gedink">
             <Copy size={13} strokeWidth={1.75} aria-hidden /> {copied ? 'コピーしました' : 'コピー'}
           </button>
-          <Link href="/alarms/settings" className="ml-auto inline-flex items-center gap-1 text-xs text-blue-600 hover:underline dark:text-gedaccent">
-            <Settings size={13} strokeWidth={1.75} aria-hidden /> 発報設定
-          </Link>
+          {canEditSettings && (
+            <Link href="/alarms/settings" className="ml-auto inline-flex items-center gap-1 text-xs text-blue-600 hover:underline dark:text-gedaccent">
+              <Settings size={13} strokeWidth={1.75} aria-hidden /> 発報設定
+            </Link>
+          )}
         </div>
         <p className="mt-2 text-[11px] text-slate-400 dark:text-gedink3">
           現地エッジ(Beelink)と同一LAN内のブラウザで上記URLを開くと発報を投入できます（<code className="font-mono">&lt;IP&gt;</code>・<code className="font-mono">&lt;カメラID&gt;</code>・<code className="font-mono">&lt;共有トークン&gt;</code> は実値に置換）。実運用ではカメラ/NVRの接点通知先も同じURLに向けます。共有トークンはエッジ .env の <code className="font-mono">ALARM_SHARED_TOKEN</code> の値です（未設定のエッジでは <code className="font-mono">&amp;token=</code> は不要）。
@@ -139,7 +145,7 @@ export function AlarmTimeline({ events }: { events: AlarmEventVM[] }) {
                 return (
                   <tr key={r.id} className="border-t border-slate-100 hover:bg-slate-50 dark:border-gedline dark:hover:bg-gedbg3/40">
                     <td className="px-3 py-2">
-                      <span className="rounded bg-slate-100 px-1.5 py-px text-[10px] font-bold text-slate-500 dark:bg-gedbg3 dark:text-gedink3">{r.eventType || r.source}</span>
+                      <span className="rounded bg-slate-100 px-1.5 py-px text-[10px] font-bold text-slate-500 dark:bg-gedbg3 dark:text-gedink3">{alarmKindLabel(r.eventType, r.source)}</span>
                     </td>
                     <td className="px-3 py-2 font-mono text-[11px] tabular-nums text-slate-600 dark:text-gedink2">{fmtJst(r.occurredAt)}</td>
                     <td className="px-3 py-2 font-medium text-slate-800 dark:text-gedink">{r.storeName}</td>

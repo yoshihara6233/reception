@@ -118,6 +118,8 @@ export default {
         'Cache-Control': 'no-store, no-cache, must-revalidate',
         'Pragma': 'no-cache',
       })
+      // 置かれた時刻。monitor の「約 ○ 秒前の映像」の印に使う (2026-11-04・シナリオ試験の所見)
+      if (obj.uploaded) headers.set('Last-Modified', obj.uploaded.toUTCString())
       if (method === 'HEAD') return new Response(null, { status: 200, headers })
       return new Response(obj.body, { status: 200, headers })
     } catch {
