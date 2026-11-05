@@ -37,6 +37,16 @@ describe('filterNavForRole', () => {
   })
 })
 
+describe('CSV 一括投入 (2026-11-05)', () => {
+  it('拠点管理者には出さない・テナント管理者以上には出す (受け口の requireTenantAdminOrSuper と同じ)', () => {
+    const nav = [{ href: '/admin/import' }]
+    expect(filterNavForRole(nav, 'store_manager')).toEqual([])
+    expect(filterNavForRole(nav, 'viewer')).toEqual([])
+    expect(filterNavForRole(nav, 'tenant_admin')).toEqual(nav)
+    expect(filterNavForRole(nav, 'super_admin')).toEqual(nav)
+  })
+})
+
 describe('canOpenModule', () => {
   it('手荷物検査店長は /baggage だけ', () => {
     expect(canOpenModule('/baggage', 'baggage_manager')).toBe(true)

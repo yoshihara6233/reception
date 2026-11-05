@@ -6,6 +6,7 @@
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { headers } from 'next/headers'
 import { logSecurityEvent, requestIp } from '@/lib/security/events'
+import { TENANT_ADMIN_ROLES } from '@/lib/auth/role-menu'
 
 const ADMIN_ROLES = ['super_admin', 'tenant_admin', 'store_manager'] as const
 
@@ -71,6 +72,17 @@ export function requireBaggageRole() {
  */
 export function requireSuperAdmin() {
   return requireRole(['super_admin'])
+}
+
+/**
+ * テナント全体を扱う役割（super_admin / tenant_admin）。拠点管理者 (store_manager) は 403。
+ *
+ * CSV 一括投入 (/api/admin/import/*) に使う (2026-11-05)。以前は requireAdmin で、画面の
+ * 「CSV 一括投入」のボタン (role-menu.ts の isTenantAdminOrSuper) を隠しただけだったため、
+ * 拠点管理者が受け口を直接呼ぶと通っていた。画面の入口の条件 (TENANT_ADMIN_ROLES) と同じにする。
+ */
+export function requireTenantAdminOrSuper() {
+  return requireRole(TENANT_ADMIN_ROLES)
 }
 
 /**

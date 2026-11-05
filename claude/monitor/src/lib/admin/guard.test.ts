@@ -42,7 +42,7 @@ vi.mock('@/lib/supabase/server', () => ({
   }),
 }))
 
-import { requireAdmin, requireSuperAdmin } from './guard'
+import { requireAdmin, requireSuperAdmin, requireTenantAdminOrSuper } from './guard'
 
 beforeEach(() => {
   h.user = null
@@ -116,5 +116,27 @@ describe('requireRole — 拒否したときに DB クライアントを渡さ�
       if (g.ok) void g.supa.from('admin_users')
     }
     expect(neverCalled).toBeTypeOf('function')
+  })
+})
+
+// CSV 一括投入に使う (2026-11-05)。画面の入口 (role-menu.ts の isTenantAdminOrSuper) と同じ条件
+describe('requireTenantAdminOrSuper', () => {
+  it('★拠点管理者・閲覧者・手荷物検査店長は 403 で、supa を持たない', async () => {
+    h.user = { id: 'u1' }
+    for (const role of ['store_manager', 'viewer', 'baggage_manager']) {
+      h.profile = { id: 'a1', role, tenant_id: 't1', store_ids: [] }
+      const g = await requireTenantAdminOrSuper()
+      expect(g).not.toHaveProperty('supa')
+      expect(g).toMatchObject({ ok: false, status: 403 })
+    }
+  })
+
+  it('テナント管理者・全体管理者は通る', async () => {
+    h.user = { id: 'u1' }
+    for (const role of ['tenant_admin', 'super_admin']) {
+      h.profile = { id: 'a1', role, tenant_id: 't1', store_ids: [] }
+      const g = await requireTenantAdminOrSuper()
+      expect(g.ok).toBe(true)
+    }
   })
 })

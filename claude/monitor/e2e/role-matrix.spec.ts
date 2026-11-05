@@ -122,6 +122,9 @@ test.describe('A1 店長（store_manager）', () => {
     await expectDenied(page, '/admin/edges')
     await expectDenied(page, '/admin/ops-users')
   })
+  test('CSV 一括投入には入れない (テナント管理者以上・2026-11-05)', async ({ page }) => {
+    await expectDenied(page, '/admin/import')
+  })
 })
 
 // ── 閲覧者（viewer）─────────────────────────────────────────────────────
@@ -185,6 +188,14 @@ test.describe('A2 検査店長（baggage_manager）', () => {
     // 転送すると、SW が install で /baggage の画面 (認証済みの HTML) を控えてしまう (ASVS 14.3.1)
     const res = await page.request.get('/offline', { maxRedirects: 0 })
     expect(res.status(), '/offline がリダイレクトされています').toBe(200)
+  })
+
+  test('多要素認証の設定を開ける・ヘッダーに入口がある (2026-11-05)', async ({ page }) => {
+    // 以前は /account/security が許可パスに無く /baggage へ戻され、入口も隠していた
+    await page.goto('/baggage')
+    await expect(page.locator('header a[href="/account/security"]')).toHaveCount(1)
+    await page.goto('/account/security')
+    await expect(page).toHaveURL(/\/account\/security/)
   })
 
   test.describe('それ以外は middleware が /baggage へ差し戻す', () => {

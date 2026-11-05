@@ -43,9 +43,10 @@ const NAV_RULES: Record<string, (role: string | null | undefined) => boolean> = 
   '/admin/fleet':    canManage,
   '/admin/bcp':      canManage,
   '/admin/audit':    canManage,
-  '/admin/import':   canManage,
   // テナント管理者以上の画面
   '/admin/baggage':  isTenantAdminOrSuper,
+  // CSV 一括投入。受け口 (/api/admin/import/*) と画面は requireTenantAdminOrSuper (2026-11-05)
+  '/admin/import':   isTenantAdminOrSuper,
   // 各機能の設定。保存は RLS の can_manage_store・テスト発令は TRIGGER_ROLES で断られる
   '/security/settings': canManage,
   '/alarms/settings':   canManage,
