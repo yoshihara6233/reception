@@ -486,3 +486,55 @@ describe('管理者の多要素認証の登録', () => {
     }
   })
 })
+
+/**
+ * 多要素認証の設定は全ての役割が開ける (2026-11-05)。手荷物検査店長だけ /account/security が
+ * 許可パスに無く、/baggage へ戻されて登録できなかった。
+ */
+describe('自分のアカウントの画面 (多要素認証など) は全ての役割が開ける', () => {
+  const ACCOUNT = ['/account/security', '/account/sessions', '/account/sites', '/api/account/mfa', '/api/account/mfa/verify']
+
+  it.each(['store_manager', 'viewer', 'baggage_manager'])('%s: 多要素の設定・端末・拠点の許可の画面と受け口を通す', async (role) => {
+    for (const path of ACCOUNT) {
+      asRole(role)
+      const res = await middleware(req(path))
+      expect(res.status, `${role} ${path}`).toBe(200)
+      expect(res.headers.get('location'), `${role} ${path}`).toBeNull()
+    }
+  })
+
+  it.each(['super_admin', 'tenant_admin'])('%s (登録済み): 同じく通す', async (role) => {
+    for (const path of ACCOUNT) {
+      asEnrolledAdmin(role)
+      expect((await middleware(req(path))).status, `${role} ${path}`).toBe(200)
+    }
+  })
+
+  it('★手荷物検査店長でも、似た経路と他の画面は今までどおり止める', async () => {
+    for (const path of ['/account/securityx', '/account', '/account/other']) {
+      asRole('baggage_manager')
+      const loc = new URL((await middleware(req(path))).headers.get('location')!)
+      expect(loc.pathname, path).toBe('/baggage')
+    }
+    asRole('baggage_manager')
+    expect((await middleware(req('/api/account/mfa-x'))).status).toBe(403)
+  })
+
+  it('★手荷物検査店長でも、番号の確認が済んでいなければ先に /login/mfa へ (判定を飛ばさない)', async () => {
+    asRole('baggage_manager')
+    state.user = { id: 'u-1', factors: [{ status: 'verified' }] }   // 登録済み・トークンは aal1
+    const res = await middleware(req('/account/security'))
+    expect(new URL(res.headers.get('location')!).pathname).toBe('/login/mfa')
+  })
+
+  it('★手荷物検査店長でも、テナントが停止していれば /suspended へ', async () => {
+    asRole('baggage_manager')
+    state.suspended = true
+    try {
+      const res = await middleware(req('/account/security'))
+      expect(new URL(res.headers.get('location')!).pathname).toBe('/suspended')
+    } finally {
+      state.suspended = false
+    }
+  })
+})

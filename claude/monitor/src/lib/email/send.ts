@@ -12,6 +12,7 @@
  */
 
 import { PRODUCT_NAME } from '@/lib/brand'
+import { bcpAlertTypeLabel } from '@/lib/bcp/labels'
 
 const RESEND_API_URL = 'https://api.resend.com/emails'
 const FROM_ADDRESS   = 'bcp@genesis-edge.com'
@@ -158,7 +159,10 @@ export interface BcpAlertStartedParams {
 export function bcpAlertStartedEmail(
   params: BcpAlertStartedParams,
 ): { subject: string; html: string } {
-  const { storeName, alertType, alertTime, eventUrl, isTest } = params
+  const { storeName, alertTime, eventUrl, isTest } = params
+  // 種別は内部名 (earthquake など) で渡ってくるので、画面・PDF と同じ表示名にする (2026-11-05)。
+  // 件名の先頭「[BCP…] Jアラート発令 - 」は受け手の振り分けに使われるので変えない。
+  const alertType = bcpAlertTypeLabel(params.alertType)
   const testLabel = isTest ? ' TEST' : ''
 
   const subject = `[BCP${testLabel}] Jアラート発令 - ${storeName} (${alertType})`
@@ -226,7 +230,9 @@ export interface BcpCompletedParams {
 export function bcpCompletedEmail(
   params: BcpCompletedParams,
 ): { subject: string; html: string } {
-  const { storeName, alertType, alertTime, eventUrl, isTest, clipCount } = params
+  const { storeName, alertTime, eventUrl, isTest, clipCount } = params
+  // 本文の「アラート種別」も内部名ではなく表示名にする (2026-11-05)
+  const alertType = bcpAlertTypeLabel(params.alertType)
   const testLabel = isTest ? ' TEST' : ''
 
   const subject = `[BCP完了${testLabel}] 録画・報告書 - ${storeName}`
@@ -295,7 +301,9 @@ export interface BcpFailedParams {
 export function bcpFailedEmail(
   params: BcpFailedParams,
 ): { subject: string; html: string } {
-  const { storeName, alertType, alertTime, isTest } = params
+  const { storeName, alertTime, isTest } = params
+  // 本文の「アラート種別」も内部名ではなく表示名にする (2026-11-05)
+  const alertType = bcpAlertTypeLabel(params.alertType)
   const testLabel = isTest ? ' TEST' : ''
 
   const subject = `[BCP失敗${testLabel}] 録画失敗 - ${storeName}`
