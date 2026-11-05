@@ -26,14 +26,20 @@ const EV = '7e900000-0000-0000-0000-0000000000e1'
 let c: PoolClient
 let sp = 0
 
-/** 利用者 U (テナント T の管理者) として 1 文を流す。通れば残し (変わらないことを後で確かめる)、断られたら取り消す。 */
-async function asUser(sql: string, params: unknown[] = []): Promise<void> {
+/**
+ * 利用者 U (テナント T の管理者) として 1 文を流す。通れば残し (変わらないことを後で確かめる)、断られたら取り消す。
+ *
+ * claimsOnly: JWT の印 (auth.role() = 'authenticated') だけを付け、DB のロールは変えない (RLS を通さない)。
+ * employees には利用者の接続で書ける許可のポリシーが無い (以前の employee_isolation は JWT に無い
+ * raw_app_meta_data を見ていて常に偽だった・20261105090000_tenants_rls_fix.sql で消した)。
+ * 見たいのは RLS ではなくトリガー (auth.role() で利用者の接続を見分ける) なので、こちらで流す。
+ */
+async function asUser(sql: string, params: unknown[] = [], opts: { claimsOnly?: boolean } = {}): Promise<void> {
   const name = `sp${++sp}`
   await c.query(`savepoint ${name}`)
   try {
-    // employees の許可のポリシー (employee_isolation) は JWT の raw_app_meta_data.tenant_id を見る
-    await c.query(`select set_config('request.jwt.claims', $1, true)`, [JSON.stringify({ sub: U, role: 'authenticated', aal: 'aal2', raw_app_meta_data: { tenant_id: T } })])
-    await c.query('set local role authenticated')
+    await c.query(`select set_config('request.jwt.claims', $1, true)`, [JSON.stringify({ sub: U, role: 'authenticated', aal: 'aal2' })])
+    if (!opts.claimsOnly) await c.query('set local role authenticated')
     await c.query(sql, params)
     await c.query('reset role')
     await c.query(`release savepoint ${name}`)
@@ -91,9 +97,9 @@ describe('従業員の保持期間の時刻', () => {
     const before = await one(`select deactivated_at, face_last_matched_at from public.employees where id = $1`, [E2])
     await asUser(
       `update public.employees set name = '乙2', deactivated_at = now() - interval '5 years', face_last_matched_at = now() + interval '5 years' where id = $1`,
-      [E2])
+      [E2], { claimsOnly: true })
     const after = await one(`select name, deactivated_at, face_last_matched_at from public.employees where id = $1`, [E2])
-    expect(after.name).toBe('乙2') // 更新そのものは通った (RLS で断られて素通りしたのではない)
+    expect(after.name).toBe('乙2') // 更新そのものは通った (断られて素通りしたのではない)
     expect({ deactivated_at: after.deactivated_at, face_last_matched_at: after.face_last_matched_at }).toEqual(before)
   })
 })

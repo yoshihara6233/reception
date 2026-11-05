@@ -49,8 +49,8 @@ export default async function EditUserPage(
   if (target.tenant_id) storesQuery = storesQuery.eq('tenant_id', target.tenant_id)
   // テナントの選択肢はサービスの接続で読む (2026-11-04・シナリオ試験の所見)。
   // tenants の RLS (tenant_isolation) は JWT の raw_app_meta_data を見ていて、利用者の
-  // 接続では 1 行も返らない。選択肢が空になり、保存されている値があっても「指定なし」と
-  // 表示されていた。他の管理画面 (limits・feedback・ops-audit) と同じく service で読み、
+  // 接続では 1 行も返らなかった。選択肢が空になり、保存されている値があっても「指定なし」と
+  // 表示されていた (RLS は 20261105090000_tenants_rls_fix.sql で直した・読み方はこのまま)。他の管理画面 (limits・feedback・ops-audit) と同じく service で読み、
   // 範囲はここで絞る: 全体管理者は全テナント・テナント管理者は自テナントだけ。
   let tenantsQuery = createSupabaseService().from('tenants').select('id, name').order('name')
   if (me.role === 'tenant_admin') tenantsQuery = tenantsQuery.eq('id', me.tenant_id)
