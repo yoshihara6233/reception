@@ -43,6 +43,7 @@ const RULES: [Guard, RegExp][] = [
   ['redirect',     /^import \{ redirect \}[\s\S]*export default function \w+\(\) \{\s*redirect\(/m],
   ['super-admin',  /requireSuperAdmin\(\)/],
   ['super-admin',  /role !== 'super_admin'\)\s*(\{[\s\S]{0,80})?notFound\(\)/],
+  ['tenant-admin', /requireTenantAdminOrSuper\(\)/],
   ['admin',        /requireAdmin\(\)/],
   ['tenant-admin', /role !== 'super_admin' && \w*\.?role !== 'tenant_admin'/],
   ['tenant-admin', /!\['super_admin', 'tenant_admin'\]\.includes\(/],
@@ -63,7 +64,7 @@ const EXPECTED: Record<string, Guard> = {
   '/admin/edges/[id]':            'super-admin',
   '/admin/edges/new':             'super-admin',
   '/admin/feedback':              'super-admin',  // 要望ボード（全テナント横断）
-  '/admin/import':                'admin',
+  '/admin/import':                'tenant-admin', // 2026-11-05 に拠点管理者を外した
   '/admin/limits':                'admin',        // 本文でさらに super_admin に絞る
   '/admin/nvmsd-releases':        'super-admin',
   '/admin/nvr-models':            'super-admin',

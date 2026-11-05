@@ -20,7 +20,7 @@
  * Returns per-row results so the UI can flag errors.
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAdmin } from '@/lib/admin/guard'
+import { requireTenantAdminOrSuper } from '@/lib/admin/guard'
 import { resolveAdminContext } from '@/lib/tenant/acting'
 import { parseCsv, CSV_MAX_ROWS, csvTooManyRows } from '@/lib/admin/csv'
 import { heavyAllows, tooManyRequests } from '@/lib/limits/heavy'
@@ -51,7 +51,9 @@ function csvBool(v: string | undefined): boolean | undefined {
 }
 
 export async function POST(req: NextRequest) {
-  const guard = await requireAdmin()
+  // テナント管理者以上だけ (2026-11-05)。拠点管理者は画面のボタンを出していない
+  // (role-menu.ts の isTenantAdminOrSuper) ので、受け口も同じ条件で 403 にする。
+  const guard = await requireTenantAdminOrSuper()
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status })
   // オプション ON/OFF を扱えるのは super_admin / tenant_admin のみ。
   const canManageOptions = ['super_admin', 'tenant_admin'].includes(guard.profile.role)

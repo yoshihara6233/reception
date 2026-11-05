@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { AdminShell } from '@/components/AdminShell'
 import { AdminDenied } from '@/components/admin/AdminDenied'
 import { PageHeader } from '@/components/admin/PageHeader'
-import { requireAdmin } from '@/lib/admin/guard'
+import { requireTenantAdminOrSuper } from '@/lib/admin/guard'
 import { ImportForm } from './import-form'
 import { getT } from '@/lib/i18n/server'
 
@@ -11,7 +11,8 @@ export default async function ImportPage() {
   // requireAdmin で塞いであったが、**画面には何のロール判定も無かった**ため、
   // 閲覧者(viewer)が投入フォームまで到達できていた（送信すれば 403）。
   // 押した結果で断るのではなく、入口で断る。/admin/users・/admin/limits と同じ形。
-  const guard = await requireAdmin()
+  // 2026-11-05: 受け口と同じくテナント管理者以上に絞った (拠点管理者は断る)。
+  const guard = await requireTenantAdminOrSuper()
   if (!guard.ok) {
     if (guard.status === 401) redirect('/login')
     return <AdminDenied pathname="/admin/import" />

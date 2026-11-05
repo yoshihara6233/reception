@@ -100,8 +100,8 @@ export function AppHeader({
   // 手荷物検査店長には /baggage 以外のタブを出さない (2026-11-04・シナリオ試験の所見)。
   // 以前は MONITOR などを押すと middleware に /baggage へ戻されていた。
   const TABS = ALL_TABS.filter((tab) => canOpenModule(tab.href, role))
-  // 設定 (/admin) と多要素の設定 (/account/security) も、手荷物検査店長は middleware が
-  // /baggage へ戻すので出さない (2026-11-04・シナリオ試験の所見)。
+  // 設定 (/admin) も、手荷物検査店長は middleware が /baggage へ戻すので出さない (2026-11-04)。
+  // 多要素の設定 (/account/security) は 2026-11-05 に手荷物検査店長にも開いたので、全ての役割に出す。
   const baggageOnly = isBaggageOnly(role)
 
   // F24: settings tab is now an icon — active highlight when the user is
@@ -218,15 +218,15 @@ export function AppHeader({
             </svg>
           </Link>
         )}
-        {/* 多要素認証の設定（2026-10-28・利用者が自分で登録・解除する） */}
-        {!baggageOnly && <Link
+        {/* 多要素認証の設定（2026-10-28・利用者が自分で登録・解除する）。全ての役割に出す */}
+        <Link
           href="/account/security"
           aria-label={t.nav.mfa}
           title={t.nav.mfa}
           className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
         >
           <ShieldCheck size={18} strokeWidth={1.5} aria-hidden />
-        </Link>}
+        </Link>
         {/* F25: userName + avatar は StatusBar に移行 */}
         {/* F24: logout — rightmost */}
         <LogoutButton />

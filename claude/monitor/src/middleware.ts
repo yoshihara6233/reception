@@ -78,6 +78,25 @@ const ALLOW_PREFIXES = [
   '/offline',
 ]
 
+/**
+ * 手荷物検査店長にも開く、自分のアカウントの画面とその受け口 (2026-11-05)。
+ *
+ * 多要素認証の設定 (/account/security) が上の許可パスに無く、手荷物検査店長だけ /baggage へ
+ * 戻されて登録も解除もできなかった。そこから行けるサインイン中の端末・拠点へのサインインの許可も同じ。
+ * 自分のアカウントのことだけで、監視の機能 (ライブ視聴など) には触れない。
+ *
+ * ALLOW_PREFIXES に入れると**ロールの参照ごと飛ばす** (多要素の番号の確認・仮のパスワード・
+ * テナントの停止の判定も効かなくなる) ので、別の表にして、それらの判定の**後**で通す。
+ */
+const BAGGAGE_ACCOUNT_PATHS = [
+  '/account/security', '/account/sessions', '/account/sites',
+  '/api/account/mfa',
+]
+
+function isBaggageAccountPath(path: string): boolean {
+  return BAGGAGE_ACCOUNT_PATHS.some((p) => path === p || path.startsWith(`${p}/`))
+}
+
 function isAllowed(path: string): boolean {
   return ALLOW_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`))
 }
@@ -197,6 +216,8 @@ async function route(req: NextRequest, next: () => NextResponse): Promise<NextRe
   if (verdict.passwordChangePending) return passwordChangeBlock(req, path)
   if (verdict.mfaEnrollRequired && !isMfaEnrollmentPath(path)) return mfaEnrollBlock(req, path)
   if (!verdict.isBaggageManager) return res  // 通常ロールは制限しない。
+  // 手荷物検査店長でも、自分のアカウントの画面 (多要素認証など) は開ける (2026-11-05)
+  if (isBaggageAccountPath(path)) return res
 
   // 手荷物検査店長が非許可パスに来た → API は 403、ページは /baggage へ。
   logSecurityEvent({ kind: 'auth.boundary', ip: requestIp(req.headers), path, detail: { role: 'baggage_manager' } })

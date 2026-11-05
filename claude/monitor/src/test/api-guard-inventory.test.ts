@@ -23,6 +23,7 @@ import { describe, expect, it } from 'vitest'
 type Guard =
   | 'super-admin'     // ②運営管理。requireSuperAdmin()
   | 'admin'           // ①管理。requireAdmin() = super_admin/tenant_admin/store_manager
+  | 'tenant-admin-or-super' // テナント管理者以上。requireTenantAdminOrSuper()（CSV 一括投入）
   | 'tenant-admin'    // テナント管理者だけ。requireTenantAdmin()（要望の送信。super_admin も入れない）
   | 'baggage-role'    // + baggage_manager。requireBaggageRole()
   | 'baggage-store'   // 手荷物検査の店舗スコープ。requireBaggageAccess()
@@ -39,6 +40,7 @@ type Guard =
 /** 上から順に当てる。1 ファイルに複数ハンドラがあるときは最も強いガードを採る。 */
 const RULES: [Guard, RegExp][] = [
   ['super-admin',    /requireSuperAdmin\s*\(/],
+  ['tenant-admin-or-super', /requireTenantAdminOrSuper\s*\(/],
   ['admin',          /requireAdmin\s*\(/],
   ['tenant-admin',   /requireTenantAdmin\s*\(/],
   ['baggage-role',   /requireBaggageRole\s*\(/],
@@ -124,8 +126,8 @@ const EXPECTED: Record<string, Guard> = {
   '/api/admin/feedback/import': 'super-admin',
   // 要望に添えた画像を見る（期限つきの URL へ 302）。要望ボードと同じく運営だけ。
   '/api/admin/feedback/items/[id]/attachment': 'super-admin',
-  '/api/admin/import/cameras': 'admin',
-  '/api/admin/import/stores': 'admin',
+  '/api/admin/import/cameras': 'tenant-admin-or-super', // 2026-11-05 に拠点管理者を外した
+  '/api/admin/import/stores': 'tenant-admin-or-super',
   '/api/admin/recorders/[id]/cameras': 'admin',
   '/api/admin/recorders/[id]/conn-test': 'admin',
   '/api/admin/recorders/[id]/discover': 'admin',
