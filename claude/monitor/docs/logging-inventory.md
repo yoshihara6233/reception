@@ -69,6 +69,7 @@
 - **書くのは**: サーバの接続だけ（`src/lib/admin/audit.ts`・利用者の INSERT の決まりは 20261029120000 で外した）。**記録の失敗で本処理は止めません**（`[audit]` の warn だけ）。
 - **見られる人**: RLS `admin_audit_log_select`（super_admin は全件・`tenant_admin` は自テナントの店舗・`store_manager` は自店舗。`store_id` が空の行は super_admin だけ）。画面は `/admin/audit/changes`・`/admin/ops-audit`。**運営の操作はテナントの画面に出しません**（`/admin/ops-audit` に出す）。
 - **保持**: 5 年。`/api/cron/data-retention`（`src/lib/retention/data-retention.ts`）。
+- **外部保全**: 毎日、前の日の分を専用の R2 バケット（Bucket lock 5 年）へ書き出します（`/api/cron/audit-archive`・[audit-archive.md](audit-archive.md)）。視聴の記録（§2.4）の 3 表も同じです。
 
 ### 2.4 視聴の記録（L4・L5・L6）
 
