@@ -15,7 +15,19 @@ export interface FleetRow {
   licenseSite: string | null
   // 未適用のとき、拠点が報告した拒否理由（health.license.last_rejected.reason）
   licenseRejectReason: string | null
+  // OS の既知の脆弱性（GVMS_CLOUD_SPEC §13）。none = 要らない・申告なし
+  osState: 'none' | 'urgent' | 'routine' | 'reboot'
+  osUrgent: number; osRoutine: number
+  // サーバごとの残り（「node201: 緊急 GVMS-SA-2026-001 CVE-… kernel」）
+  osLines: string[]
   attention: boolean
+}
+
+const OS_STATE: Record<FleetRow['osState'], { label: string; cls: string }> = {
+  none:    { label: '—', cls: 'text-slate-400' },
+  urgent:  { label: '緊急', cls: 'font-semibold text-red-700' },
+  routine: { label: '定期保守', cls: 'font-semibold text-amber-700' },
+  reboot:  { label: '再起動で直る', cls: 'text-amber-700' },
 }
 
 const SITE_LICENSE: Record<string, { label: string; bad: boolean }> = {
@@ -37,20 +49,24 @@ function ago(iso: string | null): string {
 
 export function FleetClient({ rows, canOpenEdge = false }: { rows: FleetRow[]; canOpenEdge?: boolean }) {
   const [attentionOnly, setAttentionOnly] = useState(false)
+  const [osOnly, setOsOnly] = useState(false)
   const attentionCount = rows.filter((r) => r.attention).length
+  const osCount = rows.filter((r) => r.osState !== 'none').length
+  const osUrgentCount = rows.filter((r) => r.osUrgent > 0).length
   const camerasTotal = rows.reduce((n, r) => n + r.camerasTotal, 0)
   const camerasOffline = rows.reduce((n, r) => n + r.camerasOffline, 0)
   const errorsTotal = rows.reduce((n, r) => n + (r.healthStale ? 0 : r.errors24h), 0)
-  const shown = attentionOnly ? rows.filter((r) => r.attention) : rows
+  const shown = rows.filter((r) => (!attentionOnly || r.attention) && (!osOnly || r.osState !== 'none'))
 
   return (
     <div className="space-y-5">
       {/* KPI */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         <Tile lab="監視拠点" big={rows.length} sub="nvms アップリンク" />
         <Tile lab="要対応" big={attentionCount} sub="沈黙・エラー・未反映・版/期限" warn={attentionCount > 0} />
         <Tile lab="カメラ" big={camerasTotal} sub={`オフライン ${camerasOffline}`} warn={camerasOffline > 0} />
         <Tile lab="エラー 24h" big={errorsTotal} sub="全拠点合計（報告新鮮ぶん）" warn={errorsTotal > 0} />
+        <Tile lab="OS 要更新" big={osCount} sub={`うち緊急 ${osUrgentCount.toLocaleString()} 拠点`} warn={osCount > 0} />
       </div>
 
       <section className="rounded-lg border border-slate-200 bg-white text-sm">
@@ -58,13 +74,17 @@ export function FleetClient({ rows, canOpenEdge = false }: { rows: FleetRow[]; c
           <h2 className="font-bold text-slate-900">拠点一覧</h2>
           <span className="text-[11px] text-slate-400">要対応を上に表示</span>
           <label className="ml-auto flex items-center gap-1.5 text-xs text-slate-600">
+            <input type="checkbox" checked={osOnly} onChange={(e) => setOsOnly(e.target.checked)} />
+            OS 要更新のみ
+          </label>
+          <label className="flex items-center gap-1.5 text-xs text-slate-600">
             <input type="checkbox" checked={attentionOnly} onChange={(e) => setAttentionOnly(e.target.checked)} />
             要対応のみ
           </label>
         </div>
         {shown.length === 0 ? (
           <p className="px-5 py-6 text-center text-xs text-slate-400">
-            {rows.length === 0 ? 'nvms アップリンクの拠点がまだありません。' : '要対応の拠点はありません。'}
+            {rows.length === 0 ? 'nvms アップリンクの拠点がまだありません。' : osOnly ? 'OS の更新が要る拠点はありません。' : '要対応の拠点はありません。'}
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -78,6 +98,7 @@ export function FleetClient({ rows, canOpenEdge = false }: { rows: FleetRow[]; c
                 <th className="px-3 py-2 text-left">設定</th>
                 <th className="px-3 py-2 text-left">版</th>
                 <th className="px-3 py-2 text-left">ライセンス</th>
+                <th className="px-3 py-2 text-left">OS</th>
                 <th className="px-3 py-2"></th>
               </tr>
             </thead>
@@ -139,6 +160,18 @@ export function FleetClient({ rows, canOpenEdge = false }: { rows: FleetRow[]; c
                       <div className="text-[10px] text-slate-500">{r.licenseRejectReason}</div>
                     )}
                   </td>
+                  <td className="px-3 py-2.5">
+                    <span className={OS_STATE[r.osState].cls}>{OS_STATE[r.osState].label}</span>
+                    {r.osState !== 'none' && (
+                      <div className="font-mono text-[10px] tabular-nums text-slate-500">
+                        緊急 {r.osUrgent.toLocaleString()} 件・定期保守 {r.osRoutine.toLocaleString()} 件
+                      </div>
+                    )}
+                    {r.osLines.slice(0, 4).map((l, i) => (
+                      <div key={i} className="max-w-[260px] break-words font-mono text-[10px] text-slate-500">{l}</div>
+                    ))}
+                    {r.osLines.length > 4 && <div className="text-[10px] text-slate-400">ほか {(r.osLines.length - 4).toLocaleString()} 件</div>}
+                  </td>
                   <td className="px-3 py-2.5 text-right">
                     {r.attention && <span className="rounded bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">要対応</span>}
                   </td>
@@ -150,7 +183,8 @@ export function FleetClient({ rows, canOpenEdge = false }: { rows: FleetRow[]; c
         )}
       </section>
       <p className="text-[11px] text-slate-400">
-        要対応＝沈黙（15分報告なし）／カメラオフライン／エラー24h &gt;0／設定 反映待ち／版 不一致／ライセンス期限切れ のいずれか。
+        要対応＝沈黙（15分報告なし）／カメラオフライン／エラー24h &gt;0／設定 反映待ち／版 不一致／ライセンス期限切れ／OS 要更新 のいずれか。
+        OS 要更新＝拠点の照合で緊急か定期保守の脆弱性が残っている（G・VMS 0.1.221 以降が申告。直すのは担当の販売パートナーで、手順はセキュリティのお知らせにあります）。
         「報告待ち」は死活報告（5分毎）が15分以上途絶＝エッジか G・VMS の沈黙で、「異常0」ではありません。
       </p>
     </div>
