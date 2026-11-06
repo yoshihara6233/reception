@@ -16,6 +16,7 @@ import { createSupabaseService } from '@/lib/supabase/server'
 import { authenticateEdge } from '@/lib/edge/device-auth'
 import { sanitizeCapabilities, sanitizeSpecVersion } from '@/lib/edge/capabilities'
 import { syncGvmsOidcClient } from '@/lib/edge/gvms-oidc'
+import { sanitizeOsVuln } from '@/lib/edge/os-vuln'
 import { dbErrorCode } from '@/lib/api/db-error'
 
 export const dynamic = 'force-dynamic'
@@ -40,6 +41,8 @@ const Body = z.object({
   video: z.unknown().optional(),
   // ログインの一本化の戻り先（§9）。`oidc` を名乗る拠点だけが送る。型は縛らず sanitize で読む
   oidc_redirect_uris: z.unknown().optional(),
+  // OS の既知の脆弱性の照合の結果（§13）。`os_vuln` を名乗る拠点だけが送る。型は縛らず sanitize で読む
+  os_vuln: z.unknown().optional(),
 })
 
 const VideoStats = z.object({
@@ -75,11 +78,24 @@ export async function POST(req: NextRequest) {
     video_reported_at: payload.last_seen_at,
   }
 
+  // OS の既知の脆弱性（§13）。名乗りが無い・読めなければ空に戻す（版を戻した拠点に古い申告を出さない）
+  const osv = sanitizeOsVuln(parsed.data.os_vuln)
+  const osVuln: Record<string, unknown> = {
+    os_vuln: osv,
+    os_vuln_urgent: osv?.urgent ?? 0,
+    os_vuln_routine: osv?.routine ?? 0,
+    os_vuln_reported_at: osv ? payload.last_seen_at : null,
+  }
+
   const svc = createSupabaseService()
-  let { error } = await svc.from('edge_devices').update({ ...payload, ...announce }).eq('id', edge.id)
-  // **名乗りの列が無い（migration の前にデプロイされた）ときも死活は落とさない。**
+  let { error } = await svc.from('edge_devices').update({ ...payload, ...announce, ...osVuln }).eq('id', edge.id)
+  // **列が無い（migration の前にデプロイされた）ときも死活は落とさない。**
   // 本番の migration は手で当てるので、順番を間違えると全拠点が「停止」に見える。
-  // 列が無いと PostgREST は PGRST204 を返す — そのときだけ従来の列で書き直す。
+  // 列が無いと PostgREST は PGRST204 を返す。OS の脆弱性の列が無いだけなら名乗りは残して書き直し、
+  // それでも無ければ従来の列だけで書き直す。
+  if (error?.code === 'PGRST204' && /os_vuln/.test(error.message ?? '')) {
+    ;({ error } = await svc.from('edge_devices').update({ ...payload, ...announce }).eq('id', edge.id))
+  }
   if (error?.code === 'PGRST204') {
     ;({ error } = await svc.from('edge_devices').update(payload).eq('id', edge.id))
   }
