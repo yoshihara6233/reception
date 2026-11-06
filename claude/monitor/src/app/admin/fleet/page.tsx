@@ -8,6 +8,7 @@ import { createSupabaseService } from '@/lib/supabase/server'
 import { resolveAdminContext } from '@/lib/tenant/acting'
 import { getT } from '@/lib/i18n/server'
 import { FleetClient, type FleetRow } from './fleet-client'
+import { osVulnState, type OsVulnStatus } from '@/lib/edge/os-vuln'
 
 /**
  * 多拠点 統合ダッシュボード（HYBRID_PHASE1_OVERVIEW §5・B1）。
@@ -18,6 +19,13 @@ import { FleetClient, type FleetRow } from './fleet-client'
 export const dynamic = 'force-dynamic'
 
 const STALE_MS = 15 * 60_000
+
+/** 一覧で読む edge_devices の列（os_vuln は §13 の migration の後だけ） */
+interface EdgeRow {
+  id: string; name: string | null; store_id: string; status: string; last_seen_at: string | null
+  agent_version: string | null; desired_agent_version: string | null; ota_mode: string | null
+  applied_config_version: number | null; os_vuln?: unknown
+}
 
 export default async function FleetPage() {
   const guard = await requireAdmin()
@@ -38,14 +46,20 @@ export default async function FleetPage() {
   if (allowedIds.length > 0) {
     const svc = createSupabaseService()
     // nvms アップリンクのエッジ（＝拠点）。
-    const { data: edges } = await svc
+    const baseCols = 'id, name, store_id, status, last_seen_at, agent_version, desired_agent_version, ota_mode, applied_config_version'
+    const listEdges = (cols: string) => svc
       .from('edge_devices')
-      .select('id, name, store_id, status, last_seen_at, agent_version, desired_agent_version, ota_mode, applied_config_version')
+      .select(cols)
       .in('store_id', allowedIds)
       .like('agent_version', 'nvmsd/%')
       .order('name')
       .limit(1000)
-    const edgeIds = (edges ?? []).map((e) => e.id as string)
+    // OS の既知の脆弱性の申告（GVMS_CLOUD_SPEC §13）。列がまだ無い DB（migration の前）では
+    // 一覧ごと出なくならないよう、従来の列だけで読み直す
+    let { data: edgeRows, error: edgeErr } = await listEdges(baseCols + ', os_vuln')
+    if (edgeErr) ({ data: edgeRows } = await listEdges(baseCols))
+    const edges = (edgeRows ?? []) as unknown as EdgeRow[]
+    const edgeIds = edges.map((e) => e.id as string)
 
     const recByEdge = new Map<string, { health: Record<string, unknown> | null; health_at: string | null; config_version: number }>()
     const camByEdge = new Map<string, number>()
@@ -66,7 +80,7 @@ export default async function FleetPage() {
       for (const l of lics ?? []) licByEdge.set(l.edge_id as string, { org: (l.org_name as string | null) ?? null, expires_at: (l.expires_at as string | null) ?? null, status: l.status as string, version: (l.license_version as number) ?? 0 })
     }
 
-    for (const e of edges ?? []) {
+    for (const e of edges) {
       const rec = recByEdge.get(e.id as string)
       const h = rec?.health ?? null
       const err = h && typeof h.errors === 'object' && h.errors ? ((h.errors as Record<string, unknown>).count_24h as number | undefined) ?? 0 : 0
@@ -95,7 +109,13 @@ export default async function FleetPage() {
       const licRejectReason = licNotApplied && typeof lr?.reason === 'string' ? lr.reason.slice(0, 200) : null
       const licSiteBad = siteState === 'expired' || siteState === 'machine_mismatch' || siteOverLimit || licNotApplied
 
-      const attention =
+      const osv = (e.os_vuln as OsVulnStatus | null | undefined) ?? null
+      const osState = osVulnState(osv)
+      const osLines = osState === 'none' ? [] : (osv?.servers ?? []).flatMap((sv) => sv.findings
+        .filter((f) => f.level !== 'deferred')
+        .map((f) => `${sv.node}: ${f.level === 'urgent' ? '緊急' : '定期保守'} ${[f.id, f.cve].filter(Boolean).join(' ')} ${f.package}${f.needs_reboot ? '（再起動で直る）' : ''}`))
+
+      const attention = osState !== 'none' ||
         seenStale || (!healthStale && err > 0) || cfgPending || verPending || licExpired || licSiteBad ||
         (!healthStale && ((h?.cameras_offline as number | undefined) ?? 0) > 0)
 
@@ -118,6 +138,7 @@ export default async function FleetPage() {
         licenseOrg: lic?.org ?? null, licenseExpires: lic?.expires_at ?? null, licenseExpired: licExpired,
         licenseSite: siteOverLimit ? 'over_limit' : licNotApplied ? 'not_applied' : siteState,
         licenseRejectReason: licRejectReason,
+        osState, osUrgent: osv?.urgent ?? 0, osRoutine: osv?.routine ?? 0, osLines,
         attention,
       })
     }
