@@ -9,11 +9,13 @@
  * Supabase クライアントのみモック（auth.getUser と admin_users.role 参照）。
  * パス判定・リダイレクト・403・静的アセット素通しは実コードがそのまま走る。
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { NextRequest } from 'next/server'
 
 // ── @supabase/ssr モック（ロールとログイン状態をテスト側から注入） ──────────
-const state: { user: { id: string; factors?: Array<{ status: string }> } | null; role: string | null; token: string | null; suspended?: boolean } =
+const state: { user: { id: string; factors?: Array<{ status: string }> } | null; role: string | null; token: string | null; suspended?: boolean
+  /** 利用約款の今の版に同意済みか (terms_consents の行があるか・G-9) */
+  termsConsented?: boolean } =
   { user: null, role: null, token: null }
 const getUserMock = vi.fn(async () => ({ data: { user: state.user } }))
 // access_token は cookie から読むだけの想定なので、往復カウントの対象外。
@@ -25,13 +27,15 @@ vi.mock('@supabase/ssr', () => ({
   createServerClient: () => ({
     auth: { getUser: getUserMock, getSession: getSessionMock },
     rpc: async (name: string) => ({ data: name === 'auth_tenant_suspended' ? state.suspended === true : name === 'auth_user_role' ? state.role : null, error: null }),
-    from: () => ({
-      select: () => ({
-        eq: () => ({
-          single: async () => ({ data: state.role === null ? null : { role: state.role } }),
-        }),
-      }),
-    }),
+    from: (table: string) => {
+      const q = {
+        select: () => q,
+        eq: () => q,
+        single: async () => ({ data: state.role === null ? null : { role: state.role } }),
+        limit: async () => ({ data: table === 'terms_consents' && state.termsConsented ? [{ id: 1 }] : [], error: null }),
+      }
+      return q
+    },
   }),
 }))
 
@@ -536,5 +540,50 @@ describe('自分のアカウントの画面 (多要素認証など) は全ての
     } finally {
       state.suspended = false
     }
+  })
+})
+
+describe('利用約款への同意（G-9・lib/auth/terms.ts）', () => {
+  beforeEach(() => { process.env.TERMS_VERSION = '2026-11-24'; state.termsConsented = false })
+  afterEach(() => { delete process.env.TERMS_VERSION; state.termsConsented = false })
+
+  it('同意していないテナント管理者は、画面は /login/terms へ・API は 403', async () => {
+    asEnrolledAdmin('tenant_admin')
+    const page = await middleware(req('/stores?x=1'))
+    const loc = new URL(page.headers.get('location')!)
+    expect(loc.pathname).toBe('/login/terms')
+    expect(loc.searchParams.get('next')).toBe('/stores?x=1')
+    asEnrolledAdmin('tenant_admin')
+    const api = await middleware(req('/api/sessions'))
+    expect(api.status).toBe(403)
+    expect((await api.json()).error).toBe('terms_consent_required')
+  })
+
+  it('同意の画面とその受け口は関門の外（ログインの許可パス）', async () => {
+    asEnrolledAdmin('tenant_admin')
+    for (const p of ['/login/terms', '/api/auth/terms']) {
+      const res = await middleware(req(p))
+      expect(res.headers.get('location')).toBeNull()
+      expect(res.status).toBe(200)
+    }
+  })
+
+  it('同意したテナント管理者・運営・ほかの役割は止めない', async () => {
+    state.termsConsented = true
+    asEnrolledAdmin('tenant_admin')
+    expect((await middleware(req('/stores'))).headers.get('location')).toBeNull()
+    state.termsConsented = false
+    asEnrolledAdmin('super_admin')
+    expect((await middleware(req('/stores'))).headers.get('location')).toBeNull()
+    for (const r of ['store_manager', 'viewer']) {
+      asRole(r)
+      expect((await middleware(req('/stores'))).headers.get('location')).toBeNull()
+    }
+  })
+
+  it('版が空（施行の前）なら、テナント管理者も止めない', async () => {
+    delete process.env.TERMS_VERSION
+    asEnrolledAdmin('tenant_admin')
+    expect((await middleware(req('/stores'))).headers.get('location')).toBeNull()
   })
 })

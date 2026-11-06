@@ -18,6 +18,9 @@
  * パスワードに変えるまで非許可パスを使えない。画面は /login/password へ、API は 403
  * （lib/auth/initial-password.ts）。判定は多要素と同じく getUser の結果から作る。
  *
+ * **利用約款への同意（2026-11-06・G-9）**: 約款の版（TERMS_VERSION）が決まっていれば、テナント管理者は
+ * 今の版に同意するまで非許可パスを使えない。画面は /login/terms へ、API は 403（lib/auth/terms.ts）。
+ *
  * さらに、ライブ画像（`/api/edges/**` を1〜2秒ごとにポーリング）は非許可パスなので、
  * 1フレームごとに `getUser()`＋`admin_users` 1行引きが走っていた。判定をトークン単位で
  * 30秒メモ化して往復を削る（理由と代償は `lib/auth/token-cache.ts` 冒頭）。
@@ -30,6 +33,7 @@ import { legacyRedirectTarget } from '@/lib/legacy-host'
 import { appBaseUrl } from '@/lib/app-url'
 import { isMfaEnrollmentPath, mfaEnrollmentRequired, mfaPending } from '@/lib/auth/mfa'
 import { initialPasswordState } from '@/lib/auth/initial-password'
+import { TERMS_PAGE, termsRequiredForRole, termsVersion } from '@/lib/auth/terms'
 import { isForeignClientToken } from '@/lib/auth/foreign-client'
 import { logSecurityEvent, requestIp } from '@/lib/security/events'
 import { makeNonce, pageCsp } from '@/lib/security/csp'
@@ -49,6 +53,8 @@ interface Verdict {
   tenantSuspended?: boolean
   /** 管理者が決めた仮のパスワードのまま (本人のパスワードに変えるまで止める・ASVS 6.4.1) */
   passwordChangePending?: boolean
+  /** テナント管理者が利用約款の今の版にまだ同意していない (lib/auth/terms.ts) */
+  termsPending?: boolean
 }
 
 /**
@@ -202,6 +208,7 @@ async function route(req: NextRequest, next: () => NextResponse): Promise<NextRe
         mfaPending: pending,
         mfaEnrollRequired: mfaEnrollmentRequired(role, user),
         passwordChangePending: pwPending,
+        termsPending: await termsPendingFor(supa, role, user.id),
       }
     }
     if (tokenHash && token) {
@@ -215,6 +222,7 @@ async function route(req: NextRequest, next: () => NextResponse): Promise<NextRe
   if (verdict.mfaPending) return mfaBlock(req, path)
   if (verdict.passwordChangePending) return passwordChangeBlock(req, path)
   if (verdict.mfaEnrollRequired && !isMfaEnrollmentPath(path)) return mfaEnrollBlock(req, path)
+  if (verdict.termsPending) return termsBlock(req, path)
   if (!verdict.isBaggageManager) return res  // 通常ロールは制限しない。
   // 手荷物検査店長でも、自分のアカウントの画面 (多要素認証など) は開ける (2026-11-05)
   if (isBaggageAccountPath(path)) return res
@@ -283,6 +291,34 @@ function mfaBlock(req: NextRequest, path: string): NextResponse {
   }
   const url = req.nextUrl.clone()
   url.pathname = '/login/mfa'
+  url.search = ''
+  url.searchParams.set('next', path + req.nextUrl.search)
+  return NextResponse.redirect(url)
+}
+
+/**
+ * テナント管理者が利用約款の今の版に同意したか (G-9)。版が空・管理者でなければ聞かない。
+ * 表を読めない (瞬断・migration の前) ときは止めない — 関門で管理者を締め出さない。
+ */
+async function termsPendingFor(
+  supa: ReturnType<typeof createServerClient>, role: string, userId: string,
+): Promise<boolean> {
+  const version = termsVersion()
+  if (!version || !termsRequiredForRole(role)) return false
+  const { data, error } = await supa.from('terms_consents').select('id')
+    .eq('user_id', userId).eq('terms_version', version).limit(1)
+  if (error) return false
+  return (data ?? []).length === 0
+}
+
+/** 利用約款にまだ同意していない管理者を止める。API は 403、画面は /login/terms (同意の画面)。 */
+function termsBlock(req: NextRequest, path: string): NextResponse {
+  logSecurityEvent({ kind: 'auth.terms_required', ip: requestIp(req.headers), path })
+  if (path.startsWith('/api/')) {
+    return NextResponse.json({ error: 'terms_consent_required' }, { status: 403 })
+  }
+  const url = req.nextUrl.clone()
+  url.pathname = TERMS_PAGE
   url.search = ''
   url.searchParams.set('next', path + req.nextUrl.search)
   return NextResponse.redirect(url)
