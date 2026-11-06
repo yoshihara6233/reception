@@ -19,6 +19,7 @@ export type SecurityEventKind =
   | 'auth.foreign_token'    // 拠点向けのトークンでクラウドに来た (middleware)
   | 'auth.tenant_suspended' // 停止したテナントの利用者 (middleware)
   | 'auth.password_change_required' // 仮のパスワードのまま (middleware・ASVS 6.4.1)
+  | 'auth.terms_required'   // 利用約款の今の版にまだ同意していない (middleware・G-9)
   | 'auth.initial_password_expired'  // 期限の過ぎた仮のパスワードでのログイン (/api/auth/login)
   | 'auth.boundary'         // 手荷物検査店長が許可パスの外へ (middleware)
   | 'auth.login_failed'     // ログインのパスワードの誤り (/api/auth/login)
