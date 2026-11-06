@@ -17,6 +17,7 @@ import { authenticateEdge } from '@/lib/edge/device-auth'
 import { sanitizeCapabilities, sanitizeSpecVersion } from '@/lib/edge/capabilities'
 import { syncGvmsOidcClient } from '@/lib/edge/gvms-oidc'
 import { sanitizeOsVuln } from '@/lib/edge/os-vuln'
+import { notifyOsVulnUrgent } from '@/lib/edge/os-vuln-notify'
 import { dbErrorCode } from '@/lib/api/db-error'
 
 export const dynamic = 'force-dynamic'
@@ -110,6 +111,14 @@ export async function POST(req: NextRequest) {
     if (r === 'error') console.warn('gvms oidc client sync failed', { edge: edge.id })
   } catch (e) {
     console.warn('gvms oidc client sync threw', { edge: edge.id, error: e instanceof Error ? e.message : String(e) })
+  }
+
+  // OS の緊急の脆弱性が新しく出たら知らせる（§13.2）。**失敗しても死活は落とさない**。
+  // 申告しない拠点（以前の版）では何もしない（heartbeat ごとに表を読まない）
+  try {
+    if (osv) await notifyOsVulnUrgent(svc, edge, osv)
+  } catch (e) {
+    console.warn('os vuln notify failed', { edge: edge.id, error: e instanceof Error ? e.message : String(e) })
   }
 
   return new NextResponse(null, { status: 204 })
