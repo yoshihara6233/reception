@@ -211,6 +211,8 @@ const EXPECTED: Record<string, Guard> = {
   '/api/bcp/test': 'tenant-scope',
   '/api/bcp/test/stores': 'session-only',
   '/api/cron/alarm-dispatch-retry': 'cron',
+  // 監査の記録を別の置き場 (R2・Bucket lock) へ毎日書き出す (ASVS 16.4.3・2026-11-06)
+  '/api/cron/audit-archive': 'cron',
   '/api/cron/baggage-daily': 'cron',
   // 保持期間の削除 (2026-10-30)。GET (Vercel Cron の Bearer) だけ・dry_run も同じ認証
   '/api/cron/data-retention': 'cron',

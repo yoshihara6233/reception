@@ -13,6 +13,10 @@
       "schedule": "30 3 * * *"
     },
     {
+      "path": "/api/cron/audit-archive",
+      "schedule": "0 4 * * *"
+    },
+    {
       "path": "/api/cron/edge-health",
       "schedule": "*/2 * * * *"
     },
