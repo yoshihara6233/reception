@@ -11,6 +11,7 @@ import { ARCHIVE_TABLES, dayPrefix, runAuditArchive, type ArchiveStore, type Man
  *   ★置き場にある物は上書きしない (2 回目は present)
  *   ★manifest の前で止まった日は、置き場にあるファイルを正として manifest を書く
  *   ★失敗した日で止め、後ろの日は次の実行に回す
+ *   ★あとからさかのぼると、鎖の先頭だった日に link.json を書いて前の日とつなぐ
  */
 
 type Row = Record<string, unknown> & { id: string }
@@ -133,6 +134,52 @@ describe('runAuditArchive', () => {
     expect(r.ok).toBe(true)
     expect(r.days).toHaveLength(0)
     expect(r.deferred).toBe(3)
+  })
+
+  it('★あとからさかのぼると、鎖の先頭だった日に link.json を書いてつなぐ', async () => {
+    const s = memStore()
+    // 置き場を作った日: 11/05 だけ書く (先頭なので prev は null)
+    await runAuditArchive(fakeDb(data), s, { now, days: 1 })
+    expect(manifest(s, '2026-11-05').prev_manifest_sha256).toBeNull()
+    const m5 = s.m.get('audit/v1/2026/11/05/manifest.json')!
+    // あとから 3 日さかのぼる
+    const r = await runAuditArchive(fakeDb(data), s, { now, days: 3 })
+    expect(r.days.map((d) => [d.date, d.status, d.linked ?? false])).toEqual([
+      ['2026-11-03', 'exported', false],
+      ['2026-11-04', 'exported', false],
+      ['2026-11-05', 'present', true],
+    ])
+    // 11/05 の manifest は書き換えない
+    expect(s.m.get('audit/v1/2026/11/05/manifest.json')).toBe(m5)
+    const link = JSON.parse(s.m.get('audit/v1/2026/11/05/link.json')!.toString())
+    expect(link).toMatchObject({
+      version: 1,
+      date: '2026-11-05',
+      manifest_sha256: sha(m5),
+      prev_manifest_sha256: sha(s.m.get('audit/v1/2026/11/04/manifest.json')!),
+    })
+    expect(manifest(s, '2026-11-04').prev_manifest_sha256).toBe(sha(s.m.get('audit/v1/2026/11/03/manifest.json')!))
+    // もう一度流しても link.json は書き直さず、つながったままと答える
+    const n = s.puts.length
+    const r2 = await runAuditArchive(fakeDb(data), s, { now, days: 3 })
+    expect(r2.days.map((d) => d.linked ?? false)).toEqual([false, false, true])
+    expect(s.puts.length).toBe(n)
+  })
+
+  it('★前の日を時間切れで書けなかったら、つながない', async () => {
+    const s = memStore()
+    await runAuditArchive(fakeDb(data), s, { now, days: 1 })
+    const r = await runAuditArchive(fakeDb(data), s, { now, days: 3, deadline: Date.now() - 1 })
+    expect(r.deferred).toBe(2)
+    expect(r.days).toEqual([{ date: '2026-11-05', status: 'present' }])
+    expect(s.m.has('audit/v1/2026/11/05/link.json')).toBe(false)
+  })
+
+  it('鎖の途中の日・前の日が置き場に無い先頭の日には link.json を書かない', async () => {
+    const s = memStore()
+    await runAuditArchive(fakeDb(data), s, { now, days: 3 })
+    await runAuditArchive(fakeDb(data), s, { now, days: 3 })
+    expect([...s.m.keys()].some((k) => k.endsWith('link.json'))).toBe(false)
   })
 
   it('1 000 行を超える日も全部読む', async () => {

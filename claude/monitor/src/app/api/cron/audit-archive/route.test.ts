@@ -38,6 +38,7 @@ beforeEach(() => {
   h.calls = []; h.ok = true; h.configured = true
 })
 afterEach(() => {
+  delete process.env.AUDIT_ARCHIVE_BACKFILL_DAYS
   delete process.env.CRON_SECRET
   delete process.env.SUPABASE_SERVICE_ROLE_KEY
 })
@@ -76,6 +77,19 @@ describe('/api/cron/audit-archive の呼ばれ方', () => {
     expect((await call(auth, '?backfill_days=0')).status).toBe(400)
     expect((await call(auth, '?backfill_days=401')).status).toBe(400)
     expect((await call(auth, '?backfill_days=x')).status).toBe(400)
+  })
+
+  it('★AUDIT_ARCHIVE_BACKFILL_DAYS があれば、指定の無い呼び出し (Run ボタン) もさかのぼる', async () => {
+    process.env.AUDIT_ARCHIVE_BACKFILL_DAYS = '400'
+    expect((await call(auth)).status).toBe(200)
+    // 呼び出しの指定が優先
+    expect((await call(auth, '?backfill_days=30')).status).toBe(200)
+    expect(h.calls).toEqual([{ days: 400 }, { days: 30 }])
+    process.env.AUDIT_ARCHIVE_BACKFILL_DAYS = '999'
+    expect((await call(auth)).status).toBe(400)
+    process.env.AUDIT_ARCHIVE_BACKFILL_DAYS = ' '
+    expect((await call(auth)).status).toBe(200)
+    expect(h.calls.at(-1)).toEqual({ days: undefined })
   })
 
   it('失敗があれば 500', async () => {

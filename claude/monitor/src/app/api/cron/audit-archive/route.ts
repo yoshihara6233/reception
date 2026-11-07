@@ -5,6 +5,11 @@
  * GET /api/cron/audit-archive                    前の日まで、直近 7 日で抜けている日を書き出す
  * GET /api/cron/audit-archive?backfill_days=120  初回などにさかのぼる (上限 400 日・同じ認証)
  *
+ * 環境変数 AUDIT_ARCHIVE_BACKFILL_DAYS (秘密でない値) を入れると、日数の指定の無い呼び出し
+ * (毎日の Cron・Vercel の画面の Run) もその日数だけさかのぼる (2026-11-07)。CRON_SECRET は
+ * 機密の扱いで手元に取り出せないため、さかのぼりは「この変数を入れて再配備 → Run → 変数を消す」で行う。
+ * 書き出し済みの日は飛ばすので、入れたままでも毎日の動きは変わらない (置き場を読む回数が増えるだけ)。
+ *
  * 認証: Vercel Cron の形 (GET・Bearer) か `x-cron-secret`。定数時間で比べる。
  * 置き場が未設定なら 503 (証跡を外へ出せていないことを Cron の記録で見えるようにする)。
  * 失敗が 1 つでもあれば 500。書き出せなかった日は次の実行でやり直す。
@@ -42,7 +47,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'audit_archive_not_configured' }, { status: 503 })
   }
 
-  const raw = req.nextUrl.searchParams.get('backfill_days')
+  const raw = req.nextUrl.searchParams.get('backfill_days') ?? (process.env.AUDIT_ARCHIVE_BACKFILL_DAYS?.trim() || null)
   const n = raw === null ? undefined : Number.parseInt(raw, 10)
   if (n !== undefined && (!Number.isFinite(n) || n < 1 || n > MAX_BACKFILL_DAYS)) {
     return NextResponse.json({ error: `backfill_days は 1〜${MAX_BACKFILL_DAYS}` }, { status: 400 })

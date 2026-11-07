@@ -44,8 +44,11 @@ audit/v1/YYYY/MM/DD/manifest.json   各ファイルの件数・バイト数・SH
    - `AUDIT_ARCHIVE_BUCKET` = `gvms-audit-archive`
    - `AUDIT_ARCHIVE_ACCESS_KEY_ID` / `AUDIT_ARCHIVE_SECRET_ACCESS_KEY` = 3 の値
    - `AUDIT_ARCHIVE_ACCOUNT_ID`（R2 のアカウントが映像と同じなら省略可。`R2_ACCOUNT_ID` を使う）
-5. 配り直したあと、過去の分をさかのぼって書き出す（認証は Cron と同じ `CRON_SECRET`）:
-   `GET /api/cron/audit-archive?backfill_days=150`（上限 400 日。240 秒で区切り、残りは同じ呼び出しをもう一度）
+5. 配り直したあと、過去の分をさかのぼって書き出す。`CRON_SECRET` は機密の扱いで手元に取り出せない（`vercel env pull` では空になる）ので、次の手順で行う（2026-11-07）:
+   1. Vercel の環境変数（Production）に `AUDIT_ARCHIVE_BACKFILL_DAYS` = `400`（何日さかのぼるか・上限 400）を足して再配備
+   2. Settings → Cron Jobs → `/api/cron/audit-archive` の **Run**。1 回 240 秒で区切るので、応答（Logs の `[audit-archive]`）の `deferred` が 0 になるまで Run を繰り返す
+   3. 終わったら `AUDIT_ARCHIVE_BACKFILL_DAYS` を消して再配備（入れたままでも書き出し済みの日は飛ばすが、毎日置き場を 400 回読むことになる）
+   - `CRON_SECRET` を手元に持っている場合は `GET /api/cron/audit-archive?backfill_days=150` でもよい（呼び出しの指定が環境変数より優先）
 
 保持 5 年は `admin_audit_log` の保持（`docs/data-classification.md`）に合わせています。視聴の記録は DB では 1 年・180 日で消えますが、
 外部の写しは 5 年残ります（証跡の写しとして扱う。個人の情報は利用者の ID と拠点・カメラの ID で、氏名は遠隔視聴の `viewer_name` だけ）。
@@ -54,4 +57,6 @@ audit/v1/YYYY/MM/DD/manifest.json   各ファイルの件数・バイト数・SH
 
 - 毎日: Vercel の Cron の記録で `/api/cron/audit-archive` が 200（ログの `[audit-archive]` に日ごとの件数）
 - 改ざんの検査: 各日の manifest の `files[].sha256` とファイルの SHA-256、`prev_manifest_sha256` と前の日の manifest の SHA-256 が合うこと
+  - **`prev_manifest_sha256` が null の日**（置き場を作った最初の日。本番は 2026-10-31）は、あとからさかのぼって前の日々を書いたとき、同じ日の `link.json` に前の日の manifest の SHA-256 が入る（その日の manifest は Bucket lock で書き換えられないため、別のファイルでつなぐ）。検査は「`prev_manifest_sha256`、それが null なら `link.json` の `prev_manifest_sha256`」で前の日へたどる。`link.json` の `manifest_sha256` がその日の manifest の SHA-256 と合うことも見る
+  - 鎖の本当の先頭（いちばん古い日）だけは、どちらも無い
 - 置き場の権限: 専用キーで既存の物への PUT・DELETE が断られること（Bucket lock）

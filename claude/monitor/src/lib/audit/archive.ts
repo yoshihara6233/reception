@@ -19,6 +19,12 @@
  *
  * 書き出すのは**前の日まで** (今日は途中なので出さない)。直近 LOOKBACK_DAYS 日で
  * manifest の無い日を古い順に書き出す (cron が 1 日止まっても次の日に拾う)。
+ *
+ * **後からさかのぼったときのつなぎ (link.json・2026-11-07)**: 置き場を作った最初の日の manifest は
+ * 前の日が無いので prev_manifest_sha256 が null。あとから前の日々をさかのぼって書くと、最初の日は
+ * Bucket lock で書き換えられないので、鎖が 2 本に分かれる。そこで、その日に link.json
+ * (前の日の manifest の SHA-256 と、その日の manifest の SHA-256) を書いて 2 本をつなぐ。
+ * 検査は「manifest の prev_manifest_sha256、それが null なら同じ日の link.json」で前の日へたどる。
  * 行は書き出した時点の内容 (視聴の終わりの時刻などは、日をまたいで終わった視聴だと空のことがある)。
  */
 import { createHash } from 'node:crypto'
@@ -75,6 +81,17 @@ export interface DayResult {
   status: 'exported' | 'present' | 'error'
   rows?: number
   error?: string
+  /** さかのぼりで前の日とつないだ (link.json を書いた) */
+  linked?: boolean
+}
+
+/** 鎖の先頭だった日を、あとから書いた前の日へつなぐ記録 (audit/v1/YYYY/MM/DD/link.json) */
+export interface ChainLink {
+  version: 1
+  date: string
+  generated_at: string
+  manifest_sha256: string
+  prev_manifest_sha256: string
 }
 
 export interface ArchiveSummary {
@@ -184,12 +201,16 @@ export async function runAuditArchive(svc: SupabaseClient, store: ArchiveStore, 
   for (let d = first; d <= yesterday; d = addDays(d, 1)) {
     const have = await store.get(`${dayPrefix(d)}/manifest.json`)
     if (have) {
-      prev = sha256(have)
-      days.push({ date: d, status: 'present' })
+      const haveSha = sha256(have)
+      const linked = prev !== null && (await linkIfHead(store, d, have, haveSha, prev, o.now))
+      prev = haveSha
+      days.push(linked ? { date: d, status: 'present', linked } : { date: d, status: 'present' })
       continue
     }
     if (o.deadline !== undefined && Date.now() > o.deadline) {
       deferred++
+      // 前の日が書けていないので、この後の日を前の日とつながない
+      prev = null
       continue
     }
     try {
@@ -204,6 +225,27 @@ export async function runAuditArchive(svc: SupabaseClient, store: ArchiveStore, 
     }
   }
   return { ok: days.every((x) => x.status !== 'error'), days, deferred }
+}
+
+/**
+ * その日の manifest が鎖の先頭 (prev が null) で、すぐ前の日の manifest がある (prev) なら、
+ * link.json を書いてつなぐ。書いた (既にあった) ら true。
+ */
+async function linkIfHead(store: ArchiveStore, date: string, have: Buffer, haveSha: string, prev: string, now: Date): Promise<boolean> {
+  let m: Partial<Manifest>
+  try {
+    m = JSON.parse(have.toString('utf8')) as Partial<Manifest>
+  } catch {
+    return false
+  }
+  if (m.prev_manifest_sha256 !== null) return false
+  const link: ChainLink = { version: 1, date, generated_at: now.toISOString(), manifest_sha256: haveSha, prev_manifest_sha256: prev }
+  const key = `${dayPrefix(date)}/link.json`
+  if ((await store.putOnce(key, Buffer.from(JSON.stringify(link, null, 2) + '\n', 'utf8'), 'application/json')) === 'exists') {
+    const cur = await store.get(key)
+    return !!cur && (JSON.parse(cur.toString('utf8')) as ChainLink).prev_manifest_sha256 === prev
+  }
+  return true
 }
 
 function countDays(from: string, to: string): number {
