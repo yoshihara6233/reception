@@ -91,7 +91,7 @@ const HEALTHY = {
     oauth_client_session_purge: true,
   },
   vault: {
-    project_url: true, service_role_key: true,
+    project_url: true, jalert_invoke_secret: true,
     app_url: true, bcp_webhook_secret: true,
   },
 }
