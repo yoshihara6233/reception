@@ -14,12 +14,11 @@
  * bcp_report_sweep が自動で PDF 生成＋完了メール送信まで行う。連続動画(重い)は別途・手動取得
  * （BCP イベント詳細ページの「現地レコーダの録画を取得」ボタン = /api/bcp/<id>/retrieve）。
  *
- * Deploy with:
- *   supabase functions deploy jalert-poller --schedule "* * * * *"
- *
- * Or add to supabase/config.toml:
- *   [functions.jalert-poller]
- *   schedule = "* * * * *"
+ * 配備:
+ *   supabase functions deploy jalert-poller --no-verify-jwt
+ * 起動は pg_cron の jalert_poll（毎分・invoke_jalert_poller）。
+ * 呼び出しの認証と DB の鍵は auth.ts（専用の合言葉 JALERT_INVOKE_SECRET・専用の秘密の鍵 jalert_poller）。
+ * 鍵の設定と切り替えの手順は docs/security-keys.md §5。
  */
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
@@ -33,6 +32,7 @@ import {
   shouldTrigger,
   storeAreaIntensity,
 } from './match.ts'
+import { dbKey, isAuthorizedInvoke, type JalertEnv } from './auth.ts'
 // 「流れ」の純ロジックは flow.ts へ切り出してある（vitest から読めるように）。
 // index.ts に残すのは fetch / DB / メールなど外に触る部分だけ。
 import {
@@ -138,8 +138,27 @@ interface EdgeDevice {
 // Main handler
 // ---------------------------------------------------------------------------
 
+/** 認証に使う環境変数（auth.ts）。値はログに出さない。 */
+function jalertEnv(): JalertEnv {
+  return {
+    JALERT_INVOKE_SECRET: Deno.env.get('JALERT_INVOKE_SECRET'),
+    JALERT_DB_KEY: Deno.env.get('JALERT_DB_KEY'),
+    JALERT_SECRET_KEY_NAME: Deno.env.get('JALERT_SECRET_KEY_NAME'),
+    SUPABASE_SECRET_KEYS: Deno.env.get('SUPABASE_SECRET_KEYS'),
+    JALERT_ALLOW_LEGACY_INVOKE: Deno.env.get('JALERT_ALLOW_LEGACY_INVOKE'),
+    SUPABASE_SERVICE_ROLE_KEY: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
+  }
+}
+
 serve(async (req) => {
-  // Support both scheduled invocations and manual HTTP triggers
+  // 呼び出し元は pg_cron の invoke_jalert_poller（Vault の jalert_invoke_secret を Bearer で送る）。
+  // 関数の入口の JWT の確かめは外したので（config.toml の verify_jwt = false）、ここで必ず確かめる。
+  if (!isAuthorizedInvoke(req.headers.get('authorization'), jalertEnv())) {
+    return new Response(JSON.stringify({ ok: false, error: 'unauthorized' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
   try {
     await pollJalert()
     return new Response(JSON.stringify({ ok: true }), {
@@ -160,7 +179,9 @@ serve(async (req) => {
 
 async function pollJalert(): Promise<void> {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  // 専用の秘密の鍵（新しい形式）。旧式の service_role の鍵は切り替えの間の逃げ道だけ（auth.ts）
+  const serviceKey = dbKey(jalertEnv())
+  if (!serviceKey) throw new Error('DB の鍵がありません（秘密の鍵 jalert_poller か JALERT_DB_KEY）')
   const supa = createClient(supabaseUrl, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   })

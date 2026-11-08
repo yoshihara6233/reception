@@ -77,7 +77,8 @@ export const PARTITION_JOBS: Record<string, string> = {
  */
 export const REQUIRED_VAULT_SECRETS: Record<string, string> = {
   project_url:        'J-Alert 受信（Edge Function の呼び出し先）',
-  service_role_key:   'J-Alert 受信・検査クリップ生成（Edge Function の認証）',
+  // 2026-11-09 に service_role_key（旧式の鍵）から専用の合言葉へ替えた（ASVS 13.3.2・docs/security-keys.md §5）
+  jalert_invoke_secret: 'J-Alert 受信（Edge Function の呼び出しの合言葉）',
   app_url:            'BCP レポートの自動生成（webhook の宛先）',
   bcp_webhook_secret: 'BCP レポートの自動生成（webhook の認証）',
 }

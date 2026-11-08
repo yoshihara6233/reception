@@ -426,3 +426,6 @@ enabled = true
 #   ダッシュボードの Scheduled Functions で管理する。
 [functions.jalert-poller]
 enabled = true
+# 呼び出しは関数の中で専用の合言葉（JALERT_INVOKE_SECRET）で確かめる（2026-11-09・auth.ts）。
+# 入口の JWT の確かめは旧式の鍵に頼るので外す。配備は --no-verify-jwt。
+verify_jwt = false
