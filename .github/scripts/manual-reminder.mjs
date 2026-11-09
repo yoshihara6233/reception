@@ -49,7 +49,7 @@ const lines = [
   '### 取扱説明書 第 2 部の確認',
   '',
   'この PR は G・VMS-Cloud の画面を変えています。次の章が古くならないか確かめてください。',
-  '説明書の正本は **yoshihara6233/NVMS** の `docs/ProjectFile/NVMS_取扱説明書_第2部_第N章.html` です（直したら `python3 scripts/manual_build.py --part 2 --word` で組み直す）。',
+  '説明書の正本は **yoshihara6233/NVMS** の `docs/ProjectFile/取扱説明書/第2部/NVMS_取扱説明書_第2部_第N章.html` です（直したら `python3 scripts/manual_build.py --part 2 --word` で組み直す）。',
   '',
   '| 章 | 変更したファイル |',
   '|---|---|',
