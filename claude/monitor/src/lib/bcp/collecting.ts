@@ -50,3 +50,23 @@ export function bcpListStatus(
   if ((IN_PROGRESS_STATUSES as readonly string[]).includes(e.status) && isStaleTestEvent(e, nowMs)) return 'expired'
   return e.status
 }
+
+/** 画像がそろって PDF の自動作成を待つ間の読み直しの間隔。 */
+export const BCP_REFRESH_PDF_WAIT_MS = 5_000
+/** それ以外の収集中の読み直しの間隔。 */
+export const BCP_REFRESH_MS = 20_000
+
+/**
+ * 詳細を読み直す間隔 (2026-11-09・シナリオ試験 2 周目 6-11 の所見)。
+ * 画像がそろうと (clips_uploaded) 毎分の見回りが 1 分ほどで PDF を作る。20 秒ごとだと
+ * できた後も最大 20 秒「まだ生成されていません」のままで、待っていた人が手で作り直していた。
+ * PDF を待つ間だけ短くする。
+ */
+export function bcpRefreshMs(status: string): number {
+  return status === 'clips_uploaded' ? BCP_REFRESH_PDF_WAIT_MS : BCP_REFRESH_MS
+}
+
+/** 画像がそろい、PDF の自動作成を待っている状態か (レポートがまだ無いとき)。 */
+export function isAwaitingAutoPdf(status: string, hasReport: boolean): boolean {
+  return status === 'clips_uploaded' && !hasReport
+}
