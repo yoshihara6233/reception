@@ -1,5 +1,6 @@
 'use client'
 
+import { askConfirm } from '@/components/ConfirmDialog'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Trash2, Upload } from 'lucide-react'
@@ -98,7 +99,7 @@ export function ReleasesClient({ releases, edges }: { releases: Release[]; edges
   }
 
   async function remove(rel: Release) {
-    if (!confirm(`リリース ${rel.version}（${rel.pkg_format} / ${rel.pkg_arch}）を取り下げますか？\n（この形式のエッジが目標版にしている間は消せません）`)) return
+    if (!(await askConfirm(`リリース ${rel.version}（${rel.pkg_format} / ${rel.pkg_arch}）を取り下げますか？\n（この形式のエッジが目標版にしている間は消せません）`, { confirmLabel: '取り下げ', danger: true }))) return
     const res = await fetch(`/api/admin/nvmsd-releases/${rel.id}`, { method: 'DELETE' })
     const j = await res.json().catch(() => ({}))
     if (!res.ok) {

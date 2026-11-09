@@ -7,6 +7,7 @@
  * 据え付け向きは PUT /api/baggage/kiosk-orientation（押した時点で即保存。店長が現物を
  * 見ながら選ぶ項目なので、保存ボタンを別に押させない）。
  */
+import { askConfirm } from '@/components/ConfirmDialog'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { QRCodeSVG } from 'qrcode.react'
@@ -92,7 +93,7 @@ export function IpadSettingsClient({ stores }: { stores: IpadStore[] }) {
   }
 
   const clearPin = async (id: string) => {
-    if (!window.confirm('この店舗のPINを解除します。iPadはPINで開始できなくなります。よろしいですか？')) return
+    if (!(await askConfirm('この店舗のPINを解除します。iPadはPINで開始できなくなります。よろしいですか？', { confirmLabel: '解除' }))) return
     setBusy(`clear:${id}`); setStoreMsg(id, null)
     try {
       const res = await fetch(`/api/baggage/kiosk-pin?storeId=${id}`, { method: 'DELETE' })

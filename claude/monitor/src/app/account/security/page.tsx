@@ -13,6 +13,7 @@
  * - super_admin と tenant_admin は登録が必須。未登録のあいだは middleware がここへ送る (required=1・next=元の画面)
  * - 端末を無くしたら、管理者が本人を確かめてから外す（/api/admin/users/[id]/mfa-reset）。
  */
+import { askConfirm } from '@/components/ConfirmDialog'
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { QRCodeSVG } from 'qrcode.react'
@@ -85,7 +86,7 @@ export default function AccountSecurityPage() {
     const msg = last
       ? 'この認証アプリを外すと、ログインはパスワードだけになります。外しますか？'
       : 'この認証アプリを外しますか？'
-    if (!confirm(msg)) return
+    if (!(await askConfirm(msg, { confirmLabel: '外す', danger: true }))) return
     setError(null); setNotice(null); setBusy(true)
     const { status, data } = await authFetch(`/api/account/mfa?factorId=${encodeURIComponent(f.id)}`, 'DELETE')
     setBusy(false)

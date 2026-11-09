@@ -4,6 +4,7 @@
  * 利用者の多要素認証を外す（管理者・端末の紛失など・2026-10-28）。
  * 利用者の編集画面（テナントの利用者・運営の利用者）に置く。
  */
+import { askConfirm } from '@/components/ConfirmDialog'
 import { useEffect, useState } from 'react'
 
 export function MfaResetSection({ id, name }: { id: string; name: string }) {
@@ -17,7 +18,7 @@ export function MfaResetSection({ id, name }: { id: string; name: string }) {
   }, [id])
 
   async function onReset() {
-    if (!confirm(`「${name}」の多要素認証を外します。端末を無くしたなどの申し出があったとき、本人であることを確かめてから行ってください。外しますか？`)) return
+    if (!(await askConfirm(`「${name}」の多要素認証を外します。端末を無くしたなどの申し出があったとき、本人であることを確かめてから行ってください。外しますか？`, { confirmLabel: '外す', danger: true }))) return
     setBusy(true)
     const res = await fetch(`/api/admin/users/${id}/mfa-reset`, { method: 'POST' })
     setBusy(false)

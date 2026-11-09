@@ -1,5 +1,6 @@
 'use client'
 
+import { askConfirm } from '@/components/ConfirmDialog'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Trash2, ShieldCheck } from 'lucide-react'
@@ -58,11 +59,10 @@ export function LicensesClient({ edges, rows, canIssue }: { edges: EdgeOpt[]; ro
   }
 
   async function revoke(r: LicRow) {
-    if (!confirm(
+    if (!(await askConfirm(
       `${r.org ?? r.edge} のライセンスを台帳上で失効にしますか？\n\n`
       + 'これは台帳の記録だけです。拠点の nvmsd は署名の無い取り下げでは権利を外しません（クラウド侵害で全拠点を一斉に外せないため）。\n'
-      + '拠点に効かせるには、G・VMS に「期限を切ったライセンス」を新しい発行日で署名してもらい、上の欄から差し替え登録してください。',
-    )) return
+      + '拠点に効かせるには、G・VMS に「期限を切ったライセンス」を新しい発行日で署名してもらい、上の欄から差し替え登録してください。', { confirmLabel: '失効にする', danger: true }))) return
     const res = await fetch(`/api/admin/licenses/${r.id}`, { method: 'DELETE' })
     const j = await res.json().catch(() => ({}))
     if (!res.ok) { alert(j.error ?? `失効失敗: ${res.status}`); return }
