@@ -4,6 +4,7 @@
  * 利用の状態 — 利用を止める／戻す・セッションを切る (2026-10-30・自主診断 ASVS 7.4.2・7.4.5)。
  * 利用者の編集画面 (テナントの利用者・運営の利用者) に置く。受け口は /api/admin/users/[id]/access。
  */
+import { askConfirm } from '@/components/ConfirmDialog'
 import { useEffect, useState } from 'react'
 
 type State = { suspended: boolean; sessions: number }
@@ -30,7 +31,7 @@ export function UserAccessSection({ id, name, self }: { id: string; name: string
   }, [id, self])
 
   async function run(action: 'suspend' | 'resume' | 'revoke_sessions', question: string, done: string) {
-    if (!confirm(question)) return
+    if (!(await askConfirm(question, { confirmLabel: '実行' }))) return
     setBusy(true)
     setMsg(null)
     const res = await fetch(`/api/admin/users/${id}/access`, {

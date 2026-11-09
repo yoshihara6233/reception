@@ -8,6 +8,7 @@
  * area_code) でグルーピングし、親行 = アラート / 子行 = 対象店舗 という
  * ツリー表示にする。▶ をクリックすると同行が展開される。
  */
+import { askConfirm } from '@/components/ConfirmDialog'
 import { useMemo, useState } from 'react'
 import { prefName } from '@/lib/jp-prefectures'
 import Link from 'next/link'
@@ -434,7 +435,7 @@ function TestDeleteButton({
 
   async function onDelete(e: React.MouseEvent) {
     e.stopPropagation()
-    if (!confirm(`テスト発令「${label} / ${issuedAt}」を削除します。\n配下の ${eventIds.length} 件のイベント・スナップショット・PDF も完全に消えます。元に戻せません。よろしいですか？`)) {
+    if (!(await askConfirm(`テスト発令「${label} / ${issuedAt}」を削除します。\n配下の ${eventIds.length} 件のイベント・スナップショット・PDF も完全に消えます。元に戻せません。よろしいですか？`, { confirmLabel: '削除', danger: true }))) {
       return
     }
     setBusy(true)

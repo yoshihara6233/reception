@@ -1,5 +1,6 @@
 'use client'
 
+import { askConfirm } from '@/components/ConfirmDialog'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Trash2, Settings, Search, Plug, X } from 'lucide-react'
@@ -94,7 +95,7 @@ export function EdgeDetail({ edge, bundles = [] }: { edge: EdgePayload; bundles?
   const hostDirty = go2rtcHost !== (edge.go2rtc_host ?? '')
 
   async function deleteEdge() {
-    if (!confirm(`エッジ "${edge.name}" を削除しますか？\n関連レコーダ・カメラ・セッションと、そのカメラの発報の記録も削除されます。`)) return
+    if (!(await askConfirm(`エッジ "${edge.name}" を削除しますか？\n関連レコーダ・カメラ・セッションと、そのカメラの発報の記録も削除されます。`, { confirmLabel: '削除', danger: true }))) return
     const res = await fetch(`/api/admin/edges/${edge.id}`, { method: 'DELETE' })
     if (res.ok) { router.push('/admin/edges'); return }
     // 状態コードだけでは理由が分からないので、サーバが返す error / message も出す
@@ -271,7 +272,7 @@ function OtaPanel({ edge }: { edge: EdgePayload }) {
     const v = edge.agent_version
     if (!v) return
     if (edge.ota_status !== 'healthy') { setMsg('healthy な端末からのみ全台 promote できます'); return }
-    if (!confirm(`現行版 ${v} を全拠点のエッジへ展開します。\nこのカナリアで healthy を確認済みですか？`)) return
+    if (!(await askConfirm(`現行版 ${v} を全拠点のエッジへ展開します。\nこのカナリアで healthy を確認済みですか？`, { confirmLabel: '展開' }))) return
     setBusy(true); setMsg(null)
     const res = await fetch('/api/admin/edges/ota/promote', {
       method: 'POST',
@@ -416,9 +417,9 @@ function NvmsdOtaPanel({ edge }: { edge: EdgePayload }) {
     )
   }
 
-  function forceNow() {
+  async function forceNow() {
     if (!edge.desired_agent_version) return
-    if (!confirm(`時間帯を無視して今すぐ ${edge.desired_agent_version} へ更新させますか？\n（検証拠点向け。適用確認後にフラグは自動で降ります）`)) return
+    if (!(await askConfirm(`時間帯を無視して今すぐ ${edge.desired_agent_version} へ更新させますか？\n（検証拠点向け。適用確認後にフラグは自動で降ります）`, { confirmLabel: '今すぐ更新' }))) return
     void put({ update_force: true }, '即時更新フラグを立てました（次回ポーリング＝最長10分以内に適用開始）')
   }
 
@@ -706,11 +707,10 @@ function ConfigPushPanel({ recorder, appliedVersion }: { recorder: Recorder; app
   const retentionDecrease = prevRetention != null && nextRetention != null && nextRetention < prevRetention
 
   async function save() {
-    if (retentionDecrease && !confirm(
+    if (retentionDecrease && !(await askConfirm(
       `保持日数を ${prevRetention} 日 → ${nextRetention} 日に下げます。\n`
       + '下げると古い録画が消え、取り消せません。\n'
-      + '拠点側で許可（NVMS_REMOTE_RETENTION_DECREASE=true）が無い拠点では反映されず「反映待ち」のままになります。\n\n配信しますか？',
-    )) return
+      + '拠点側で許可（NVMS_REMOTE_RETENTION_DECREASE=true）が無い拠点では反映されず「反映待ち」のままになります。\n\n配信しますか？', { confirmLabel: '配信', danger: true }))) return
     setBusy(true); setMsg(null); setErr(null)
     // 空欄のキーは送らない（＝そのキーは設定しない）。
     const body: Record<string, unknown> = {}
@@ -820,7 +820,7 @@ function SiteHttpsPanel({ edge }: { edge: EdgePayload }) {
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)) } finally { setBusy(false) }
   }
   async function clear() {
-    if (!confirm('名前を外します。拠点は証明書の自動取得を止め、手元の証明書は期限まで使います。\n\nよろしいですか？')) return
+    if (!(await askConfirm('名前を外します。拠点は証明書の自動取得を止め、手元の証明書は期限まで使います。\n\nよろしいですか？', { confirmLabel: '外す' }))) return
     setBusy(true); setMsg(null); setErr(null)
     try {
       const res = await fetch(`/api/admin/edges/${edge.id}/site-host`, { method: 'DELETE' })
@@ -1232,7 +1232,7 @@ function RecorderCard({ recorder }: { recorder: Recorder }) {
       delete: cams.filter((c) => c._del && c.id).map((c) => c.id!),
     }
     if (payload.delete.length > 0
-      && !confirm(`${payload.delete.length.toLocaleString()} 台のカメラを削除しますか？\nそのカメラの発報の記録も削除されます。`)) return
+      && !(await askConfirm(`${payload.delete.length.toLocaleString()} 台のカメラを削除しますか？\nそのカメラの発報の記録も削除されます。`, { confirmLabel: '削除', danger: true }))) return
     setBusy(true); setMsg(null)
     const res = await fetch(`/api/admin/recorders/${recorder.id}/cameras`, {
       method: 'PUT',
@@ -1251,7 +1251,7 @@ function RecorderCard({ recorder }: { recorder: Recorder }) {
   }
 
   async function deleteRec() {
-    if (!confirm(`レコーダ ${recorder.host} を削除しますか？\n配下のカメラと、そのカメラの発報の記録も削除されます。`)) return
+    if (!(await askConfirm(`レコーダ ${recorder.host} を削除しますか？\n配下のカメラと、そのカメラの発報の記録も削除されます。`, { confirmLabel: '削除', danger: true }))) return
     const res = await fetch(`/api/admin/recorders/${recorder.id}`, { method: 'DELETE' })
     if (res.ok) { router.refresh(); return }
     // 状態コードだけでは理由が分からないので、サーバが返す error / message も出す

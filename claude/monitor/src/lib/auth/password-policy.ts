@@ -35,3 +35,19 @@ export function passwordProblem(password: string, email?: string | null): string
   }
   return null
 }
+
+/**
+ * 認証基盤 (Supabase Auth) がパスワードを断ったときの案内。入力の誤りでなければ null。
+ * 漏えいしたパスワード・よく使われるパスワード・短いものは code が weak_password で返る。
+ * 管理者がほかの人のパスワードを決める画面で、500 の「password_update_failed」にせず案内を出すために使う。
+ */
+export function passwordRejectMessage(err: { code?: string | null } | null | undefined): string | null {
+  switch (err?.code) {
+    case 'weak_password':
+      return '推測されやすいパスワードか、漏えいが知られているパスワードのため使えません。長くするか、別のパスワードにしてください。'
+    case 'same_password':
+      return '今と同じパスワードは使えません。'
+    default:
+      return null
+  }
+}

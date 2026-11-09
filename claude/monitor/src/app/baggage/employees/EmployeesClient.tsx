@@ -4,6 +4,7 @@
  * 従業員マスタ（M4・クライアント）— 追加・顔登録・登録抹消。
  * 顔登録は画像ファイル選択 → dataURL → API（Rekognition IndexFaces）。
  */
+import { askConfirm } from '@/components/ConfirmDialog'
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
@@ -85,7 +86,7 @@ export function EmployeesClient(
   }
 
   const deactivate = async (e: EmployeeRow) => {
-    if (!window.confirm(`${e.name} を登録抹消します。顔データもコレクションから削除されます。よろしいですか？`)) return
+    if (!(await askConfirm(`${e.name} を登録抹消します。顔データもコレクションから削除されます。よろしいですか？`, { confirmLabel: '抹消', danger: true }))) return
     setBusy(`del:${e.id}`); setMsg(null)
     try {
       const res = await fetch(`/api/baggage/employees/${e.id}`, { method: 'DELETE' })
@@ -96,7 +97,7 @@ export function EmployeesClient(
 
   // 顔データのみ削除（従業員は active のまま → キオスクのセルフ登録で撮り直せる）
   const deleteFace = async (e: EmployeeRow) => {
-    if (!window.confirm(`${e.name} の顔データを削除します。キオスクの「はじめての方の顔登録」から再登録できます。よろしいですか？`)) return
+    if (!(await askConfirm(`${e.name} の顔データを削除します。キオスクの「はじめての方の顔登録」から再登録できます。よろしいですか？`, { confirmLabel: '削除', danger: true }))) return
     setBusy(`delface:${e.id}`); setMsg(null)
     try {
       const res = await fetch(`/api/baggage/employees/${e.id}/face`, { method: 'DELETE' })

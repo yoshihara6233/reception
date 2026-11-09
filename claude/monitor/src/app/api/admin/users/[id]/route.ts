@@ -7,7 +7,7 @@
  *   - tenant_admin: only same-tenant users, cannot promote to super_admin
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { passwordProblem } from '@/lib/auth/password-policy'
+import { passwordProblem, passwordRejectMessage } from '@/lib/auth/password-policy'
 import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin/guard'
@@ -121,6 +121,11 @@ export async function PUT(
       ...(isSelf ? {} : { app_metadata: initialPasswordMetadata() }),
     })
     if (pwErr) {
+      // 認証基盤が断った理由 (推測されやすい・弱い) は入力の誤りなので 400 と日本語の案内で返す。
+      // 以前は 500 の password_update_failed (db_error) になり、何を直せばよいか分からなかった
+      // (2026-11-09 シナリオ試験 2 周目で見つけた)。
+      const policyMsg = passwordRejectMessage(pwErr)
+      if (policyMsg) return NextResponse.json({ error: 'password_policy', message: policyMsg }, { status: 400 })
       return NextResponse.json({ error: 'password_update_failed', message: dbErrorCode(pwErr, '/api/admin/users/[id]') }, { status: 500 })
     }
   }

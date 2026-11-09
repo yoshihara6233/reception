@@ -1,5 +1,6 @@
 'use client'
 
+import { askConfirm } from '@/components/ConfirmDialog'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
@@ -8,7 +9,7 @@ export function UserDeleteButton({ id, name }: { id: string; name: string }) {
   const [busy, setBusy] = useState(false)
 
   async function onDelete() {
-    if (!confirm(`「${name}」を削除します。元に戻せません。よろしいですか？`)) return
+    if (!(await askConfirm(`「${name}」を削除します。元に戻せません。よろしいですか？`, { confirmLabel: '削除', danger: true }))) return
     setBusy(true)
     const res = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' })
     setBusy(false)

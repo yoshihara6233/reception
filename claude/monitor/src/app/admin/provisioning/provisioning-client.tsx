@@ -1,5 +1,6 @@
 'use client'
 
+import { askConfirm } from '@/components/ConfirmDialog'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { QRCodeSVG } from 'qrcode.react'
@@ -64,7 +65,7 @@ export function ProvisioningClient({ stores, rows, canIssue = true, canOpenEdge 
   }
 
   async function reissue(id: string) {
-    if (!confirm('コードを再発行しますか？（古いコードは無効になります）')) return
+    if (!(await askConfirm('コードを再発行しますか？（古いコードは無効になります）', { confirmLabel: '再発行' }))) return
     const res = await fetch(`/api/admin/enrollments/${id}/reissue`, { method: 'POST' })
     const j = await res.json().catch(() => ({}))
     if (!res.ok) { alert(j.error === 'already_enrolled' ? '既に claim 済みのため再発行できません' : (j.error ?? `再発行失敗: ${res.status}`)); return }
