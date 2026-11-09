@@ -19,7 +19,7 @@ import { AdminShell } from '@/components/AdminShell'
 import { PageHeader } from '@/components/admin/PageHeader'
 import { GenerateReportButton } from './GenerateReportButton'
 import { AutoRefresh } from './AutoRefresh'
-import { shouldAutoRefreshBcp } from '@/lib/bcp/collecting'
+import { bcpRefreshMs, isAwaitingAutoPdf, shouldAutoRefreshBcp } from '@/lib/bcp/collecting'
 import { RetrieveRecordingButton } from './RetrieveRecordingButton'
 import { Camera, FileText, LayoutGrid } from 'lucide-react'
 
@@ -296,6 +296,7 @@ export default async function BcpEventDetailPage({
     clips.some((c) => !['completed', 'failed', 'skipped_ipro'].includes(c.upload_status))
     || gridShots.some((g) => g.upload_status === 'pending')
   const autoRefresh = shouldAutoRefreshBcp(event, hasUnsettledShots)
+  const refreshMs = bcpRefreshMs(event.status)
 
   return (
     <AdminShell pathname="/bcp" section="bcp">
@@ -549,7 +550,7 @@ export default async function BcpEventDetailPage({
         <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
             <h2 className="text-sm font-bold text-slate-900">BCPレポート</h2>
-            <AutoRefresh enabled={autoRefresh} />
+            <AutoRefresh enabled={autoRefresh} intervalMs={refreshMs} />
           </div>
 
           <div className="space-y-4 px-4 py-4">
@@ -584,6 +585,13 @@ export default async function BcpEventDetailPage({
                   <span className="text-xs text-slate-400">PDFは生成中です</span>
                 )}
               </div>
+            ) : isAwaitingAutoPdf(event.status, false) ? (
+              // 画像がそろった後は毎分の見回りが PDF を作る。手で作り直す前に待ってもらう
+              // (2026-11-09 シナリオ試験 2 周目 6-11: 自動でできた 40 秒後に手で作り直していた)
+              <p role="status" className="text-xs text-slate-600 dark:text-gedink2">
+                スナップショットがそろいました。PDF は 1 分ほどで自動で作られ、完了メールが送信されます。
+                この画面は自動で読み直すので、そのままお待ちください。
+              </p>
             ) : (
               <p className="text-xs text-slate-400">
                 レポートはまだ生成されていません。8 枚スナップショット (T-5〜T+30) のアップロードが
@@ -606,7 +614,9 @@ export default async function BcpEventDetailPage({
                 hintMessage={
                   report
                     ? '撮影が進んだ最新の状態で PDF を再作成します (旧 PDF は上書き)'
-                    : '撮影済みスナップショットから PDF を作成します'
+                    : isAwaitingAutoPdf(event.status, false)
+                      ? '自動の作成を待たずに今すぐ作るときだけ押してください'
+                      : '撮影済みスナップショットから PDF を作成します'
                 }
               />
             </div>

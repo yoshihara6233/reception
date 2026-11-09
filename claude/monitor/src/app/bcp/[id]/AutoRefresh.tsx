@@ -11,24 +11,27 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { RefreshCw } from 'lucide-react'
+import { BCP_REFRESH_MS } from '@/lib/bcp/collecting'
 
-export const BCP_REFRESH_MS = 20_000
-
-export function AutoRefresh({ enabled }: { enabled: boolean }) {
+/**
+ * intervalMs は収集の段階で変える (lib/bcp/collecting.ts の bcpRefreshMs)。
+ * 画像がそろって PDF を待つ間は短く、それ以外は 20 秒。
+ */
+export function AutoRefresh({ enabled, intervalMs = BCP_REFRESH_MS }: { enabled: boolean; intervalMs?: number }) {
   const router = useRouter()
   useEffect(() => {
     if (!enabled) return
     const iv = setInterval(() => {
       if (document.visibilityState === 'hidden') return
       router.refresh()
-    }, BCP_REFRESH_MS)
+    }, intervalMs)
     return () => clearInterval(iv)
-  }, [enabled, router])
+  }, [enabled, intervalMs, router])
   if (!enabled) return null
   return (
     <p className="inline-flex items-center gap-1 text-[11px] text-slate-500 dark:text-gedink3">
       <RefreshCw size={12} strokeWidth={1.5} aria-hidden />
-      収集中のため {BCP_REFRESH_MS / 1000} 秒ごとに自動で読み直しています
+      収集中のため {intervalMs / 1000} 秒ごとに自動で読み直しています
     </p>
   )
 }

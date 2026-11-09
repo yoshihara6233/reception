@@ -1,6 +1,9 @@
 // テスト発令の期限と詳細の自動の読み直し (2026-11-04・シナリオ試験の所見)
 import { describe, it, expect } from 'vitest'
-import { bcpListStatus, isStaleTestEvent, shouldAutoRefreshBcp, TEST_EVENT_STALE_MS } from './collecting'
+import {
+  BCP_REFRESH_MS, BCP_REFRESH_PDF_WAIT_MS, bcpListStatus, bcpRefreshMs, isAwaitingAutoPdf, isStaleTestEvent,
+  shouldAutoRefreshBcp, TEST_EVENT_STALE_MS,
+} from './collecting'
 import { aggregateBcpStatus } from './aggregate-status'
 
 const NOW = Date.parse('2026-11-04T12:00:00Z')
@@ -45,5 +48,20 @@ describe('shouldAutoRefreshBcp', () => {
     expect(shouldAutoRefreshBcp({ ...base, status: 'failed' }, false, NOW)).toBe(false)
     expect(shouldAutoRefreshBcp({ ...base, status: 'recording', raw_purged_at: ago(0) }, true, NOW)).toBe(false)
     expect(shouldAutoRefreshBcp({ ...base, status: 'recording', created_at: ago(TEST_EVENT_STALE_MS + 1) }, true, NOW)).toBe(false)
+  })
+})
+
+describe('bcpRefreshMs / isAwaitingAutoPdf (6-11 の所見)', () => {
+  it('画像がそろって PDF を待つ間は 5 秒ごと・ほかは 20 秒ごと', () => {
+    expect(bcpRefreshMs('clips_uploaded')).toBe(BCP_REFRESH_PDF_WAIT_MS)
+    expect(bcpRefreshMs('recording')).toBe(BCP_REFRESH_MS)
+    expect(bcpRefreshMs('pending')).toBe(BCP_REFRESH_MS)
+    expect(BCP_REFRESH_PDF_WAIT_MS).toBeLessThan(BCP_REFRESH_MS)
+  })
+  it('PDF を待つ案内は、画像がそろってレポートがまだ無いときだけ', () => {
+    expect(isAwaitingAutoPdf('clips_uploaded', false)).toBe(true)
+    expect(isAwaitingAutoPdf('clips_uploaded', true)).toBe(false)
+    expect(isAwaitingAutoPdf('recording', false)).toBe(false)
+    expect(isAwaitingAutoPdf('report_generated', false)).toBe(false)
   })
 })
