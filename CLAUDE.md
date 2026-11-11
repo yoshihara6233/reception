@@ -59,7 +59,7 @@ Key routing rules:
 ## 取扱説明書 第 2 部（G・VMS-Cloud）を一緒に直す（必須）
 
 客先へ渡す取扱説明書のうち、**第 2 部が G・VMS-Cloud の説明**。正本は G・VMS のリポジトリにある
-（`/Users/junji.y/claude/NVMS/docs/ProjectFile/NVMS_取扱説明書_第2部_第N章.html`）。
+（`/Users/junji.y/claude/NVMS/docs/ProjectFile/取扱説明書/第2部/NVMS_取扱説明書_第2部_第N章.html`）。
 **画面・操作・表示の文言を変える PR では、該当の章も同じ日に直す。** 後回しにすると、客先が手順どおりに
 操作して画面と合わない説明書になる（2026-10-02 に、削除したカメラの表示・現地更新の札・環境変数の警告を
 変えた PR 3 本で、第 2 部の 9 章が古くなった）。
