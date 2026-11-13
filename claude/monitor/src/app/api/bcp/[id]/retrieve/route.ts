@@ -43,6 +43,20 @@ export async function POST(
   const guard = await requireAdmin()
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status })
 
+  // そのイベントが、この利用者の権限 (RLS) で見えるかを先に確かめる (2026-11-13・見直し C-3)。
+  //
+  // 以前は役割だけを確かめて service role へ移り、bcp_events を ID 一本で引いていた。
+  // 別テナントの管理者でも、イベントの ID が分かれば他テナントの拠点へ撮影の指示を書けた。
+  // generate-report と同じ形にする。見えない ID の「存在」を教えないよう 403 ではなく 404。
+  const { data: visible } = await guard.supa
+    .from('bcp_events')
+    .select('id')
+    .eq('id', eventId)
+    .maybeSingle()
+  if (!visible) {
+    return NextResponse.json({ error: 'event_not_found' }, { status: 404 })
+  }
+
   const svc = createSupabaseService()
 
   // 1. イベント取得（発令時刻・店舗・状態）
