@@ -41,8 +41,6 @@ vi.mock('@/lib/supabase/server', () => ({
 vi.mock('@/lib/edge/auth-provision', () => ({
   edgeAuthEmail: (id: string) => `edge+${id}@example.invalid`,
   ensureEdgeAuthPassword: async () => null,
-  mayWithholdServiceRole: () => false,
-  isGvmsUplinkEdge: async () => false,
 }))
 
 beforeEach(() => {

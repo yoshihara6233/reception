@@ -30,6 +30,13 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return invalidInput(req, { error: 'invalid_body' }, guard.user.id)
   const { store_id, name, camera_tier, kind } = parsed.data
 
+  // 試作のエッジ箱 (kind=edge) の登録コードは運営だけが発行する (2026-11-13)。
+  // 画面 (/admin/edges/new) はもともと super_admin 専用で、テナントの管理者が使うのは
+  // G・VMS の拠点 (kind=nvms・/admin/provisioning) だけ。API だけが広かった。
+  if (kind === 'edge' && guard.profile.role !== 'super_admin') {
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+  }
+
   // 認可: その店舗が呼び出し管理者から見えるか（RLS セッションで確認）→ tenant_id を取得。
   // 見えない店舗には発行不可（テナント越権防止）。tenant_id は store 由来。
   const { data: store } = await guard.supa

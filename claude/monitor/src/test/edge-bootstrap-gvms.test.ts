@@ -1,13 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * `/api/edge/bootstrap` は G・VMS 本体の内蔵アップリンク (nvmsd) に service_role を返さない
- * (2026-10-28・自主診断で発見)。
+ * `/api/edge/bootstrap` は、どの拠点にも service_role を返さない。
  *
- * nvmsd の device_token は現場のサーバの /etc/nvms/uplink.env に置かれ、現場の管理者や
- * 販売店が読める。ここで鍵を返すと、1 拠点のトークンの漏れが全テナントの DB・置き場の
- * 読み書きになる。nvmsd 自身は bootstrap を使わない。
- * 試作のエッジ箱 (intereco-edge) は従来どおり受け取れること (止めると箱が動かない) も固定する。
+ * - 2026-10-28 (自主診断): G・VMS 本体の内蔵アップリンク (nvmsd) には返さないようにした。
+ *   nvmsd の device_token は現場のサーバの /etc/nvms/uplink.env に置かれ、現場の管理者や
+ *   販売店が読める。ここで鍵を返すと、1 拠点のトークンの漏れが全テナントの読み書きになる。
+ * - 2026-11-13 (見直し): 試作のエッジ箱 (kind=edge) にも返さないようにした。その登録コードは
+ *   tenant_admin・store_manager でも発行できたため、テナントの管理者が enroll → bootstrap と
+ *   呼ぶだけで鍵を受け取れた。**「試作の箱には従来どおり返す」と固定していた試験が、
+ *   この穴を守っていた**ので、向きを逆にした。
  */
 
 const h = vi.hoisted(() => ({
@@ -46,7 +48,7 @@ vi.mock('@/lib/supabase/server', () => ({
 
 vi.mock('@/lib/edge/auth-provision', async (orig) => ({
   ...(await orig<typeof import('@/lib/edge/auth-provision')>()),
-  // スコープトークンは発行できなかった応答にする (= 従来の安全装置なら鍵を返してしまう条件)
+  // スコープトークンは発行できなかった応答にする (= 以前の安全装置なら鍵を返してしまった条件)
   ensureEdgeAuthPassword: async () => null,
 }))
 
@@ -72,7 +74,7 @@ const bootstrap = async () => {
   return { status: res.status, text: JSON.stringify(await res.json()) }
 }
 
-describe('/api/edge/bootstrap は G・VMS の内蔵アップリンクに service_role を返さない', () => {
+describe('/api/edge/bootstrap は、どの拠点にも service_role を返さない', () => {
   it('★agent_version が nvmsd/ なら返さない', async () => {
     h.edge!.agent_version = 'nvmsd/0.1.203'
     const r = await bootstrap()
@@ -97,14 +99,26 @@ describe('/api/edge/bootstrap は G・VMS の内蔵アップリンクに service
     expect((await bootstrap()).text).not.toContain(KEY)
   })
 
-  it('試作のエッジ箱 (G・VMS でない) には従来どおり返す — 止めると箱が動かない', async () => {
+  it('★試作のエッジ箱 (G・VMS でない・scoped_only=false) にも返さない (2026-11-13)', async () => {
     h.edge!.agent_version = 'intereco-edge/1.4.0'
-    expect((await bootstrap()).text).toContain(KEY)
+    h.edge!.scoped_only = false
+    const r = await bootstrap()
+    expect(r.status).toBe(200)
+    expect(r.text).not.toContain(KEY)
+    expect(r.text).not.toContain('supabase_service_role_key')
+    expect(r.text).toContain('edge-1')
   })
 
-  it('見分けの照会に失敗したら従来どおり (試作の箱を DB の一時的な失敗で止めない)', async () => {
+  it('★スコープトークンを発行できず、手持ちの申告も無い応答でも返さない (止まる側に倒す)', async () => {
+    h.edge!.agent_version = null
+    const r = await bootstrap()
+    expect(r.text).not.toContain(KEY)
+    expect(r.text).not.toContain('scoped_access_token')
+  })
+
+  it('★DB の照会が失敗していても返さない', async () => {
     h.lookupErr = { message: 'timeout' }
-    expect((await bootstrap()).text).toContain(KEY)
+    expect((await bootstrap()).text).not.toContain(KEY)
   })
 })
 

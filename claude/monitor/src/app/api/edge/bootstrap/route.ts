@@ -1,8 +1,7 @@
 /**
  * エッジ ブートストラップ（鍵ローテ無停止同期 / Phase A + スコープ鍵化 Phase B1）。
  *
- * エッジが `x-device-token` で認証し、現行の Supabase URL + service key を取得する。
- * これにより Supabase 鍵をローテしても、エッジの .env を手で書き換えずに追従できる。
+ * エッジが `x-device-token` で認証し、現行の Supabase URL とスコープトークンを取得する。
  *
  * Phase B1（エッジ専用スコープ鍵化）: このエッジ専用の Supabase Auth ユーザで
  * signInWithPassword し、短命アクセストークン(≤1h)を `scoped_access_token` /
@@ -18,15 +17,19 @@
  * 認証: 受け取ったトークンの SHA-256 が edge_devices.device_token_hash と
  *       一致する行のみ。平文は DB に無い（M-5 段階2）。
  *
- * ⚠ 移行中は service_role も従来通り返す。Phase B4（全エッジがスコープ運用に載ったら）で
- *   service_role 返却を撤廃し、device_token 漏洩時の影響限定を完成させる。
- *   **ただし G・VMS 本体の内蔵アップリンク (nvmsd) には、移行を待たずに一切返さない**
- *   (2026-10-28・isGvmsUplinkEdge)。nvmsd は鍵を使わず、トークンは現場のサーバに置かれるため。
+ * **service_role は、どの拠点にも返さない (2026-11-13・Phase B4 の完了)。**
+ *   以前は「試作のエッジ箱 (kind=edge)」には返していた。その登録コードは tenant_admin・
+ *   store_manager でも発行できたため、テナントの管理者が enroll → bootstrap と呼ぶだけで
+ *   service_role (全テナントの DB と置き場の読み書き) を受け取れた (2026-11-13 の見直しで発見。
+ *   10/28 の直しは G・VMS (nvmsd) の拠点にしか効いていなかった)。
+ *   本番のエッジ箱は 0 台。箱はスコープトークン (scoped_access_token) だけで動かす。
+ *   スコープトークンを発行できなかった応答では、箱は次の pull (5 分後) まで DB に触れない
+ *   (止まる側に倒す。鍵を返して動かし続ける側には倒さない)。
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createSupabaseService } from '@/lib/supabase/server'
-import { edgeAuthEmail, ensureEdgeAuthPassword, isGvmsUplinkEdge, mayWithholdServiceRole } from '@/lib/edge/auth-provision'
+import { edgeAuthEmail, ensureEdgeAuthPassword } from '@/lib/edge/auth-provision'
 import { hashDeviceToken } from '@/lib/edge/device-token'
 import { storeTenantSuspended } from '@/lib/edge/device-auth'
 import { edgeSecretKeysFor } from '@intereco/shared'
@@ -50,7 +53,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const supa = createSupabaseService()
   const { data, error } = await supa
     .from('edge_devices')
-    .select('id, store_id, scoped_only, auth_user_id, auth_password_enc, agent_version, desired_agent_version, desired_cloudflared_version')
+    .select('id, store_id, auth_user_id, auth_password_enc, desired_agent_version, desired_cloudflared_version')
     .eq('device_token_hash', hashDeviceToken(token))
     .maybeSingle()
 
@@ -76,8 +79,6 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const body: {
     edge_id: string
     supabase_url: string
-    // Phase B4: scoped_only なエッジには返さない（下の安全装置つき）。
-    supabase_service_role_key?: string
     scoped_access_token?: string
     scoped_expires_at?: number
     // 自律OTA: 本部が宣言する目標版（NULL=更新指示なし）。エッジは pull で受けて
@@ -100,7 +101,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const stillFresh = Number.isFinite(until) && until > Date.now() / 1000 + SCOPED_REISSUE_MARGIN_SEC
 
   // 短命スコープトークンを発行して同梱。auth ユーザが未 provisioning ならここで用意する。
-  // 失敗しても 200（service_role 経路は維持）— 無停止のための後方互換。
+  // 失敗しても 200 (スコープトークンを載せないだけ)。箱は次の pull でやり直す。
   if (!stillFresh && anon) {
     try {
       const password = await ensureEdgeAuthPassword(supa, {
@@ -127,20 +128,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
   }
 
-  // Phase B4: scoped_only なエッジには service_role を返さない。
-  //
-  // ただし省くのは「このエッジが確実にスコープトークンを持っている」と言える時だけ:
-  //   - この応答で新しく発行できた（scoped_access_token あり）
-  //   - もしくはエッジが x-scoped-until でまだ有効だと申告している（stillFresh）
-  // どちらでもない＝代替手段が無い応答で鍵まで止めるとエッジが丸腰になるため、
-  // その場合は従来どおり返して次の pull で復帰させる（フェイルセーフ）。
-  const withhold = mayWithholdServiceRole({
-    scopedOnly: data.scoped_only === true,
-    mintedToken: !!body.scoped_access_token,
-    clientTokenStillFresh: stillFresh,
-    gvmsUplink: await isGvmsUplinkEdge(supa, { id: data.id, agent_version: data.agent_version as string | null }),
-  })
-  if (!withhold) body.supabase_service_role_key = key
+  // service_role は返さない (冒頭の説明・2026-11-13)。応答に載せる行そのものを置かない
 
   // エッジごとの鍵 (packages/shared/src/secret-codec.ts)。マスタ鍵が無ければ付けない
   const sk = edgeSecretKeysFor(data.id as string)
