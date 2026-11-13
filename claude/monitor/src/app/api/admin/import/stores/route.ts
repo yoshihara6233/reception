@@ -57,6 +57,7 @@ export async function POST(req: NextRequest) {
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status })
   // オプション ON/OFF を扱えるのは super_admin / tenant_admin のみ。
   const canManageOptions = ['super_admin', 'tenant_admin'].includes(guard.profile.role)
+  const isSuperAdmin = guard.profile.role === 'super_admin'
 
   // 実効テナント（super_admin は「操作中テナント」cookie・他ロールは所属テナント）。
   // CSV の tenant_id 列が空のときの登録先はこれ。profile.tenant_id では super_admin の
@@ -94,7 +95,8 @@ export async function POST(req: NextRequest) {
   const extIds = rows.map((r) => r.external_id).filter((v): v is string => !!v)
   const existing = new Map<string, { opt_patrol: boolean; opt_alarm: boolean; opt_baggage: boolean }>()
   if (extIds.length) {
-    const { data } = await svc.from('stores')
+    // 利用者の権限 (RLS) で引く。見えない拠点 (他テナント) は「無い」として扱う
+    const { data } = await guard.supa.from('stores')
       .select('id, opt_patrol, opt_alarm, opt_baggage').in('id', extIds)
     ;(data ?? []).forEach((s) => existing.set(s.id as string, {
       opt_patrol: !!s.opt_patrol, opt_alarm: !!s.opt_alarm, opt_baggage: !!s.opt_baggage,
@@ -125,7 +127,13 @@ export async function POST(req: NextRequest) {
     const r = rows[i]
     const lat = r.latitude  ? parseFloat(r.latitude)  : null
     const lng = r.longitude ? parseFloat(r.longitude) : null
-    const tenantId = r.tenant_id || defaultTenantId
+    // CSV の tenant_id 列を使えるのは運営 (super_admin) だけ。ほかの役割は自分のテナントに限る。
+    // 以前はそのまま使い、書き込みは RLS で断られるものの、他テナントの拠点名の有無・契約・上限が
+    // 行ごとの結果 (duplicate_name・option_not_contracted・警告) から分かった (2026-11-13・見直しの続き)。
+    if (!isSuperAdmin && r.tenant_id && r.tenant_id !== defaultTenantId) {
+      results.push({ row: i + 2, ok: false, error: 'tenant_not_allowed' }); continue
+    }
+    const tenantId = isSuperAdmin ? (r.tenant_id || defaultTenantId) : defaultTenantId
 
     const payload: Record<string, unknown> = {
       name:       r.name,

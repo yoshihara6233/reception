@@ -6,6 +6,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseServer } from '@/lib/supabase/server'
 import { recordMetric, CLIENT_METRIC_KINDS, type ClientMetricKind } from '@/lib/metrics'
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const META_MAX_CHARS = 2000
+
 interface Body {
   kind:      string
   storeId?:  string | null
@@ -27,13 +30,32 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
   const value = typeof body.value === 'number' && Number.isFinite(body.value) ? body.value : null
 
+  // 拠点とカメラは、この利用者の権限 (RLS) で見えるものだけを受ける (2026-11-13・見直しの続き)。
+  // 書き込みは service role なので、確かめないと他テナントの拠点・カメラの ID で行を書けた。
+  // 形の違う ID・見えない ID は 404 (存在を教えない)。
+  const storeId  = body.storeId  ?? null
+  const cameraId = body.cameraId ?? null
+  if (storeId != null) {
+    if (typeof storeId !== 'string' || !UUID_RE.test(storeId)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+    const { data } = await supa.from('stores').select('id').eq('id', storeId).maybeSingle()
+    if (!data) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  }
+  if (cameraId != null) {
+    if (typeof cameraId !== 'string' || !UUID_RE.test(cameraId)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+    const { data } = await supa.from('recorder_cameras').select('id').eq('id', cameraId).maybeSingle()
+    if (!data) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  }
+  // meta は小さい付け足しだけ (大きいものは捨てる。計測の本体は value)
+  let meta = body.meta ?? null
+  if (meta != null && (typeof meta !== 'object' || Array.isArray(meta) || JSON.stringify(meta).length > META_MAX_CHARS)) meta = null
+
   await recordMetric({
     kind:     body.kind,
-    storeId:  body.storeId ?? null,
-    cameraId: body.cameraId ?? null,
+    storeId,
+    cameraId,
     userId:   user.id,
     value,
-    meta:     body.meta ?? null,
+    meta,
   })
   return NextResponse.json({ ok: true })
 }
