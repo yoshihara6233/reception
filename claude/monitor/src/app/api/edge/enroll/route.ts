@@ -83,9 +83,8 @@ export async function POST(req: NextRequest) {
       device_token_hash: hashDeviceToken(device_token),
       status:      'offline',
       camera_tier: tok.camera_tier,
-      // G・VMS (nvmsd) は bootstrap の service_role を使わない。管理画面の表示と
-      // 「配らない」宣言を最初から合わせる (2026-10-28)。返さないこと自体は
-      // bootstrap の isGvmsUplinkEdge が別に保証する (この列に頼らない)。
+      // 管理画面の表示用 (2026-10-28)。bootstrap は 2026-11-13 から、この列に関係なく
+      // どの拠点にも service_role を返さない。
       ...(tok.kind === 'nvms' ? { scoped_only: true } : {}),
     })
     .select('id')

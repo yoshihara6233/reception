@@ -56,6 +56,10 @@ G・VMS（拠点）の側の一覧は NVMS の `docs/security/鍵と暗号.md` �
 ## 5. service_role の鍵の作り直し（旧式の JWT から新しい形式へ・2026-11-09 に終えた）
 
 10/28 の自主診断で、エッジの bootstrap が G・VMS の拠点にも service_role の鍵を返していたと分かった（#403 で直した）。
+11/13 の見直しで、試作のエッジ箱（kind=edge）には今も返していて、その登録コードを tenant_admin・store_manager でも発行できたと分かった。
+bootstrap はどの拠点にも service_role を返さない形にし、kind=edge の登録コードの発行を super_admin だけにした。
+**この直しを本番に入れた後、下の表の手順で service_role（新しい形式の秘密の鍵）をもう一度作り直すこと**（11/9 に作り直した鍵も、この道で返っていたため）。
+あわせて、監査ログの `enrollment.issue`（kind=edge・super_admin 以外）と、`edge_devices` の `scoped_only=false` の行を洗う。
 返していた値（旧式の鍵・`eyJ…`）は流れたものとして扱い、使えなくする。旧式の鍵は 1 本だけ止められず、
 Supabase の画面で「旧式の鍵（anon と service_role）をまとめて止める」しかないので、先に旧式の鍵に頼る所をすべて新しい形式へ移す。
 
