@@ -7,6 +7,7 @@
  *   - 本番アラート (is_test=false) は 1 件でも含まれていたら 403 で全拒否。
  *     テストデータ掃除専用であり、実災害の記録は誤って消せない。
  *   - requireAdmin (super_admin / tenant_admin / store_manager) のみ実行可。
+ *   - 消せるのは、その利用者の権限 (RLS) で見えるイベントだけ (別テナントの ID は 404)。
  *
  * 削除順序 (bcp_clips/bcp_reports → bcp_events に FK があり CASCADE 無しのため):
  *   1. bcp_clips の storage ファイル (bcp-clips バケット) を remove
@@ -42,7 +43,12 @@ export async function DELETE(req: NextRequest) {
   const svc = createSupabaseService()
 
   // 1. 対象イベントを読み、すべて is_test=true であることを検証
-  const { data: events, error: loadErr } = await svc
+  //
+  //    **利用者の権限 (RLS) で引く (2026-11-13・見直し C-3)。** 以前は役割だけを確かめて
+  //    service role で ID だけを頼りに引いていたため、別テナントの管理者でも、イベントの ID が
+  //    分かれば他テナントのテスト発令を画像ごと消せた。見えない ID はここで落ち、下の削除
+  //    (service role) は、ここで見えた ID だけを対象にする。
+  const { data: events, error: loadErr } = await guard.supa
     .from('bcp_events')
     .select('id, is_test')
     .in('id', eventIds)
