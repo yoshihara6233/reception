@@ -25,6 +25,12 @@ export async function DELETE(
   const { data: lic } = await guard.supa
     .from('licenses').select('id, edge_id').eq('id', id).maybeSingle()
   if (!lic) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  // licenses の読み取りの決まりはテナントまでしか見ない。拠点管理者 (store_manager) は、同じ
+  // テナントの担当外の拠点のライセンスも見えてしまうので、そのエッジ (= 拠点) が見えるかを
+  // 重ねて確かめる (2026-11-13・見直しの続き)。発行 (POST) と同じ確かめ方。
+  const { data: edge } = await guard.supa
+    .from('edge_devices').select('id').eq('id', lic.edge_id).maybeSingle()
+  if (!edge) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 
   const { error } = await createSupabaseService()
     .from('licenses').update({ status: 'revoked', updated_at: new Date().toISOString() }).eq('id', id)

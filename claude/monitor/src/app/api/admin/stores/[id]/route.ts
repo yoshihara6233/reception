@@ -58,7 +58,9 @@ export async function PUT(
       for (const o of OPTION_KEYS) delete patch[OPTION_STORE_COL[o]]
     } else {
       const svc = createSupabaseService()
-      const { data: cur, error: curErr } = await svc
+      // 今の状態は利用者の権限 (RLS) で引く。service role で引くと、他テナントの拠点の有無と
+      // 契約の有無が応答 (404・409) から分かってしまう (2026-11-13・見直しの続き)。
+      const { data: cur, error: curErr } = await guard.supa
         .from('stores')
         .select('tenant_id, opt_patrol, opt_alarm, opt_baggage')
         .eq('id', id)
@@ -85,8 +87,10 @@ export async function PUT(
     }
   }
 
-  const { error } = await guard.supa.from('stores').update(patch).eq('id', id)
+  // 更新できた行を受け取る。権限 (RLS) で届かない拠点は 0 行になるので、成功と監査の記録に進めない。
+  const { data: updated, error } = await guard.supa.from('stores').update(patch).eq('id', id).select('id')
   if (error) return NextResponse.json({ error: dbErrorCode(error, '/api/admin/stores/[id]') }, { status: 500 })
+  if (!updated || updated.length === 0) return NextResponse.json({ error: 'store_not_found' }, { status: 404 })
 
   await recordAudit(guard.supa, {
     actorUserId: guard.user.id,

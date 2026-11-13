@@ -14,6 +14,7 @@ export function quotaMessage(code?: string): string {
   switch (base) {
     case 'name_required':          return '拠点名(name)が空です'
     case 'duplicate_name':         return '同一名称の拠点が既にあるため登録をスキップしました'
+    case 'tenant_not_allowed':     return 'tenant_id 列に、ほかのテナントは指定できません（列を空にするか、自分のテナントの ID にしてください）'
     case 'tenant_unresolved':      return '登録先テナントが未確定です（操作中テナントを選択するか tenant_id 列を指定）'
     case 'store_limit_exceeded':   return '拠点数が上限を超えています（登録は完了）'
     case 'option_limit_exceeded':  return `${optJa}を ON にした拠点数が上限を超えています（登録は完了）`
