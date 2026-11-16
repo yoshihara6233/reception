@@ -115,8 +115,9 @@ const EXPECTED: Record<string, Guard> = {
   '/api/admin/enrollments/[id]/reissue': 'admin',
   '/api/admin/enrollments/[id]': 'admin',
   '/api/admin/enrollments': 'admin',
-  '/api/admin/licenses': 'admin',
-  '/api/admin/licenses/[id]': 'admin',
+  // 発行・差し替え・失効は運営だけ (2026-11-16)。一覧 (GET) は requireAdmin のまま (同じファイルに両方あり強い方で数える)
+  '/api/admin/licenses': 'super-admin',
+  '/api/admin/licenses/[id]': 'super-admin',
   '/api/admin/geocode': 'admin',
   // 要望ボード（要望の収集 第 1 段・D-2-21）。全テナント横断なので運営だけ。
   '/api/admin/feedback': 'super-admin',

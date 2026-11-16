@@ -20,7 +20,7 @@ function expiryState(d: string | null): { cls: string; label: string } {
   return { cls: '', label: d }
 }
 
-export function LicensesClient({ edges, rows, canIssue }: { edges: EdgeOpt[]; rows: LicRow[]; canIssue: boolean }) {
+export function LicensesClient({ edges, rows, canIssue, isSuper }: { edges: EdgeOpt[]; rows: LicRow[]; canIssue: boolean; isSuper: boolean }) {
   const router = useRouter()
   const [edgeId, setEdgeId] = useState('')
   const [org, setOrg] = useState('')
@@ -83,7 +83,12 @@ export function LicensesClient({ edges, rows, canIssue }: { edges: EdgeOpt[]; ro
           <li>拠点は、いま効いているものより<b>古い発行日</b>のライセンスを受け付けません（巻き戻し防止）。</li>
           <li>期限切れでも録画・閲覧は止まりません。止まるのはカメラの増設です。</li>
         </ul>
-        {!canIssue && (
+        {!isSuper && (
+          <p className="mb-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+            ライセンスの発行・差し替え・失効は、運営（当社）が行います。ご依頼は当社の窓口へお送りください。
+          </p>
+        )}
+        {isSuper && !canIssue && (
           <p className="mb-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
             操作中テナントを選択すると登録できます（上部の「切替」から）。
           </p>
@@ -166,7 +171,7 @@ export function LicensesClient({ edges, rows, canIssue }: { edges: EdgeOpt[]; ro
                       </span>
                     </td>
                     <td className="px-4 py-2.5 text-right">
-                      {r.status === 'active' && (
+                      {r.status === 'active' && isSuper && (
                         <button onClick={() => revoke(r)} className="inline-flex items-center gap-1 rounded border border-red-200 px-2 py-0.5 text-[11px] text-red-700 hover:bg-red-50">
                           <Trash2 size={12} strokeWidth={1.5} aria-hidden /> 台帳で失効
                         </button>

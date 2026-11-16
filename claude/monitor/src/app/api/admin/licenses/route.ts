@@ -1,15 +1,15 @@
 /**
  * ライセンス台帳（LICENSE_SPEC §3）
  *
- * GET  — 一覧（テナント権限・RLS で自テナントのみ）。
- * POST — 登録/差し替え: G・VMS 署名済みライセンス（不透明 blob）＋メタを台帳へ。
+ * GET  — 一覧（テナント権限・RLS で自テナントのみ）。テナント管理者・拠点管理者も見られる。
+ * POST — 登録/差し替え（運営 super_admin だけ・2026-11-16 発注者の決定。ライセンスは当社が発行する）: G・VMS 署名済みライセンス（不透明 blob）＋メタを台帳へ。
  *        同じエッジに有効ライセンスがあれば blob/メタを更新して版を +1（差し替え）、
  *        無ければ新規。クラウドは blob を解釈しない（OTA の sig と同じ透過）。
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { invalidInput } from '@/lib/api/invalid-input'
 import { z } from 'zod'
-import { requireAdmin } from '@/lib/admin/guard'
+import { requireAdmin, requireSuperAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { recordAudit, storeIdForEdge } from '@/lib/admin/audit'
 import { dbErrorCode } from '@/lib/api/db-error'
@@ -44,7 +44,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const guard = await requireAdmin()
+  // 発行・差し替えは運営だけ (2026-11-16)。以前は拠点管理者まで登録できた
+  const guard = await requireSuperAdmin()
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status })
 
   const parsed = Body.safeParse(await req.json().catch(() => null))

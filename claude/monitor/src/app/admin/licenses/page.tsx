@@ -11,8 +11,8 @@ import { LicensesClient, type LicRow, type EdgeOpt } from './licenses-client'
 
 /**
  * ライセンスのクラウド管理（LICENSE_SPEC.md・第1弾 A4）。
- * パートナー（tenant_admin）が自テナントのライセンスを発行/差し替え/失効。
- * super_admin は横断。スコープは操作中テナント＋ RLS で担保（/admin/provisioning と同型）。
+ * 発行・差し替え・失効は運営（super_admin）だけ（2026-11-16 発注者の決定・ライセンスは当社が発行する）。
+ * テナント管理者・拠点管理者は自分の範囲の一覧を見るだけ。super_admin は横断。スコープは操作中テナント＋ RLS で担保（/admin/provisioning と同型）。
  */
 export const dynamic = 'force-dynamic'
 
@@ -30,7 +30,8 @@ export default async function LicensesPage() {
   const stores = (storeRows ?? []) as { id: string; name: string; area_code: string | null }[]
   const storeName = new Map(stores.map((s) => [s.id, s.name]))
   const allowedIds = stores.map((s) => s.id)
-  const canIssue = !!ctx.tenantId || !!ctx.storeIds
+  const isSuper = guard.profile.role === 'super_admin'
+  const canIssue = isSuper && (!!ctx.tenantId || !!ctx.storeIds)
 
   const edges: EdgeOpt[] = []
   const rows: LicRow[] = []
@@ -95,7 +96,7 @@ export default async function LicensesPage() {
         crumb={[{ href: '/admin', label: t.breadcrumb.admin }, { href: '/admin/fleet', label: '拠点の G・VMS' }, { href: '/admin/licenses', label: 'ライセンス' }]} />
       <GvmsTabs current="/admin/licenses" />
       <div className="p-5">
-        <LicensesClient edges={edges} rows={rows} canIssue={canIssue} />
+        <LicensesClient edges={edges} rows={rows} canIssue={canIssue} isSuper={isSuper} />
       </div>
     </AdminShell>
   )
