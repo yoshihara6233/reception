@@ -6,7 +6,7 @@ import { createFakeDb } from '@/test/fake-supabase'
  * 役割だけを確かめて service role で引いていた、小さい 4 か所（2026-11-13・見直しの続き）。
  *
  *   ★計測の記録: 見えない拠点・カメラの ID では書けない。大きすぎる meta は捨てる
- *   ★ライセンスの失効: 拠点管理者は、担当外の拠点（エッジが見えない）のライセンスを失効できない
+ *   ★ライセンスの失効: 運営 (super_admin) だけ (2026-11-16)。テナント管理者・拠点管理者は 403
  *   ★拠点の更新: 他テナントの拠点は 404（契約の有無を答えない・成功と監査の記録に進まない）
  *   ★拠点の CSV 一括投入: 運営のほかは、CSV の tenant_id で他テナントを指せない
  *
@@ -32,7 +32,11 @@ const guardOk = async () => ({
   profile: { id: 'p-a', role: h.role, tenant_id: 't-a', store_ids: [STORE_A] },
   supa: userClient(),
 })
-vi.mock('@/lib/admin/guard', () => ({ requireAdmin: () => guardOk(), requireTenantAdminOrSuper: () => guardOk() }))
+vi.mock('@/lib/admin/guard', () => ({
+  requireAdmin: () => guardOk(),
+  requireTenantAdminOrSuper: () => guardOk(),
+  requireSuperAdmin: async () => (h.role === 'super_admin' ? guardOk() : { ok: false as const, status: 403, error: 'forbidden' }),
+}))
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServer: async () => userClient(),
   createSupabaseService: () => h.svcDb.client,
@@ -64,6 +68,7 @@ vi.mock('@/lib/admin/tenant-quota', async (orig) => {
 
 import { POST as postMetric } from '@/app/api/metrics/route'
 import { DELETE as revokeLicense } from '@/app/api/admin/licenses/[id]/route'
+import { GET as listLicenses, POST as issueLicense } from '@/app/api/admin/licenses/route'
 import { PUT as putStore } from '@/app/api/admin/stores/[id]/route'
 import { POST as importStores } from '@/app/api/admin/import/stores/route'
 
@@ -118,19 +123,53 @@ describe('計測の記録 (/api/metrics)', () => {
 })
 
 describe('ライセンスの失効 (/api/admin/licenses/[id])', () => {
-  beforeEach(() => { seed(); h.role = 'store_manager' })
+  beforeEach(seed)
   const del = (id: string) => revokeLicense(new NextRequest(`http://localhost/api/admin/licenses/${id}`, { method: 'DELETE' }), {
     params: Promise.resolve({ id }),
   })
 
-  it('担当外の拠点 (エッジが見えない) のライセンスは失効できない', async () => {
-    expect((await del('l-a2')).status).toBe(404)
-    expect(svcRows('licenses').find((l) => l.id === 'l-a2')?.status).toBe('active')
+  it('拠点管理者は、担当の拠点のライセンスでも失効できない (運営だけ・2026-11-16)', async () => {
+    h.role = 'store_manager'
+    expect((await del('l-a')).status).toBe(403)
+    expect(svcRows('licenses').find((l) => l.id === 'l-a')?.status).toBe('active')
     expect(h.audits).toHaveLength(0)
   })
-  it('担当の拠点のライセンスは失効できる', async () => {
+  it('テナント管理者も失効できない', async () => {
+    h.role = 'tenant_admin'
+    expect((await del('l-a')).status).toBe(403)
+    expect(svcRows('licenses').find((l) => l.id === 'l-a')?.status).toBe('active')
+  })
+  it('運営は失効できる', async () => {
+    h.role = 'super_admin'
     expect((await del('l-a')).status).toBe(200)
     expect(svcRows('licenses').find((l) => l.id === 'l-a')?.status).toBe('revoked')
+  })
+  it('運営でも、見えないライセンスは 404', async () => {
+    h.role = 'super_admin'
+    expect((await del('l-a2')).status).toBe(404)
+    expect(svcRows('licenses').find((l) => l.id === 'l-a2')?.status).toBe('active')
+  })
+})
+
+describe('ライセンスの発行 (/api/admin/licenses POST)', () => {
+  beforeEach(seed)
+  const post = (b: unknown) => issueLicense(json('http://localhost/api/admin/licenses', 'POST', b))
+  const body = { edge_id: 'e-a', license_blob: 'SIGNED-LICENSE-BLOB' }
+
+  it('テナント管理者・拠点管理者は発行できない', async () => {
+    for (const role of ['tenant_admin', 'store_manager']) {
+      h.role = role
+      expect((await post(body)).status).toBe(403)
+    }
+    expect(svcRows('licenses')).toHaveLength(2)
+    expect(h.audits).toHaveLength(0)
+  })
+  it('一覧はテナント管理者・拠点管理者も見られる', async () => {
+    for (const role of ['tenant_admin', 'store_manager']) {
+      h.role = role
+      const res = await listLicenses()
+      expect(res.status).toBe(200)
+    }
   })
 })
 

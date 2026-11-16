@@ -1,12 +1,14 @@
 /**
  * DELETE /api/admin/licenses/[id] — ライセンスの失効（revoke）
  *
+ * 運営 (super_admin) だけが行える (2026-11-16 発注者の決定。以前は拠点管理者まで失効できた)。
+ *
  * 物理削除ではなく status='revoked'（監査のため台帳に残す）。失効後は
  * GET /api/edge/license が 204 を返し、次回取得で nvmsd 側が権利を失う。
  * unique index（有効1件/エッジ）が空くので、同じエッジに再発行できる。
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAdmin } from '@/lib/admin/guard'
+import { requireSuperAdmin } from '@/lib/admin/guard'
 import { createSupabaseService } from '@/lib/supabase/server'
 import { recordAudit, storeIdForEdge } from '@/lib/admin/audit'
 import { dbErrorCode } from '@/lib/api/db-error'
@@ -17,7 +19,7 @@ export async function DELETE(
   _req: NextRequest,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const guard = await requireAdmin()
+  const guard = await requireSuperAdmin()
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status })
 
   const { id } = await ctx.params
