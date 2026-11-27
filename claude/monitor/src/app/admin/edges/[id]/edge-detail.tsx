@@ -4,6 +4,7 @@ import { askConfirm } from '@/components/ConfirmDialog'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Trash2, Settings, Search, Plug, X } from 'lucide-react'
+import { otaRolloutView, type OtaRolloutStatus } from '@/lib/edge/ota-rollout'
 import { edgePkg } from '@/lib/admin/nvmsd-releases'
 
 interface Camera {
@@ -63,6 +64,8 @@ interface EdgePayload {
   update_window_end: string | null
   update_force: boolean
   ota_mode: 'onsite' | 'auto'
+  // 順送りの自動更新の進み具合（GVMS_CLOUD_SPEC §15）。作業が無い・申告しない拠点は null
+  ota_rollout?: OtaRolloutStatus | null
   pkg_format: string | null
   pkg_arch: string | null
   applied_config_version: number | null
@@ -348,6 +351,31 @@ function OtaPanel({ edge }: { edge: EdgePayload }) {
  * 既定 02:00-05:00）はサーバ側判定なので、ここは値の置き場だけ。
  * 「今すぐ更新」は時間帯を無視する 1 回きりのフラグ（目標到達で自動解除）。
  */
+/** 順送りの自動更新の進み具合（§15）。言葉の決め方は lib/edge/ota-rollout.ts の 1 か所。 */
+function OtaRolloutNote({ status }: { status: OtaRolloutStatus }) {
+  const v = otaRolloutView(status)
+  const cls = v.tone === 'failed' ? 'border-red-200 bg-red-50 text-red-800'
+    : v.tone === 'done' ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+    : 'border-amber-200 bg-amber-50 text-amber-800'
+  return (
+    <div className={'mb-3 rounded border px-3 py-2 text-xs ' + cls} role="status">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-semibold">{v.badge}</span>
+        {v.tone === 'running' && (
+          <progress className="h-1.5 w-32" value={status.done} max={status.total} aria-label="更新済みの台数" />
+        )}
+        {status.updated_at && (
+          <span className="ml-auto text-[11px] opacity-70">
+            {new Date(status.updated_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })} 時点
+          </span>
+        )}
+      </div>
+      <div className="mt-1">{v.text}</div>
+      {v.detail && <div className="mt-1 break-words text-[11px] opacity-80">{v.detail}</div>}
+    </div>
+  )
+}
+
 function NvmsdOtaPanel({ edge }: { edge: EdgePayload }) {
   const router = useRouter()
   const running = (edge.agent_version ?? '').replace(/^nvmsd\//, '')
@@ -435,6 +463,9 @@ function NvmsdOtaPanel({ edge }: { edge: EdgePayload }) {
           {!isAuto ? '現地更新' : !edge.desired_agent_version ? '指示なし' : pending ? '更新待ち' : '目標版で稼働中'}
         </span>
       </div>
+
+      {/* 順送りの自動更新の進み具合（§15）: サーバが 2 台以上の拠点が、1 台ずつ当てている間と、終わって 24 時間まで申告する */}
+      {edge.ota_rollout && <OtaRolloutNote status={edge.ota_rollout} />}
 
       <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
         <Row k="稼働版" v={<span className="font-mono">{running || '—'}</span>} />
