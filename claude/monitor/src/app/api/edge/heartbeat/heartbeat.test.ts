@@ -7,6 +7,8 @@ const h = vi.hoisted(() => ({
   noAnnounceColumns: false,
   /** OS の脆弱性の列だけが無い DB（§13 の migration 前）を真似る */
   noOsVulnColumns: false,
+  /** 順送りの進み具合の列だけが無い DB（§15 の migration 前）を真似る */
+  noRolloutColumns: false,
 }))
 
 vi.mock('@/lib/edge/device-auth', () => ({
@@ -17,10 +19,11 @@ vi.mock('@/lib/supabase/server', () => ({
     from: () => ({
       update: (p: Record<string, unknown>) => {
         h.updates.push(p)
+        const missingRo = (h.noRolloutColumns || h.noOsVulnColumns || h.noAnnounceColumns) && 'ota_rollout' in p
         const missingOs = (h.noOsVulnColumns || h.noAnnounceColumns) && 'os_vuln' in p
         const missing = h.noAnnounceColumns && 'capabilities' in p
-        const col = missingOs ? 'os_vuln' : 'capabilities'
-        return { eq: async () => ({ error: missingOs || missing ? { code: 'PGRST204', message: `Could not find the '${col}' column` } : null }) }
+        const col = missingRo ? 'ota_rollout' : missingOs ? 'os_vuln' : 'capabilities'
+        return { eq: async () => ({ error: missingRo || missingOs || missing ? { code: 'PGRST204', message: `Could not find the '${col}' column` } : null }) }
       },
     }),
   }),
@@ -32,7 +35,7 @@ const post = (body: unknown) => POST(new NextRequest('http://localhost/api/edge/
   method: 'POST', body: JSON.stringify(body), headers: { authorization: 'Bearer t' },
 }))
 
-beforeEach(() => { h.updates = []; h.noAnnounceColumns = false; h.noOsVulnColumns = false })
+beforeEach(() => { h.updates = []; h.noAnnounceColumns = false; h.noOsVulnColumns = false; h.noRolloutColumns = false })
 
 describe('POST /api/edge/heartbeat — 版と機能の名乗り（GVMS_CLOUD_SPEC §2）', () => {
   it('名乗りと遠隔視聴の状況を写す', async () => {
@@ -68,10 +71,10 @@ describe('POST /api/edge/heartbeat — 版と機能の名乗り（GVMS_CLOUD_SPE
     h.noAnnounceColumns = true
     const res = await post({ status: 'idle', agent_version: 'nvmsd/0.1.68', capabilities: ['hls_live'] })
     expect(res.status).toBe(204)
-    // os_vuln の列 → 名乗りの列 → 従来の列だけ、の順に書き直す
-    expect(h.updates).toHaveLength(3)
-    expect(h.updates[2]).not.toHaveProperty('capabilities')
-    expect(h.updates[2]).toMatchObject({ status: 'idle', agent_version: 'nvmsd/0.1.68' })
+    // ota_rollout の列 → os_vuln の列 → 名乗りの列 → 従来の列だけ、の順に書き直す
+    expect(h.updates).toHaveLength(4)
+    expect(h.updates[3]).not.toHaveProperty('capabilities')
+    expect(h.updates[3]).toMatchObject({ status: 'idle', agent_version: 'nvmsd/0.1.68' })
   })
 
   it('★ログインの一本化 (§9) のクライアントの同期に失敗しても死活は落とさない', async () => {
@@ -115,8 +118,40 @@ describe('POST /api/edge/heartbeat — OS の既知の脆弱性の申告（GVMS_
     h.noOsVulnColumns = true
     const res = await post({ status: 'idle', capabilities: ['os_vuln'], os_vuln: os })
     expect(res.status).toBe(204)
+    // ota_rollout の列 → os_vuln の列、の順に外して書き直す
+    expect(h.updates).toHaveLength(3)
+    expect(h.updates[2]).not.toHaveProperty('os_vuln')
+    expect(h.updates[2]).toMatchObject({ capabilities: ['os_vuln'] })
+  })
+})
+
+describe('POST /api/edge/heartbeat — 順送りの自動更新の進み具合（GVMS_CLOUD_SPEC §15）', () => {
+  const RO = { version: '1.0.1', state: 'running', phase: 'apply', node: 'node203', done: 1, total: 3 }
+
+  it('進み具合を写す', async () => {
+    const res = await post({ status: 'idle', capabilities: ['ota', 'ota_rollout'], ota_rollout: RO })
+    expect(res.status).toBe(204)
+    expect(h.updates[0]).toMatchObject({ ota_rollout: RO })
+    expect(h.updates[0].ota_rollout_reported_at).toBeTruthy()
+  })
+
+  it('作業が無い（項目が無い）ときは空に戻す', async () => {
+    await post({ status: 'idle', capabilities: ['ota', 'ota_rollout'] })
+    expect(h.updates[0]).toMatchObject({ ota_rollout: null, ota_rollout_reported_at: null })
+  })
+
+  it('★形の崩れた申告でも拒否しない（空として扱う）', async () => {
+    const res = await post({ status: 'idle', ota_rollout: { state: 'exploded', total: 'many' } })
+    expect(res.status).toBe(204)
+    expect(h.updates[0]).toMatchObject({ ota_rollout: null })
+  })
+
+  it('★列が無い DB（migration の前）でも死活は落とさず、ほかの申告は残す', async () => {
+    h.noRolloutColumns = true
+    const res = await post({ status: 'idle', capabilities: ['ota'], ota_rollout: RO })
+    expect(res.status).toBe(204)
     expect(h.updates).toHaveLength(2)
-    expect(h.updates[1]).not.toHaveProperty('os_vuln')
-    expect(h.updates[1]).toMatchObject({ capabilities: ['os_vuln'] })
+    expect('ota_rollout' in h.updates[1]).toBe(false)
+    expect(h.updates[1]).toMatchObject({ capabilities: ['ota'], os_vuln: null })
   })
 })

@@ -4,6 +4,7 @@ import { PageHeader } from '@/components/admin/PageHeader'
 import { AdminDenied } from '@/components/admin/AdminDenied'
 import { requireSuperAdmin } from '@/lib/admin/guard'
 import { EdgeDetail } from './edge-detail'
+import { sanitizeOtaRollout, type OtaRolloutStatus } from '@/lib/edge/ota-rollout'
 
 interface EdgePayload {
   id: string
@@ -28,6 +29,8 @@ interface EdgePayload {
   update_window_end: string | null
   update_force: boolean
   ota_mode: 'onsite' | 'auto'
+  // 順送りの自動更新の進み具合（GVMS_CLOUD_SPEC §15）。作業が無い・申告しない拠点は null
+  ota_rollout: OtaRolloutStatus | null
   // OTA 配り分け: nvmsd の名乗り（null = 名乗りなし → deb / amd64）
   pkg_format: string | null
   pkg_arch: string | null
@@ -114,8 +117,14 @@ export default async function EdgeEditPage(
 
   // password_enc / vod_password_enc（秘密）はクライアントへ送らず、設定済みフラグだけにする。
   const raw = data as never as Omit<EdgePayload, 'recorders'> & { recorders: RawRecorder[] }
+  // 順送りの自動更新の進み具合（§15）。**列が無い DB（migration の前）でも画面を落とさない**よう、
+  // 上の問い合わせに混ぜずに別に読み、読めなければ無いものとして扱う
+  const { data: ro } = await supa.from('edge_devices').select('ota_rollout').eq('id', id).maybeSingle()
+  const otaRollout = sanitizeOtaRollout((ro as { ota_rollout?: unknown } | null)?.ota_rollout)
+
   const edge: EdgePayload = {
     ...raw,
+    ota_rollout: otaRollout,
     recorders: raw.recorders.map((r) => ({
       id: r.id, vendor: r.vendor, model: r.model, host: r.host, rtsp_port: r.rtsp_port,
       onvif_port: r.onvif_port, username: r.username, notes: r.notes,

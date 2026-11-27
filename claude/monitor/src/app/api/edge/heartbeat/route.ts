@@ -18,6 +18,7 @@ import { sanitizeCapabilities, sanitizeSpecVersion } from '@/lib/edge/capabiliti
 import { syncGvmsOidcClient } from '@/lib/edge/gvms-oidc'
 import { sanitizeOsVuln } from '@/lib/edge/os-vuln'
 import { notifyOsVulnUrgent } from '@/lib/edge/os-vuln-notify'
+import { sanitizeOtaRollout } from '@/lib/edge/ota-rollout'
 import { dbErrorCode } from '@/lib/api/db-error'
 
 export const dynamic = 'force-dynamic'
@@ -44,6 +45,8 @@ const Body = z.object({
   oidc_redirect_uris: z.unknown().optional(),
   // OS の既知の脆弱性の照合の結果（§13）。`os_vuln` を名乗る拠点だけが送る。型は縛らず sanitize で読む
   os_vuln: z.unknown().optional(),
+  // 順送りの自動更新の進み具合（§15）。`ota_rollout` を名乗る拠点が、作業があるときだけ送る。型は縛らず sanitize で読む
+  ota_rollout: z.unknown().optional(),
 })
 
 const VideoStats = z.object({
@@ -88,8 +91,19 @@ export async function POST(req: NextRequest) {
     os_vuln_reported_at: osv ? payload.last_seen_at : null,
   }
 
+  // 順送りの自動更新の進み具合（§15）。作業が無い・読めなければ空に戻す（終わった作業を出し続けない）
+  const rolloutStatus = sanitizeOtaRollout(parsed.data.ota_rollout)
+  const rollout: Record<string, unknown> = {
+    ota_rollout: rolloutStatus,
+    ota_rollout_reported_at: rolloutStatus ? payload.last_seen_at : null,
+  }
+
   const svc = createSupabaseService()
-  let { error } = await svc.from('edge_devices').update({ ...payload, ...announce, ...osVuln }).eq('id', edge.id)
+  let { error } = await svc.from('edge_devices').update({ ...payload, ...announce, ...osVuln, ...rollout }).eq('id', edge.id)
+  // 進み具合の列だけが無い（§15 の migration の前）なら、その列を外して書き直す
+  if (error?.code === 'PGRST204' && /ota_rollout/.test(error.message ?? '')) {
+    ;({ error } = await svc.from('edge_devices').update({ ...payload, ...announce, ...osVuln }).eq('id', edge.id))
+  }
   // **列が無い（migration の前にデプロイされた）ときも死活は落とさない。**
   // 本番の migration は手で当てるので、順番を間違えると全拠点が「停止」に見える。
   // 列が無いと PostgREST は PGRST204 を返す。OS の脆弱性の列が無いだけなら名乗りは残して書き直し、
