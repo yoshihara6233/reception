@@ -67,6 +67,7 @@ const EXPECTED: Record<string, Guard> = {
   '/admin/import':                'tenant-admin', // 2026-11-05 に拠点管理者を外した
   '/admin/limits':                'admin',        // 本文でさらに super_admin に絞る
   '/admin/nvmsd-releases':        'super-admin',
+  '/admin/os-updates':            'super-admin',
   '/admin/nvr-models':            'super-admin',
   '/admin/nvr-models/[id]':       'super-admin',
   '/admin/ops-audit':             'super-admin',

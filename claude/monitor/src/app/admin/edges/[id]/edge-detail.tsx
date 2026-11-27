@@ -447,14 +447,16 @@ function NvmsdOtaPanel({ edge }: { edge: EdgePayload }) {
         } />
       </dl>
 
-      {/* 配信モード（OTA_SPEC 付録A・2026-09-18）: 更新で録画が約5秒欠けるため、
-          複数台の拠点は現地更新（欠損なし）、1台の拠点は自動、と切り分ける。既定は現地。 */}
+      {/* 配信モード（OTA_SPEC 付録A・2026-09-18）: 既定は現地。
+          G・VMS 1.0.0 からは、サーバが 2 台以上の拠点でも窓口のサーバが 1 台ずつ空にしてから入れ替える
+          （E-4-8・2026-11-23 に検証機 3 台で録画の隙間 0 を確認）ので、自動更新でも録画は止まらない。
+          1 台の拠点と、1.0.0 より前の 2 台以上の拠点は、入れ替えの約 5 秒が欠ける。 */}
       <div className="mt-4 border-t border-slate-100 pt-3">
         <div className="mb-1 text-xs font-medium text-slate-600">配信モード</div>
         <div className="flex flex-wrap gap-2">
           {([
-            ['onsite', '現地更新（既定）', 'クラウドから配信しない。画面から現地で更新（録画欠損なし）。複数台の拠点向け。'],
-            ['auto', '自動更新', 'クラウドから配信。更新中に録画が約5秒欠ける。1台のみの拠点向け。'],
+            ['onsite', '現地更新（既定）', 'クラウドから配信しない。拠点の画面から更新する。'],
+            ['auto', '自動更新', 'クラウドから配信。サーバが 2 台以上の拠点（G・VMS 1.0.0 以降）は 1 台ずつ入れ替え、録画は止まらない。1 台の拠点は約 5 秒欠ける。'],
           ] as const).map(([val, label, desc]) => (
             <button key={val} type="button" disabled={busy || edge.ota_mode === val}
                     onClick={() => void put({ ota_mode: val }, val === 'auto' ? '自動更新にしました' : '現地更新にしました')}

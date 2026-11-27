@@ -53,6 +53,7 @@
     ["app/admin/provisioning", ["9"]],
     ["app/admin/licenses", ["9"]],
     ["app/admin/nvmsd-releases", ["9"]],
+    ["app/admin/os-updates", ["9"]],
     ["app/admin/stores", ["9"]],
     ["app/admin/tenants", ["9"]],
     ["app/admin/users", ["9"]],
