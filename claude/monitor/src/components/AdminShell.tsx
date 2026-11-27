@@ -71,6 +71,8 @@ export function getAdminNav(t: Msg, opts?: { isSuper?: boolean; baggage?: boolea
       // デッドリンク（/admin/recorders）はナビから除外。
       // 保守自動化②: nvmsd リリース台帳と配備状況 (NVMS/docs/OTA_SPEC.md)
       { href: '/admin/nvmsd-releases', label: 'nvmsd リリース', icon: '⬆' },
+      // E-4-8: OS 更新ファイルを登録して拠点へ届ける (接続仕様 §14)。届いても当たらない
+      { href: '/admin/os-updates', label: 'OS 更新ファイル', icon: '⬇' },
       { href: '/admin/limits',     label: t.adminNav.limits, icon: '⏱' },
       // F49.J: NVR 機種マスタ (EOL/EOS 管理)。使う場面が少ないので視聴上限の下へ (2026-09-30・発注者の指示)
       { href: '/admin/nvr-models', label: 'NVR 機種',   icon: '🛰' },
